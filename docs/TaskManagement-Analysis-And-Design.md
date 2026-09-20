@@ -1,6 +1,22 @@
 # TaskManagement module — architecture analysis and database design
 
-Status: **design only**. No entity, migration, API or business logic has been written yet.
+Status: **partly superseded — see the box below.**
+
+> **SUPERSEDED IN PART.** Two corrections were issued after this document was written and
+> they take precedence over anything below that contradicts them:
+>
+> 1. **Shared vs. business modules.** NexusCore Identity (User, Role, Permission, UserGroup,
+>    Tenant) is *shared infrastructure*, not another business module. TaskManagement uses
+>    **real foreign keys and navigation properties** into it. Conflict **C2 is resolved that
+>    way** — the earlier "Guid reference, no FK" recommendation no longer applies. Module
+>    isolation still holds between *business* modules.
+> 2. **Task / RepetitiveTask.** Every task — plain, project and recurring — lives in the
+>    `Tasks` table. `RepetitiveTask` now holds **only the recurrence schedule** and links back
+>    with a real `TaskId` FK (one-to-zero-or-one, unique). Conflict **C1 is resolved that way**.
+>    The junction tables therefore drop `RepetitiveTaskId` and carry only `TaskId` / `SubTaskId`.
+>
+> See `TaskManagement-Implementation.md` for the as-built design.
+
 
 ---
 

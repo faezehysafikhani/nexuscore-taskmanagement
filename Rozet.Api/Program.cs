@@ -34,6 +34,8 @@ using Nexus.ProjectManagement.Agile.Infrastructure;
 using Nexus.ProjectManagement.Core;
 using Nexus.ProjectManagement.Core.Endpoints;
 using Nexus.ProjectManagement.Core.Infrastructure;
+using Nexus.TaskManagement;
+using Nexus.TaskManagement.Infrastructure;
 using Nexus.ProjectManagement.Deliverables;
 using Nexus.ProjectManagement.Deliverables.Endpoints;
 using Nexus.ProjectManagement.Deliverables.Infrastructure;
@@ -105,6 +107,7 @@ builder.Services.AddKnowledgeManagement();
 builder.Services.AddStrategyManagement();
 
 builder.Services.AddProjectManagementCore();
+builder.Services.AddTaskManagement();
 builder.Services.AddWaterfallPlanning();
 builder.Services.AddAgilePlanning();
 builder.Services.AddProjectTeam();
@@ -137,6 +140,7 @@ builder.Services.AddKnowledgeManagementInfrastructure(builder.Configuration);
 builder.Services.AddStrategyManagementInfrastructure(builder.Configuration);
 
 builder.Services.AddProjectManagementCoreInfrastructure(builder.Configuration);
+builder.Services.AddTaskManagementInfrastructure(builder.Configuration);
 builder.Services.AddWaterfallPlanningInfrastructure(builder.Configuration);
 builder.Services.AddAgilePlanningInfrastructure(builder.Configuration);
 builder.Services.AddProjectTeamInfrastructure(builder.Configuration);
@@ -325,6 +329,7 @@ if (builder.Configuration.GetValue("Database:SeedOnStartup", true))
     await ModuleSchemaInitializer.EnsureCreatedAsync(services.GetRequiredService<StrategyManagementDbContext>(), cancellationToken);
 
     await ModuleSchemaInitializer.EnsureCreatedAsync(services.GetRequiredService<ProjectManagementCoreDbContext>(), cancellationToken);
+    await ModuleSchemaInitializer.EnsureCreatedAsync(services.GetRequiredService<TaskManagementDbContext>(), cancellationToken);
     await ModuleSchemaInitializer.EnsureCreatedAsync(services.GetRequiredService<WaterfallDbContext>(), cancellationToken);
     await ModuleSchemaInitializer.EnsureCreatedAsync(services.GetRequiredService<AgileDbContext>(), cancellationToken);
     await ModuleSchemaInitializer.EnsureCreatedAsync(services.GetRequiredService<TeamDbContext>(), cancellationToken);
