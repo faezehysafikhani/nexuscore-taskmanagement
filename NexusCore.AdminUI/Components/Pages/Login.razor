@@ -1,0 +1,50 @@
+@page "/login"
+@rendermode InteractiveServer
+@inject ApiClient Api
+@inject AuthTokenStore TokenStore
+@inject NavigationManager Navigation
+
+<PageTitle>ورود</PageTitle>
+
+<h1>ورود به سامانه</h1>
+
+<div class="form-panel">
+    <label>ایمیل</label>
+    <input class="form-control" @bind="email" />
+    <label>رمز عبور</label>
+    <input class="form-control" type="password" @bind="password" />
+    <label>شناسه سازمان</label>
+    <input class="form-control" @bind="tenantSlug" />
+    <button class="btn btn-primary mt-3" @onclick="LoginAsync">ورود</button>
+    <button class="btn btn-outline-secondary mt-3 ms-2" @onclick="ClearAsync">پاک کردن توکن</button>
+    @if (!string.IsNullOrWhiteSpace(message))
+    {
+        <p class="mt-3">@message</p>
+    }
+</div>
+
+@code {
+    private string email = "admin@nexus.local";
+    private string password = "Admin@12345";
+    private string tenantSlug = "default";
+    private string? message;
+
+    private async Task LoginAsync()
+    {
+        var result = await Api.PostAsync<AuthResponse>("/api/identity/auth/login", new LoginRequest(email, password, tenantSlug));
+        if (result is { IsSuccess: true, Value: not null })
+        {
+            await TokenStore.SetAsync(result.Value.AccessToken, result.Value.RefreshToken);
+            Navigation.NavigateTo("/");
+            return;
+        }
+
+        message = PersianMessages.Error(result.Error);
+    }
+
+    private async Task ClearAsync()
+    {
+        await TokenStore.ClearAsync();
+        message = "توکن ورود پاک شد.";
+    }
+}

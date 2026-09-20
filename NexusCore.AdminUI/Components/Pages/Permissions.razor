@@ -1,0 +1,52 @@
+@page "/permissions"
+@rendermode InteractiveServer
+@inject ApiClient Api
+
+<PageTitle>دسترسی‌ها</PageTitle>
+
+<h1>دسترسی‌ها</h1>
+
+<button class="btn btn-outline-secondary mb-3" @onclick="LoadAsync">به‌روزرسانی</button>
+
+@foreach (var group in groups)
+{
+    <h2>@group.Module</h2>
+    <table class="table table-sm">
+        <tbody>
+            @foreach (var permission in group.Permissions)
+            {
+                <tr><td>@permission.Name</td><td>@permission.Description</td></tr>
+            }
+        </tbody>
+    </table>
+}
+
+@if (!string.IsNullOrWhiteSpace(message))
+{
+    <p>@message</p>
+}
+
+@code {
+    private readonly List<PermissionGroupDto> groups = [];
+    private string? message;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadAsync();
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        var result = await Api.GetAsync<IReadOnlyList<PermissionGroupDto>>("/api/identity/permissions");
+        groups.Clear();
+        if (result.Value is not null)
+        {
+            groups.AddRange(result.Value);
+        }
+        message = result.IsSuccess ? null : PersianMessages.Error(result.Error);
+    }
+}

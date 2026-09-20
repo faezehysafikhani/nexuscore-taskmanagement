@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "Nexus.ProjectManagement.Deliverables": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:1613;http://localhost:1615"
+    }
+  }
+}

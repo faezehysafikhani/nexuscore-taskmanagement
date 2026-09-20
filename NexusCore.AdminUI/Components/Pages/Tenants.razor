@@ -1,0 +1,65 @@
+@page "/tenants"
+@rendermode InteractiveServer
+@inject ApiClient Api
+
+<PageTitle>سازمان‌ها</PageTitle>
+
+<h1>سازمان‌ها</h1>
+
+<div class="form-panel">
+    <input class="form-control" placeholder="نام سازمان" @bind="name" />
+    <input class="form-control" placeholder="شناسه یکتا" @bind="slug" />
+    <input class="form-control" placeholder="توضیحات" @bind="description" />
+    <button class="btn btn-primary" @onclick="CreateAsync">ایجاد سازمان</button>
+    <button class="btn btn-outline-secondary ms-2" @onclick="LoadAsync">به‌روزرسانی</button>
+</div>
+
+<table class="table table-sm">
+    <thead><tr><th>نام</th><th>شناسه یکتا</th><th>فعال</th><th>شناسه</th></tr></thead>
+    <tbody>
+        @foreach (var tenant in tenants)
+        {
+            <tr><td>@tenant.Name</td><td>@tenant.Slug</td><td>@tenant.IsActive</td><td>@tenant.Id</td></tr>
+        }
+    </tbody>
+</table>
+
+@if (!string.IsNullOrWhiteSpace(message))
+{
+    <p>@message</p>
+}
+
+@code {
+    private readonly List<TenantDto> tenants = [];
+    private string name = "";
+    private string slug = "";
+    private string? description;
+    private string? message;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadAsync();
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        var result = await Api.GetAsync<IReadOnlyList<TenantDto>>("/api/platform/tenants");
+        tenants.Clear();
+        if (result.Value is not null)
+        {
+            tenants.AddRange(result.Value);
+        }
+        message = result.IsSuccess ? null : PersianMessages.Error(result.Error);
+    }
+
+    private async Task CreateAsync()
+    {
+        var result = await Api.PostAsync<TenantDto>("/api/platform/tenants", new CreateTenantRequest(name, slug, description));
+        message = result.IsSuccess ? "سازمان با موفقیت ایجاد شد." : PersianMessages.Error(result.Error);
+        await LoadAsync();
+    }
+}

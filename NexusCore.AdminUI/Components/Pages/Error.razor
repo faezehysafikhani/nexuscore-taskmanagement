@@ -1,0 +1,34 @@
+﻿@page "/Error"
+@using System.Diagnostics
+
+<PageTitle>خطا</PageTitle>
+
+<h1 class="text-danger">خطا</h1>
+<h2 class="text-danger">هنگام پردازش درخواست، خطایی رخ داد.</h2>
+
+@if (ShowRequestId)
+{
+    <p>
+        <strong>شناسه درخواست:</strong> <code>@RequestId</code>
+    </p>
+}
+
+<h3>حالت توسعه</h3>
+<p>
+    در محیط توسعه، جزئیات بیشتری از خطای رخ‌داده نمایش داده می‌شود.
+</p>
+<p>
+    <strong>محیط توسعه نباید برای نسخه عملیاتی فعال باشد.</strong>
+    نمایش جزئیات خطا ممکن است اطلاعات حساس را در اختیار کاربران قرار دهد.
+</p>
+
+@code{
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
+    private string? RequestId { get; set; }
+    private bool ShowRequestId => !string.IsNullOrEmpty(RequestId);
+
+    protected override void OnInitialized() =>
+        RequestId = Activity.Current?.Id ?? HttpContext?.TraceIdentifier;
+}

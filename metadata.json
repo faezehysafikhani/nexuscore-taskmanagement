@@ -1,0 +1,8 @@
+{
+  "name": "NexusCore",
+  "description": "Enterprise modular platform for Identity, Multi-Tenancy, Role-Based Access Control, Events & Calendar, Task Management, Chat, Ticketing, and Notifications.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

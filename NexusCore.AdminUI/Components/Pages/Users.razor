@@ -1,0 +1,84 @@
+@page "/users"
+@rendermode InteractiveServer
+@inject ApiClient Api
+
+<PageTitle>کاربران</PageTitle>
+
+<h1>کاربران</h1>
+
+<div class="form-panel">
+    <input class="form-control" placeholder="شناسه سازمان" @bind="tenantId" />
+    <input class="form-control" placeholder="ایمیل" @bind="email" />
+    <input class="form-control" placeholder="نام نمایشی" @bind="displayName" />
+    <input class="form-control" placeholder="رمز عبور" type="password" @bind="password" />
+    <button class="btn btn-primary" @onclick="CreateAsync">ایجاد کاربر</button>
+    <button class="btn btn-outline-secondary ms-2" @onclick="LoadAsync">به‌روزرسانی</button>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(message))
+{
+    <p>@message</p>
+}
+
+<table class="table table-sm">
+    <thead><tr><th>ایمیل</th><th>نام</th><th>سازمان</th><th>فعال</th><th>نقش‌ها</th><th></th></tr></thead>
+    <tbody>
+        @foreach (var user in users)
+        {
+            <tr>
+                <td>@user.Email</td>
+                <td><input class="form-control form-control-sm" value="@user.DisplayName" @onchange="e => editedNames[user.Id] = e.Value?.ToString() ?? user.DisplayName" /></td>
+                <td>@user.TenantId</td>
+                <td>@user.IsActive</td>
+                <td>@string.Join(", ", user.Roles)</td>
+                <td><button class="btn btn-sm btn-outline-primary" @onclick="() => SaveUserAsync(user)">ذخیره</button></td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    private readonly List<UserDto> users = [];
+    private readonly Dictionary<Guid, string> editedNames = [];
+    private string tenantId = "11111111-1111-1111-1111-111111111111";
+    private string email = "";
+    private string displayName = "";
+    private string password = "Password@123";
+    private string? message;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadAsync();
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        var result = await Api.GetAsync<PagedResult<UserDto>>($"/api/identity/users?tenantId={tenantId}&pageNumber=1&pageSize=50");
+        users.Clear();
+        editedNames.Clear();
+        if (result.Value is not null)
+        {
+            users.AddRange(result.Value.Items);
+        }
+        message = result.IsSuccess ? null : PersianMessages.Error(result.Error);
+    }
+
+    private async Task CreateAsync()
+    {
+        var result = await Api.PostAsync<UserDto>("/api/identity/users", new CreateUserRequest(Guid.Parse(tenantId), email, displayName, password));
+        message = result.IsSuccess ? "کاربر با موفقیت ایجاد شد." : PersianMessages.Error(result.Error);
+        await LoadAsync();
+    }
+
+    private async Task SaveUserAsync(UserDto user)
+    {
+        var name = editedNames.GetValueOrDefault(user.Id, user.DisplayName);
+        var result = await Api.PutAsync<UserDto>($"/api/identity/users/{user.Id}", new UpdateUserRequest(name, user.IsActive));
+        message = result.IsSuccess ? "اطلاعات کاربر ذخیره شد." : PersianMessages.Error(result.Error);
+        await LoadAsync();
+    }
+}

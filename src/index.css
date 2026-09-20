@@ -1,0 +1,48 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: Tahoma, 'Segoe UI', system-ui, -apple-system, sans-serif;
+    direction: rtl;
+    text-align: right;
+  }
+}
+
+/* Custom NexusCore layout and panel classes */
+.panel {
+  @apply bg-white border border-slate-200 rounded-xl p-5 shadow-sm transition-all;
+}
+
+.form-panel {
+  @apply bg-white border border-slate-200 rounded-xl p-5 mb-5 shadow-sm;
+}
+
+.input-field {
+  @apply w-full px-3.5 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all text-slate-800 placeholder-slate-400;
+}
+
+.btn-primary-nexus {
+  @apply px-4 py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm font-medium rounded-lg shadow-sm transition-all flex items-center justify-center gap-2;
+}
+
+.btn-secondary-nexus {
+  @apply px-4 py-2 bg-white hover:bg-slate-50 active:bg-slate-100 text-slate-700 text-sm font-medium border border-slate-200 rounded-lg shadow-sm transition-all flex items-center justify-center gap-2;
+}
+
+.table-nexus {
+  @apply w-full text-right text-sm border-collapse;
+}
+
+.table-nexus th {
+  @apply py-3 px-4 bg-slate-50 text-slate-600 font-semibold border-b border-slate-200 text-xs tracking-wider;
+}
+
+.table-nexus td {
+  @apply py-3 px-4 border-b border-slate-100 text-slate-700 align-middle;
+}
+
+.table-nexus tbody tr:hover {
+  @apply bg-slate-50/75;
+}

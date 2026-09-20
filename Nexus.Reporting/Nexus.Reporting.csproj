@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+	  <OutputType>Library</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Read-oriented - no Infrastructure project, no owned entity, no duplicated business
+         logic. Progress is a required reference only for its DTOs/service interface (used as
+         IProgressService?, resolved at runtime - see AddReporting's note): Reporting must not
+         force Progress Management to be installed just to show project/action counts. -->
+    <ProjectReference Include="..\Nexus.ProjectManagement.Core\Nexus.ProjectManagement.Core.csproj" />
+    <ProjectReference Include="..\Nexus.Actions\Nexus.Actions.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Progress\Nexus.ProjectManagement.Progress.csproj" />
+    <ProjectReference Include="..\NexusCore.Application\NexusCore.Application.csproj" />
+    <ProjectReference Include="..\NexusCore.SharedKernel\NexusCore.SharedKernel.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,56 @@
+@page "/audit-logs"
+@rendermode InteractiveServer
+@inject ApiClient Api
+
+<PageTitle>گزارش فعالیت‌ها</PageTitle>
+
+<h1>گزارش فعالیت‌ها</h1>
+
+<div class="form-panel">
+    <input class="form-control" placeholder="شناسه سازمان، اختیاری" @bind="tenantId" />
+    <button class="btn btn-outline-secondary" @onclick="LoadAsync">به‌روزرسانی</button>
+</div>
+
+<table class="table table-sm">
+    <thead><tr><th>زمان</th><th>عملیات</th><th>موجودیت</th><th>کاربر</th><th>جزئیات</th></tr></thead>
+    <tbody>
+        @foreach (var log in logs)
+        {
+            <tr><td>@log.OccurredAtUtc</td><td>@log.Action</td><td>@log.EntityName / @log.EntityId</td><td>@log.UserId</td><td>@log.Details</td></tr>
+        }
+    </tbody>
+</table>
+
+@if (!string.IsNullOrWhiteSpace(message))
+{
+    <p>@message</p>
+}
+
+@code {
+    private readonly List<AuditLogDto> logs = [];
+    private string tenantId = "";
+    private string? message;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadAsync();
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        var query = string.IsNullOrWhiteSpace(tenantId)
+            ? "/api/platform/audit-logs?pageNumber=1&pageSize=50"
+            : $"/api/platform/audit-logs?tenantId={tenantId}&pageNumber=1&pageSize=50";
+        var result = await Api.GetAsync<PagedResult<AuditLogDto>>(query);
+        logs.Clear();
+        if (result.Value is not null)
+        {
+            logs.AddRange(result.Value.Items);
+        }
+        message = result.IsSuccess ? null : PersianMessages.Error(result.Error);
+    }
+}

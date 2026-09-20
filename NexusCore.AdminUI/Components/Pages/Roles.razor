@@ -1,0 +1,65 @@
+@page "/roles"
+@rendermode InteractiveServer
+@inject ApiClient Api
+
+<PageTitle>نقش‌ها</PageTitle>
+
+<h1>نقش‌ها</h1>
+
+<div class="form-panel">
+    <input class="form-control" placeholder="شناسه سازمان" @bind="tenantId" />
+    <input class="form-control" placeholder="نام نقش" @bind="name" />
+    <input class="form-control" placeholder="توضیحات" @bind="description" />
+    <button class="btn btn-primary" @onclick="CreateAsync">ایجاد نقش</button>
+    <button class="btn btn-outline-secondary ms-2" @onclick="LoadAsync">به‌روزرسانی</button>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(message))
+{
+    <p>@message</p>
+}
+
+<table class="table table-sm">
+    <thead><tr><th>نام</th><th>توضیحات</th><th>سیستمی</th><th>دسترسی‌ها</th></tr></thead>
+    <tbody>
+        @foreach (var role in roles)
+        {
+            <tr><td>@role.Name</td><td>@role.Description</td><td>@role.IsSystem</td><td>@string.Join(", ", role.Permissions)</td></tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    private readonly List<RoleDto> roles = [];
+    private string tenantId = "11111111-1111-1111-1111-111111111111";
+    private string name = "";
+    private string? description;
+    private string? message;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadAsync();
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        var result = await Api.GetAsync<IReadOnlyList<RoleDto>>($"/api/identity/roles?tenantId={tenantId}");
+        roles.Clear();
+        if (result.Value is not null)
+        {
+            roles.AddRange(result.Value);
+        }
+        message = result.IsSuccess ? null : PersianMessages.Error(result.Error);
+    }
+
+    private async Task CreateAsync()
+    {
+        var result = await Api.PostAsync<RoleDto>("/api/identity/roles", new CreateRoleRequest(Guid.Parse(tenantId), name, description));
+        message = result.IsSuccess ? "نقش با موفقیت ایجاد شد." : PersianMessages.Error(result.Error);
+        await LoadAsync();
+    }
+}

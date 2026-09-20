@@ -1,0 +1,86 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>postbank-api</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.12" />
+    <PackageReference Include="Microsoft.IdentityModel.Tokens" Version="7.7.1" />
+    <PackageReference Include="Serilog.AspNetCore" Version="8.0.3" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="7.7.1" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
+  </ItemGroup>
+
+  <!-- PostBank is a second consumer of the Nexus Platform, alongside Rozet: same NexusCore
+       foundation plus the reusable modules this product chooses to compose. Trimming PostBank is
+       a matter of deleting the matching ProjectReference/AddXxx()/MapXxxEndpoints() lines; nothing
+       here is load-bearing for any other application host (Rozet.Api included). -->
+  <ItemGroup>
+    <!-- NexusCore foundation -->
+    <ProjectReference Include="..\Chat.Api\Chat.Api.csproj" />
+    <ProjectReference Include="..\Chat.Application\Chat.Application.csproj" />
+    <ProjectReference Include="..\Chat.Infrastructure\Chat.Infrastructure.csproj" />
+    <ProjectReference Include="..\Events.Api\Events.Api.csproj" />
+    <ProjectReference Include="..\Events.Application\Events.Application.csproj" />
+    <ProjectReference Include="..\Events.Infrastructure\Events.Infrastructure.csproj" />
+    <ProjectReference Include="..\NexusCore.Application\NexusCore.Application.csproj" />
+    <ProjectReference Include="..\NexusCore.Infrastructure\NexusCore.Infrastructure.csproj" />
+    <ProjectReference Include="..\NexusCore.SharedKernel\NexusCore.SharedKernel.csproj" />
+    <ProjectReference Include="..\Notifications.Api\Notifications.Api.csproj" />
+    <ProjectReference Include="..\Notifications.Application\Notifications.Application.csproj" />
+    <ProjectReference Include="..\Notifications.Infrastructure\Notifications.Infrastructure.csproj" />
+    <ProjectReference Include="..\Ticketing.Api\Ticketing.Api.csproj" />
+    <ProjectReference Include="..\Ticketing.Application\Ticketing.Application.csproj" />
+    <ProjectReference Include="..\Ticketing.Infrastructure\Ticketing.Infrastructure.csproj" />
+
+    <!-- Reusable platform capabilities (not ProjectManagement-specific) -->
+    <ProjectReference Include="..\Nexus.Organization\Nexus.Organization.csproj" />
+    <ProjectReference Include="..\Nexus.Organization.Infrastructure\Nexus.Organization.Infrastructure.csproj" />
+    <ProjectReference Include="..\Nexus.Calendar\Nexus.Calendar.csproj" />
+    <ProjectReference Include="..\Nexus.Calendar.Infrastructure\Nexus.Calendar.Infrastructure.csproj" />
+    <ProjectReference Include="..\Nexus.Workflow\Nexus.Workflow.csproj" />
+    <ProjectReference Include="..\Nexus.Workflow.Infrastructure\Nexus.Workflow.Infrastructure.csproj" />
+    <ProjectReference Include="..\Nexus.Actions\Nexus.Actions.csproj" />
+    <ProjectReference Include="..\Nexus.Actions.Infrastructure\Nexus.Actions.Infrastructure.csproj" />
+    <ProjectReference Include="..\Nexus.Knowledge\Nexus.Knowledge.csproj" />
+    <ProjectReference Include="..\Nexus.Knowledge.Infrastructure\Nexus.Knowledge.Infrastructure.csproj" />
+    <ProjectReference Include="..\Nexus.Strategy\Nexus.Strategy.csproj" />
+    <ProjectReference Include="..\Nexus.Strategy.Infrastructure\Nexus.Strategy.Infrastructure.csproj" />
+
+    <!-- Project Management: Core + every independently-registerable capability -->
+    <ProjectReference Include="..\Nexus.ProjectManagement.Core\Nexus.ProjectManagement.Core.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Core.Infrastructure\Nexus.ProjectManagement.Core.Infrastructure.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Waterfall\Nexus.ProjectManagement.Waterfall.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Waterfall.Infrastructure\Nexus.ProjectManagement.Waterfall.Infrastructure.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Agile\Nexus.ProjectManagement.Agile.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Agile.Infrastructure\Nexus.ProjectManagement.Agile.Infrastructure.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Team\Nexus.ProjectManagement.Team.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Team.Infrastructure\Nexus.ProjectManagement.Team.Infrastructure.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Deliverables\Nexus.ProjectManagement.Deliverables.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Deliverables.Infrastructure\Nexus.ProjectManagement.Deliverables.Infrastructure.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Kpi\Nexus.ProjectManagement.Kpi.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Kpi.Infrastructure\Nexus.ProjectManagement.Kpi.Infrastructure.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Risk\Nexus.ProjectManagement.Risk.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Risk.Infrastructure\Nexus.ProjectManagement.Risk.Infrastructure.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Stakeholder\Nexus.ProjectManagement.Stakeholder.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Stakeholder.Infrastructure\Nexus.ProjectManagement.Stakeholder.Infrastructure.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Progress\Nexus.ProjectManagement.Progress.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Progress.Infrastructure\Nexus.ProjectManagement.Progress.Infrastructure.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Documents\Nexus.ProjectManagement.Documents.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Documents.Infrastructure\Nexus.ProjectManagement.Documents.Infrastructure.csproj" />
+
+    <!-- Integrations (Project family x Workflow / Strategy) -->
+    <ProjectReference Include="..\Nexus.Integrations.ProjectWorkflow\Nexus.Integrations.ProjectWorkflow.csproj" />
+    <ProjectReference Include="..\Nexus.Integrations.ProjectStrategyAlignment\Nexus.Integrations.ProjectStrategyAlignment.csproj" />
+    <ProjectReference Include="..\Nexus.Integrations.ProjectStrategyAlignment.Infrastructure\Nexus.Integrations.ProjectStrategyAlignment.Infrastructure.csproj" />
+
+    <!-- Read/orchestration -->
+    <ProjectReference Include="..\Nexus.Portfolio\Nexus.Portfolio.csproj" />
+    <ProjectReference Include="..\Nexus.Reporting\Nexus.Reporting.csproj" />
+  </ItemGroup>
+
+</Project>

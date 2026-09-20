@@ -1,0 +1,77 @@
+@page "/role-permissions"
+@rendermode InteractiveServer
+@inject ApiClient Api
+
+<PageTitle>دسترسی‌های نقش</PageTitle>
+
+<h1>اختصاص دسترسی به نقش</h1>
+
+<div class="form-panel">
+    <input class="form-control" placeholder="شناسه سازمان" @bind="tenantId" />
+    <button class="btn btn-outline-secondary" @onclick="LoadAsync">بارگذاری نقش‌ها و دسترسی‌ها</button>
+</div>
+
+<div class="form-panel">
+    <label>نقش</label>
+    <select class="form-select" @bind="selectedRoleId">
+        <option value="">انتخاب نقش</option>
+        @foreach (var role in roles)
+        {
+            <option value="@role.Id">@role.Name</option>
+        }
+    </select>
+    <label>شناسه دسترسی‌ها، جداشده با ویرگول</label>
+    <textarea class="form-control" rows="3" @bind="permissionIds"></textarea>
+    <button class="btn btn-primary" @onclick="AssignAsync">اختصاص دسترسی‌ها</button>
+</div>
+
+@foreach (var group in permissions)
+{
+    <h2>@group.Module</h2>
+    <table class="table table-sm">
+        <tbody>
+            @foreach (var permission in group.Permissions)
+            {
+                <tr><td>@permission.Id</td><td>@permission.Name</td></tr>
+            }
+        </tbody>
+    </table>
+}
+
+@if (!string.IsNullOrWhiteSpace(message))
+{
+    <p>@message</p>
+}
+
+@code {
+    private readonly List<RoleDto> roles = [];
+    private readonly List<PermissionGroupDto> permissions = [];
+    private string tenantId = "11111111-1111-1111-1111-111111111111";
+    private string selectedRoleId = "";
+    private string permissionIds = "";
+    private string? message;
+
+    private async Task LoadAsync()
+    {
+        var rolesResult = await Api.GetAsync<IReadOnlyList<RoleDto>>($"/api/identity/roles?tenantId={tenantId}");
+        var permissionsResult = await Api.GetAsync<IReadOnlyList<PermissionGroupDto>>("/api/identity/permissions");
+        roles.Clear();
+        permissions.Clear();
+        if (rolesResult.Value is not null)
+        {
+            roles.AddRange(rolesResult.Value);
+        }
+        if (permissionsResult.Value is not null)
+        {
+            permissions.AddRange(permissionsResult.Value);
+        }
+        message = rolesResult.IsSuccess && permissionsResult.IsSuccess ? null : PersianMessages.Error(rolesResult.Error ?? permissionsResult.Error);
+    }
+
+    private async Task AssignAsync()
+    {
+        var parsedPermissionIds = permissionIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(Guid.Parse).ToList();
+        var result = await Api.PutAsync($"/api/identity/roles/{Guid.Parse(selectedRoleId)}/permissions", new AssignRolePermissionsRequest(parsedPermissionIds));
+        message = result.IsSuccess ? "دسترسی‌ها با موفقیت به نقش اختصاص داده شدند." : PersianMessages.Error(result.Error);
+    }
+}

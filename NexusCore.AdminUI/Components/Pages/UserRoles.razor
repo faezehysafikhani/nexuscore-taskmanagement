@@ -1,0 +1,77 @@
+@page "/user-roles"
+@rendermode InteractiveServer
+@inject ApiClient Api
+
+<PageTitle>نقش‌های کاربر</PageTitle>
+
+<h1>اختصاص نقش به کاربر</h1>
+
+<div class="form-panel">
+    <input class="form-control" placeholder="شناسه سازمان" @bind="tenantId" />
+    <button class="btn btn-outline-secondary" @onclick="LoadAsync">بارگذاری کاربران و نقش‌ها</button>
+</div>
+
+<div class="form-panel">
+    <label>کاربر</label>
+    <select class="form-select" @bind="selectedUserId">
+        <option value="">انتخاب کاربر</option>
+        @foreach (var user in users)
+        {
+            <option value="@user.Id">@user.DisplayName (@user.Email)</option>
+        }
+    </select>
+    <label>شناسه نقش‌ها، جداشده با ویرگول</label>
+    <input class="form-control" @bind="roleIds" />
+    <button class="btn btn-primary" @onclick="AssignAsync">اختصاص نقش‌ها</button>
+</div>
+
+@if (roles.Count > 0)
+{
+    <h2>نقش‌های موجود</h2>
+    <table class="table table-sm">
+        <tbody>
+            @foreach (var role in roles)
+            {
+                <tr><td>@role.Id</td><td>@role.Name</td></tr>
+            }
+        </tbody>
+    </table>
+}
+
+@if (!string.IsNullOrWhiteSpace(message))
+{
+    <p>@message</p>
+}
+
+@code {
+    private readonly List<UserDto> users = [];
+    private readonly List<RoleDto> roles = [];
+    private string tenantId = "11111111-1111-1111-1111-111111111111";
+    private string selectedUserId = "";
+    private string roleIds = "";
+    private string? message;
+
+    private async Task LoadAsync()
+    {
+        var usersResult = await Api.GetAsync<PagedResult<UserDto>>($"/api/identity/users?tenantId={tenantId}&pageNumber=1&pageSize=100");
+        var rolesResult = await Api.GetAsync<IReadOnlyList<RoleDto>>($"/api/identity/roles?tenantId={tenantId}");
+        users.Clear();
+        roles.Clear();
+        if (usersResult.Value is not null)
+        {
+            users.AddRange(usersResult.Value.Items);
+        }
+        if (rolesResult.Value is not null)
+        {
+            roles.AddRange(rolesResult.Value);
+        }
+        message = usersResult.IsSuccess && rolesResult.IsSuccess ? null : PersianMessages.Error(usersResult.Error ?? rolesResult.Error);
+    }
+
+    private async Task AssignAsync()
+    {
+        var parsedRoleIds = roleIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(Guid.Parse).ToList();
+        var result = await Api.PutAsync($"/api/identity/users/{Guid.Parse(selectedUserId)}/roles", new AssignUserRolesRequest(parsedRoleIds));
+        message = result.IsSuccess ? "نقش‌ها با موفقیت به کاربر اختصاص داده شدند." : PersianMessages.Error(result.Error);
+    }
+}
