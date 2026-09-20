@@ -277,3 +277,32 @@ internal sealed class TaskAssigneeConfiguration : IEntityTypeConfiguration<TaskA
         builder.HasIndex(x => x.UserId);
     }
 }
+
+internal sealed class TaskCommentConfiguration : IEntityTypeConfiguration<TaskComment>
+{
+    public void Configure(EntityTypeBuilder<TaskComment> builder)
+    {
+        builder.ToTable("TaskComments", Schema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+
+        builder.Property(x => x.Text).HasMaxLength(4000).IsRequired();
+        builder.Property(x => x.TaskId).IsRequired();
+        builder.Property(x => x.UserId).IsRequired();
+
+        // Comments belong to their task and go with it.
+        builder.HasOne(x => x.Task)
+            .WithMany()
+            .HasForeignKey(x => x.TaskId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Real foreign key into the shared identity schema. Restrict, so removing a user is
+        // a deliberate act rather than something that quietly erases a discussion.
+        builder.HasOne(x => x.User)
+            .WithMany()
+            .HasForeignKey(x => x.UserId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasIndex(x => new { x.TenantId, x.TaskId, x.CreatedAtUtc });
+    }
+}

@@ -13,6 +13,7 @@ public static class TaskManagementPermissions
     public const string ManageTags = "Tasks.ManageTags";
     public const string UploadFiles = "Tasks.UploadFiles";
     public const string ManageNotes = "Notes.Manage";
+    public const string Comment = "Tasks.Comment";
 
     public static IReadOnlyList<PermissionDefinition> All { get; } =
     [
@@ -24,7 +25,8 @@ public static class TaskManagementPermissions
         new(ManageRecurring, "TaskManagement", "Manage recurring task schedules"),
         new(ManageTags, "TaskManagement", "Manage task tags"),
         new(UploadFiles, "TaskManagement", "Upload task attachments"),
-        new(ManageNotes, "TaskManagement", "Manage personal notes")
+        new(ManageNotes, "TaskManagement", "Manage personal notes"),
+        new(Comment, "TaskManagement", "Comment on tasks")
     ];
 }
 

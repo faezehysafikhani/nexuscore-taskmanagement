@@ -60,6 +60,7 @@
     <ProjectReference Include="..\Nexus.ProjectManagement.Core.Infrastructure\Nexus.ProjectManagement.Core.Infrastructure.csproj" />
     <ProjectReference Include="..\Nexus.TaskManagement\Nexus.TaskManagement.csproj" />
     <ProjectReference Include="..\Nexus.TaskManagement.Infrastructure\Nexus.TaskManagement.Infrastructure.csproj" />
+    <ProjectReference Include="..\Nexus.Integrations.TaskNotifications\Nexus.Integrations.TaskNotifications.csproj" />
     <ProjectReference Include="..\Nexus.ProjectManagement.Waterfall\Nexus.ProjectManagement.Waterfall.csproj" />
     <ProjectReference Include="..\Nexus.ProjectManagement.Waterfall.Infrastructure\Nexus.ProjectManagement.Waterfall.Infrastructure.csproj" />
     <ProjectReference Include="..\Nexus.ProjectManagement.Agile\Nexus.ProjectManagement.Agile.csproj" />

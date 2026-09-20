@@ -56,7 +56,14 @@ public sealed class TaskManagementIsolationTests
 
             // The composition host is allowed to reference everything - that is its job.
             if (name is "Rozet.Api" or "Nexus.CompositionTests") continue;
+
+            // The module itself, and its own tests.
             if (name.StartsWith("Nexus.TaskManagement", StringComparison.Ordinal)) continue;
+
+            // Integration projects are the sanctioned bridge between two modules: they are
+            // allowed to know both sides precisely so neither module has to know the other.
+            // The same exemption the existing ProjectStrategyAlignment test relies on.
+            if (name.StartsWith("Nexus.Integrations.", StringComparison.Ordinal)) continue;
 
             var references = GetProjectReferences(Path.GetRelativePath(SolutionRoot, projectFile));
             Assert.DoesNotContain(references, r => r.StartsWith("Nexus.TaskManagement", StringComparison.Ordinal));
@@ -116,6 +123,31 @@ public sealed class TaskManagementIsolationTests
                 Assert.DoesNotContain("\"identity\"", statement);
             }
         }
+    }
+
+    /// <summary>
+    /// The notification bridge must stay a bridge: it may know both sides, but neither side
+    /// may know it, or the coupling it exists to prevent comes back through the side door.
+    /// </summary>
+    [Fact]
+    public void TaskNotificationsIntegration_ReferencesBothSidesAndIsReferencedByNeither()
+    {
+        const string integration = "Nexus.Integrations.TaskNotifications/Nexus.Integrations.TaskNotifications.csproj";
+        if (!File.Exists(Path.Combine(SolutionRoot, integration)))
+        {
+            return;
+        }
+
+        var references = GetProjectReferences(integration);
+        Assert.Contains("Nexus.TaskManagement", references);
+        Assert.Contains("Notifications.Application", references);
+
+        Assert.DoesNotContain(
+            GetProjectReferences(TaskManagement),
+            r => r.StartsWith("Nexus.Integrations.", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            GetProjectReferences(TaskManagementInfrastructure),
+            r => r.StartsWith("Nexus.Integrations.", StringComparison.Ordinal));
     }
 
     private static IReadOnlyList<string> GetProjectReferences(string relativeProjectPath)

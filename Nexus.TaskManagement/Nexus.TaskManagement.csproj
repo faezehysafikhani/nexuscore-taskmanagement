@@ -12,6 +12,11 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<!-- The tests pin down the Jalali day-index mapping, which is internal. -->
+		<InternalsVisibleTo Include="Nexus.TaskManagement.Tests" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<ProjectReference Include="..\NexusCore.Application\NexusCore.Application.csproj" />
 		<ProjectReference Include="..\NexusCore.SharedKernel\NexusCore.SharedKernel.csproj" />
 	</ItemGroup>

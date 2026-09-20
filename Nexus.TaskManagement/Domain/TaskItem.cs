@@ -151,4 +151,12 @@ public sealed class TaskItem : AuditableEntity<Guid>
     public void AttachRecurrence(RepetitiveTask recurrence) => Recurrence = recurrence;
 
     public void ClearRecurrence() => Recurrence = null;
+
+    /// <summary>
+    /// Announces that this task's recurrence schedule has come due. Called by the scheduler
+    /// after it has already claimed the occurrence, so the event only ever describes work
+    /// that is committed.
+    /// </summary>
+    public void RaiseRecurrenceDue(Guid repetitiveTaskId, DateTimeOffset dueAtUtc) =>
+        RaiseDomainEvent(new RepetitiveTaskDue(repetitiveTaskId, Id, TenantId, dueAtUtc));
 }

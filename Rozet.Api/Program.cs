@@ -33,9 +33,11 @@ using Nexus.ProjectManagement.Agile.Endpoints;
 using Nexus.ProjectManagement.Agile.Infrastructure;
 using Nexus.ProjectManagement.Core;
 using Nexus.ProjectManagement.Core.Endpoints;
+using Nexus.TaskManagement.Endpoints;
 using Nexus.ProjectManagement.Core.Infrastructure;
 using Nexus.TaskManagement;
 using Nexus.TaskManagement.Infrastructure;
+using Nexus.Integrations.TaskNotifications;
 using Nexus.ProjectManagement.Deliverables;
 using Nexus.ProjectManagement.Deliverables.Endpoints;
 using Nexus.ProjectManagement.Deliverables.Infrastructure;
@@ -108,6 +110,7 @@ builder.Services.AddStrategyManagement();
 
 builder.Services.AddProjectManagementCore();
 builder.Services.AddTaskManagement();
+builder.Services.AddTaskNotificationsIntegration();
 builder.Services.AddWaterfallPlanning();
 builder.Services.AddAgilePlanning();
 builder.Services.AddProjectTeam();
@@ -292,6 +295,7 @@ app.MapKnowledgeDocumentEndpoints();
 app.MapStrategyEndpoints();
 
 app.MapProjectEndpoints();
+app.MapTaskManagementEndpoints();
 app.MapWaterfallEndpoints();
 app.MapAgileTaskEndpoints();
 app.MapTeamEndpoints();

@@ -155,6 +155,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nexus.TaskManagement", "Nex
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nexus.TaskManagement.Infrastructure", "Nexus.TaskManagement.Infrastructure\Nexus.TaskManagement.Infrastructure.csproj", "{A12BF104-DED0-4885-9FF4-BD755E2CD5DA}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nexus.Integrations.TaskNotifications", "Nexus.Integrations.TaskNotifications\Nexus.Integrations.TaskNotifications.csproj", "{45A52B87-5214-4337-BB5B-C5CF25BC272A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nexus.TaskManagement.Tests", "Nexus.TaskManagement.Tests\Nexus.TaskManagement.Tests.csproj", "{15D8E056-8ABC-4BD1-B13C-6A15AD191519}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -417,6 +421,14 @@ Global
 		{A12BF104-DED0-4885-9FF4-BD755E2CD5DA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A12BF104-DED0-4885-9FF4-BD755E2CD5DA}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A12BF104-DED0-4885-9FF4-BD755E2CD5DA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{45A52B87-5214-4337-BB5B-C5CF25BC272A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{45A52B87-5214-4337-BB5B-C5CF25BC272A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{45A52B87-5214-4337-BB5B-C5CF25BC272A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{45A52B87-5214-4337-BB5B-C5CF25BC272A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{15D8E056-8ABC-4BD1-B13C-6A15AD191519}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{15D8E056-8ABC-4BD1-B13C-6A15AD191519}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{15D8E056-8ABC-4BD1-B13C-6A15AD191519}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{15D8E056-8ABC-4BD1-B13C-6A15AD191519}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

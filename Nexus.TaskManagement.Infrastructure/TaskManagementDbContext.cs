@@ -28,6 +28,7 @@ public sealed class TaskManagementDbContext(DbContextOptions<TaskManagementDbCon
     public DbSet<TaskTag> TaskTags => Set<TaskTag>();
     public DbSet<Note> Notes => Set<Note>();
     public DbSet<TaskAssignee> TaskAssignees => Set<TaskAssignee>();
+    public DbSet<TaskComment> TaskComments => Set<TaskComment>();
 
     // Read-only views onto the shared identity tables, for joins and FK targets only.
     public DbSet<User> Users => Set<User>();
