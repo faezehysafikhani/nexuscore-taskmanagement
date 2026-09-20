@@ -293,9 +293,12 @@ public static class TaskManagementEndpoints
                 Guid fileId, ITaskFileService service, CancellationToken cancellationToken) =>
             {
                 var result = await service.DownloadAsync(fileId, cancellationToken);
-                return result.IsSuccess
-                    ? Results.File(result.Value.Content, result.Value.ContentType, result.Value.FileName)
-                    : result.ToApiResult();
+                if (result.IsFailure || result.Value is not { } download)
+                {
+                    return result.ToApiResult();
+                }
+
+                return Results.File(download.Content, download.ContentType, download.FileName);
             })
             .WithSummary("Download an attachment")
             .RequireAuthorization(TaskManagementPermissions.View);

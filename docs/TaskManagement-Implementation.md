@@ -308,8 +308,8 @@ indexes. EF and SqlClient set it by default; raw `sqlcmd` does not.
 
 | Check | Result |
 |---|---|
-| `dotnet build NexusCore.sln` | succeeded — **0 errors, 0 warnings** |
-| `dotnet test NexusCore.sln` | **76/76 passed** (2 NexusCore.Tests + 24 CompositionTests + 50 TaskManagement.Tests) |
+| `dotnet build NexusCore.sln --no-incremental` | succeeded — **0 errors**; 3 warnings, all pre-existing (Events.Infrastructure, Ticketing.Domain) |
+| `dotnet test NexusCore.sln` | **111/111 passed** (2 NexusCore.Tests + 24 CompositionTests + 85 TaskManagement.Tests) |
 | Migrations | `InitTaskManagement`, `AddTaskComments` |
 | Host starts with the module composed | yes — DI graph resolved, 0 resolution errors |
 | Schema created in a real database | 10 tables in `task_management` |
@@ -324,12 +324,19 @@ indexes. EF and SqlClient set it by default; raw `sqlcmd` does not.
 | `TaskManagerDB` (the real local database) | **untouched** |
 | Other modules changed | none |
 
+### Integration tests
+
+35 of the 85 tests run against a **real SQL Server database**, created per run and dropped
+afterwards. They use the in-memory provider nowhere: CHECK constraints, filtered unique
+indexes, cascade behaviour and cross-schema foreign keys do not exist in memory, so a green
+in-memory run would prove nothing about them. They skip cleanly when no SQL Server is reachable.
+
 ### Not tested
 
-Endpoint, authentication and authorization behaviour is not covered by automated tests — that
-needs a `WebApplicationFactory` host with a seeded database, which this environment does not
-have. The 50 tests cover the recurrence calculator, the domain rules and the validators. Real
-SMS delivery is untested because there is nothing to deliver to.
+HTTP-level behaviour — routing, model binding, the JWT pipeline and the permission policies as
+ASP.NET applies them — is not covered. That needs a `WebApplicationFactory`. Authorization is
+verified only at the service layer (tenant scoping, note and comment ownership) and by reading
+the endpoint definitions. Real SMS delivery is untested because there is nothing to deliver to.
 
 ---
 
