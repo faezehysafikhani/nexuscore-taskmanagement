@@ -7,6 +7,20 @@ public interface IIdentityRepository
 {
     Task<User?> GetUserByEmailAsync(string email, string? tenantSlug, CancellationToken cancellationToken);
     Task<User?> GetUserByIdAsync(Guid userId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Finds the account for a sign-in identifier: an email address, a username or a mobile
+    /// number. Returns null when nothing matches or the identifier is ambiguous across tenants.
+    /// </summary>
+    Task<User?> FindUserByLoginAsync(string identifier, string? tenantSlug, CancellationToken cancellationToken);
+    Task<bool> UsernameExistsAsync(Guid tenantId, string username, Guid? exceptUserId, CancellationToken cancellationToken);
+    Task<Role?> GetRoleByNameAsync(Guid tenantId, string name, CancellationToken cancellationToken);
+    Task<Tenant?> GetTenantBySlugAsync(string slug, CancellationToken cancellationToken);
+    Task AddPasswordResetTokenAsync(PasswordResetToken token, CancellationToken cancellationToken);
+    Task<PasswordResetToken?> FindActivePasswordResetTokenAsync(string tokenHash, CancellationToken cancellationToken);
+    /// <summary>Revokes every active refresh token of the user: signs them out everywhere.</summary>
+    Task RevokeRefreshTokensAsync(Guid userId, CancellationToken cancellationToken);
+    Task InvalidatePasswordResetTokensAsync(Guid userId, DateTimeOffset nowUtc, CancellationToken cancellationToken);
     Task<PagedResult<User>> ListUsersAsync(Guid? tenantId,
     int? pageNumber,
     int? pageSize,

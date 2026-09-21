@@ -28,11 +28,14 @@ public static class PermissionPrerequisites
         [IdentityPermissions.SettingsUpdate] = [IdentityPermissions.SettingsView],
         [IdentityPermissions.TenantsCreate] = [IdentityPermissions.TenantsView],
 
-        // Optional user-group feature. Remove these four entries together with the feature.
+        // Optional user-group feature. Remove these entries together with the feature.
         [UserGroupPermissions.GroupsCreate] = [UserGroupPermissions.GroupsView],
         [UserGroupPermissions.GroupsUpdate] = [UserGroupPermissions.GroupsView],
         [UserGroupPermissions.GroupsAssignPermissions] = [UserGroupPermissions.GroupsView, IdentityPermissions.PermissionsView],
-        [UserGroupPermissions.GroupsManageMembers] = [UserGroupPermissions.GroupsView, IdentityPermissions.UsersView]
+        [UserGroupPermissions.GroupsManageMembers] = [UserGroupPermissions.GroupsView, IdentityPermissions.UsersView],
+        [UserGroupPermissions.GroupsDelete] = [UserGroupPermissions.GroupsView],
+        // Building a team means picking its members from the user list.
+        [UserGroupPermissions.GroupsManageOwn] = [IdentityPermissions.UsersView]
     };
 
     /// <summary>

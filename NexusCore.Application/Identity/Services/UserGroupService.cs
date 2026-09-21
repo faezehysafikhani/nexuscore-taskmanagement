@@ -12,7 +12,8 @@ public sealed class UserGroupService(
     IUserGroupRepository repository,
     IIdentityRepository identityRepository,
     IUnitOfWork unitOfWork,
-    IPlatformService platformService) : IUserGroupService
+    IPlatformService platformService,
+    ICurrentUserContext currentUser) : IUserGroupService
 {
     public async Task<Result<IReadOnlyList<UserGroupDto>>> ListAsync(Guid? tenantId, CancellationToken cancellationToken)
     {
@@ -89,6 +90,13 @@ public sealed class UserGroupService(
             return Result.Failure(Error.NotFound("User group was not found."));
         }
 
+        // A personal work team is managed by its owner; letting it carry permissions would let any
+        // user grant themselves access by joining their own team.
+        if (group.IsPersonalTeam)
+        {
+            return Result.Failure(Error.Validation("A personal work team cannot carry permissions."));
+        }
+
         var known = (await identityRepository.ListPermissionsAsync(cancellationToken)).Select(permission => permission.Id).ToHashSet();
         if (request.PermissionIds.Any(id => !known.Contains(id)))
         {
@@ -127,6 +135,163 @@ public sealed class UserGroupService(
         return Result.Success();
     }
 
+    public async Task<Result> DeleteAsync(Guid groupId, CancellationToken cancellationToken)
+    {
+        var group = await repository.GetByIdAsync(groupId, cancellationToken);
+        if (group is null)
+        {
+            return Result.Failure(Error.NotFound("User group was not found."));
+        }
+
+        return await RemoveAsync(group, "groups.delete", cancellationToken);
+    }
+
+    public async Task<Result<IReadOnlyList<UserGroupDto>>> ListMyTeamsAsync(CancellationToken cancellationToken)
+    {
+        if (currentUser.UserId is not { } ownerId || currentUser.TenantId is not { } tenantId)
+        {
+            return Result.Failure<IReadOnlyList<UserGroupDto>>(Error.Unauthorized());
+        }
+
+        var teams = await repository.ListOwnedAsync(tenantId, ownerId, cancellationToken);
+        var users = await LoadMemberUsersAsync(teams, cancellationToken);
+        return Result.Success<IReadOnlyList<UserGroupDto>>(teams.Select(team => ToDto(team, users)).ToList());
+    }
+
+    public async Task<Result<UserGroupDto>> CreateMyTeamAsync(CreateMyTeamRequest request, CancellationToken cancellationToken)
+    {
+        if (currentUser.UserId is not { } ownerId || currentUser.TenantId is not { } tenantId)
+        {
+            return Result.Failure<UserGroupDto>(Error.Unauthorized());
+        }
+
+        var nameCheck = ValidateTeamName(request.Name);
+        if (nameCheck.IsFailure)
+        {
+            return Result.Failure<UserGroupDto>(nameCheck.Error);
+        }
+
+        if (await repository.NameExistsAsync(tenantId, request.Name.Trim().ToUpperInvariant(), null, cancellationToken, ownerId))
+        {
+            return Result.Failure<UserGroupDto>(Error.Conflict("You already have a team with this name."));
+        }
+
+        // The owner is always the first member of their own team.
+        var team = new UserGroup(Guid.NewGuid(), tenantId, request.Name, request.Description, ownerId);
+        team.SetMembers([ownerId]);
+        await repository.AddAsync(team, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        await platformService.AuditAsync("groups.create_own", nameof(UserGroup), team.Id.ToString(), team.Name, cancellationToken);
+
+        var users = await LoadMemberUsersAsync([team], cancellationToken);
+        return Result.Success(ToDto(team, users));
+    }
+
+    public async Task<Result<UserGroupDto>> UpdateMyTeamAsync(Guid groupId, UpdateMyTeamRequest request, CancellationToken cancellationToken)
+    {
+        var owned = await GetOwnedTeamAsync(groupId, cancellationToken);
+        if (owned.IsFailure)
+        {
+            return Result.Failure<UserGroupDto>(owned.Error);
+        }
+
+        var team = owned.Value!;
+        var nameCheck = ValidateTeamName(request.Name);
+        if (nameCheck.IsFailure)
+        {
+            return Result.Failure<UserGroupDto>(nameCheck.Error);
+        }
+
+        if (await repository.NameExistsAsync(team.TenantId, request.Name.Trim().ToUpperInvariant(), team.Id, cancellationToken, team.OwnerUserId))
+        {
+            return Result.Failure<UserGroupDto>(Error.Conflict("You already have a team with this name."));
+        }
+
+        team.Update(request.Name, request.Description, team.IsActive);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        await platformService.AuditAsync("groups.update_own", nameof(UserGroup), team.Id.ToString(), team.Name, cancellationToken);
+
+        var users = await LoadMemberUsersAsync([team], cancellationToken);
+        return Result.Success(ToDto(team, users));
+    }
+
+    public async Task<Result<UserGroupDto>> SetMyTeamMembersAsync(Guid groupId, SetMyTeamMembersRequest request, CancellationToken cancellationToken)
+    {
+        var owned = await GetOwnedTeamAsync(groupId, cancellationToken);
+        if (owned.IsFailure)
+        {
+            return Result.Failure<UserGroupDto>(owned.Error);
+        }
+
+        var team = owned.Value!;
+        var memberIds = (request.UserIds ?? []).Append(team.OwnerUserId!.Value).Distinct().ToList();
+
+        var users = await repository.ListUsersAsync(memberIds, cancellationToken);
+        if (users.Count != memberIds.Count)
+        {
+            return Result.Failure<UserGroupDto>(Error.Validation("One or more users do not exist."));
+        }
+
+        if (users.Any(user => user.TenantId != team.TenantId))
+        {
+            return Result.Failure<UserGroupDto>(Error.Validation("All members must belong to the same tenant as the team."));
+        }
+
+        team.SetMembers(memberIds);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        await platformService.AuditAsync("groups.manage_own_members", nameof(UserGroup), team.Id.ToString(), string.Join(",", memberIds), cancellationToken);
+        return Result.Success(ToDto(team, users));
+    }
+
+    public async Task<Result> DeleteMyTeamAsync(Guid groupId, CancellationToken cancellationToken)
+    {
+        var owned = await GetOwnedTeamAsync(groupId, cancellationToken);
+        return owned.IsFailure
+            ? Result.Failure(owned.Error)
+            : await RemoveAsync(owned.Value!, "groups.delete_own", cancellationToken);
+    }
+
+    /// <summary>
+    /// The caller's own team, or the same "not found" for a team that does not exist and one
+    /// that belongs to somebody else - so ids of other people's teams are not confirmed.
+    /// </summary>
+    private async Task<Result<UserGroup>> GetOwnedTeamAsync(Guid groupId, CancellationToken cancellationToken)
+    {
+        if (currentUser.UserId is not { } ownerId || currentUser.TenantId is not { } tenantId)
+        {
+            return Result.Failure<UserGroup>(Error.Unauthorized());
+        }
+
+        var team = await repository.GetByIdAsync(groupId, cancellationToken);
+        return team is null || team.TenantId != tenantId || team.OwnerUserId != ownerId
+            ? Result.Failure<UserGroup>(Error.NotFound("Team was not found."))
+            : Result.Success(team);
+    }
+
+    private async Task<Result> RemoveAsync(UserGroup group, string auditAction, CancellationToken cancellationToken)
+    {
+        repository.Remove(group);
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (Microsoft.EntityFrameworkCore.DbUpdateException)
+        {
+            // Other modules (e.g. tasks assigned to this team) still point at the group.
+            return Result.Failure(Error.Conflict("The team is still in use (for example, tasks are assigned to it). Reassign them first."));
+        }
+
+        await platformService.AuditAsync(auditAction, nameof(UserGroup), group.Id.ToString(), group.Name, cancellationToken);
+        return Result.Success();
+    }
+
+    private static Result ValidateTeamName(string? name) =>
+        string.IsNullOrWhiteSpace(name)
+            ? Result.Failure(Error.Validation("Team name is required."))
+            : name.Trim().Length > 128
+                ? Result.Failure(Error.Validation("Team name must be at most 128 characters."))
+                : Result.Success();
+
     private async Task<IReadOnlyList<User>> LoadMemberUsersAsync(IReadOnlyList<UserGroup> groups, CancellationToken cancellationToken)
     {
         var userIds = groups.SelectMany(group => group.Members.Select(member => member.UserId)).Distinct().ToList();
@@ -150,6 +315,7 @@ public sealed class UserGroupService(
                 .Where(member => byId.ContainsKey(member.UserId))
                 .Select(member => new UserGroupMemberDto(member.UserId, byId[member.UserId].DisplayName, byId[member.UserId].Email))
                 .OrderBy(member => member.DisplayName)
-                .ToList());
+                .ToList(),
+            group.OwnerUserId);
     }
 }

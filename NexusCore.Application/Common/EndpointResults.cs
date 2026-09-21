@@ -38,6 +38,7 @@ public static class EndpointResults
             "not_found" => StatusCodes.Status404NotFound,
             "conflict" => StatusCodes.Status409Conflict,
             "unauthorized" => StatusCodes.Status401Unauthorized,
+            "forbidden" => StatusCodes.Status403Forbidden,
             _ => StatusCodes.Status400BadRequest
         };
 

@@ -30,7 +30,8 @@ public sealed class IdentityService(
             return Result.Failure<AuthResponse>(validation.Error);
         }
 
-        var user = await repository.GetUserByEmailAsync(request.Email, request.TenantSlug, cancellationToken);
+        // The identifier may be an email address, a username or a mobile number.
+        var user = await repository.FindUserByLoginAsync(request.Email, request.TenantSlug, cancellationToken);
         if (user is null || !user.IsActive || !passwordHasher.Verify(request.Password, user.PasswordHash))
         {
             return Result.Failure<AuthResponse>(Error.Unauthorized("Invalid email or password."));
@@ -121,7 +122,14 @@ public sealed class IdentityService(
             return Result.Failure<UserDto>(Error.Conflict("A user with this email already exists in the tenant."));
         }
 
+        if (!string.IsNullOrWhiteSpace(request.Username)
+            && await repository.UsernameExistsAsync(request.TenantId, request.Username, null, cancellationToken))
+        {
+            return Result.Failure<UserDto>(Error.Conflict("A user with this username already exists in the tenant."));
+        }
+
         var user = new User(Guid.NewGuid(), request.TenantId, request.Email, request.DisplayName, passwordHasher.HashPassword(request.Password), request.IsActive);
+        user.UpdateContactDetails(request.Username, request.PhoneNumber, request.TelegramChatId, request.NotifySms, request.NotifyTelegram);
         await repository.AddUserAsync(user, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await platformService.AuditAsync("users.create", nameof(User), user.Id.ToString(), user.Email, cancellationToken);
@@ -143,7 +151,41 @@ public sealed class IdentityService(
             return Result.Failure<UserDto>(Error.NotFound("User was not found."));
         }
 
+        if (!string.IsNullOrWhiteSpace(request.Email)
+            && !string.Equals(request.Email.Trim(), user.Email, StringComparison.OrdinalIgnoreCase))
+        {
+            if (await repository.UserEmailExistsAsync(user.TenantId, request.Email, cancellationToken))
+            {
+                return Result.Failure<UserDto>(Error.Conflict("A user with this email already exists in the tenant."));
+            }
+
+            user.ChangeEmail(request.Email);
+        }
+
+        if (request.Username is not null
+            && !string.IsNullOrWhiteSpace(request.Username)
+            && await repository.UsernameExistsAsync(user.TenantId, request.Username, user.Id, cancellationToken))
+        {
+            return Result.Failure<UserDto>(Error.Conflict("A user with this username already exists in the tenant."));
+        }
+
         user.UpdateProfile(request.DisplayName, request.IsActive);
+
+        // Fields left null keep their current value.
+        user.UpdateContactDetails(
+            request.Username ?? user.Username,
+            request.PhoneNumber ?? user.PhoneNumber,
+            request.TelegramChatId ?? user.TelegramChatId,
+            request.NotifySms ?? user.NotifySms,
+            request.NotifyTelegram ?? user.NotifyTelegram);
+
+        if (!string.IsNullOrWhiteSpace(request.Password))
+        {
+            user.ChangePassword(passwordHasher.HashPassword(request.Password));
+            // A new password ends every existing session of that user.
+            await repository.RevokeRefreshTokensAsync(user.Id, cancellationToken);
+        }
+
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await platformService.AuditAsync("users.update", nameof(User), user.Id.ToString(), user.Email, cancellationToken);
         return Result.Success(ToUserDto(user));
@@ -164,7 +206,16 @@ public sealed class IdentityService(
 
         var auditDetails = user.Email;
         await repository.RemoveUserAsync(user, cancellationToken);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (Microsoft.EntityFrameworkCore.DbUpdateException)
+        {
+            // Other data (tasks they own, a team of theirs assigned to tasks) still points at the
+            // user. That is a conflict to resolve first, not a server error.
+            return Result.Failure(Error.Conflict("The user is still referenced by other records (for example tasks they own). Deactivate the account instead, or reassign that data first."));
+        }
         await platformService.AuditAsync("users.delete", nameof(User), user.Id.ToString(), auditDetails, cancellationToken);
         return Result.Success();
     }
@@ -276,8 +327,7 @@ public sealed class IdentityService(
         return Result.Success(ToTenantDto(tenant));
     }
 
-    private static UserDto ToUserDto(User user) =>
-        new(user.Id, user.TenantId, user.Email, user.DisplayName, user.IsActive, user.LastLoginAtUtc, user.Roles.Select(role => role.Role?.Name ?? role.RoleId.ToString()).ToList());
+    private static UserDto ToUserDto(User user) => IdentityMappings.ToUserDto(user);
 
     private static RoleDto ToRoleDto(Role role) =>
         new(role.Id, role.TenantId, role.Name, role.Description, role.IsSystem, role.Permissions.Select(permission => permission.Permission?.Name ?? permission.PermissionId.ToString()).ToList());

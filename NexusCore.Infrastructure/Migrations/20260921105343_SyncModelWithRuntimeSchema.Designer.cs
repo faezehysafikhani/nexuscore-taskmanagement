@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NexusCore.Infrastructure.Persistence;
 
@@ -11,9 +12,11 @@ using NexusCore.Infrastructure.Persistence;
 namespace NexusCore.Infrastructure.Migrations
 {
     [DbContext(typeof(NexusCoreDbContext))]
-    partial class NexusCoreDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260921105343_SyncModelWithRuntimeSchema")]
+    partial class SyncModelWithRuntimeSchema
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -278,13 +281,6 @@ namespace NexusCore.Infrastructure.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<string>("AvatarUrl")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("ColorPalette")
-                        .HasMaxLength(40)
-                        .HasColumnType("nvarchar(40)");
-
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("datetimeoffset");
 
@@ -313,52 +309,18 @@ namespace NexusCore.Infrastructure.Migrations
                     b.Property<Guid?>("ModifiedByUserId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<bool>("NotifySms")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(true);
-
-                    b.Property<bool>("NotifyTelegram")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(true);
-
                     b.Property<string>("PasswordHash")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
 
-                    b.Property<string>("PhoneNumber")
-                        .HasMaxLength(32)
-                        .HasColumnType("nvarchar(32)");
-
-                    b.Property<string>("TelegramChatId")
-                        .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)");
-
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("Theme")
-                        .HasMaxLength(40)
-                        .HasColumnType("nvarchar(40)");
-
-                    b.Property<string>("ThemeMode")
-                        .HasMaxLength(10)
-                        .HasColumnType("nvarchar(10)");
-
-                    b.Property<string>("Username")
-                        .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)");
 
                     b.HasKey("Id");
 
                     b.HasIndex("TenantId", "Email")
                         .IsUnique();
-
-                    b.HasIndex("TenantId", "Username")
-                        .IsUnique()
-                        .HasFilter("[Username] IS NOT NULL");
 
                     b.ToTable("Users", "identity");
                 });
@@ -397,17 +359,12 @@ namespace NexusCore.Infrastructure.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("nvarchar(128)");
 
-                    b.Property<Guid?>("OwnerUserId")
-                        .HasColumnType("uniqueidentifier");
-
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uniqueidentifier");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("OwnerUserId");
-
-                    b.HasIndex("TenantId", "OwnerUserId", "NormalizedName")
+                    b.HasIndex("TenantId", "NormalizedName")
                         .IsUnique();
 
                     b.ToTable("UserGroups", "identity");
@@ -570,11 +527,6 @@ namespace NexusCore.Infrastructure.Migrations
 
             modelBuilder.Entity("NexusCore.Domain.Identity.UserGroup", b =>
                 {
-                    b.HasOne("NexusCore.Domain.Identity.User", null)
-                        .WithMany()
-                        .HasForeignKey("OwnerUserId")
-                        .OnDelete(DeleteBehavior.NoAction);
-
                     b.HasOne("NexusCore.Domain.Identity.Tenant", "Tenant")
                         .WithMany()
                         .HasForeignKey("TenantId")

@@ -1,4 +1,5 @@
 ﻿using NexusCore.Domain.Identity;
+using NexusCore.SharedKernel.Results;
 
 namespace NexusCore.Application.Security;
 
@@ -20,6 +21,9 @@ public interface IPasswordResetLinkSender
     /// </summary>
     bool ExposeTokenInResponse { get; }
 
-    /// <summary>Delivers the reset link and returns the link that was built.</summary>
-    Task<string> SendAsync(User user, string rawToken, DateTimeOffset expiresAtUtc, CancellationToken cancellationToken);
+    /// <summary>False when the channel cannot deliver anything (e.g. no mail server configured).</summary>
+    bool IsAvailable { get; }
+
+    /// <summary>Delivers the reset link. Fails (never throws) when it cannot be delivered.</summary>
+    Task<Result<string>> SendAsync(User user, string rawToken, DateTimeOffset expiresAtUtc, CancellationToken cancellationToken);
 }

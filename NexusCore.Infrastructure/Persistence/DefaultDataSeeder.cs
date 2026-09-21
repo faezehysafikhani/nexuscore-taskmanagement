@@ -1,4 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using NexusCore.Application.Identity.Options;
 using NexusCore.Application.Identity.Permissions;
 using NexusCore.Application.Security;
 using NexusCore.Domain.Identity;
@@ -14,7 +17,9 @@ namespace NexusCore.Infrastructure.Persistence;
 public sealed class DefaultDataSeeder(
     NexusCoreDbContext dbContext,
     IPasswordHasher passwordHasher,
-    IEnumerable<IPermissionCatalog> permissionCatalogs)
+    IEnumerable<IPermissionCatalog> permissionCatalogs,
+    IOptions<IdentitySeedOptions> seedOptions,
+    ILogger<DefaultDataSeeder> logger)
 {
     public static readonly Guid DefaultTenantId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     public static readonly Guid AdminRoleId = Guid.Parse("22222222-2222-2222-2222-222222222222");
@@ -62,6 +67,8 @@ public sealed class DefaultDataSeeder(
         var permissionIds = await dbContext.Permissions.Select(permission => permission.Id).ToListAsync(cancellationToken);
         adminRole.SetPermissions(permissionIds);
 
+        await SeedConfiguredRolesAsync(cancellationToken);
+
         if (!await dbContext.Settings.AnyAsync(setting => setting.Key == "Localization.DefaultCulture", cancellationToken))
         {
             await dbContext.Settings.AddAsync(new SystemSetting(Guid.NewGuid(), null, "Localization.DefaultCulture", "fa-IR", "System"), cancellationToken);
@@ -69,6 +76,33 @@ public sealed class DefaultDataSeeder(
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task SeedConfiguredRolesAsync(CancellationToken cancellationToken)
+    {
+        foreach (var definition in seedOptions.Value.SeedRoles.Where(role => !string.IsNullOrWhiteSpace(role.Name)))
+        {
+            var normalized = definition.Name.Trim().ToUpperInvariant();
+            if (await dbContext.Roles.AnyAsync(role => role.TenantId == DefaultTenantId && role.NormalizedName == normalized, cancellationToken))
+            {
+                continue; // Exists already: whatever an administrator did to it stays.
+            }
+
+            var wanted = definition.Permissions.Select(name => name.Trim()).ToHashSet(StringComparer.Ordinal);
+            var permissions = await dbContext.Permissions
+                .Where(permission => wanted.Contains(permission.Name))
+                .Select(permission => new { permission.Id, permission.Name })
+                .ToListAsync(cancellationToken);
+
+            foreach (var missing in wanted.Except(permissions.Select(p => p.Name)))
+            {
+                logger.LogWarning("Seed role {Role} names unknown permission {Permission}; it was skipped.", definition.Name, missing);
+            }
+
+            var role = new Role(CreateStableGuid("role:" + normalized), DefaultTenantId, definition.Name.Trim(), definition.Description);
+            role.SetPermissions(permissions.Select(p => p.Id));
+            await dbContext.Roles.AddAsync(role, cancellationToken);
+        }
     }
 
     private static Guid CreateStableGuid(string value)

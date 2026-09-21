@@ -35,6 +35,18 @@ public static class UserGroupServiceCollectionExtensions
         services.AddScoped<IUserGroupRepository, UserGroupRepository>();
         services.AddScoped<IUserGroupService, UserGroupService>();
         services.AddSingleton<IPermissionCatalog, UserGroupPermissionCatalog>();
+
+        // The group endpoints require these names as policies. They are registered here, next to
+        // the catalog, the same way every module registers its own - without this every group
+        // request failed with "AuthorizationPolicy named 'groups.view' was not found" (500).
+        services.AddAuthorization(options =>
+        {
+            foreach (var permission in UserGroupPermissions.All)
+            {
+                options.AddPolicy(permission.Name, policy =>
+                    policy.RequireAuthenticatedUser().AddRequirements(new PermissionRequirement(permission.Name)));
+            }
+        });
         return services;
     }
 }

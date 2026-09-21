@@ -9,7 +9,8 @@ public sealed class UserGroupPermissionProvider(NexusCoreDbContext dbContext) : 
 {
     public async Task<IReadOnlyList<string>> GetPermissionNamesAsync(Guid userId, CancellationToken cancellationToken) =>
         await dbContext.UserGroupMembers
-            .Where(member => member.UserId == userId && member.UserGroup!.IsActive)
+            // Personal work teams never grant anything, whatever rows might exist.
+            .Where(member => member.UserId == userId && member.UserGroup!.IsActive && member.UserGroup.OwnerUserId == null)
             .SelectMany(member => member.UserGroup!.Permissions)
             .Select(groupPermission => groupPermission.Permission!.Name)
             .Distinct()
@@ -18,7 +19,7 @@ public sealed class UserGroupPermissionProvider(NexusCoreDbContext dbContext) : 
     public async Task<IReadOnlyDictionary<Guid, IReadOnlyList<string>>> GetGrantingGroupsAsync(Guid userId, CancellationToken cancellationToken)
     {
         var pairs = await dbContext.UserGroupMembers
-            .Where(member => member.UserId == userId && member.UserGroup!.IsActive)
+            .Where(member => member.UserId == userId && member.UserGroup!.IsActive && member.UserGroup.OwnerUserId == null)
             .SelectMany(member => member.UserGroup!.Permissions.Select(groupPermission => new
             {
                 groupPermission.PermissionId,

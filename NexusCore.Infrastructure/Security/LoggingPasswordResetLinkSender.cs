@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Options;
 using NexusCore.Application.Security;
 using NexusCore.Domain.Identity;
+using NexusCore.SharedKernel.Results;
 
 namespace NexusCore.Infrastructure.Security;
 
@@ -17,7 +18,9 @@ public sealed class LoggingPasswordResetLinkSender(
 
     public bool ExposeTokenInResponse => options.Value.ReturnTokenInResponse;
 
-    public Task<string> SendAsync(User user, string rawToken, DateTimeOffset expiresAtUtc, CancellationToken cancellationToken)
+    public bool IsAvailable => true;
+
+    public Task<Result<string>> SendAsync(User user, string rawToken, DateTimeOffset expiresAtUtc, CancellationToken cancellationToken)
     {
         var template = options.Value.ResetUrlTemplate.TrimEnd('/');
         var separator = template.Contains('?') ? "&" : "?";
@@ -29,6 +32,6 @@ public sealed class LoggingPasswordResetLinkSender(
             expiresAtUtc,
             resetLink);
 
-        return Task.FromResult(resetLink);
+        return Task.FromResult(Result.Success(resetLink));
     }
 }

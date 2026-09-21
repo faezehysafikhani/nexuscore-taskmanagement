@@ -14,7 +14,15 @@ public sealed class UserGroupConfiguration : IEntityTypeConfiguration<UserGroup>
         builder.Property(x => x.Name).HasMaxLength(128).IsRequired();
         builder.Property(x => x.NormalizedName).HasMaxLength(128).IsRequired();
         builder.Property(x => x.Description).HasMaxLength(512);
-        builder.HasIndex(x => new { x.TenantId, x.NormalizedName }).IsUnique();
+        // Organisational groups (OwnerUserId NULL) keep unique names per tenant - SQL Server treats
+        // NULLs as equal in a unique index. Personal work teams are unique per owner, so two
+        // people can each have a team with the same name.
+        // HasFilter(null): EF would otherwise add "[OwnerUserId] IS NOT NULL" and drop the
+        // uniqueness of organisational group names.
+        builder.HasIndex(x => new { x.TenantId, x.OwnerUserId, x.NormalizedName }).IsUnique().HasFilter(null);
+        // NoAction: deleting a user removes their teams explicitly (IdentityRepository.RemoveUserAsync);
+        // a cascade here would give SQL Server two cascade paths into UserGroupMembers.
+        builder.HasOne<User>().WithMany().HasForeignKey(x => x.OwnerUserId).OnDelete(DeleteBehavior.NoAction);
         builder.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
         builder.Navigation(x => x.Permissions).UsePropertyAccessMode(PropertyAccessMode.Field);
         builder.Navigation(x => x.Members).UsePropertyAccessMode(PropertyAccessMode.Field);

@@ -20,15 +20,24 @@ public sealed class UserGroupRepository(NexusCoreDbContext dbContext) : IUserGro
     public Task<UserGroup?> GetByIdAsync(Guid groupId, CancellationToken cancellationToken) =>
         IncludeGraph(dbContext.UserGroups.AsQueryable()).SingleOrDefaultAsync(group => group.Id == groupId, cancellationToken);
 
-    public Task<bool> NameExistsAsync(Guid tenantId, string normalizedName, Guid? excludeGroupId, CancellationToken cancellationToken) =>
+    public Task<bool> NameExistsAsync(Guid tenantId, string normalizedName, Guid? excludeGroupId, CancellationToken cancellationToken, Guid? ownerUserId = null) =>
         dbContext.UserGroups.AnyAsync(
             group => group.TenantId == tenantId
+                && group.OwnerUserId == ownerUserId
                 && group.NormalizedName == normalizedName
                 && (excludeGroupId == null || group.Id != excludeGroupId),
             cancellationToken);
 
     public async Task AddAsync(UserGroup group, CancellationToken cancellationToken) =>
         await dbContext.UserGroups.AddAsync(group, cancellationToken);
+
+    public async Task<IReadOnlyList<UserGroup>> ListOwnedAsync(Guid tenantId, Guid ownerUserId, CancellationToken cancellationToken) =>
+        await IncludeGraph(dbContext.UserGroups.AsQueryable())
+            .Where(group => group.TenantId == tenantId && group.OwnerUserId == ownerUserId)
+            .OrderBy(group => group.Name)
+            .ToListAsync(cancellationToken);
+
+    public void Remove(UserGroup group) => dbContext.UserGroups.Remove(group);
 
     public async Task<IReadOnlyList<User>> ListUsersAsync(IReadOnlyList<Guid> userIds, CancellationToken cancellationToken) =>
         await dbContext.Users.AsNoTracking()

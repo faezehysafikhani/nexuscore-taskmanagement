@@ -2,6 +2,8 @@ using NexusCore.Application.Common;
 using NexusCore.Application.Identity.Dtos;
 using NexusCore.Application.Identity.Interfaces;
 using NexusCore.Application.Identity.Permissions;
+using NexusCore.Application.Identity.Services;
+using NexusCore.Application.Messaging;
 using NexusCore.Application.Platform.Dtos;
 using NexusCore.Application.Platform.Interfaces;
 using NexusCore.SharedKernel.Interfaces;
@@ -36,10 +38,54 @@ public static class IdentityEndpoints
             .RequireAuthorization()
             .WithName("GetCurrentUser");
 
+        // --- Self-service account -------------------------------------------------------------
+
+        auth.MapPost("/register", async (RegisterRequest request, IAccountService accounts, CancellationToken cancellationToken) =>
+                (await accounts.RegisterAsync(request, cancellationToken)).ToApiResult())
+            .AllowAnonymous()
+            .WithName("Register")
+            .WithSummary("Create an account (only when Identity:SelfRegistration:Enabled)");
+
+        auth.MapPost("/forgot-password", async (ForgotPasswordRequest request, IAccountService accounts, CancellationToken cancellationToken) =>
+                (await accounts.ForgotPasswordAsync(request, cancellationToken)).ToApiResult())
+            .AllowAnonymous()
+            .WithName("ForgotPassword")
+            .WithSummary("Email a password-reset link. The answer never reveals whether the account exists.");
+
+        auth.MapPost("/reset-password", async (ResetPasswordRequest request, IAccountService accounts, CancellationToken cancellationToken) =>
+                (await accounts.ResetPasswordAsync(request, cancellationToken)).ToApiResult())
+            .AllowAnonymous()
+            .WithName("ResetPassword");
+
+        auth.MapPut("/me/profile", async (UpdateMyProfileRequest request, IAccountService accounts, CancellationToken cancellationToken) =>
+                (await accounts.UpdateMyProfileAsync(request, cancellationToken)).ToApiResult())
+            .RequireAuthorization()
+            .WithName("UpdateMyProfile");
+
+        auth.MapPut("/me/preferences", async (UpdateMyPreferencesRequest request, IAccountService accounts, CancellationToken cancellationToken) =>
+                (await accounts.UpdateMyPreferencesAsync(request, cancellationToken)).ToApiResult())
+            .RequireAuthorization()
+            .WithName("UpdateMyPreferences");
+
         var users = app.MapGroup("/api/identity/users").WithTags("Users").RequireAuthorization();
 
-        users.MapGet("/", async (Guid? tenantId, int? pageNumber, int? pageSize, string? search, IIdentityService identityService, CancellationToken cancellationToken) =>
-                (await identityService.ListUsersAsync(tenantId, pageNumber, pageSize, search, cancellationToken)).ToApiResult())
+        // Without an explicit tenantId the list is the caller's own tenant - never every tenant.
+        // Contact details (phone, Telegram) are only for those who may edit users; everyone else
+        // with users.view - e.g. members picking an assignee - sees names and emails only.
+        users.MapGet("/", async (Guid? tenantId, int? pageNumber, int? pageSize, string? search, HttpContext http, ICurrentUserContext currentUser, IIdentityService identityService, CancellationToken cancellationToken) =>
+            {
+                var result = await identityService.ListUsersAsync(tenantId ?? currentUser.TenantId, pageNumber, pageSize, search, cancellationToken);
+                if (result.IsFailure || http.User.HasClaim("permission", IdentityPermissions.UsersUpdate))
+                {
+                    return result.ToApiResult();
+                }
+
+                var page = result.Value!;
+                return Results.Ok(page with
+                {
+                    Items = page.Items.Select(user => user with { PhoneNumber = null, TelegramChatId = null }).ToList()
+                });
+            })
             .RequireAuthorization(IdentityPermissions.UsersView);
 
         users.MapPost("/", async (CreateUserRequest request, IIdentityService identityService, CancellationToken cancellationToken) =>
@@ -103,6 +149,26 @@ public static class IdentityEndpoints
 
         platform.MapPut("/settings", async (UpsertSettingRequest request, IPlatformService platformService, CancellationToken cancellationToken) =>
                 (await platformService.UpsertSettingAsync(request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(IdentityPermissions.SettingsUpdate);
+
+        // SMS and Telegram gateways of the caller's tenant. Secrets are returned only to
+        // holders of settings.view and are stored encrypted.
+        var channels = platform.MapGroup("/notification-channels").WithTags("Platform - Notification channels");
+
+        channels.MapGet("/", async (INotificationChannelService service, CancellationToken cancellationToken) =>
+                (await service.GetAsync(cancellationToken)).ToApiResult())
+            .RequireAuthorization(IdentityPermissions.SettingsView);
+
+        channels.MapPut("/", async (NotificationChannelSettingsDto request, INotificationChannelService service, CancellationToken cancellationToken) =>
+                (await service.SaveAsync(request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(IdentityPermissions.SettingsUpdate);
+
+        channels.MapPost("/test-sms", async (TestSmsRequest request, INotificationChannelService service, CancellationToken cancellationToken) =>
+                (await service.TestSmsAsync(request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(IdentityPermissions.SettingsUpdate);
+
+        channels.MapPost("/test-telegram", async (TestTelegramRequest request, INotificationChannelService service, CancellationToken cancellationToken) =>
+                (await service.TestTelegramAsync(request, cancellationToken)).ToApiResult())
             .RequireAuthorization(IdentityPermissions.SettingsUpdate);
 
         return app;

@@ -21,9 +21,10 @@ public sealed class UserGroup : AuditableEntity<Guid>
         NormalizedName = string.Empty;
     }
 
-    public UserGroup(Guid id, Guid tenantId, string name, string? description = null) : base(id)
+    public UserGroup(Guid id, Guid tenantId, string name, string? description = null, Guid? ownerUserId = null) : base(id)
     {
         TenantId = tenantId;
+        OwnerUserId = ownerUserId;
         Name = name.Trim();
         NormalizedName = name.Trim().ToUpperInvariant();
         Description = description;
@@ -35,6 +36,15 @@ public sealed class UserGroup : AuditableEntity<Guid>
     public string NormalizedName { get; private set; }
     public string? Description { get; private set; }
     public bool IsActive { get; private set; } = true;
+
+    /// <summary>
+    /// Null for an organisational group, managed by administrators and able to carry
+    /// permissions. Set for a personal work team: owned by that user, managed by them, and
+    /// never a source of permissions.
+    /// </summary>
+    public Guid? OwnerUserId { get; private set; }
+
+    public bool IsPersonalTeam => OwnerUserId is not null;
 
     public IReadOnlyCollection<UserGroupPermission> Permissions => _permissions.AsReadOnly();
     public IReadOnlyCollection<UserGroupMember> Members => _members.AsReadOnly();
@@ -49,6 +59,11 @@ public sealed class UserGroup : AuditableEntity<Guid>
 
     public void SetPermissions(IEnumerable<Guid> permissionIds)
     {
+        if (IsPersonalTeam)
+        {
+            throw new InvalidOperationException("A personal work team cannot carry permissions.");
+        }
+
         _permissions.Clear();
         foreach (var permissionId in permissionIds.Distinct())
         {

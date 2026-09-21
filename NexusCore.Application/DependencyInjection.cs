@@ -5,6 +5,7 @@ using NexusCore.Application.Identity.Interfaces;
 using NexusCore.Application.Identity.Permissions;
 using NexusCore.Application.Identity.Services;
 using NexusCore.Application.Identity.Validators;
+using NexusCore.Application.Messaging;
 using NexusCore.Application.Platform.Interfaces;
 using NexusCore.Application.Platform.Services;
 
@@ -20,7 +21,13 @@ public static class DependencyInjection
         services.AddScoped<IValidator<UpdateUserRequest>, UpdateUserRequestValidator>();
         services.AddScoped<IValidator<CreateRoleRequest>, CreateRoleRequestValidator>();
         services.AddScoped<IValidator<CreateTenantRequest>, CreateTenantRequestValidator>();
+        services.AddScoped<IValidator<RegisterRequest>, RegisterRequestValidator>();
+        services.AddScoped<IValidator<ResetPasswordRequest>, ResetPasswordRequestValidator>();
+        services.AddScoped<IValidator<UpdateMyProfileRequest>, UpdateMyProfileRequestValidator>();
         services.AddScoped<IIdentityService, IdentityService>();
+        services.AddScoped<IAccountService, AccountService>();
+        services.AddScoped<INotificationChannelSettingsReader, NotificationChannelSettingsReader>();
+        services.AddScoped<INotificationChannelService, NotificationChannelService>();
         services.AddScoped<IPlatformService, PlatformService>();
         services.AddSingleton<IPermissionCatalog, IdentityPermissionCatalog>();
         return services;

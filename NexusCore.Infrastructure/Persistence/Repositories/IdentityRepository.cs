@@ -23,6 +23,90 @@ public sealed class IdentityRepository(NexusCoreDbContext dbContext) : IIdentity
     public Task<User?> GetUserByIdAsync(Guid userId, CancellationToken cancellationToken) =>
         IncludeUserGraph(dbContext.Users).SingleOrDefaultAsync(user => user.Id == userId, cancellationToken);
 
+    public async Task<User?> FindUserByLoginAsync(string identifier, string? tenantSlug, CancellationToken cancellationToken)
+    {
+        var value = identifier.Trim();
+        if (value.Length == 0)
+        {
+            return null;
+        }
+
+        var query = IncludeUserGraph(dbContext.Users);
+        if (!string.IsNullOrWhiteSpace(tenantSlug))
+        {
+            query = query.Where(user => user.Tenant != null && user.Tenant.Slug == tenantSlug);
+        }
+
+        if (value.Contains('@'))
+        {
+            var email = value.ToLowerInvariant();
+            query = query.Where(user => user.Email == email);
+        }
+        else
+        {
+            // Username comparison follows the column collation (case-insensitive by default).
+            query = query.Where(user => user.Username == value || user.PhoneNumber == value);
+        }
+
+        // Two matches means the identifier is not unique across tenants (or a username equals
+        // someone else's phone number): refuse rather than guess which account was meant.
+        var matches = await query.Take(2).ToListAsync(cancellationToken);
+        return matches.Count == 1 ? matches[0] : null;
+    }
+
+    public Task<bool> UsernameExistsAsync(Guid tenantId, string username, Guid? exceptUserId, CancellationToken cancellationToken)
+    {
+        var value = username.Trim();
+        return dbContext.Users.AnyAsync(
+            user => user.TenantId == tenantId && user.Username == value && (exceptUserId == null || user.Id != exceptUserId),
+            cancellationToken);
+    }
+
+    public Task<Role?> GetRoleByNameAsync(Guid tenantId, string name, CancellationToken cancellationToken)
+    {
+        var normalized = name.Trim().ToUpperInvariant();
+        return dbContext.Roles.SingleOrDefaultAsync(role => role.TenantId == tenantId && role.NormalizedName == normalized, cancellationToken);
+    }
+
+    public Task<Tenant?> GetTenantBySlugAsync(string slug, CancellationToken cancellationToken) =>
+        dbContext.Tenants.SingleOrDefaultAsync(tenant => tenant.Slug == slug, cancellationToken);
+
+    public async Task AddPasswordResetTokenAsync(PasswordResetToken token, CancellationToken cancellationToken) =>
+        await dbContext.Set<PasswordResetToken>().AddAsync(token, cancellationToken);
+
+    public Task<PasswordResetToken?> FindActivePasswordResetTokenAsync(string tokenHash, CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        return dbContext.Set<PasswordResetToken>()
+            .Include(token => token.User)
+            .SingleOrDefaultAsync(
+                token => token.TokenHash == tokenHash && token.UsedAtUtc == null && token.InvalidatedAtUtc == null && token.ExpiresAtUtc > now,
+                cancellationToken);
+    }
+
+    public async Task RevokeRefreshTokensAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var active = await dbContext.RefreshTokens
+            .Where(token => token.UserId == userId && token.RevokedAtUtc == null && token.ExpiresAtUtc > now)
+            .ToListAsync(cancellationToken);
+        foreach (var token in active)
+        {
+            token.Revoke(null);
+        }
+    }
+
+    public async Task InvalidatePasswordResetTokensAsync(Guid userId, DateTimeOffset nowUtc, CancellationToken cancellationToken)
+    {
+        var outstanding = await dbContext.Set<PasswordResetToken>()
+            .Where(token => token.UserId == userId && token.UsedAtUtc == null && token.InvalidatedAtUtc == null)
+            .ToListAsync(cancellationToken);
+        foreach (var token in outstanding)
+        {
+            token.Invalidate(nowUtc);
+        }
+    }
+
     public async Task<PagedResult<User>> ListUsersAsync(
     Guid? tenantId,
     int? pageNumber,
@@ -89,6 +173,11 @@ public sealed class IdentityRepository(NexusCoreDbContext dbContext) : IIdentity
         await dbContext.UserGroupMembers
             .Where(member => member.UserId == user.Id)
             .ExecuteDeleteAsync(cancellationToken);
+
+        // The user's personal work teams go with them (members and permissions cascade from the
+        // team). Tracked removal, so a team still referenced elsewhere fails at SaveChanges.
+        var ownedTeams = await dbContext.UserGroups.Where(group => group.OwnerUserId == user.Id).ToListAsync(cancellationToken);
+        dbContext.UserGroups.RemoveRange(ownedTeams);
         dbContext.Users.Remove(user);
     }
 

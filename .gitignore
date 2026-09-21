@@ -371,3 +371,6 @@ FodyWeavers.xsd
 
 # EF migration scripts generated for inspection
 *.sql
+
+# Database upgrade scripts are deliverables, not build output.
+!docs/upgrade/*.sql
