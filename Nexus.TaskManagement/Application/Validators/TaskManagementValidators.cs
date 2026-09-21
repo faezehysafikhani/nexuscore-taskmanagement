@@ -228,14 +228,15 @@ public sealed class UpdateNoteRequestValidator : AbstractValidator<UpdateNoteReq
 
 public sealed class CreateTaskCommentRequestValidator : AbstractValidator<CreateTaskCommentRequest>
 {
+    // Text may be empty: a comment can consist of attachments only, uploaded right after it.
     public CreateTaskCommentRequestValidator() =>
-        RuleFor(x => x.Text).NotEmpty().MaximumLength(4000);
+        RuleFor(x => x.Text).NotNull().MaximumLength(4000);
 }
 
 public sealed class UpdateTaskCommentRequestValidator : AbstractValidator<UpdateTaskCommentRequest>
 {
     public UpdateTaskCommentRequestValidator() =>
-        RuleFor(x => x.Text).NotEmpty().MaximumLength(4000);
+        RuleFor(x => x.Text).NotNull().MaximumLength(4000);
 }
 
 public sealed class UploadFileRequestValidator : AbstractValidator<UploadFileRequest>

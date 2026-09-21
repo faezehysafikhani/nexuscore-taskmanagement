@@ -36,7 +36,8 @@ public sealed record SubTaskDto(
     int SortOrder,
     IReadOnlyList<TagDto> Tags,
     IReadOnlyList<TaskFileDto> Files,
-    DateTimeOffset CreatedAtUtc);
+    DateTimeOffset CreatedAtUtc,
+    bool IsGeneratedOccurrence = false);
 
 /// <summary>
 /// The recurrence schedule. Carries no title, priority or assignee - those belong to the task
@@ -66,7 +67,8 @@ public sealed record TaskCommentDto(
     string? UserDisplayName,
     string Text,
     DateTimeOffset CreatedAtUtc,
-    DateTimeOffset? ModifiedAtUtc);
+    DateTimeOffset? ModifiedAtUtc,
+    IReadOnlyList<TaskFileDto>? Files = null);
 
 /// <summary>
 /// One entry of a task's history. Read back out of the shared AuditLog rather than a table of
@@ -152,7 +154,8 @@ public sealed record SubTaskInput(
     SubTaskImportance Importance = SubTaskImportance.Medium,
     DateOnly? StartDate = null,
     DateOnly? EndDate = null,
-    int SortOrder = 0);
+    int SortOrder = 0,
+    bool IsGeneratedOccurrence = false);
 
 public sealed record RecurrenceInput(
     RecurrenceFrequency Frequency,
@@ -239,7 +242,8 @@ public sealed record CreateSubTaskRequest(
     SubTaskImportance Importance = SubTaskImportance.Medium,
     DateOnly? StartDate = null,
     DateOnly? EndDate = null,
-    int SortOrder = 0);
+    int SortOrder = 0,
+    bool IsGeneratedOccurrence = false);
 
 public sealed record UpdateSubTaskRequest(
     string Title,
@@ -273,6 +277,9 @@ public sealed record UpdateNoteRequest(string Title, string Content, string? Col
 public sealed record CreateTaskCommentRequest(string Text);
 
 public sealed record UpdateTaskCommentRequest(string Text);
+
+/// <summary>An entry the UI adds to a task's history, e.g. "edited 3 fields". The actor is the caller.</summary>
+public sealed record CreateTaskActivityRequest(string Action, string? Details = null);
 
 /// <summary>
 /// An upload handed to the service. The service checks Content.Length itself rather than

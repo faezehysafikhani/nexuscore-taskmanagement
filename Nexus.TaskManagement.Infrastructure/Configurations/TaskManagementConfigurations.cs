@@ -80,6 +80,7 @@ internal sealed class SubTaskConfiguration : IEntityTypeConfiguration<SubTask>
 
         builder.HasIndex(x => new { x.TaskId, x.SortOrder });
         builder.HasIndex(x => new { x.TenantId, x.IsCompleted });
+        builder.Property(x => x.IsGeneratedOccurrence).HasDefaultValue(false);
     }
 }
 
@@ -136,13 +137,14 @@ internal sealed class TaskFileConfiguration : IEntityTypeConfiguration<TaskFile>
 {
     public void Configure(EntityTypeBuilder<TaskFile> builder)
     {
-        // Exactly one owner: a file belongs to a task or to a subtask, never to both and
-        // never to neither.
+        // Exactly one owner: a file belongs to a task, a subtask or a comment - never to more
+        // than one and never to none.
         builder.ToTable("TaskFiles", Schema.Name, table =>
             table.HasCheckConstraint(
                 "CK_TaskFiles_ExactlyOneOwner",
                 "(CASE WHEN [TaskId] IS NOT NULL THEN 1 ELSE 0 END + " +
-                "CASE WHEN [SubTaskId] IS NOT NULL THEN 1 ELSE 0 END) = 1"));
+                "CASE WHEN [SubTaskId] IS NOT NULL THEN 1 ELSE 0 END + " +
+                "CASE WHEN [CommentId] IS NOT NULL THEN 1 ELSE 0 END) = 1"));
 
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).ValueGeneratedNever();
@@ -173,6 +175,16 @@ internal sealed class TaskFileConfiguration : IEntityTypeConfiguration<TaskFile>
         builder.HasIndex(x => new { x.FileId, x.SubTaskId })
             .IsUnique()
             .HasFilter("[SubTaskId] IS NOT NULL");
+
+        // Comments cascade from tasks, so this path is NoAction too; the services clear it.
+        builder.HasOne(x => x.Comment)
+            .WithMany()
+            .HasForeignKey(x => x.CommentId)
+            .OnDelete(DeleteBehavior.NoAction);
+
+        builder.HasIndex(x => new { x.FileId, x.CommentId })
+            .IsUnique()
+            .HasFilter("[CommentId] IS NOT NULL");
     }
 }
 

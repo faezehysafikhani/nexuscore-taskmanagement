@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+using NexusCore.Application.Files;
 using Nexus.TaskManagement.Application.Dtos;
 using Nexus.TaskManagement.Domain;
 using NexusCore.SharedKernel.Interfaces;
@@ -336,19 +336,25 @@ public sealed class TagService(
 public sealed class TaskFileService(
     ITaskFileRepository repository,
     ITaskRepository taskRepository,
+    ITaskCommentRepository commentRepository,
     ITaskManagementUnitOfWork unitOfWork,
-    ICurrentUserContext currentUser) : ITaskFileService
+    ICurrentUserContext currentUser,
+    IFileStorage fileStorage) : ITaskFileService
 {
     public Task<Result<TaskFileDto>> UploadToTaskAsync(
         Guid taskId, UploadFileRequest request, CancellationToken cancellationToken) =>
-        UploadAsync(request, taskId, null, cancellationToken);
+        UploadAsync(request, taskId, null, null, cancellationToken);
 
     public Task<Result<TaskFileDto>> UploadToSubTaskAsync(
         Guid subTaskId, UploadFileRequest request, CancellationToken cancellationToken) =>
-        UploadAsync(request, null, subTaskId, cancellationToken);
+        UploadAsync(request, null, subTaskId, null, cancellationToken);
+
+    public Task<Result<TaskFileDto>> UploadToCommentAsync(
+        Guid commentId, UploadFileRequest request, CancellationToken cancellationToken) =>
+        UploadAsync(request, null, null, commentId, cancellationToken);
 
     private async Task<Result<TaskFileDto>> UploadAsync(
-        UploadFileRequest request, Guid? taskId, Guid? subTaskId, CancellationToken cancellationToken)
+        UploadFileRequest request, Guid? taskId, Guid? subTaskId, Guid? commentId, CancellationToken cancellationToken)
     {
         if (currentUser.TenantId is null)
         {
@@ -379,41 +385,65 @@ public sealed class TaskFileService(
             return Result.Failure<TaskFileDto>(Error.NotFound("Subtask not found."));
         }
 
-        // The client's filename is display data only. What lands on disk is generated here,
-        // so a crafted name cannot escape the storage folder or overwrite anything.
-        var extension = Path.GetExtension(request.FileName);
-        if (extension.Length > 20 || extension.Any(c => Path.GetInvalidFileNameChars().Contains(c)))
+        if (commentId is { } c)
         {
-            extension = string.Empty;
+            var comment = await commentRepository.GetByIdAsync(tenantId, c, cancellationToken);
+            if (comment is null)
+            {
+                return Result.Failure<TaskFileDto>(Error.NotFound("Comment not found."));
+            }
+
+            // Attachments are part of what the author wrote; nobody else can add to it.
+            if (comment.UserId != currentUser.UserId)
+            {
+                return Result.Failure<TaskFileDto>(Error.Forbidden("You can only attach files to your own comments."));
+            }
         }
 
-        var storedName = $"{DateTime.UtcNow:yyyyMMdd}-{Convert.ToHexString(RandomNumberGenerator.GetBytes(16))}{extension}";
+        // The client's filename is display data only. The bytes go through the platform file
+        // storage, which generates its own key, so a crafted name cannot escape the storage
+        // folder or overwrite anything.
+        var displayName = Path.GetFileName(request.FileName);
+        if (string.IsNullOrWhiteSpace(displayName))
+        {
+            displayName = "file";
+        }
+
+        var contentType = string.IsNullOrWhiteSpace(request.ContentType) ? "application/octet-stream" : request.ContentType;
+
+        StoredFile stored;
+        await using (var content = new MemoryStream(request.Content, writable: false))
+        {
+            stored = await fileStorage.SaveAsync(displayName, contentType, content, cancellationToken);
+        }
+
         var fileId = Guid.NewGuid();
-
-        TaskFileAsset asset;
-        try
-        {
-            asset = new TaskFileAsset(
-                fileId, tenantId,
-                Path.GetFileName(request.FileName),
-                storedName,
-                string.IsNullOrWhiteSpace(request.ContentType) ? "application/octet-stream" : request.ContentType,
-                request.Content.Length,
-                Path.Combine("task-management", tenantId.ToString(), storedName),
-                currentUser.UserId);
-        }
-        catch (ArgumentOutOfRangeException)
-        {
-            return Result.Failure<TaskFileDto>(Error.Validation(
-                $"File is too large. The maximum size is {TaskFileAsset.MaxFileSizeBytes} bytes (200 KB)."));
-        }
+        var asset = new TaskFileAsset(
+            fileId, tenantId,
+            displayName,
+            stored.StorageKey,
+            contentType,
+            request.Content.Length,
+            stored.StorageKey,
+            currentUser.UserId);
 
         var link = taskId is { } taskValue
             ? TaskFile.ForTask(Guid.NewGuid(), fileId, taskValue)
-            : TaskFile.ForSubTask(Guid.NewGuid(), fileId, subTaskId!.Value);
+            : subTaskId is { } subTaskValue
+                ? TaskFile.ForSubTask(Guid.NewGuid(), fileId, subTaskValue)
+                : TaskFile.ForComment(Guid.NewGuid(), fileId, commentId!.Value);
 
         await repository.AddAsync(asset, link, cancellationToken);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch
+        {
+            // The row was not written, so the stored bytes would be unreachable: remove them.
+            await fileStorage.DeleteAsync(stored.StorageKey, cancellationToken);
+            throw;
+        }
 
         return Result.Success(new TaskFileDto(
             link.Id, asset.Id, asset.OriginalFileName, asset.ContentType,
@@ -433,15 +463,16 @@ public sealed class TaskFileService(
             return Result.Failure<FileDownload>(Error.NotFound("File not found."));
         }
 
-        var fullPath = Path.Combine(AppContext.BaseDirectory, asset.StoragePath);
-        if (!File.Exists(fullPath))
+        await using var stream = await fileStorage.OpenReadAsync(asset.StoragePath, cancellationToken);
+        if (stream is null)
         {
             return Result.Failure<FileDownload>(
                 Error.NotFound("The file record exists but its contents are missing from storage."));
         }
 
-        var bytes = await File.ReadAllBytesAsync(fullPath, cancellationToken);
-        return Result.Success(new FileDownload(asset.OriginalFileName, asset.ContentType, bytes));
+        using var buffer = new MemoryStream();
+        await stream.CopyToAsync(buffer, cancellationToken);
+        return Result.Success(new FileDownload(asset.OriginalFileName, asset.ContentType, buffer.ToArray()));
     }
 
     public async Task<Result> DeleteAsync(Guid linkId, CancellationToken cancellationToken)
@@ -463,8 +494,20 @@ public sealed class TaskFileService(
             return Result.Failure(Error.NotFound("File not found."));
         }
 
+        // A comment's attachment belongs to the comment's author.
+        if (link.CommentId is { } commentId)
+        {
+            var comment = await commentRepository.GetByIdAsync(currentUser.TenantId.Value, commentId, cancellationToken);
+            if (comment is not null && comment.UserId != currentUser.UserId)
+            {
+                return Result.Failure(Error.Forbidden("You can only remove files from your own comments."));
+            }
+        }
+
+        var storageKey = asset.StoragePath;
         repository.Remove(asset, link);
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        await fileStorage.DeleteAsync(storageKey, cancellationToken);
         return Result.Success();
     }
 
@@ -596,8 +639,10 @@ public sealed class NoteService(
 public sealed class TaskCommentService(
     ITaskCommentRepository repository,
     ITaskRepository taskRepository,
+    ITaskFileRepository fileRepository,
     ITaskManagementUnitOfWork unitOfWork,
-    ICurrentUserContext currentUser) : ITaskCommentService
+    ICurrentUserContext currentUser,
+    IFileStorage fileStorage) : ITaskCommentService
 {
     public async Task<Result<IReadOnlyList<TaskCommentDto>>> ListAsync(Guid taskId, CancellationToken cancellationToken)
     {
@@ -610,12 +655,14 @@ public sealed class TaskCommentService(
         var comments = await repository.ListForTaskAsync(tenantId, taskId, cancellationToken);
         var users = await taskRepository.GetUserSummariesAsync(
             comments.Select(c => c.UserId).Distinct().ToList(), cancellationToken);
+        var files = await fileRepository.ListForCommentsAsync(tenantId, comments.Select(c => c.Id).ToList(), cancellationToken);
+        var filesByComment = files.ToLookup(f => f.CommentId!.Value);
 
         return Result.Success<IReadOnlyList<TaskCommentDto>>(comments
-            .Select(c => new TaskCommentDto(
-                c.Id, c.TaskId, c.UserId,
+            .Select(c => ToDto(
+                c,
                 users.TryGetValue(c.UserId, out var u) ? u.DisplayName : null,
-                c.Text, c.CreatedAtUtc, c.ModifiedAtUtc))
+                filesByComment[c.Id].Select(TaskService.ToDto).ToList()))
             .ToList());
     }
 
@@ -639,9 +686,7 @@ public sealed class TaskCommentService(
         await repository.AddAsync(comment, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return Result.Success(new TaskCommentDto(
-            comment.Id, comment.TaskId, comment.UserId, null,
-            comment.Text, comment.CreatedAtUtc, comment.ModifiedAtUtc));
+        return Result.Success(ToDto(comment, await DisplayNameAsync(comment.UserId, cancellationToken), []));
     }
 
     public async Task<Result<TaskCommentDto>> UpdateAsync(
@@ -652,24 +697,25 @@ public sealed class TaskCommentService(
             return Result.Failure<TaskCommentDto>(Error.Unauthorized());
         }
 
-        var comment = await repository.GetByIdAsync(currentUser.TenantId.Value, id, cancellationToken);
+        var tenantId = currentUser.TenantId.Value;
+        var comment = await repository.GetByIdAsync(tenantId, id, cancellationToken);
         if (comment is null)
         {
             return Result.Failure<TaskCommentDto>(Error.NotFound("Comment not found."));
         }
 
-        // Only the author may edit their own words.
+        // Only the author may edit their own words. Forbidden (403), not Unauthorized (401): the
+        // caller is signed in, and a 401 would make a client drop its session.
         if (comment.UserId != currentUser.UserId.Value)
         {
-            return Result.Failure<TaskCommentDto>(Error.Unauthorized("You can only edit your own comments."));
+            return Result.Failure<TaskCommentDto>(Error.Forbidden("You can only edit your own comments."));
         }
 
         comment.UpdateText(request.Text);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return Result.Success(new TaskCommentDto(
-            comment.Id, comment.TaskId, comment.UserId, null,
-            comment.Text, comment.CreatedAtUtc, comment.ModifiedAtUtc));
+        var files = await fileRepository.ListForCommentsAsync(tenantId, [comment.Id], cancellationToken);
+        return Result.Success(ToDto(comment, await DisplayNameAsync(comment.UserId, cancellationToken), files.Select(TaskService.ToDto).ToList()));
     }
 
     public async Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken)
@@ -687,11 +733,30 @@ public sealed class TaskCommentService(
 
         if (comment.UserId != currentUser.UserId.Value)
         {
-            return Result.Failure(Error.Unauthorized("You can only delete your own comments."));
+            return Result.Failure(Error.Forbidden("You can only delete your own comments."));
         }
 
+        // The file links point at the comment with NoAction, so they go first; the stored
+        // contents are removed once the rows are gone.
+        var storageKeys = await fileRepository.ClearForCommentAsync(comment.Id, cancellationToken);
         repository.Remove(comment);
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        foreach (var key in storageKeys)
+        {
+            await fileStorage.DeleteAsync(key, cancellationToken);
+        }
+
         return Result.Success();
     }
+
+    private async Task<string?> DisplayNameAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var users = await taskRepository.GetUserSummariesAsync([userId], cancellationToken);
+        return users.TryGetValue(userId, out var user) ? user.DisplayName : null;
+    }
+
+    private static TaskCommentDto ToDto(TaskComment comment, string? displayName, IReadOnlyList<TaskFileDto> files) =>
+        new(comment.Id, comment.TaskId, comment.UserId, displayName,
+            comment.Text, comment.CreatedAtUtc, comment.ModifiedAtUtc, files);
 }
+

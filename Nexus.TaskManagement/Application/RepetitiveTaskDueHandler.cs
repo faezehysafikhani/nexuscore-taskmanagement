@@ -103,7 +103,7 @@ public sealed class RepetitiveTaskDueHandler(
     private async Task SendSmsAsync(
         TaskItem task, IReadOnlyList<Guid> recipients, CancellationToken cancellationToken)
     {
-        if (!smsSender.IsEnabled)
+        if (!await smsSender.IsEnabledAsync(task.TenantId, cancellationToken))
         {
             return;
         }
@@ -124,7 +124,7 @@ public sealed class RepetitiveTaskDueHandler(
 
             foreach (var (userId, phoneNumber) in phoneNumbers)
             {
-                var result = await smsSender.SendAsync(phoneNumber, message, cancellationToken);
+                var result = await smsSender.SendAsync(task.TenantId, phoneNumber, message, cancellationToken);
                 if (result.IsFailure)
                 {
                     logger.LogWarning(

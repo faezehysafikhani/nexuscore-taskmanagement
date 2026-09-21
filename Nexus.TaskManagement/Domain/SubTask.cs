@@ -43,6 +43,13 @@ public sealed class SubTask : AuditableEntity<Guid>
     public bool IsCompleted { get; private set; }
     public int SortOrder { get; private set; }
 
+    /// <summary>
+    /// True for an occurrence the client generated from the task's recurrence schedule, as opposed
+    /// to a subtask a person wrote. Lets the client replace its generated occurrences when the
+    /// schedule is saved again, instead of adding a second set.
+    /// </summary>
+    public bool IsGeneratedOccurrence { get; private set; }
+
     public IReadOnlyCollection<TaskFile> Files => _files.AsReadOnly();
     public IReadOnlyCollection<TaskTag> Tags => _tags.AsReadOnly();
 
@@ -56,4 +63,6 @@ public sealed class SubTask : AuditableEntity<Guid>
     }
 
     public void SetCompleted(bool isCompleted) => IsCompleted = isCompleted;
+
+    public void MarkGeneratedOccurrence(bool isGenerated) => IsGeneratedOccurrence = isGenerated;
 }

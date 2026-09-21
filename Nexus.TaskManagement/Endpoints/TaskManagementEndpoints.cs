@@ -5,6 +5,7 @@ using Nexus.TaskManagement.Application;
 using Nexus.TaskManagement.Application.Dtos;
 using Nexus.TaskManagement.Domain;
 using Nexus.TaskManagement.Permissions;
+using Nexus.TaskManagement.Realtime;
 using NexusCore.Application.Common;
 using NexusCore.SharedKernel.Interfaces;
 
@@ -24,6 +25,7 @@ public static class TaskManagementEndpoints
         app.MapTaskTagEndpoints();
         app.MapTaskFileEndpoints();
         app.MapNoteEndpoints();
+        app.MapHub<TaskManagementHub>(TaskManagementHub.Route);
         return app;
     }
 
@@ -31,7 +33,9 @@ public static class TaskManagementEndpoints
     {
         var group = app.MapGroup("/api/task-management/tasks")
             .WithTags("Tasks")
-            .RequireAuthorization();
+            .RequireAuthorization()
+            .AddEndpointFilter<RequestValidationFilter>()
+            .AddEndpointFilter<TaskChangeBroadcastFilter>();
 
         group.MapGet("/", async (
                 ICurrentUserContext currentUser,
@@ -127,6 +131,11 @@ public static class TaskManagementEndpoints
             .WithSummary("Task history, read from the shared audit log")
             .RequireAuthorization(TaskManagementPermissions.View);
 
+        group.MapPost("/{id:guid}/activity", async (Guid id, CreateTaskActivityRequest request, ITaskService service, CancellationToken cancellationToken) =>
+                (await service.AddActivityEntryAsync(id, request, cancellationToken)).ToApiResult())
+            .WithSummary("Add an entry to the task history (recorded under the caller)")
+            .RequireAuthorization(TaskManagementPermissions.View);
+
         // --- Tags and files on a task ---
         group.MapGet("/{id:guid}/files", async (Guid id, ITaskFileService service, CancellationToken cancellationToken) =>
                 (await service.GetByTaskIdAsync(id, cancellationToken)).ToApiResult())
@@ -150,7 +159,9 @@ public static class TaskManagementEndpoints
     {
         var group = app.MapGroup("/api/task-management/subtasks")
             .WithTags("Subtasks")
-            .RequireAuthorization();
+            .RequireAuthorization()
+            .AddEndpointFilter<RequestValidationFilter>()
+            .AddEndpointFilter<TaskChangeBroadcastFilter>();
 
         group.MapGet("/{id:guid}", async (Guid id, ITaskService service, CancellationToken cancellationToken) =>
                 (await service.GetSubTaskAsync(id, cancellationToken)).ToApiResult())
@@ -189,7 +200,9 @@ public static class TaskManagementEndpoints
     {
         var group = app.MapGroup("/api/task-management/repetitive-tasks")
             .WithTags("Recurring tasks")
-            .RequireAuthorization();
+            .RequireAuthorization()
+            .AddEndpointFilter<RequestValidationFilter>()
+            .AddEndpointFilter<TaskChangeBroadcastFilter>();
 
         group.MapGet("/", async (
                 ICurrentUserContext currentUser, int? pageNumber, int? pageSize, bool? isActive,
@@ -240,7 +253,9 @@ public static class TaskManagementEndpoints
     {
         var group = app.MapGroup("/api/task-management/tags")
             .WithTags("Task tags")
-            .RequireAuthorization();
+            .RequireAuthorization()
+            .AddEndpointFilter<RequestValidationFilter>()
+            .AddEndpointFilter<TaskChangeBroadcastFilter>();
 
         group.MapGet("/", async (string? search, ITagService service, CancellationToken cancellationToken) =>
                 (await service.ListAsync(search, cancellationToken)).ToApiResult())
@@ -265,7 +280,9 @@ public static class TaskManagementEndpoints
     {
         var group = app.MapGroup("/api/task-management/files")
             .WithTags("Task files")
-            .RequireAuthorization();
+            .RequireAuthorization()
+            .AddEndpointFilter<RequestValidationFilter>()
+            .AddEndpointFilter<TaskChangeBroadcastFilter>();
 
         // Multipart rather than JSON: the 200 KB ceiling is measured from the bytes that
         // actually arrive, and base64 in a JSON body would inflate them by a third.
@@ -288,6 +305,16 @@ public static class TaskManagementEndpoints
             .WithSummary("Upload an attachment to a subtask (max 200 KB)")
             .DisableAntiforgery()
             .RequireAuthorization(TaskManagementPermissions.UploadFiles);
+
+        group.MapPost("/comments/{commentId:guid}", async (
+                Guid commentId, IFormFile file, ITaskFileService service, CancellationToken cancellationToken) =>
+            {
+                var upload = await ReadAsync(file, cancellationToken);
+                return (await service.UploadToCommentAsync(commentId, upload, cancellationToken)).ToApiResult();
+            })
+            .WithSummary("Attach a file to your own comment (max 200 KB)")
+            .DisableAntiforgery()
+            .RequireAuthorization(TaskManagementPermissions.Comment);
 
         group.MapGet("/{fileId:guid}/content", async (
                 Guid fileId, ITaskFileService service, CancellationToken cancellationToken) =>
@@ -314,7 +341,8 @@ public static class TaskManagementEndpoints
     {
         var group = app.MapGroup("/api/task-management/notes")
             .WithTags("Personal notes")
-            .RequireAuthorization();
+            .RequireAuthorization()
+            .AddEndpointFilter<RequestValidationFilter>();
 
         // Notes are private, so there is no "list another user's notes" route by design -
         // every route below resolves the owner from the caller's own token.
@@ -342,7 +370,9 @@ public static class TaskManagementEndpoints
         // Comments live here too - they are edited by id, not through their task.
         var comments = app.MapGroup("/api/task-management/comments")
             .WithTags("Task comments")
-            .RequireAuthorization();
+            .RequireAuthorization()
+            .AddEndpointFilter<RequestValidationFilter>()
+            .AddEndpointFilter<TaskChangeBroadcastFilter>();
 
         comments.MapPut("/{id:guid}", async (Guid id, UpdateTaskCommentRequest request, ITaskCommentService service, CancellationToken cancellationToken) =>
                 (await service.UpdateAsync(id, request, cancellationToken)).ToApiResult())

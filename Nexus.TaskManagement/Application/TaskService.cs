@@ -1,5 +1,6 @@
 using Nexus.TaskManagement.Application.Dtos;
 using Nexus.TaskManagement.Domain;
+using NexusCore.Application.Files;
 using NexusCore.SharedKernel.Interfaces;
 using NexusCore.SharedKernel.Results;
 
@@ -10,7 +11,8 @@ public sealed class TaskService(
     ITagRepository tagRepository,
     ITaskManagementUnitOfWork unitOfWork,
     ICurrentUserContext currentUser,
-    ITaskActivityService activity) : ITaskService
+    ITaskActivityService activity,
+    IFileStorage fileStorage) : ITaskService
 {
     public async Task<Result<PagedResult<TaskListItemDto>>> ListAsync(
         ListTasksRequest request, CancellationToken cancellationToken)
@@ -122,6 +124,7 @@ public sealed class TaskService(
                 Guid.NewGuid(), input.Title, input.Importance,
                 input.SortOrder == 0 ? index : input.SortOrder);
             subTask.UpdateDetails(input.Title, input.Importance, input.StartDate, input.EndDate, subTask.SortOrder);
+            subTask.MarkGeneratedOccurrence(input.IsGeneratedOccurrence);
         }
 
         if (request.Recurrence is { } recurrence)
@@ -220,9 +223,10 @@ public sealed class TaskService(
         }
 
         // Junction rows use NoAction, so they have to go before the task does.
-        await repository.ClearLinksForTaskAsync(id, cancellationToken);
+        var storedFiles = await repository.ClearLinksForTaskAsync(id, cancellationToken);
         repository.Remove(task);
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        await DeleteStoredFilesAsync(storedFiles, cancellationToken);
         await activity.RecordAsync(id, "Task deleted", task.Title, cancellationToken);
 
         return Result.Success();
@@ -384,6 +388,7 @@ public sealed class TaskService(
             Guid.NewGuid(), request.Title, request.Importance,
             request.SortOrder == 0 ? count : request.SortOrder);
         subTask.UpdateDetails(request.Title, request.Importance, request.StartDate, request.EndDate, subTask.SortOrder);
+        subTask.MarkGeneratedOccurrence(request.IsGeneratedOccurrence);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await activity.RecordAsync(taskId, "Subtask added", request.Title, cancellationToken);
@@ -484,9 +489,10 @@ public sealed class TaskService(
             }
         }
 
-        await repository.ClearLinksForSubTaskAsync(subTaskId, cancellationToken);
+        var storedFiles = await repository.ClearLinksForSubTaskAsync(subTaskId, cancellationToken);
         repository.RemoveSubTask(subTask);
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        await DeleteStoredFilesAsync(storedFiles, cancellationToken);
         await activity.RecordAsync(subTask.TaskId, "Subtask deleted", subTask.Title, cancellationToken);
 
         return Result.Success();
@@ -555,6 +561,43 @@ public sealed class TaskService(
         where TValue : class =>
         key is { } id && source.TryGetValue(id, out var value) ? value : null;
 
+    public async Task<Result> AddActivityEntryAsync(Guid taskId, CreateTaskActivityRequest request, CancellationToken cancellationToken)
+    {
+        if (currentUser.TenantId is null)
+        {
+            return Result.Failure(Error.Unauthorized());
+        }
+
+        // AuditLog.Action is 120 characters; details are kept to a sensible size.
+        if (string.IsNullOrWhiteSpace(request.Action) || request.Action.Trim().Length > 120)
+        {
+            return Result.Failure(Error.Validation("An activity action of 1-120 characters is required."));
+        }
+
+        if (request.Details is { Length: > 2000 })
+        {
+            return Result.Failure(Error.Validation("Activity details can be at most 2000 characters."));
+        }
+
+        if (await repository.GetForUpdateAsync(currentUser.TenantId.Value, taskId, cancellationToken) is null)
+        {
+            return Result.Failure(Error.NotFound("Task not found."));
+        }
+
+        // Recorded under the signed-in user; the request cannot name someone else.
+        await activity.RecordAsync(taskId, request.Action.Trim(), request.Details?.Trim(), cancellationToken);
+        return Result.Success();
+    }
+
+    /// <summary>Removes file contents after the rows are gone (never before: a failed save keeps both).</summary>
+    private async Task DeleteStoredFilesAsync(IReadOnlyList<string> storageKeys, CancellationToken cancellationToken)
+    {
+        foreach (var key in storageKeys)
+        {
+            await fileStorage.DeleteAsync(key, cancellationToken);
+        }
+    }
+
     internal static TagDto ToDto(Tag tag) => new(tag.Id, tag.Name, tag.Color);
 
     internal static TaskFileDto ToDto(TaskFile link) => new(
@@ -577,7 +620,8 @@ public sealed class TaskService(
         subTask.SortOrder,
         subTask.Tags.Where(t => t.Tag is not null).Select(t => ToDto(t.Tag!)).ToList(),
         subTask.Files.Select(ToDto).ToList(),
-        subTask.CreatedAtUtc);
+        subTask.CreatedAtUtc,
+        subTask.IsGeneratedOccurrence);
 
     internal static RepetitiveTaskDto ToDto(RepetitiveTask schedule) => new(
         schedule.Id,

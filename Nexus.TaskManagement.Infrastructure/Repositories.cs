@@ -111,28 +111,38 @@ public sealed class TaskRepository(TaskManagementDbContext db) : ITaskRepository
     /// removed explicitly before the task goes. Subtask links are cleared too, because the
     /// subtasks themselves will cascade away with the task.
     /// </summary>
-    public async Task ClearLinksForTaskAsync(Guid taskId, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<string>> ClearLinksForTaskAsync(Guid taskId, CancellationToken cancellationToken)
     {
         var subTaskIds = await db.SubTasks
             .Where(s => s.TaskId == taskId)
             .Select(s => s.Id)
             .ToListAsync(cancellationToken);
 
-        var fileLinks = await db.TaskFiles
-            .Where(f => f.TaskId == taskId || (f.SubTaskId != null && subTaskIds.Contains(f.SubTaskId.Value)))
+        var commentIds = await db.TaskComments
+            .Where(c => c.TaskId == taskId)
+            .Select(c => c.Id)
             .ToListAsync(cancellationToken);
-        db.TaskFiles.RemoveRange(fileLinks);
+
+        // Comment attachments too: comments cascade with the task, but their file links do not.
+        var fileLinks = await db.TaskFiles
+            .Include(f => f.File)
+            .Where(f => f.TaskId == taskId
+                        || (f.SubTaskId != null && subTaskIds.Contains(f.SubTaskId.Value))
+                        || (f.CommentId != null && commentIds.Contains(f.CommentId.Value)))
+            .ToListAsync(cancellationToken);
+        var storageKeys = RemoveLinksAndFiles(fileLinks);
 
         var tagLinks = await db.TaskTags
             .Where(t => t.TaskId == taskId || (t.SubTaskId != null && subTaskIds.Contains(t.SubTaskId.Value)))
             .ToListAsync(cancellationToken);
         db.TaskTags.RemoveRange(tagLinks);
+        return storageKeys;
     }
 
-    public async Task ClearLinksForSubTaskAsync(Guid subTaskId, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<string>> ClearLinksForSubTaskAsync(Guid subTaskId, CancellationToken cancellationToken)
     {
-        var fileLinks = await db.TaskFiles.Where(f => f.SubTaskId == subTaskId).ToListAsync(cancellationToken);
-        db.TaskFiles.RemoveRange(fileLinks);
+        var fileLinks = await db.TaskFiles.Include(f => f.File).Where(f => f.SubTaskId == subTaskId).ToListAsync(cancellationToken);
+        var storageKeys = RemoveLinksAndFiles(fileLinks);
 
         var tagLinks = await db.TaskTags.Where(t => t.SubTaskId == subTaskId).ToListAsync(cancellationToken);
 
@@ -145,6 +155,17 @@ public sealed class TaskRepository(TaskManagementDbContext db) : ITaskRepository
                 db.TaskTags.Remove(link);
             }
         }
+
+        return storageKeys;
+    }
+
+    /// <summary>Every file has exactly one link (upload creates both), so the file goes with it.</summary>
+    private List<string> RemoveLinksAndFiles(List<TaskFile> links)
+    {
+        db.TaskFiles.RemoveRange(links);
+        var files = links.Where(l => l.File is not null).Select(l => l.File!).DistinctBy(f => f.Id).ToList();
+        db.Files.RemoveRange(files);
+        return files.Select(f => f.StoragePath).Where(p => !string.IsNullOrWhiteSpace(p)).ToList();
     }
 
     public Task<bool> UserExistsAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken) =>
@@ -283,6 +304,24 @@ public sealed class TaskFileRepository(TaskManagementDbContext db) : ITaskFileRe
             .Include(f => f.File)
             .Where(f => f.SubTaskId == subTaskId && f.File!.TenantId == tenantId)
             .ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<TaskFile>> ListForCommentsAsync(
+        Guid tenantId, IReadOnlyCollection<Guid> commentIds, CancellationToken cancellationToken) =>
+        commentIds.Count == 0
+            ? []
+            : await db.TaskFiles
+                .Include(f => f.File)
+                .Where(f => f.CommentId != null && commentIds.Contains(f.CommentId.Value) && f.File!.TenantId == tenantId)
+                .ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<string>> ClearForCommentAsync(Guid commentId, CancellationToken cancellationToken)
+    {
+        var links = await db.TaskFiles.Include(f => f.File).Where(f => f.CommentId == commentId).ToListAsync(cancellationToken);
+        db.TaskFiles.RemoveRange(links);
+        var files = links.Where(l => l.File is not null).Select(l => l.File!).DistinctBy(f => f.Id).ToList();
+        db.Files.RemoveRange(files);
+        return files.Select(f => f.StoragePath).Where(p => !string.IsNullOrWhiteSpace(p)).ToList();
+    }
 
     public async Task AddAsync(TaskFileAsset asset, TaskFile link, CancellationToken cancellationToken)
     {

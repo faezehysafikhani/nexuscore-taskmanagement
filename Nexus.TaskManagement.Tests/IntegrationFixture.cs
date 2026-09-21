@@ -1,11 +1,14 @@
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nexus.TaskManagement.Application;
 using Nexus.TaskManagement.Domain;
 using Nexus.TaskManagement.Infrastructure;
 using NexusCore.Domain.Identity;
+using NexusCore.Application.Files;
+using NexusCore.Infrastructure.Files;
 using NexusCore.Infrastructure.Persistence;
 using NexusCore.SharedKernel.Interfaces;
 
@@ -44,6 +47,9 @@ public sealed class SqlServerFixture : IAsyncLifetime
 
     public bool Available { get; private set; }
 
+    /// <summary>Real file storage on a throwaway folder, so uploads and downloads really round-trip.</summary>
+    public string StorageRoot { get; } = Path.Combine(Path.GetTempPath(), $"TaskMgmt_IT_files_{Guid.NewGuid():N}");
+
     public Guid TenantId { get; } = Guid.NewGuid();
     public Guid OwnerUserId { get; } = Guid.NewGuid();
     public Guid OtherUserId { get; } = Guid.NewGuid();
@@ -74,6 +80,10 @@ public sealed class SqlServerFixture : IAsyncLifetime
 
         var services = new ServiceCollection();
         services.AddSingleton(typeof(Microsoft.Extensions.Logging.ILogger<>), typeof(NullLogger<>));
+        services.AddSingleton<IConfiguration>(new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["FileStorage:RootPath"] = StorageRoot })
+            .Build());
+        services.AddScoped<IFileStorage, LocalDiskFileStorage>();
         services.AddSingleton<TestUserContext>();
         services.AddSingleton<ICurrentUserContext>(sp => sp.GetRequiredService<TestUserContext>());
         services.AddScoped<AuditingInterceptor>();
@@ -143,6 +153,15 @@ public sealed class SqlServerFixture : IAsyncLifetime
         if (_provider is not null)
         {
             await _provider.DisposeAsync();
+        }
+
+        try
+        {
+            if (Directory.Exists(StorageRoot)) Directory.Delete(StorageRoot, recursive: true);
+        }
+        catch
+        {
+            // A leftover temp folder must not fail the run.
         }
 
         if (!Available) return;

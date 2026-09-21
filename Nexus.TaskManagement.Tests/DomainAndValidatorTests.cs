@@ -317,12 +317,20 @@ public sealed class ValidatorTests
     }
 
     [Fact]
-    public void AnEmptyCommentIsRejected()
+    public void ACommentMayHaveNoText_BecauseItCanBeAttachmentsOnly()
     {
-        var result = new CreateTaskCommentRequestValidator().TestValidate(
-            new CreateTaskCommentRequest(""));
+        // The UI allows a comment that is only files; the files are uploaded right after it.
+        new CreateTaskCommentRequestValidator().TestValidate(new CreateTaskCommentRequest(""))
+            .ShouldNotHaveValidationErrorFor(x => x.Text);
+    }
 
-        result.ShouldHaveValidationErrorFor(x => x.Text);
+    [Fact]
+    public void ACommentTextOverTheLimitIsRejected()
+    {
+        new CreateTaskCommentRequestValidator().TestValidate(new CreateTaskCommentRequest(new string('x', 4001)))
+            .ShouldHaveValidationErrorFor(x => x.Text);
+        new UpdateTaskCommentRequestValidator().TestValidate(new UpdateTaskCommentRequest(null!))
+            .ShouldHaveValidationErrorFor(x => x.Text);
     }
 
     [Fact]

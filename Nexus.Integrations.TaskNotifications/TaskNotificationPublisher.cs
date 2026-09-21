@@ -43,6 +43,11 @@ public static class DependencyInjection
     public static IServiceCollection AddTaskNotificationsIntegration(this IServiceCollection services)
     {
         services.AddScoped<ITaskNotificationPublisher, TaskNotificationPublisher>();
+
+        // Real delivery for the module's SMS and contact seams, and SMS/Telegram on task creation.
+        services.AddScoped<ITaskSmsSender, PlatformTaskSmsSender>();
+        services.AddScoped<IUserContactResolver, DirectoryUserContactResolver>();
+        services.AddScoped<NexusCore.SharedKernel.Domain.IDomainEventHandler<Nexus.TaskManagement.Domain.TaskItemCreated>, TaskCreatedChannelNotifier>();
         return services;
     }
 }

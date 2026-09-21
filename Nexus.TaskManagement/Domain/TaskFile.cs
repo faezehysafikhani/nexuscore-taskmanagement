@@ -60,11 +60,11 @@ public sealed class TaskFileAsset : AuditableEntity<Guid>
 }
 
 /// <summary>
-/// Links a file to exactly one owner: a task or a subtask. Recurring tasks live in the Tasks
-/// table like everything else, so their files hang off TaskId - there is no separate column
-/// for them.
+/// Links a file to exactly one owner: a task, a subtask or a comment. Recurring tasks live in
+/// the Tasks table like everything else, so their files hang off TaskId - there is no separate
+/// column for them.
 ///
-/// Exactly one of TaskId / SubTaskId is set; a CHECK constraint enforces it in the database.
+/// Exactly one of TaskId / SubTaskId / CommentId is set; a CHECK constraint enforces it.
 /// </summary>
 public sealed class TaskFile : Entity<Guid>
 {
@@ -72,11 +72,12 @@ public sealed class TaskFile : Entity<Guid>
     {
     }
 
-    private TaskFile(Guid id, Guid fileId, Guid? taskId, Guid? subTaskId) : base(id)
+    private TaskFile(Guid id, Guid fileId, Guid? taskId, Guid? subTaskId, Guid? commentId = null) : base(id)
     {
         FileId = fileId;
         TaskId = taskId;
         SubTaskId = subTaskId;
+        CommentId = commentId;
     }
 
     public Guid FileId { get; private set; }
@@ -88,7 +89,12 @@ public sealed class TaskFile : Entity<Guid>
     public Guid? SubTaskId { get; private set; }
     public SubTask? SubTask { get; private set; }
 
+    public Guid? CommentId { get; private set; }
+    public TaskComment? Comment { get; private set; }
+
     public static TaskFile ForTask(Guid id, Guid fileId, Guid taskId) => new(id, fileId, taskId, null);
 
     public static TaskFile ForSubTask(Guid id, Guid fileId, Guid subTaskId) => new(id, fileId, null, subTaskId);
+
+    public static TaskFile ForComment(Guid id, Guid fileId, Guid commentId) => new(id, fileId, null, null, commentId);
 }

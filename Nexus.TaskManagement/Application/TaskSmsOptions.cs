@@ -54,9 +54,9 @@ public sealed class LoggingTaskSmsSender(
 {
     private readonly TaskSmsOptions _options = options.Value;
 
-    public bool IsEnabled => _options.Enabled;
+    public Task<bool> IsEnabledAsync(Guid tenantId, CancellationToken cancellationToken) => Task.FromResult(_options.Enabled);
 
-    public Task<Result> SendAsync(string phoneNumber, string message, CancellationToken cancellationToken)
+    public Task<Result> SendAsync(Guid tenantId, string phoneNumber, string message, CancellationToken cancellationToken)
     {
         if (!_options.Enabled)
         {

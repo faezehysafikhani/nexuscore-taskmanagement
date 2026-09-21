@@ -37,9 +37,10 @@ public interface ITaskRepository
     /// NoAction on purpose (cascading from Tasks and from SubTasks at once would give SQL
     /// Server two delete paths to the same row), so deleting a task has to do this first.
     /// </summary>
-    Task ClearLinksForTaskAsync(Guid taskId, CancellationToken cancellationToken);
+    /// <summary>Removes the task's file and tag links (and the files themselves); returns the storage keys to delete once saved.</summary>
+    Task<IReadOnlyList<string>> ClearLinksForTaskAsync(Guid taskId, CancellationToken cancellationToken);
 
-    Task ClearLinksForSubTaskAsync(Guid subTaskId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<string>> ClearLinksForSubTaskAsync(Guid subTaskId, CancellationToken cancellationToken);
 
     Task<bool> UserExistsAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken);
 
@@ -94,6 +95,11 @@ public interface ITaskFileRepository
 
     Task<IReadOnlyList<TaskFile>> ListForSubTaskAsync(Guid tenantId, Guid subTaskId, CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<TaskFile>> ListForCommentsAsync(Guid tenantId, IReadOnlyCollection<Guid> commentIds, CancellationToken cancellationToken);
+
+    /// <summary>Removes a comment's file links and files; returns the storage keys to delete once saved.</summary>
+    Task<IReadOnlyList<string>> ClearForCommentAsync(Guid commentId, CancellationToken cancellationToken);
+
     Task AddAsync(TaskFileAsset asset, TaskFile link, CancellationToken cancellationToken);
 
     void Remove(TaskFileAsset asset, TaskFile link);
@@ -133,6 +139,7 @@ public interface ITaskService
     Task<Result<TaskDto>> UpdateAsync(Guid id, UpdateTaskRequest request, CancellationToken cancellationToken);
     Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken);
     Task<Result<TaskDto>> ChangeStatusAsync(Guid id, ChangeTaskStatusRequest request, CancellationToken cancellationToken);
+    Task<Result> AddActivityEntryAsync(Guid taskId, CreateTaskActivityRequest request, CancellationToken cancellationToken);
     Task<Result<TaskDto>> ChangePriorityAsync(Guid id, ChangeTaskPriorityRequest request, CancellationToken cancellationToken);
     Task<Result<TaskDto>> AssignUserAsync(Guid id, AssignUserRequest request, CancellationToken cancellationToken);
     Task<Result<TaskDto>> AssignUserGroupAsync(Guid id, AssignUserGroupRequest request, CancellationToken cancellationToken);
@@ -173,6 +180,7 @@ public interface ITaskFileService
 {
     Task<Result<TaskFileDto>> UploadToTaskAsync(Guid taskId, UploadFileRequest request, CancellationToken cancellationToken);
     Task<Result<TaskFileDto>> UploadToSubTaskAsync(Guid subTaskId, UploadFileRequest request, CancellationToken cancellationToken);
+    Task<Result<TaskFileDto>> UploadToCommentAsync(Guid commentId, UploadFileRequest request, CancellationToken cancellationToken);
     Task<Result<FileDownload>> DownloadAsync(Guid fileId, CancellationToken cancellationToken);
     Task<Result> DeleteAsync(Guid linkId, CancellationToken cancellationToken);
     Task<Result<IReadOnlyList<TaskFileDto>>> GetByTaskIdAsync(Guid taskId, CancellationToken cancellationToken);
@@ -223,14 +231,13 @@ public interface IRecurrenceCalculator
 /// <summary>
 /// Sending an SMS, as this module needs it.
 ///
-/// NexusCore has no SMS infrastructure, so this contract is the module's own seam rather
-/// than a wrapper over something that already exists. The shipped implementation is
-/// disabled-by-default and sends nothing; a real provider is plugged in by replacing the
-/// registration, with its credentials read from configuration.
+/// The module's own seam, so TaskManagement never references a gateway. The shipped
+/// implementation only logs; Nexus.Integrations.TaskNotifications replaces it with one that
+/// sends through the platform's SMS gateway, whose settings are per tenant.
 /// </summary>
 public interface ITaskSmsSender
 {
-    bool IsEnabled { get; }
+    Task<bool> IsEnabledAsync(Guid tenantId, CancellationToken cancellationToken);
 
-    Task<Result> SendAsync(string phoneNumber, string message, CancellationToken cancellationToken);
+    Task<Result> SendAsync(Guid tenantId, string phoneNumber, string message, CancellationToken cancellationToken);
 }
