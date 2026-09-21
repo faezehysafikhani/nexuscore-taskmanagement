@@ -26,6 +26,10 @@ API surface: 30 routes under `/api/task-management`, all permission-gated and vi
 See [docs/TaskManagement-Implementation.md](docs/TaskManagement-Implementation.md) for the full
 design, the business rules, what is verified and what is not, and the remaining dependencies.
 
+See [docs/NexusCore-Independence-From-PocketBase.md](docs/NexusCore-Independence-From-PocketBase.md)
+for accounts, teams, chat, notification gateways and live updates, and for upgrading an
+existing database.
+
 ### Enabling the recurring-task scheduler
 
 Off by default. In `Rozet.Api/appsettings.json`:
