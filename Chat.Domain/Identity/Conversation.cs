@@ -31,5 +31,24 @@ namespace Chat.Domain.Entities
         public ChatType Type { get; private set; }
         public Guid? CreatedBy { get; private set; }
         public DateTime CreatedAt { get; private set; }
+
+        /// <summary>
+        /// For a direct conversation: both participant ids in a fixed order, so the pair has
+        /// exactly one conversation (unique index). Null for group conversations.
+        /// </summary>
+        public string? DirectKey { get; private set; }
+
+        public static Conversation CreateDirect(Guid id, Guid? tenantId, Guid firstUserId, Guid secondUserId)
+        {
+            var conversation = new Conversation(id, tenantId, null, ChatType.Direct, firstUserId);
+            conversation.DirectKey = BuildDirectKey(firstUserId, secondUserId);
+            return conversation;
+        }
+
+        public static string BuildDirectKey(Guid a, Guid b)
+        {
+            var (low, high) = a.CompareTo(b) <= 0 ? (a, b) : (b, a);
+            return $"{low:N}:{high:N}";
+        }
     }
 }

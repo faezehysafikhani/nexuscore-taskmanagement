@@ -16,6 +16,8 @@ public static class DependencyInjection
             options.UseSqlServer(
                 configuration.GetConnectionString("Chat")));
 
+        services.Configure<Chat.Application.Direct.ChatOptions>(configuration.GetSection(Chat.Application.Direct.ChatOptions.SectionName));
+
         services.AddScoped<IChatDbContext>(
             provider => provider.GetRequiredService<ChatDbContext>());
 

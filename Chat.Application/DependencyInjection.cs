@@ -9,6 +9,7 @@ public static class DependencyInjection
     public static IServiceCollection AddChatApplication(this IServiceCollection services)
     {
         services.AddMediatR(typeof(CreateDirectConversationCommandHandler).Assembly);
+        services.AddScoped<Chat.Application.Direct.DirectConversationService>();
 
         return services;
     }

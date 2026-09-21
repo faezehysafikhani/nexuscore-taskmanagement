@@ -35,8 +35,30 @@ namespace Chat.Domain.Identity
         public DateTime? EditedAt { get; private set; }
 
         public bool IsDeleted { get; private set; }
+
+        /// <summary>Optional attachment, stored through the platform file storage.</summary>
+        public string? AttachmentFileName { get; private set; }
+        public string? AttachmentContentType { get; private set; }
+        public long? AttachmentSizeBytes { get; private set; }
+        public string? AttachmentStorageKey { get; private set; }
+
+        public bool HasAttachment => AttachmentStorageKey is not null;
+
+        public void AttachFile(string fileName, string contentType, long sizeBytes, string storageKey)
+        {
+            AttachmentFileName = fileName;
+            AttachmentContentType = contentType;
+            AttachmentSizeBytes = sizeBytes;
+            AttachmentStorageKey = storageKey;
+        }
+
         public void Edit(string text)
         {
+            if (IsDeleted)
+            {
+                throw new InvalidOperationException("A deleted message cannot be edited.");
+            }
+
             Text = text;
             EditedAt = DateTime.UtcNow;
         }

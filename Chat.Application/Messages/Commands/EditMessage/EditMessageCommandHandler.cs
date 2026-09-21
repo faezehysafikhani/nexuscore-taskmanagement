@@ -24,16 +24,20 @@ public sealed class EditMessageCommandHandler
         EditMessageCommand request,
         CancellationToken cancellationToken)
     {
+        // Only the sender can edit, and only a message that still exists.
         var message = await _db.Messages
             .FirstOrDefaultAsync(x =>
                 x.Id == request.MessageId &&
                 x.SenderUserId == _currentUser.UserId,
                 cancellationToken);
 
-        if (message is null)
+        if (message is null || message.IsDeleted)
             return Result.Failure(Error.NotFound("Message not found"));
 
-        message.Edit(request.Text);
+        if (string.IsNullOrWhiteSpace(request.Text) || request.Text.Length > 4000)
+            return Result.Failure(Error.Validation("A message needs 1-4000 characters of text."));
+
+        message.Edit(request.Text.Trim());
 
         await _db.SaveChangesAsync(cancellationToken);
 

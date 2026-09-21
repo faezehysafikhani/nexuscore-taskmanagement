@@ -2,6 +2,7 @@ using Chat.Api.Endpoints;
 using Chat.Api.Hubs;
 using Chat.Application;
 using Chat.Infrastructure;
+using Chat.Infrastructure.Persistence;
 using Events.Api.Endpoints;
 using Events.Application;
 using Events.Infrastructure;
@@ -20,6 +21,7 @@ using Notifications.Api.Endpoints;
 using Notifications.Api.Hubs;
 using Notifications.Application;
 using Notifications.Infrastructure;
+using Notifications.Infrastructure.Persistence;
 using Serilog;
 using System.Reflection;
 using System.Text;
@@ -176,6 +178,10 @@ if (builder.Configuration.GetValue("Database:SeedOnStartup", true))
     var cancellationToken = CancellationToken.None;
 
     await services.GetRequiredService<DefaultDataSeeder>().SeedAsync(cancellationToken);
+
+    // Chat and in-app notifications. Chat uses its own connection string/database.
+    await ModuleSchemaInitializer.EnsureCreatedAsync(services.GetRequiredService<NotificationDbContext>(), cancellationToken);
+    await ModuleSchemaInitializer.EnsureCreatedAsync(services.GetRequiredService<ChatDbContext>(), cancellationToken);
 }
 
 app.Run();

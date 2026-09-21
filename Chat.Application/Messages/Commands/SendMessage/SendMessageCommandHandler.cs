@@ -26,6 +26,9 @@ public sealed class SendMessageCommandHandler
         SendMessageCommand request,
         CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(request.Text) || request.Text.Length > 4000)
+            return Result.Failure<Guid>(Error.Validation("A message needs 1-4000 characters of text."));
+
         var isParticipant = await _db.ConversationParticipants
             .AnyAsync(x =>
                 x.ConversationId == request.ConversationId &&
@@ -33,13 +36,13 @@ public sealed class SendMessageCommandHandler
                 cancellationToken);
 
         if (!isParticipant)
-            return Result.Failure<Guid>(Error.Validation("You are not a participant of this conversation"));
+            return Result.Failure<Guid>(Error.NotFound("Conversation not found."));
 
         var message = new Message(
             Guid.NewGuid(),
             request.ConversationId,
             _currentUser.UserId,
-            request.Text);
+            request.Text.Trim());
 
         _db.Messages.Add(message);
 

@@ -25,6 +25,19 @@ public sealed class MarkAsReadCommandHandler
         MarkAsReadCommand request,
         CancellationToken cancellationToken)
     {
+        // Only a participant of the message's conversation may mark it read.
+        var visible = await _db.Messages
+            .AnyAsync(m =>
+                m.Id == request.MessageId &&
+                !m.IsDeleted &&
+                _db.ConversationParticipants.Any(p =>
+                    p.ConversationId == m.ConversationId &&
+                    p.UserId == _currentUser.UserId),
+                cancellationToken);
+
+        if (!visible)
+            return Result.Failure(Error.NotFound("Message not found"));
+
         var exists = await _db.MessageReads
             .AnyAsync(x =>
                 x.MessageId == request.MessageId &&
@@ -41,7 +54,14 @@ public sealed class MarkAsReadCommandHandler
 
         _db.MessageReads.Add(read);
 
-        await _db.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            // Marked by a parallel request in the meantime: it is read, which is all we wanted.
+        }
 
         return Result.Success();
     }

@@ -32,7 +32,7 @@ public sealed class GetConversationMessagesQueryHandler
                 cancellationToken);
 
         if (!isParticipant)
-            return Result.Failure<List<MessageDto>>(Error.Unauthorized("Access denied"));
+            return Result.Failure<List<MessageDto>>(Error.NotFound("Conversation not found."));
 
         var messages = await _db.Messages
             .AsNoTracking()
@@ -55,6 +55,9 @@ public sealed class GetConversationMessagesQueryHandler
             .ToListAsync(cancellationToken);
 
         messages.Reverse();
+
+        // Stored as UTC without a kind; mark it, so the JSON carries "Z" and clients do not read local time.
+        messages = messages.Select(m => m with { SentAt = DateTime.SpecifyKind(m.SentAt, DateTimeKind.Utc) }).ToList();
 
         return Result.Success(messages);
     }

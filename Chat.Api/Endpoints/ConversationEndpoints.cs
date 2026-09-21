@@ -4,7 +4,7 @@ using Chat.Application.Conversations.Queries.GetConversationMessages;
 using Chat.Application.Conversations.Queries.GetMyConversations;
 using Chat.Application.Conversations.Queries.GetUnreadCount;
 using MediatR;
-using Microsoft.AspNetCore.Hosting.Server;
+using NexusCore.Application.Common;
 
 namespace Chat.Api.Endpoints;
 
@@ -24,24 +24,24 @@ public static class ConversationEndpoints
                 new GetMyConversationsQuery(),
                 cancellationToken);
 
-            return Results.Ok(result);
+            return result.ToApiResult();
         });
 
         group.MapGet("/{conversationId:Guid}/messages", async (
             Guid conversationId,
-            int page,
-            int pageSize,
+            int? page,
+            int? pageSize,
             ISender sender,
             CancellationToken cancellationToken) =>
         {
-            page = page <= 0 ? 1 : page;
-            pageSize = pageSize <= 0 ? 50 : pageSize;
+            var safePage = page is > 0 ? page.Value : 1;
+            var safePageSize = pageSize is > 0 ? Math.Min(pageSize.Value, 500) : 50;
 
             var result = await sender.Send(
-                new GetConversationMessagesQuery(conversationId, page, pageSize),
+                new GetConversationMessagesQuery(conversationId, safePage, safePageSize),
                 cancellationToken);
 
-            return Results.Ok(result);
+            return result.ToApiResult();
         });
 
         group.MapPost("/direct", async (
@@ -51,7 +51,7 @@ public static class ConversationEndpoints
         {
             var result = await sender.Send(command, cancellationToken);
 
-            return Results.Ok(result);
+            return result.ToApiResult();
         });
 
         group.MapPost("/group", async (
@@ -61,18 +61,20 @@ public static class ConversationEndpoints
         {
             var result = await sender.Send(command, cancellationToken);
 
-            return Results.Ok(result);
+            return result.ToApiResult();
         });
+
         group.MapGet("/unread-count", async (
-    ISender sender,
-    CancellationToken cancellationToken) =>
+            ISender sender,
+            CancellationToken cancellationToken) =>
         {
             var result = await sender.Send(
                 new GetUnreadCountQuery(),
                 cancellationToken);
 
-            return Results.Ok(result);
+            return result.ToApiResult();
         });
+
         return app;
     }
 }

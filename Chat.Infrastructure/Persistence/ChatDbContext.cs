@@ -31,5 +31,23 @@ public class ChatDbContext : DbContext, IChatDbContext
                 x.ConversationId,
                 x.UserId
             });
+
+        // One conversation per pair of users.
+        modelBuilder.Entity<Conversation>()
+            .Property(x => x.DirectKey).HasMaxLength(65);
+        modelBuilder.Entity<Conversation>()
+            .HasIndex(x => x.DirectKey).IsUnique().HasFilter("[DirectKey] IS NOT NULL");
+
+        modelBuilder.Entity<Message>(message =>
+        {
+            message.Property(x => x.AttachmentFileName).HasMaxLength(260);
+            message.Property(x => x.AttachmentContentType).HasMaxLength(150);
+            message.Property(x => x.AttachmentStorageKey).HasMaxLength(300);
+            message.HasIndex(x => new { x.ConversationId, x.SentAt });
+        });
+
+        // A message is read at most once per user; also serves the unread-count lookups.
+        modelBuilder.Entity<MessageRead>()
+            .HasIndex(x => new { x.MessageId, x.UserId }).IsUnique().HasFilter("[MessageId] IS NOT NULL AND [UserId] IS NOT NULL");
     }
 }

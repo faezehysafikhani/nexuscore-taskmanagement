@@ -1,57 +1,33 @@
-using Chat.Application.Abstractions;
-using Chat.Domain.Entities;
-using Chat.Domain.Enums;
-using Chat.Domain.Identity;
+using Chat.Application.Direct;
 using MediatR;
-using NexusCore.SharedKernel.Interfaces;
 using NexusCore.SharedKernel.Results;
 
 namespace Chat.Application.Conversations.Commands.CreateDirectConversation;
 
+/// <summary>
+/// Returns the conversation between the caller and the other user, creating it on first use.
+/// A pair of users has exactly one direct conversation.
+/// </summary>
 public sealed class CreateDirectConversationCommandHandler
     : IRequestHandler<CreateDirectConversationCommand, Result<Guid>>
 {
-    private readonly IChatDbContext _db;
-    private readonly ICurrentUserContext _currentUser;
+    private readonly DirectConversationService _conversations;
 
-    public CreateDirectConversationCommandHandler(
-        IChatDbContext db,
-        ICurrentUserContext currentUser)
+    public CreateDirectConversationCommandHandler(DirectConversationService conversations)
     {
-        _db = db;
-        _currentUser = currentUser;
+        _conversations = conversations;
     }
 
     public async Task<Result<Guid>> Handle(
         CreateDirectConversationCommand request,
         CancellationToken cancellationToken)
     {
-        var conversation = new Conversation(
-            Guid.NewGuid(),
-            _currentUser.TenantId,
-            null,
-            ChatType.Direct,
-            _currentUser.UserId);
+        var pair = await _conversations.ResolvePairAsync(request.OtherUserId, cancellationToken);
+        if (pair.IsFailure)
+            return Result.Failure<Guid>(pair.Error);
 
-        _db.Conversations.Add(conversation);
-
-        _db.ConversationParticipants.AddRange(
-            new ConversationParticipant
-            {
-                ConversationId = conversation.Id,
-                UserId = _currentUser.UserId,
-                JoinedAt = DateTime.UtcNow,
-                IsAdmin = true
-            },
-            new ConversationParticipant
-            {
-                ConversationId = conversation.Id,
-                UserId = request.OtherUserId,
-                JoinedAt = DateTime.UtcNow,
-                IsAdmin = false
-            });
-
-        await _db.SaveChangesAsync(cancellationToken);
+        var (me, other) = pair.Value;
+        var conversation = await _conversations.FindOrCreateAsync(me.Id, other.Id, cancellationToken);
 
         return Result.Success(conversation.Id);
     }

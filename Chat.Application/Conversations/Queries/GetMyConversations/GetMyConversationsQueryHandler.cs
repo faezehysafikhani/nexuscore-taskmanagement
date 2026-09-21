@@ -57,7 +57,13 @@ public sealed class GetMyConversationsQueryHandler
             .ToListAsync(cancellationToken);
 
         // این قسمت خارج از Query دیتابیس اجرا می‌شود
+        // Stored as UTC without a kind; mark it so the JSON carries "Z".
         conversations = conversations
+            .Select(x => x with
+            {
+                CreatedAt = DateTime.SpecifyKind(x.CreatedAt, DateTimeKind.Utc),
+                LastMessageAt = x.LastMessageAt is { } last ? DateTime.SpecifyKind(last, DateTimeKind.Utc) : null
+            })
             .OrderByDescending(x => x.LastMessageAt ?? x.CreatedAt)
             .ToList();
 

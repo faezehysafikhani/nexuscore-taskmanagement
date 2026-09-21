@@ -13,6 +13,7 @@ public class MessageRead : AuditableEntity<Guid>
     {
         MessageId = messageId;
         UserId = userId;
+        ReadAt = DateTime.UtcNow;
     }
     public Guid? MessageId { get; set; }
     public Guid? UserId { get; set; }
