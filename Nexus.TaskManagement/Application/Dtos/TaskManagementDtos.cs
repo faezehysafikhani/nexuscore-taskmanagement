@@ -37,7 +37,9 @@ public sealed record SubTaskDto(
     IReadOnlyList<TagDto> Tags,
     IReadOnlyList<TaskFileDto> Files,
     DateTimeOffset CreatedAtUtc,
-    bool IsGeneratedOccurrence = false);
+    bool IsGeneratedOccurrence = false,
+    TimeOnly? StartTime = null,
+    TimeOnly? EndTime = null);
 
 /// <summary>
 /// The recurrence schedule. Carries no title, priority or assignee - those belong to the task
@@ -112,7 +114,8 @@ public sealed record TaskDto(
     IReadOnlyList<TaskFileDto> Files,
     RepetitiveTaskDto? Recurrence,
     DateTimeOffset CreatedAtUtc,
-    DateTimeOffset? ModifiedAtUtc);
+    DateTimeOffset? ModifiedAtUtc,
+    TimeOnly? DueTime = null);
 
 /// <summary>Trimmed shape for list and board views - no subtasks, files or charter.</summary>
 public sealed record TaskListItemDto(
@@ -129,7 +132,8 @@ public sealed record TaskListItemDto(
     int CompletedSubTaskCount,
     IReadOnlyList<TagDto> Tags,
     DateTimeOffset CreatedAtUtc,
-    DateTimeOffset? ModifiedAtUtc);
+    DateTimeOffset? ModifiedAtUtc,
+    TimeOnly? DueTime = null);
 
 public sealed record NoteDto(
     Guid Id,
@@ -155,7 +159,9 @@ public sealed record SubTaskInput(
     DateOnly? StartDate = null,
     DateOnly? EndDate = null,
     int SortOrder = 0,
-    bool IsGeneratedOccurrence = false);
+    bool IsGeneratedOccurrence = false,
+    TimeOnly? StartTime = null,
+    TimeOnly? EndTime = null);
 
 public sealed record RecurrenceInput(
     RecurrenceFrequency Frequency,
@@ -185,8 +191,13 @@ public sealed record CreateTaskRequest(
     DateOnly? CharterEndDate = null,
     IReadOnlyList<SubTaskInput>? SubTasks = null,
     IReadOnlyList<string>? Tags = null,
-    RecurrenceInput? Recurrence = null);
+    RecurrenceInput? Recurrence = null,
+    TimeOnly? DueTime = null);
 
+/// <summary>
+/// Replaces the task's details. Like every other field here, DueTime is replaced as sent: null
+/// means "no time of day", not "keep the current one".
+/// </summary>
 public sealed record UpdateTaskRequest(
     string Title,
     DateOnly DueDate,
@@ -200,7 +211,8 @@ public sealed record UpdateTaskRequest(
     string? CharterDescription = null,
     string? CharterProjectManager = null,
     DateOnly? CharterStartDate = null,
-    DateOnly? CharterEndDate = null);
+    DateOnly? CharterEndDate = null,
+    TimeOnly? DueTime = null);
 
 public sealed record ChangeTaskStatusRequest(TaskItemStatus Status);
 
@@ -243,14 +255,18 @@ public sealed record CreateSubTaskRequest(
     DateOnly? StartDate = null,
     DateOnly? EndDate = null,
     int SortOrder = 0,
-    bool IsGeneratedOccurrence = false);
+    bool IsGeneratedOccurrence = false,
+    TimeOnly? StartTime = null,
+    TimeOnly? EndTime = null);
 
 public sealed record UpdateSubTaskRequest(
     string Title,
     SubTaskImportance Importance,
     DateOnly? StartDate = null,
     DateOnly? EndDate = null,
-    int SortOrder = 0);
+    int SortOrder = 0,
+    TimeOnly? StartTime = null,
+    TimeOnly? EndTime = null);
 
 public sealed record ChangeSubTaskStatusRequest(bool IsCompleted);
 

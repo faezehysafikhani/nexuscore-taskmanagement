@@ -58,6 +58,14 @@ public sealed class TaskItem : AuditableEntity<Guid>
     public TaskPriority Priority { get; private set; }
 
     public DateOnly DueDate { get; private set; }
+
+    /// <summary>
+    /// The time of day on <see cref="DueDate"/> the task is due, as the user picked it (wall-clock
+    /// time, like DueDate is a calendar date). Null when only a date was given; 00:00 is a real
+    /// time, not "no time".
+    /// </summary>
+    public TimeOnly? DueTime { get; private set; }
+
     public DateTimeOffset? ActualCompletionDateUtc { get; private set; }
 
     public Guid? OwnerUserId { get; private set; }
@@ -109,6 +117,8 @@ public sealed class TaskItem : AuditableEntity<Guid>
         AssignedUserGroupId = assignedUserGroupId;
         AllowAssigneeStatusUpdate = allowAssigneeStatusUpdate;
     }
+
+    public void SetDueTime(TimeOnly? dueTime) => DueTime = dueTime;
 
     public void UpdateCharter(string? description, string? projectManager, DateOnly? startDate, DateOnly? endDate)
     {

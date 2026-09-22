@@ -37,6 +37,12 @@ public sealed class SubTask : AuditableEntity<Guid>
     public DateOnly? StartDate { get; private set; }
     public DateOnly? EndDate { get; private set; }
 
+    /// <summary>Time of day on <see cref="StartDate"/>; null when only a date was given.</summary>
+    public TimeOnly? StartTime { get; private set; }
+
+    /// <summary>Time of day on <see cref="EndDate"/>; null when only a date was given.</summary>
+    public TimeOnly? EndTime { get; private set; }
+
     /// <summary>The UI's importance weight, rendered as "وزن ۱/۲/۳".</summary>
     public SubTaskImportance Importance { get; private set; }
 
@@ -60,6 +66,13 @@ public sealed class SubTask : AuditableEntity<Guid>
         StartDate = startDate;
         EndDate = endDate;
         SortOrder = sortOrder;
+    }
+
+    /// <summary>A time without its date means nothing, so each is kept only alongside its date.</summary>
+    public void SetTimes(TimeOnly? startTime, TimeOnly? endTime)
+    {
+        StartTime = StartDate is null ? null : startTime;
+        EndTime = EndDate is null ? null : endTime;
     }
 
     public void SetCompleted(bool isCompleted) => IsCompleted = isCompleted;

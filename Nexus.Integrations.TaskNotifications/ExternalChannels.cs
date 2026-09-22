@@ -121,6 +121,10 @@ public sealed class TaskCreatedChannelNotifier(IServiceScopeFactory scopeFactory
                 _ => "پایین"
             };
             var due = ToPersianDate(task.DueDate);
+            if (task.DueTime is { } dueTime)
+            {
+                due += " - " + ToPersianDigits(dueTime.ToString("HH:mm", CultureInfo.InvariantCulture));
+            }
 
             var smsText = $"📋 فعالیت جدید \"{task.Title}\" به {assigneeName} واگذار شد.\nایجادکننده: {creator}\nاولویت: {priority} | مهلت: {due}";
             var telegramText = $"🔔 فعالیت جدید\n\n📌 عنوان: {task.Title}\n👤 ایجادکننده: {creator}\n🎯 واگذار شده به: {assigneeName}\n⚡ اولویت: {priority}\n📅 مهلت تحویل: {due}\n\nجهت مشاهده و مدیریت فعالیت وارد سامانه شوید.";
@@ -161,6 +165,9 @@ public sealed class TaskCreatedChannelNotifier(IServiceScopeFactory scopeFactory
         var calendar = new PersianCalendar();
         var value = date.ToDateTime(TimeOnly.MinValue);
         var text = $"{calendar.GetYear(value):0000}/{calendar.GetMonth(value):00}/{calendar.GetDayOfMonth(value):00}";
-        return string.Concat(text.Select(c => char.IsDigit(c) ? (char)('۰' + (c - '0')) : c));
+        return ToPersianDigits(text);
     }
+
+    private static string ToPersianDigits(string text) =>
+        string.Concat(text.Select(c => char.IsDigit(c) ? (char)('۰' + (c - '0')) : c));
 }

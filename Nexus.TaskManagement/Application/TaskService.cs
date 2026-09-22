@@ -59,7 +59,8 @@ public sealed class TaskService(
             task.SubTasks.Count(s => s.IsCompleted),
             task.Tags.Where(t => t.Tag is not null).Select(t => ToDto(t.Tag!)).ToList(),
             task.CreatedAtUtc,
-            task.ModifiedAtUtc)).ToList();
+            task.ModifiedAtUtc,
+            task.DueTime)).ToList();
 
         return Result.Success(new PagedResult<TaskListItemDto>(
             items, page.PageNumber, page.PageSize, page.TotalCount));
@@ -108,6 +109,7 @@ public sealed class TaskService(
         task.UpdateDetails(
             request.Title, request.Description, request.DueDate, request.Priority,
             request.AssignedUserId, request.AssignedUserGroupId, request.AllowAssigneeStatusUpdate);
+        task.SetDueTime(request.DueTime);
 
         task.UpdateCharter(
             request.CharterDescription, request.CharterProjectManager,
@@ -124,6 +126,7 @@ public sealed class TaskService(
                 Guid.NewGuid(), input.Title, input.Importance,
                 input.SortOrder == 0 ? index : input.SortOrder);
             subTask.UpdateDetails(input.Title, input.Importance, input.StartDate, input.EndDate, subTask.SortOrder);
+            subTask.SetTimes(input.StartTime, input.EndTime);
             subTask.MarkGeneratedOccurrence(input.IsGeneratedOccurrence);
         }
 
@@ -187,6 +190,7 @@ public sealed class TaskService(
         task.UpdateDetails(
             request.Title, request.Description, request.DueDate, request.Priority,
             request.AssignedUserId, request.AssignedUserGroupId, request.AllowAssigneeStatusUpdate);
+        task.SetDueTime(request.DueTime);
 
         task.UpdateCharter(
             request.CharterDescription, request.CharterProjectManager,
@@ -388,6 +392,7 @@ public sealed class TaskService(
             Guid.NewGuid(), request.Title, request.Importance,
             request.SortOrder == 0 ? count : request.SortOrder);
         subTask.UpdateDetails(request.Title, request.Importance, request.StartDate, request.EndDate, subTask.SortOrder);
+        subTask.SetTimes(request.StartTime, request.EndTime);
         subTask.MarkGeneratedOccurrence(request.IsGeneratedOccurrence);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -411,6 +416,7 @@ public sealed class TaskService(
         }
 
         subTask.UpdateDetails(request.Title, request.Importance, request.StartDate, request.EndDate, request.SortOrder);
+        subTask.SetTimes(request.StartTime, request.EndTime);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await activity.RecordAsync(subTask.TaskId, "Subtask updated", request.Title, cancellationToken);
 
@@ -621,7 +627,9 @@ public sealed class TaskService(
         subTask.Tags.Where(t => t.Tag is not null).Select(t => ToDto(t.Tag!)).ToList(),
         subTask.Files.Select(ToDto).ToList(),
         subTask.CreatedAtUtc,
-        subTask.IsGeneratedOccurrence);
+        subTask.IsGeneratedOccurrence,
+        subTask.StartTime,
+        subTask.EndTime);
 
     internal static RepetitiveTaskDto ToDto(RepetitiveTask schedule) => new(
         schedule.Id,
@@ -680,6 +688,7 @@ public sealed class TaskService(
             task.Files.Select(ToDto).ToList(),
             task.Recurrence is null ? null : ToDto(task.Recurrence),
             task.CreatedAtUtc,
-            task.ModifiedAtUtc);
+            task.ModifiedAtUtc,
+            task.DueTime);
     }
 }
