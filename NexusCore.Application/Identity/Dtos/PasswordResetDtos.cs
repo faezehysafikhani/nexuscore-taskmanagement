@@ -1,7 +1,7 @@
-﻿namespace NexusCore.Application.Identity.Dtos;
+namespace NexusCore.Application.Identity.Dtos;
 
-/// <summary>Email carries the account identifier: email address, username or mobile number.</summary>
-public sealed record ForgotPasswordRequest(string Email, string? TenantSlug);
+/// <summary>Identifier is the account's username or mobile number, as at sign-in.</summary>
+public sealed record ForgotPasswordRequest(string Identifier, string? TenantSlug);
 
 /// <summary>
 /// Deliberately does not reveal whether the account exists (user-enumeration protection).

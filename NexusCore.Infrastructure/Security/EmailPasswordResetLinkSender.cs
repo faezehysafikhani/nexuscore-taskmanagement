@@ -32,6 +32,12 @@ public sealed class EmailPasswordResetLinkSender(
                 "Password reset by email is not available: email delivery is not configured on the server."));
         }
 
+        // Email is optional; an account without one has nowhere to receive the link.
+        if (string.IsNullOrWhiteSpace(user.Email))
+        {
+            return Result.Failure<string>(Error.Validation("This account has no email address to send a reset link to."));
+        }
+
         var minutes = (int)Math.Ceiling((expiresAtUtc - DateTimeOffset.UtcNow).TotalMinutes);
         var body =
             $"سلام {user.DisplayName}،\n\n" +

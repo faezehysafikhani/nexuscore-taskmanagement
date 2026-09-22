@@ -2,6 +2,7 @@ using NexusCore.Application.Common;
 using NexusCore.Application.Identity.Dtos;
 using NexusCore.Application.Identity.Interfaces;
 using NexusCore.Application.Identity.Permissions;
+using NexusCore.Application.Identity.Security;
 using NexusCore.Application.Identity.Services;
 using NexusCore.Application.Messaging;
 using NexusCore.Application.Platform.Dtos;
@@ -19,7 +20,14 @@ public static class IdentityEndpoints
         auth.MapPost("/login", async (LoginRequest request, IIdentityService identityService, CancellationToken cancellationToken) =>
                 (await identityService.LoginAsync(request, cancellationToken)).ToApiResult())
             .AllowAnonymous()
-            .WithName("Login");
+            .WithName("Login")
+            .WithSummary("Sign in with a username or mobile number. After a failed attempt the next one needs a CAPTCHA (/auth/captcha).");
+
+        auth.MapPost("/captcha", async (ILoginProtection protection, CancellationToken cancellationToken) =>
+                (await protection.IssueCaptchaAsync(cancellationToken)).ToApiResult())
+            .AllowAnonymous()
+            .WithName("IssueLoginCaptcha")
+            .WithSummary("A single-use CAPTCHA image for the next sign-in attempt from this client");
 
         auth.MapPost("/refresh", async (RefreshTokenRequest request, IIdentityService identityService, CancellationToken cancellationToken) =>
                 (await identityService.RefreshTokenAsync(request, cancellationToken)).ToApiResult())
@@ -70,8 +78,8 @@ public static class IdentityEndpoints
         var users = app.MapGroup("/api/identity/users").WithTags("Users").RequireAuthorization();
 
         // Without an explicit tenantId the list is the caller's own tenant - never every tenant.
-        // Contact details (phone, Telegram) are only for those who may edit users; everyone else
-        // with users.view - e.g. members picking an assignee - sees names and emails only.
+        // Mobile numbers are only for those who may edit users; everyone else with users.view -
+        // e.g. members picking an assignee - sees names, usernames and emails only.
         users.MapGet("/", async (Guid? tenantId, int? pageNumber, int? pageSize, string? search, HttpContext http, ICurrentUserContext currentUser, IIdentityService identityService, CancellationToken cancellationToken) =>
             {
                 var result = await identityService.ListUsersAsync(tenantId ?? currentUser.TenantId, pageNumber, pageSize, search, cancellationToken);
@@ -83,7 +91,7 @@ public static class IdentityEndpoints
                 var page = result.Value!;
                 return Results.Ok(page with
                 {
-                    Items = page.Items.Select(user => user with { PhoneNumber = null, TelegramChatId = null }).ToList()
+                    Items = page.Items.Select(user => user with { PhoneNumber = null }).ToList()
                 });
             })
             .RequireAuthorization(IdentityPermissions.UsersView);
@@ -151,8 +159,8 @@ public static class IdentityEndpoints
                 (await platformService.UpsertSettingAsync(request, cancellationToken)).ToApiResult())
             .RequireAuthorization(IdentityPermissions.SettingsUpdate);
 
-        // SMS and Telegram gateways of the caller's tenant. Secrets are returned only to
-        // holders of settings.view and are stored encrypted.
+        // The SMS gateway of the caller's tenant. The API key is returned only to holders of
+        // settings.view and is stored encrypted.
         var channels = platform.MapGroup("/notification-channels").WithTags("Platform - Notification channels");
 
         channels.MapGet("/", async (INotificationChannelService service, CancellationToken cancellationToken) =>
@@ -165,10 +173,6 @@ public static class IdentityEndpoints
 
         channels.MapPost("/test-sms", async (TestSmsRequest request, INotificationChannelService service, CancellationToken cancellationToken) =>
                 (await service.TestSmsAsync(request, cancellationToken)).ToApiResult())
-            .RequireAuthorization(IdentityPermissions.SettingsUpdate);
-
-        channels.MapPost("/test-telegram", async (TestTelegramRequest request, INotificationChannelService service, CancellationToken cancellationToken) =>
-                (await service.TestTelegramAsync(request, cancellationToken)).ToApiResult())
             .RequireAuthorization(IdentityPermissions.SettingsUpdate);
 
         return app;

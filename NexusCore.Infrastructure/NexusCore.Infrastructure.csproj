@@ -26,4 +26,9 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- LoginProtection.GenerateCode: tests supply the CAPTCHA code they cannot read from the image. -->
+    <InternalsVisibleTo Include="NexusCore.Tests" />
+  </ItemGroup>
+
 </Project>

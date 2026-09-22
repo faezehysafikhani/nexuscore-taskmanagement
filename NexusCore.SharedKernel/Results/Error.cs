@@ -10,4 +10,7 @@ public sealed record Error(string Code, string Message)
 
     /// <summary>Signed in, but not allowed to do this (HTTP 403). Not for missing sign-in - that is Unauthorized.</summary>
     public static Error Forbidden(string message = "You are not allowed to perform this action.") => new("forbidden", message);
+
+    /// <summary>Too many attempts in a short time (HTTP 429); the caller should wait before trying again.</summary>
+    public static Error TooManyRequests(string message = "Too many attempts. Please wait a few minutes and try again.") => new("too_many_requests", message);
 }

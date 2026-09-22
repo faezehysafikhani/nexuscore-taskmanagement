@@ -44,7 +44,7 @@ public static class DependencyInjection
     {
         services.AddScoped<ITaskNotificationPublisher, TaskNotificationPublisher>();
 
-        // Real delivery for the module's SMS and contact seams, and SMS/Telegram on task creation.
+        // Real delivery for the module's SMS and contact seams, and SMS on task creation.
         services.AddScoped<ITaskSmsSender, PlatformTaskSmsSender>();
         services.AddScoped<IUserContactResolver, DirectoryUserContactResolver>();
         services.AddScoped<NexusCore.SharedKernel.Domain.IDomainEventHandler<Nexus.TaskManagement.Domain.TaskItemCreated>, TaskCreatedChannelNotifier>();

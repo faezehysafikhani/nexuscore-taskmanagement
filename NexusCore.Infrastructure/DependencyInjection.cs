@@ -9,6 +9,7 @@ using NexusCore.Application.Identity.Interfaces;
 using NexusCore.Application.Identity.Options;
 using NexusCore.Infrastructure.Security;
 using NexusCore.Application.Identity.Permissions;
+using NexusCore.Application.Identity.Security;
 using NexusCore.Application.Messaging;
 using NexusCore.Application.Platform.Interfaces;
 using NexusCore.Application.Security;
@@ -61,18 +62,22 @@ public static class DependencyInjection
         services.AddScoped<IFileStorage, LocalDiskFileStorage>();
         services.AddScoped<IUserDirectory, UserDirectory>();
 
+        // Sign-in CAPTCHA and attempt limits. The in-memory cache is only the default: a host that
+        // registers a distributed cache (Redis, SQL Server) shares this state across instances.
+        services.AddDistributedMemoryCache();
+        services.Configure<LoginProtectionOptions>(configuration.GetSection(LoginProtectionOptions.SectionName));
+        services.AddScoped<ILoginProtection, LoginProtection>();
+
         services.Configure<SelfRegistrationOptions>(configuration.GetSection(SelfRegistrationOptions.SectionName));
         services.Configure<IdentitySeedOptions>(configuration.GetSection(IdentitySeedOptions.SectionName));
         services.Configure<PasswordResetOptions>(configuration.GetSection(PasswordResetOptions.SectionName));
         services.AddScoped<IPasswordResetLinkSender, EmailPasswordResetLinkSender>();
         services.Configure<SmtpEmailOptions>(configuration.GetSection(SmtpEmailOptions.SectionName));
 
-        // Outgoing messages. Request logging is removed from these clients: the SMS API key and
-        // the Telegram bot token are part of the request URL and must not reach the logs.
+        // Outgoing messages. Request logging is removed from this client: the SMS API key is part
+        // of the request URL and must not reach the logs.
         services.AddHttpClient(GatewaySmsSender.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(15)).RemoveAllLoggers();
-        services.AddHttpClient(TelegramBotSender.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(15)).RemoveAllLoggers();
         services.AddScoped<ISmsSender, GatewaySmsSender>();
-        services.AddScoped<ITelegramSender, TelegramBotSender>();
         services.AddScoped<IEmailSender, SmtpEmailSender>();
 
         return services;

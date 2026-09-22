@@ -7,7 +7,7 @@ using NexusCore.Application.Platform.Interfaces;
 namespace NexusCore.Application.Messaging;
 
 /// <summary>
-/// Reads and decrypts a tenant's SMS/Telegram gateway settings from platform.Settings.
+/// Reads and decrypts a tenant's SMS gateway settings from platform.Settings.
 /// Separate from <see cref="NotificationChannelService"/> because the senders need the
 /// settings and the service needs the senders (for its test actions).
 /// </summary>
@@ -25,8 +25,7 @@ public sealed class NotificationChannelSettingsReader(
     private readonly IDataProtector _protector = dataProtectionProvider.CreateProtector(ProtectorPurpose);
 
     public static NotificationChannelSettingsDto Defaults { get; } = new(
-        new SmsChannelSettingsDto(false, SmsProviders.Kavenegar, null, null, null, null),
-        new TelegramChannelSettingsDto(false, null, null, null, null));
+        new SmsChannelSettingsDto(false, SmsProviders.Kavenegar, null, null, null, null));
 
     public async Task<NotificationChannelSettingsDto> ReadAsync(Guid tenantId, CancellationToken cancellationToken)
     {
@@ -59,13 +58,7 @@ public sealed class NotificationChannelSettingsReader(
                 Unprotect(stored.Sms?.ApiKey, tenantId),
                 stored.Sms?.LineNumber,
                 stored.Sms?.PatternCode,
-                stored.Sms?.ApiUrl),
-            new TelegramChannelSettingsDto(
-                stored.Telegram?.Enabled ?? false,
-                Unprotect(stored.Telegram?.BotToken, tenantId),
-                stored.Telegram?.BotUsername,
-                stored.Telegram?.AdminChatId,
-                stored.Telegram?.ApiUrl));
+                stored.Sms?.ApiUrl));
     }
 
     private string? Unprotect(string? protectedSecret, Guid tenantId)
@@ -90,7 +83,5 @@ public sealed class NotificationChannelSettingsReader(
 
     internal sealed record StoredSms(bool Enabled, string Provider, string? ApiKey, string? LineNumber, string? PatternCode, string? ApiUrl);
 
-    internal sealed record StoredTelegram(bool Enabled, string? BotToken, string? BotUsername, string? AdminChatId, string? ApiUrl);
-
-    internal sealed record StoredSettings(StoredSms? Sms, StoredTelegram? Telegram);
+    internal sealed record StoredSettings(StoredSms? Sms);
 }

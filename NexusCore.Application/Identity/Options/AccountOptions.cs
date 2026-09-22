@@ -24,6 +24,12 @@ public sealed class IdentitySeedOptions
     public const string SectionName = "Identity";
 
     public List<SeedRoleOptions> SeedRoles { get; set; } = [];
+
+    /// <summary>
+    /// Identity:AdminUsername - the sign-in name of the built-in administrator account the seeder
+    /// creates. Users sign in with a username or mobile number only, so that account needs one.
+    /// </summary>
+    public string AdminUsername { get; set; } = "admin";
 }
 
 public sealed class SeedRoleOptions

@@ -5,13 +5,11 @@ public sealed record UserContact(
     Guid Id,
     Guid TenantId,
     string DisplayName,
-    string Email,
+    string? Email,
     string? Username,
     string? AvatarUrl,
     string? PhoneNumber,
-    string? TelegramChatId,
     bool NotifySms,
-    bool NotifyTelegram,
     bool IsActive);
 
 /// <summary>

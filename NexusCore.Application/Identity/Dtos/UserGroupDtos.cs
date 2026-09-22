@@ -12,7 +12,7 @@ public sealed record UserGroupDto(
     IReadOnlyList<UserGroupMemberDto> Members,
     Guid? OwnerUserId = null);
 
-public sealed record UserGroupMemberDto(Guid UserId, string DisplayName, string Email);
+public sealed record UserGroupMemberDto(Guid UserId, string DisplayName, string? Email);
 
 public sealed record CreateUserGroupRequest(Guid TenantId, string Name, string? Description);
 

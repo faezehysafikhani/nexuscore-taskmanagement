@@ -18,10 +18,15 @@ public sealed class JwtTokenService(IOptions<JwtOptions> options) : IJwtTokenSer
         var claims = new List<Claim>
         {
             new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
-            new(JwtRegisteredClaimNames.Email, user.Email),
             new("tenant_id", user.TenantId.ToString()),
             new("name", user.DisplayName)
         };
+
+        // Email is optional contact data; the claim is only there when the user has one.
+        if (!string.IsNullOrWhiteSpace(user.Email))
+        {
+            claims.Add(new Claim(JwtRegisteredClaimNames.Email, user.Email));
+        }
 
         claims.AddRange(permissions.Select(permission => new Claim("permission", permission)));
         claims.AddRange(user.Roles.Select(role => new Claim(ClaimTypes.Role, role.Role?.Name ?? role.RoleId.ToString())));

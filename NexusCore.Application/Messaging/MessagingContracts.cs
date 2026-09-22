@@ -21,12 +21,6 @@ public interface ISmsSender
     Task<Result<string>> SendAsync(Guid tenantId, string phoneNumber, string text, CancellationToken cancellationToken);
 }
 
-/// <summary>Outgoing Telegram message through the tenant's configured bot.</summary>
-public interface ITelegramSender
-{
-    Task<Result> SendAsync(Guid tenantId, string chatId, string text, CancellationToken cancellationToken);
-}
-
 /// <summary>SMS gateways with a real implementation. Anything else is refused, not faked.</summary>
 public static class SmsProviders
 {

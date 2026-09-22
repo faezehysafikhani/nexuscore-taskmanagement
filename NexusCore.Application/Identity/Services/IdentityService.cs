@@ -2,6 +2,7 @@ using FluentValidation;
 using NexusCore.Application.Common;
 using NexusCore.Application.Identity.Dtos;
 using NexusCore.Application.Identity.Interfaces;
+using NexusCore.Application.Identity.Security;
 using NexusCore.Application.Platform.Interfaces;
 using NexusCore.Application.Security;
 using NexusCore.Domain.Identity;
@@ -20,8 +21,14 @@ public sealed class IdentityService(
     IValidator<CreateUserRequest> createUserValidator,
     IValidator<UpdateUserRequest> updateUserValidator,
     IValidator<CreateRoleRequest> createRoleValidator,
-    IValidator<CreateTenantRequest> createTenantValidator) : IIdentityService
+    IValidator<CreateTenantRequest> createTenantValidator,
+    ILoginProtection loginProtection,
+    AuthSessionIssuer sessionIssuer) : IIdentityService
 {
+    // One message for every way sign-in can fail on the credentials, so the answer never tells
+    // whether a username or mobile number is registered.
+    private const string InvalidCredentials = "Invalid username/mobile number or password.";
+
     public async Task<Result<AuthResponse>> LoginAsync(LoginRequest request, CancellationToken cancellationToken)
     {
         var validation = await loginValidator.ValidateAsResultAsync(request, cancellationToken);
@@ -30,24 +37,28 @@ public sealed class IdentityService(
             return Result.Failure<AuthResponse>(validation.Error);
         }
 
-        // The identifier may be an email address, a username or a mobile number.
-        var user = await repository.FindUserByLoginAsync(request.Email, request.TenantSlug, cancellationToken);
-        if (user is null || !user.IsActive || !passwordHasher.Verify(request.Password, user.PasswordHash))
+        // Limits and CAPTCHA come first: while a CAPTCHA is due, the password is not even
+        // checked, so guessing cannot continue without solving one each time.
+        var guard = await loginProtection.BeforeLoginAttemptAsync(
+            request.Identifier, request.CaptchaId, request.CaptchaAnswer, cancellationToken);
+        if (guard.IsFailure)
         {
-            return Result.Failure<AuthResponse>(Error.Unauthorized("Invalid email or password."));
+            return Result.Failure<AuthResponse>(guard.Error);
         }
 
-        var permissions = await repository.GetUserPermissionNamesAsync(user.Id, cancellationToken);
-        var accessToken = jwtTokenService.CreateAccessToken(user, permissions);
-        var refreshToken = jwtTokenService.CreateRefreshToken();
-        var refreshTokenEntity = user.AddRefreshToken(passwordHasher.HashToken(refreshToken), DateTimeOffset.UtcNow.AddDays(14), null);
-        await repository.AddRefreshTokenAsync(refreshTokenEntity, cancellationToken);
-        user.MarkLoggedIn(DateTimeOffset.UtcNow);
+        // The identifier is a username or a mobile number; an email address matches nothing.
+        var user = await repository.FindUserByLoginAsync(request.Identifier, request.TenantSlug, cancellationToken);
+        var passwordOk = user is not null && passwordHasher.Verify(request.Password, user.PasswordHash);
+        if (user is null || !user.IsActive || !passwordOk)
+        {
+            var captchaNext = await loginProtection.RecordFailedLoginAsync(request.Identifier, cancellationToken);
+            return Result.Failure<AuthResponse>(captchaNext
+                ? new Error("unauthorized.captcha_required", InvalidCredentials)
+                : Error.Unauthorized(InvalidCredentials));
+        }
 
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-        await platformService.AuditAsync("identity.login", nameof(User), user.Id.ToString(), user.Email, cancellationToken);
-
-        return Result.Success(new AuthResponse(accessToken.Token, refreshToken, accessToken.ExpiresAtUtc, ToUserDto(user)));
+        await loginProtection.RecordSuccessfulLoginAsync(request.Identifier, cancellationToken);
+        return Result.Success(await sessionIssuer.IssueAsync(user, cancellationToken));
     }
 
     public async Task<Result<AuthResponse>> RefreshTokenAsync(RefreshTokenRequest request, CancellationToken cancellationToken)
@@ -117,22 +128,17 @@ public sealed class IdentityService(
             return Result.Failure<UserDto>(Error.NotFound("Tenant was not found."));
         }
 
-        if (await repository.UserEmailExistsAsync(request.TenantId, request.Email, cancellationToken))
+        var taken = await FindTakenSignInDetailAsync(request.TenantId, null, request.Username, request.PhoneNumber, request.Email, cancellationToken);
+        if (taken is not null)
         {
-            return Result.Failure<UserDto>(Error.Conflict("A user with this email already exists in the tenant."));
-        }
-
-        if (!string.IsNullOrWhiteSpace(request.Username)
-            && await repository.UsernameExistsAsync(request.TenantId, request.Username, null, cancellationToken))
-        {
-            return Result.Failure<UserDto>(Error.Conflict("A user with this username already exists in the tenant."));
+            return Result.Failure<UserDto>(taken);
         }
 
         var user = new User(Guid.NewGuid(), request.TenantId, request.Email, request.DisplayName, passwordHasher.HashPassword(request.Password), request.IsActive);
-        user.UpdateContactDetails(request.Username, request.PhoneNumber, request.TelegramChatId, request.NotifySms, request.NotifyTelegram);
+        user.UpdateContactDetails(request.Username, request.PhoneNumber, request.NotifySms);
         await repository.AddUserAsync(user, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        await platformService.AuditAsync("users.create", nameof(User), user.Id.ToString(), user.Email, cancellationToken);
+        await platformService.AuditAsync("users.create", nameof(User), user.Id.ToString(), user.Username, cancellationToken);
 
         return Result.Success(ToUserDto(user));
     }
@@ -151,33 +157,24 @@ public sealed class IdentityService(
             return Result.Failure<UserDto>(Error.NotFound("User was not found."));
         }
 
-        if (!string.IsNullOrWhiteSpace(request.Email)
-            && !string.Equals(request.Email.Trim(), user.Email, StringComparison.OrdinalIgnoreCase))
+        var taken = await FindTakenSignInDetailAsync(user.TenantId, user.Id, request.Username, request.PhoneNumber, request.Email, cancellationToken);
+        if (taken is not null)
         {
-            if (await repository.UserEmailExistsAsync(user.TenantId, request.Email, cancellationToken))
-            {
-                return Result.Failure<UserDto>(Error.Conflict("A user with this email already exists in the tenant."));
-            }
-
-            user.ChangeEmail(request.Email);
-        }
-
-        if (request.Username is not null
-            && !string.IsNullOrWhiteSpace(request.Username)
-            && await repository.UsernameExistsAsync(user.TenantId, request.Username, user.Id, cancellationToken))
-        {
-            return Result.Failure<UserDto>(Error.Conflict("A user with this username already exists in the tenant."));
+            return Result.Failure<UserDto>(taken);
         }
 
         user.UpdateProfile(request.DisplayName, request.IsActive);
 
-        // Fields left null keep their current value.
+        // Null keeps the current value; an empty string clears email or mobile number.
+        if (request.Email is not null)
+        {
+            user.ChangeEmail(request.Email);
+        }
+
         user.UpdateContactDetails(
             request.Username ?? user.Username,
             request.PhoneNumber ?? user.PhoneNumber,
-            request.TelegramChatId ?? user.TelegramChatId,
-            request.NotifySms ?? user.NotifySms,
-            request.NotifyTelegram ?? user.NotifyTelegram);
+            request.NotifySms ?? user.NotifySms);
 
         if (!string.IsNullOrWhiteSpace(request.Password))
         {
@@ -187,7 +184,7 @@ public sealed class IdentityService(
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        await platformService.AuditAsync("users.update", nameof(User), user.Id.ToString(), user.Email, cancellationToken);
+        await platformService.AuditAsync("users.update", nameof(User), user.Id.ToString(), user.Username, cancellationToken);
         return Result.Success(ToUserDto(user));
     }
 
@@ -204,7 +201,7 @@ public sealed class IdentityService(
             return Result.Failure(Error.Validation("The built-in administrator account cannot be deleted."));
         }
 
-        var auditDetails = user.Email;
+        var auditDetails = user.Username ?? user.Email;
         await repository.RemoveUserAsync(user, cancellationToken);
         try
         {
@@ -325,6 +322,34 @@ public sealed class IdentityService(
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await platformService.AuditAsync("tenants.create", nameof(Tenant), tenant.Id.ToString(), tenant.Slug, cancellationToken);
         return Result.Success(ToTenantDto(tenant));
+    }
+
+    /// <summary>
+    /// The conflict to report when a username, mobile number or email already belongs to another
+    /// user of the tenant; null when all are free. Used by administrators managing accounts.
+    /// </summary>
+    private async Task<Error?> FindTakenSignInDetailAsync(
+        Guid tenantId, Guid? exceptUserId, string? username, string? phoneNumber, string? email, CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(username)
+            && await repository.UsernameExistsAsync(tenantId, username, exceptUserId, cancellationToken))
+        {
+            return Error.Conflict("A user with this username already exists in the tenant.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(phoneNumber)
+            && await repository.PhoneNumberExistsAsync(tenantId, phoneNumber, exceptUserId, cancellationToken))
+        {
+            return Error.Conflict("A user with this mobile number already exists in the tenant.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(email)
+            && await repository.UserEmailExistsAsync(tenantId, email, exceptUserId, cancellationToken))
+        {
+            return Error.Conflict("A user with this email already exists in the tenant.");
+        }
+
+        return null;
     }
 
     private static UserDto ToUserDto(User user) => IdentityMappings.ToUserDto(user);

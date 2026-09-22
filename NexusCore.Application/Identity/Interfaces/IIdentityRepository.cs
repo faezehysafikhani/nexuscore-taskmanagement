@@ -5,15 +5,18 @@ namespace NexusCore.Application.Identity.Interfaces;
 
 public interface IIdentityRepository
 {
-    Task<User?> GetUserByEmailAsync(string email, string? tenantSlug, CancellationToken cancellationToken);
     Task<User?> GetUserByIdAsync(Guid userId, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Finds the account for a sign-in identifier: an email address, a username or a mobile
-    /// number. Returns null when nothing matches or the identifier is ambiguous across tenants.
+    /// Finds the account for a sign-in identifier: a username or a mobile number (in any common
+    /// spelling). Email addresses are not sign-in names and never match. Returns null when
+    /// nothing matches or the identifier is ambiguous across tenants.
     /// </summary>
     Task<User?> FindUserByLoginAsync(string identifier, string? tenantSlug, CancellationToken cancellationToken);
     Task<bool> UsernameExistsAsync(Guid tenantId, string username, Guid? exceptUserId, CancellationToken cancellationToken);
+
+    /// <summary>Whether another user of the tenant has this mobile number (compared in canonical form).</summary>
+    Task<bool> PhoneNumberExistsAsync(Guid tenantId, string phoneNumber, Guid? exceptUserId, CancellationToken cancellationToken);
     Task<Role?> GetRoleByNameAsync(Guid tenantId, string name, CancellationToken cancellationToken);
     Task<Tenant?> GetTenantBySlugAsync(string slug, CancellationToken cancellationToken);
     Task AddPasswordResetTokenAsync(PasswordResetToken token, CancellationToken cancellationToken);
@@ -26,7 +29,7 @@ public interface IIdentityRepository
     int? pageSize,
     string? search,
     CancellationToken cancellationToken);
-    Task<bool> UserEmailExistsAsync(Guid tenantId, string email, CancellationToken cancellationToken);
+    Task<bool> UserEmailExistsAsync(Guid tenantId, string email, Guid? exceptUserId, CancellationToken cancellationToken);
     Task AddUserAsync(User user, CancellationToken cancellationToken);
     Task RemoveUserAsync(User user, CancellationToken cancellationToken);
     Task AddRefreshTokenAsync(RefreshToken refreshToken, CancellationToken cancellationToken);

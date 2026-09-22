@@ -9,9 +9,9 @@ public static class PersianMessages
             return "عملیات انجام نشد. لطفاً دوباره تلاش کنید.";
         }
 
-        if (error.Contains("Invalid email or password", StringComparison.OrdinalIgnoreCase))
+        if (error.Contains("Invalid username/mobile number or password", StringComparison.OrdinalIgnoreCase))
         {
-            return "ایمیل یا رمز عبور نادرست است.";
+            return "نام کاربری/شماره تلفن یا رمز عبور نادرست است.";
         }
 
         if (error.Contains("Authentication is required", StringComparison.OrdinalIgnoreCase) ||

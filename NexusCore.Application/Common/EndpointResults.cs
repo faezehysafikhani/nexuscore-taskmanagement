@@ -38,6 +38,9 @@ public static class EndpointResults
             "not_found" => StatusCodes.Status404NotFound,
             "conflict" => StatusCodes.Status409Conflict,
             "unauthorized" => StatusCodes.Status401Unauthorized,
+            // A failed sign-in after which the next attempt must include a CAPTCHA.
+            "unauthorized.captcha_required" => StatusCodes.Status401Unauthorized,
+            "too_many_requests" => StatusCodes.Status429TooManyRequests,
             "forbidden" => StatusCodes.Status403Forbidden,
             _ => StatusCodes.Status400BadRequest
         };

@@ -1,5 +1,6 @@
 @page "/login"
 @rendermode InteractiveServer
+@using System.Text.Json
 @inject ApiClient Api
 @inject AuthTokenStore TokenStore
 @inject NavigationManager Navigation
@@ -9,13 +10,24 @@
 <h1>ورود به سامانه</h1>
 
 <div class="form-panel">
-    <label>ایمیل</label>
-    <input class="form-control" @bind="email" />
+    <label>نام کاربری یا شماره تلفن همراه</label>
+    <input class="form-control" @bind="identifier" autocomplete="username" placeholder="مثلاً admin یا 09121234567" />
     <label>رمز عبور</label>
-    <input class="form-control" type="password" @bind="password" />
+    <input class="form-control" type="password" @bind="password" autocomplete="current-password" />
     <label>شناسه سازمان</label>
     <input class="form-control" @bind="tenantSlug" />
-    <button class="btn btn-primary mt-3" @onclick="LoginAsync">ورود</button>
+
+    @if (captcha is not null)
+    {
+        <label class="mt-2">کد امنیتی تصویر را وارد کنید</label>
+        <div class="d-flex align-items-center gap-2">
+            <img src="@captcha.ImageDataUrl" alt="کد امنیتی" width="200" height="70" />
+            <button class="btn btn-outline-secondary btn-sm" @onclick="LoadCaptchaAsync">کد جدید</button>
+        </div>
+        <input class="form-control" @bind="captchaAnswer" inputmode="numeric" autocomplete="off" />
+    }
+
+    <button class="btn btn-primary mt-3" @onclick="LoginAsync" disabled="@(captcha is not null && string.IsNullOrWhiteSpace(captchaAnswer))">ورود</button>
     <button class="btn btn-outline-secondary mt-3 ms-2" @onclick="ClearAsync">پاک کردن توکن</button>
     @if (!string.IsNullOrWhiteSpace(message))
     {
@@ -24,22 +36,72 @@
 </div>
 
 @code {
-    private string email = "admin@nexus.local";
-    private string password = "Admin@12345";
+    private string identifier = "";
+    private string password = "";
     private string tenantSlug = "default";
     private string? message;
+    private CaptchaChallengeDto? captcha;
+    private string captchaAnswer = "";
 
     private async Task LoginAsync()
     {
-        var result = await Api.PostAsync<AuthResponse>("/api/identity/auth/login", new LoginRequest(email, password, tenantSlug));
+        var request = new LoginRequest(identifier, password, tenantSlug, captcha?.CaptchaId, captcha is null ? null : captchaAnswer);
+        var result = await Api.PostAsync<AuthResponse>("/api/identity/auth/login", request);
         if (result is { IsSuccess: true, Value: not null })
         {
+            captcha = null;
             await TokenStore.SetAsync(result.Value.AccessToken, result.Value.RefreshToken);
             Navigation.NavigateTo("/");
             return;
         }
 
-        message = PersianMessages.Error(result.Error);
+        // A CAPTCHA is used once, right or wrong; after any failure a fresh one is needed when the
+        // server asks for it.
+        var code = ProblemCode(result.Error);
+        message = code switch
+        {
+            "captcha.required" => "لطفاً کد امنیتی را وارد کنید.",
+            "captcha.invalid" => "کد امنیتی نادرست است یا منقضی شده است. کد جدید را وارد کنید.",
+            "too_many_requests" => "تعداد تلاش‌ها بیش از حد مجاز است. چند دقیقه بعد دوباره تلاش کنید.",
+            "unauthorized" or "unauthorized.captcha_required" => "نام کاربری/شماره تلفن یا رمز عبور نادرست است.",
+            _ => PersianMessages.Error(result.Error)
+        };
+
+        if (code is "captcha.required" or "captcha.invalid" or "unauthorized.captcha_required" || captcha is not null)
+        {
+            await LoadCaptchaAsync();
+        }
+    }
+
+    private async Task LoadCaptchaAsync()
+    {
+        captchaAnswer = "";
+        var result = await Api.PostAsync<CaptchaChallengeDto>("/api/identity/auth/captcha", new { });
+        captcha = result.Value;
+        if (!result.IsSuccess)
+        {
+            message = ProblemCode(result.Error) == "too_many_requests"
+                ? "تعداد درخواست‌ها بیش از حد مجاز است. چند دقیقه بعد دوباره تلاش کنید."
+                : PersianMessages.Error(result.Error);
+        }
+    }
+
+    private static string? ProblemCode(string? body)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var json = JsonDocument.Parse(body);
+            return json.RootElement.TryGetProperty("title", out var title) ? title.GetString() : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     private async Task ClearAsync()

@@ -25,9 +25,7 @@ public sealed class UserDirectory(NexusCoreDbContext dbContext) : IUserDirectory
                 user.Username,
                 user.AvatarUrl,
                 user.PhoneNumber,
-                user.TelegramChatId,
                 user.NotifySms,
-                user.NotifyTelegram,
                 user.IsActive))
             .ToListAsync(cancellationToken);
     }

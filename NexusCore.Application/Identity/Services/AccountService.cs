@@ -6,6 +6,7 @@ using NexusCore.Application.Common;
 using NexusCore.Application.Identity.Dtos;
 using NexusCore.Application.Identity.Interfaces;
 using NexusCore.Application.Identity.Options;
+using NexusCore.Application.Identity.Security;
 using NexusCore.Application.Platform.Interfaces;
 using NexusCore.Application.Security;
 using NexusCore.Domain.Identity;
@@ -29,7 +30,8 @@ public interface IAccountService
 /// </summary>
 public sealed class AccountService(
     IIdentityRepository repository,
-    IIdentityService identityService,
+    AuthSessionIssuer sessionIssuer,
+    ILoginProtection loginProtection,
     IPasswordHasher passwordHasher,
     IUnitOfWork unitOfWork,
     IPlatformService platformService,
@@ -49,6 +51,12 @@ public sealed class AccountService(
             return Result.Failure<AuthResponse>(Error.Validation("Self-registration is disabled. Ask an administrator for an account."));
         }
 
+        var throttled = await loginProtection.ThrottleAsync(AuthAction.Register, cancellationToken);
+        if (throttled.IsFailure)
+        {
+            return Result.Failure<AuthResponse>(throttled.Error);
+        }
+
         var validation = await registerValidator.ValidateAsResultAsync(request, cancellationToken);
         if (validation.IsFailure)
         {
@@ -62,19 +70,24 @@ public sealed class AccountService(
                 "Self-registration has no target tenant. Set Identity:SelfRegistration:TenantSlug."));
         }
 
-        if (await repository.UserEmailExistsAsync(tenant.Id, request.Email, cancellationToken))
+        // A username has to be chosen freely, so a taken one is named as such. A mobile number or
+        // email that is already registered is not confirmed: the answer is the same for both, and
+        // points the owner to sign-in or password reset instead.
+        if (await repository.UsernameExistsAsync(tenant.Id, request.Username, null, cancellationToken))
         {
-            return Result.Failure<AuthResponse>(Error.Conflict("An account with this email already exists."));
+            return Result.Failure<AuthResponse>(Error.Conflict("This username is already taken. Choose another one."));
         }
 
-        if (!string.IsNullOrWhiteSpace(request.Username)
-            && await repository.UsernameExistsAsync(tenant.Id, request.Username, null, cancellationToken))
+        if (await repository.PhoneNumberExistsAsync(tenant.Id, request.PhoneNumber, null, cancellationToken)
+            || (!string.IsNullOrWhiteSpace(request.Email)
+                && await repository.UserEmailExistsAsync(tenant.Id, request.Email, null, cancellationToken)))
         {
-            return Result.Failure<AuthResponse>(Error.Conflict("This username is already taken."));
+            return Result.Failure<AuthResponse>(Error.Conflict(
+                "This mobile number or email cannot be used for a new account. If you already have an account, sign in or reset your password."));
         }
 
         var user = new User(Guid.NewGuid(), tenant.Id, request.Email, request.DisplayName, passwordHasher.HashPassword(request.Password));
-        user.UpdateContactDetails(request.Username, request.PhoneNumber, request.TelegramChatId, request.NotifySms, request.NotifyTelegram);
+        user.UpdateContactDetails(request.Username, request.PhoneNumber, request.NotifySms);
         user.SetPreferences(request.Theme, request.ColorPalette, request.ThemeMode);
 
         if (!string.IsNullOrWhiteSpace(options.DefaultRoleName))
@@ -94,18 +107,25 @@ public sealed class AccountService(
 
         await repository.AddUserAsync(user, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        await platformService.AuditAsync("users.register", nameof(User), user.Id.ToString(), user.Email, cancellationToken);
+        await platformService.AuditAsync("users.register", nameof(User), user.Id.ToString(), user.Username, cancellationToken);
 
-        // Signing in through the normal login path issues the same tokens a login would.
-        return await identityService.LoginAsync(new LoginRequest(user.Email, request.Password, tenant.Slug), cancellationToken);
+        // The account was just created with this password: sign the user in with the same
+        // session a login issues.
+        return Result.Success(await sessionIssuer.IssueAsync(user, cancellationToken));
     }
 
     public async Task<Result<ForgotPasswordResponse>> ForgotPasswordAsync(
         ForgotPasswordRequest request, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.Email))
+        if (string.IsNullOrWhiteSpace(request.Identifier))
         {
-            return Result.Failure<ForgotPasswordResponse>(Error.Validation("An email, username or mobile number is required."));
+            return Result.Failure<ForgotPasswordResponse>(Error.Validation("A username or mobile number is required."));
+        }
+
+        var throttled = await loginProtection.ThrottleAsync(AuthAction.ForgotPassword, cancellationToken);
+        if (throttled.IsFailure)
+        {
+            return Result.Failure<ForgotPasswordResponse>(throttled.Error);
         }
 
         // Decided before any lookup, so this answer cannot depend on whether the account exists.
@@ -117,10 +137,11 @@ public sealed class AccountService(
 
         // Same answer whether or not the account exists, so the endpoint cannot be used to find
         // out which accounts exist.
-        const string message = "If an account matches, a password reset link has been sent to its email address.";
+        const string message = "If an account matches and has an email address, a password reset link has been sent to it.";
 
-        var user = await repository.FindUserByLoginAsync(request.Email, request.TenantSlug, cancellationToken);
-        if (user is null || !user.IsActive)
+        var user = await repository.FindUserByLoginAsync(request.Identifier, request.TenantSlug, cancellationToken);
+        // No email address means nowhere to send the link; the answer stays the same.
+        if (user is null || !user.IsActive || string.IsNullOrWhiteSpace(user.Email))
         {
             return Result.Success(new ForgotPasswordResponse(message, null, null));
         }
@@ -199,14 +220,19 @@ public sealed class AccountService(
             return Result.Failure<UserDto>(Error.NotFound("User was not found."));
         }
 
-        if (!string.IsNullOrWhiteSpace(request.Username)
-            && await repository.UsernameExistsAsync(user.TenantId, request.Username, user.Id, cancellationToken))
+        if (await repository.UsernameExistsAsync(user.TenantId, request.Username, user.Id, cancellationToken))
         {
             return Result.Failure<UserDto>(Error.Conflict("This username is already taken."));
         }
 
+        if (!string.IsNullOrWhiteSpace(request.PhoneNumber)
+            && await repository.PhoneNumberExistsAsync(user.TenantId, request.PhoneNumber, user.Id, cancellationToken))
+        {
+            return Result.Failure<UserDto>(Error.Conflict("This mobile number cannot be used. Enter another one."));
+        }
+
         user.ChangeDisplayName(request.DisplayName);
-        user.UpdateContactDetails(request.Username, request.PhoneNumber, request.TelegramChatId, request.NotifySms, request.NotifyTelegram);
+        user.UpdateContactDetails(request.Username, request.PhoneNumber, request.NotifySms);
         user.SetAvatar(request.AvatarUrl);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await platformService.AuditAsync("users.update_own_profile", nameof(User), user.Id.ToString(), null, cancellationToken);

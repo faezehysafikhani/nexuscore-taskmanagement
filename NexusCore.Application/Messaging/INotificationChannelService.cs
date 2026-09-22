@@ -10,9 +10,6 @@ public interface INotificationChannelService
     Task<Result<NotificationChannelSettingsDto>> SaveAsync(NotificationChannelSettingsDto settings, CancellationToken cancellationToken);
 
     Task<Result<ChannelTestResultDto>> TestSmsAsync(TestSmsRequest request, CancellationToken cancellationToken);
-
-    Task<Result<ChannelTestResultDto>> TestTelegramAsync(TestTelegramRequest request, CancellationToken cancellationToken);
-
 }
 
 /// <summary>Decrypted channel settings of a tenant, for the senders. Never exposed over HTTP.</summary>

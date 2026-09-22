@@ -24,6 +24,7 @@ public static class DependencyInjection
         services.AddScoped<IValidator<RegisterRequest>, RegisterRequestValidator>();
         services.AddScoped<IValidator<ResetPasswordRequest>, ResetPasswordRequestValidator>();
         services.AddScoped<IValidator<UpdateMyProfileRequest>, UpdateMyProfileRequestValidator>();
+        services.AddScoped<AuthSessionIssuer>();
         services.AddScoped<IIdentityService, IdentityService>();
         services.AddScoped<IAccountService, AccountService>();
         services.AddScoped<INotificationChannelSettingsReader, NotificationChannelSettingsReader>();

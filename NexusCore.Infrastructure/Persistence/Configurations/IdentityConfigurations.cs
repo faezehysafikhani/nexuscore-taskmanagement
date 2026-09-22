@@ -27,21 +27,21 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
         builder.ToTable("Users", "identity");
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).ValueGeneratedNever();
-        builder.Property(x => x.Email).HasMaxLength(256).IsRequired();
+        // Optional contact address; unique when present.
+        builder.Property(x => x.Email).HasMaxLength(256);
         builder.Property(x => x.DisplayName).HasMaxLength(160).IsRequired();
         builder.Property(x => x.PasswordHash).HasMaxLength(256).IsRequired();
-        builder.HasIndex(x => new { x.TenantId, x.Email }).IsUnique();
+        builder.HasIndex(x => new { x.TenantId, x.Email }).IsUnique().HasFilter("[Email] IS NOT NULL");
         builder.Property(x => x.Username).HasMaxLength(64);
         builder.Property(x => x.PhoneNumber).HasMaxLength(32);
-        builder.Property(x => x.TelegramChatId).HasMaxLength(64);
         builder.Property(x => x.NotifySms).HasDefaultValue(true);
-        builder.Property(x => x.NotifyTelegram).HasDefaultValue(true);
         builder.Property(x => x.AvatarUrl);
         builder.Property(x => x.Theme).HasMaxLength(40);
         builder.Property(x => x.ColorPalette).HasMaxLength(40);
         builder.Property(x => x.ThemeMode).HasMaxLength(10);
-        // Usernames are optional but, when set, identify one user per tenant.
+        // Username and mobile number are the sign-in names: each identifies one user per tenant.
         builder.HasIndex(x => new { x.TenantId, x.Username }).IsUnique().HasFilter("[Username] IS NOT NULL");
+        builder.HasIndex(x => new { x.TenantId, x.PhoneNumber }).IsUnique().HasFilter("[PhoneNumber] IS NOT NULL");
         builder.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
         builder.Navigation(x => x.Roles).UsePropertyAccessMode(PropertyAccessMode.Field);
         builder.Navigation(x => x.RefreshTokens).UsePropertyAccessMode(PropertyAccessMode.Field);

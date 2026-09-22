@@ -45,9 +45,9 @@ public sealed class DirectoryUserContactResolver(IUserDirectory directory) : IUs
 }
 
 /// <summary>
-/// When a task is created, tells the people involved by SMS and Telegram - the assignee, the
-/// collaborators, the members of the assigned team and the creator - each according to their
-/// own notification preferences and the tenant's channel settings.
+/// When a task is created, tells the people involved by SMS - the assignee, the collaborators,
+/// the members of the assigned team and the creator - each according to their own notification
+/// preference and the tenant's SMS gateway settings.
 ///
 /// Runs after the task is saved and in the background, so a slow or unreachable gateway
 /// never delays or fails the request that created the task. Delivery is best-effort: a failed
@@ -71,7 +71,7 @@ public sealed class TaskCreatedChannelNotifier(IServiceScopeFactory scopeFactory
         {
             var channels = await services.GetRequiredService<INotificationChannelSettingsReader>()
                 .ReadAsync(created.TenantId, CancellationToken.None);
-            if (!channels.Sms.Enabled && !channels.Telegram.Enabled)
+            if (!channels.Sms.Enabled)
             {
                 return;
             }
@@ -127,28 +127,17 @@ public sealed class TaskCreatedChannelNotifier(IServiceScopeFactory scopeFactory
             }
 
             var smsText = $"📋 فعالیت جدید \"{task.Title}\" به {assigneeName} واگذار شد.\nایجادکننده: {creator}\nاولویت: {priority} | مهلت: {due}";
-            var telegramText = $"🔔 فعالیت جدید\n\n📌 عنوان: {task.Title}\n👤 ایجادکننده: {creator}\n🎯 واگذار شده به: {assigneeName}\n⚡ اولویت: {priority}\n📅 مهلت تحویل: {due}\n\nجهت مشاهده و مدیریت فعالیت وارد سامانه شوید.";
 
             var sms = services.GetRequiredService<ISmsSender>();
-            var telegram = services.GetRequiredService<ITelegramSender>();
 
             foreach (var user in users)
             {
-                if (channels.Sms.Enabled && user.NotifySms && !string.IsNullOrWhiteSpace(user.PhoneNumber))
+                if (user.NotifySms && !string.IsNullOrWhiteSpace(user.PhoneNumber))
                 {
                     var sent = await sms.SendAsync(created.TenantId, user.PhoneNumber!, smsText, CancellationToken.None);
                     if (sent.IsFailure)
                     {
                         logger.LogWarning("Task {TaskId}: SMS to user {UserId} not sent: {Error}", task.Id, user.Id, sent.Error.Message);
-                    }
-                }
-
-                if (channels.Telegram.Enabled && user.NotifyTelegram && !string.IsNullOrWhiteSpace(user.TelegramChatId))
-                {
-                    var sent = await telegram.SendAsync(created.TenantId, user.TelegramChatId!, telegramText, CancellationToken.None);
-                    if (sent.IsFailure)
-                    {
-                        logger.LogWarning("Task {TaskId}: Telegram to user {UserId} not sent: {Error}", task.Id, user.Id, sent.Error.Message);
                     }
                 }
             }

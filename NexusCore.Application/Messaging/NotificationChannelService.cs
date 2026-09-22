@@ -8,10 +8,9 @@ using NexusCore.SharedKernel.Results;
 namespace NexusCore.Application.Messaging;
 
 /// <summary>
-/// Stores the SMS and Telegram gateway settings as one tenant-scoped platform setting
-/// (platform.Settings, key <see cref="NotificationChannelSettingsReader.SettingKey"/>) - the same table and repository every
-/// other platform setting uses. The API key and bot token are encrypted with ASP.NET Core
-/// Data Protection before they are written.
+/// Stores the SMS gateway settings as one tenant-scoped platform setting (platform.Settings,
+/// key <see cref="NotificationChannelSettingsReader.SettingKey"/>) - the same table and repository every other platform
+/// setting uses. The API key is encrypted with ASP.NET Core Data Protection before it is written.
 /// </summary>
 public sealed class NotificationChannelService(
     IPlatformRepository repository,
@@ -20,8 +19,7 @@ public sealed class NotificationChannelService(
     IPlatformService platformService,
     IDataProtectionProvider dataProtectionProvider,
     INotificationChannelSettingsReader reader,
-    ISmsSender smsSender,
-    ITelegramSender telegramSender) : INotificationChannelService
+    ISmsSender smsSender) : INotificationChannelService
 {
     private const int MaxStoredLength = 2000; // platform.Settings.Value column size
 
@@ -60,13 +58,7 @@ public sealed class NotificationChannelService(
                 Protect(settings.Sms.ApiKey),
                 Clean(settings.Sms.LineNumber),
                 Clean(settings.Sms.PatternCode),
-                Clean(settings.Sms.ApiUrl)),
-            new NotificationChannelSettingsReader.StoredTelegram(
-                settings.Telegram.Enabled,
-                Protect(settings.Telegram.BotToken),
-                Clean(settings.Telegram.BotUsername),
-                Clean(settings.Telegram.AdminChatId),
-                Clean(settings.Telegram.ApiUrl)));
+                Clean(settings.Sms.ApiUrl)));
 
         var value = JsonSerializer.Serialize(stored, NotificationChannelSettingsReader.Json);
         if (value.Length > MaxStoredLength)
@@ -115,33 +107,11 @@ public sealed class NotificationChannelService(
             : new ChannelTestResultDto(false, sent.Error.Message));
     }
 
-    public async Task<Result<ChannelTestResultDto>> TestTelegramAsync(TestTelegramRequest request, CancellationToken cancellationToken)
-    {
-        if (currentUser.TenantId is not { } tenantId)
-        {
-            return Result.Failure<ChannelTestResultDto>(Error.Unauthorized());
-        }
-
-        if (string.IsNullOrWhiteSpace(request.ChatId))
-        {
-            return Result.Failure<ChannelTestResultDto>(Error.Validation("A Telegram chat id is required."));
-        }
-
-        var text = string.IsNullOrWhiteSpace(request.Text)
-            ? "🔔 پیام آزمایشی سامانه مدیریت فعالیت‌ها"
-            : request.Text.Trim();
-
-        var sent = await telegramSender.SendAsync(tenantId, request.ChatId.Trim(), text, cancellationToken);
-        return Result.Success(sent.IsSuccess
-            ? new ChannelTestResultDto(true, $"پیام آزمایشی تلگرام به شناسه چت {request.ChatId.Trim()} ارسال شد.")
-            : new ChannelTestResultDto(false, sent.Error.Message));
-    }
-
     private static Result Validate(NotificationChannelSettingsDto settings)
     {
-        if (settings.Sms is null || settings.Telegram is null)
+        if (settings.Sms is null)
         {
-            return Result.Failure(Error.Validation("Both the sms and telegram sections are required."));
+            return Result.Failure(Error.Validation("The sms section is required."));
         }
 
         var provider = settings.Sms.Provider?.Trim().ToLowerInvariant() ?? string.Empty;
@@ -163,18 +133,11 @@ public sealed class NotificationChannelService(
             return Result.Failure(Error.Validation("An enabled SMS gateway needs an API key and a sender line number."));
         }
 
-        if (settings.Telegram.Enabled && string.IsNullOrWhiteSpace(settings.Telegram.BotToken))
+        var url = settings.Sms.ApiUrl;
+        if (!string.IsNullOrWhiteSpace(url)
+            && (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp)))
         {
-            return Result.Failure(Error.Validation("An enabled Telegram bot needs a bot token."));
-        }
-
-        foreach (var url in new[] { settings.Sms.ApiUrl, settings.Telegram.ApiUrl })
-        {
-            if (!string.IsNullOrWhiteSpace(url)
-                && (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp)))
-            {
-                return Result.Failure(Error.Validation($"'{url}' is not a valid http(s) URL."));
-            }
+            return Result.Failure(Error.Validation($"'{url}' is not a valid http(s) URL."));
         }
 
         return Result.Success();

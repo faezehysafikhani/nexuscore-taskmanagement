@@ -1,9 +1,10 @@
 namespace NexusCore.AdminUI.Models;
 
-public sealed record LoginRequest(string Email, string Password, string? TenantSlug);
+public sealed record LoginRequest(string Identifier, string Password, string? TenantSlug, string? CaptchaId = null, string? CaptchaAnswer = null);
+public sealed record CaptchaChallengeDto(string CaptchaId, string ImageDataUrl, int ExpiresInSeconds);
 public sealed record AuthResponse(string AccessToken, string RefreshToken, DateTimeOffset AccessTokenExpiresAtUtc, UserDto User);
-public sealed record UserDto(Guid Id, Guid TenantId, string Email, string DisplayName, bool IsActive, DateTimeOffset? LastLoginAtUtc, IReadOnlyList<string> Roles);
-public sealed record CreateUserRequest(Guid TenantId, string Email, string DisplayName, string Password, bool IsActive = true);
+public sealed record UserDto(Guid Id, Guid TenantId, string? Email, string DisplayName, bool IsActive, DateTimeOffset? LastLoginAtUtc, IReadOnlyList<string> Roles, string? Username = null, string? PhoneNumber = null);
+public sealed record CreateUserRequest(Guid TenantId, string Username, string DisplayName, string Password, bool IsActive = true, string? Email = null, string? PhoneNumber = null);
 public sealed record UpdateUserRequest(string DisplayName, bool IsActive);
 public sealed record AssignUserRolesRequest(IReadOnlyList<Guid> RoleIds);
 public sealed record RoleDto(Guid Id, Guid TenantId, string Name, string? Description, bool IsSystem, IReadOnlyList<string> Permissions);

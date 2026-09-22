@@ -10,7 +10,7 @@ namespace Nexus.TaskManagement.Application.Dtos;
 /// A person as a task screen needs them: enough to render an avatar and a name, nothing more.
 /// Projected from the shared identity tables - this module never stores a copy.
 /// </summary>
-public sealed record UserSummaryDto(Guid Id, string DisplayName, string Email);
+public sealed record UserSummaryDto(Guid Id, string DisplayName, string? Email);
 
 public sealed record UserGroupSummaryDto(Guid Id, string Name);
 

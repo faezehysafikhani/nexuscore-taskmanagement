@@ -51,11 +51,30 @@ public sealed class DefaultDataSeeder(
             await dbContext.Roles.AddAsync(new Role(AdminRoleId, DefaultTenantId, "Administrator", "Built-in full access role", isSystem: true), cancellationToken);
         }
 
-        if (!await dbContext.Users.AnyAsync(user => user.Id == AdminUserId, cancellationToken))
+        var adminUsername = seedOptions.Value.AdminUsername?.Trim();
+        var builtInAdmin = await dbContext.Users.SingleOrDefaultAsync(user => user.Id == AdminUserId, cancellationToken);
+        if (builtInAdmin is null)
         {
             var admin = new User(AdminUserId, DefaultTenantId, "admin@nexus.local", "System Administrator", passwordHasher.HashPassword("Admin@12345"), true);
+            admin.UpdateContactDetails(Username.IsValid(adminUsername) ? adminUsername : "admin", null, notifySms: true);
             admin.AssignRole(AdminRoleId);
             await dbContext.Users.AddAsync(admin, cancellationToken);
+        }
+        else if (builtInAdmin.Username is null && builtInAdmin.PhoneNumber is null)
+        {
+            // Sign-in is by username or mobile number only. The built-in account from an older
+            // version has neither, which would lock every administrator out; it gets the configured
+            // username - only when nobody in the tenant uses that name already.
+            if (Username.IsValid(adminUsername)
+                && !await dbContext.Users.AnyAsync(user => user.TenantId == builtInAdmin.TenantId && user.Username == adminUsername, cancellationToken))
+            {
+                builtInAdmin.UpdateContactDetails(adminUsername, null, builtInAdmin.NotifySms);
+                logger.LogWarning("The built-in administrator had no sign-in name; it now signs in as '{Username}'.", adminUsername);
+            }
+            else
+            {
+                logger.LogError("The built-in administrator has no username or mobile number and cannot sign in. Set Identity:AdminUsername to a free, valid username.");
+            }
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);

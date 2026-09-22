@@ -14,36 +14,38 @@ public sealed class User : AuditableEntity<Guid>
         PasswordHash = string.Empty;
     }
 
-    public User(Guid id, Guid tenantId, string email, string displayName, string passwordHash, bool isActive = true) : base(id)
+    public User(Guid id, Guid tenantId, string? email, string displayName, string passwordHash, bool isActive = true) : base(id)
     {
         TenantId = tenantId;
-        Email = email.Trim().ToLowerInvariant();
+        Email = NormalizeEmail(email);
         DisplayName = displayName.Trim();
         PasswordHash = passwordHash;
         IsActive = isActive;
         NotifySms = true;
-        NotifyTelegram = true;
     }
 
     public Guid TenantId { get; private set; }
     public Tenant? Tenant { get; private set; }
-    public string Email { get; private set; }
+    /// <summary>
+    /// Optional contact address (password-reset links are sent here). Not a sign-in name:
+    /// users sign in with <see cref="Username"/> or <see cref="PhoneNumber"/>.
+    /// </summary>
+    public string? Email { get; private set; }
     public string DisplayName { get; private set; }
     public string PasswordHash { get; private set; }
     public bool IsActive { get; private set; }
     public DateTimeOffset? LastLoginAtUtc { get; private set; }
 
-    /// <summary>Optional sign-in name, unique within the tenant. Email always works too.</summary>
+    /// <summary>Sign-in name, unique within the tenant.</summary>
     public string? Username { get; private set; }
 
-    /// <summary>Mobile number used for SMS notifications.</summary>
+    /// <summary>
+    /// Mobile number: the other sign-in name, and where SMS notifications go. Unique within the
+    /// tenant and always stored in the canonical form of <see cref="Identity.PhoneNumber"/>.
+    /// </summary>
     public string? PhoneNumber { get; private set; }
 
-    /// <summary>Telegram chat the notification bot writes to.</summary>
-    public string? TelegramChatId { get; private set; }
-
     public bool NotifySms { get; private set; }
-    public bool NotifyTelegram { get; private set; }
 
     /// <summary>Avatar image as a URL or data URL (the UI's preset or uploaded picture).</summary>
     public string? AvatarUrl { get; private set; }
@@ -64,16 +66,31 @@ public sealed class User : AuditableEntity<Guid>
 
     public void ChangePassword(string passwordHash) => PasswordHash = passwordHash;
 
-    public void ChangeEmail(string email) => Email = email.Trim().ToLowerInvariant();
+    public void ChangeEmail(string? email) => Email = NormalizeEmail(email);
 
-    public void UpdateContactDetails(
-        string? username, string? phoneNumber, string? telegramChatId, bool notifySms, bool notifyTelegram)
+    /// <summary>
+    /// A phone number that is not a valid mobile number is rejected rather than stored as typed:
+    /// a number nobody can match at sign-in, or that could duplicate another user's, must not
+    /// get into the table.
+    /// </summary>
+    public void UpdateContactDetails(string? username, string? phoneNumber, bool notifySms)
     {
+        var phone = Identity.PhoneNumber.Normalize(phoneNumber);
+        if (phone is null && !string.IsNullOrWhiteSpace(phoneNumber))
+        {
+            // A value from before numbers were validated, passed back unchanged (e.g. while only
+            // the display name is edited), stays until someone replaces it.
+            if (phoneNumber != PhoneNumber)
+            {
+                throw new ArgumentException("Not a valid mobile number.", nameof(phoneNumber));
+            }
+
+            phone = PhoneNumber;
+        }
+
         Username = Normalize(username);
-        PhoneNumber = Normalize(phoneNumber);
-        TelegramChatId = Normalize(telegramChatId);
+        PhoneNumber = phone;
         NotifySms = notifySms;
-        NotifyTelegram = notifyTelegram;
     }
 
     public void ChangeDisplayName(string displayName) => DisplayName = displayName.Trim();
@@ -89,6 +106,9 @@ public sealed class User : AuditableEntity<Guid>
 
     private static string? Normalize(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static string? NormalizeEmail(string? email) =>
+        string.IsNullOrWhiteSpace(email) ? null : email.Trim().ToLowerInvariant();
 
     public void MarkLoggedIn(DateTimeOffset loggedInAtUtc) => LastLoginAtUtc = loggedInAtUtc;
 

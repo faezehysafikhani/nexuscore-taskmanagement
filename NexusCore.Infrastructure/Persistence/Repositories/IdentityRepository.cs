@@ -7,19 +7,6 @@ namespace NexusCore.Infrastructure.Persistence.Repositories;
 
 public sealed class IdentityRepository(NexusCoreDbContext dbContext) : IIdentityRepository
 {
-    public Task<User?> GetUserByEmailAsync(string email, string? tenantSlug, CancellationToken cancellationToken)
-    {
-        var normalizedEmail = email.Trim().ToLowerInvariant();
-        var query = IncludeUserGraph(dbContext.Users).Where(user => user.Email == normalizedEmail);
-
-        if (!string.IsNullOrWhiteSpace(tenantSlug))
-        {
-            query = query.Where(user => user.Tenant != null && user.Tenant.Slug == tenantSlug);
-        }
-
-        return query.SingleOrDefaultAsync(cancellationToken);
-    }
-
     public Task<User?> GetUserByIdAsync(Guid userId, CancellationToken cancellationToken) =>
         IncludeUserGraph(dbContext.Users).SingleOrDefaultAsync(user => user.Id == userId, cancellationToken);
 
@@ -37,21 +24,34 @@ public sealed class IdentityRepository(NexusCoreDbContext dbContext) : IIdentity
             query = query.Where(user => user.Tenant != null && user.Tenant.Slug == tenantSlug);
         }
 
-        if (value.Contains('@'))
+        // A username starts with a letter; a mobile number never does. So the identifier is one
+        // or the other (or neither - an email address, for example, matches nothing).
+        if (PhoneNumber.Normalize(value) is { } phone)
         {
-            var email = value.ToLowerInvariant();
-            query = query.Where(user => user.Email == email);
+            query = query.Where(user => user.PhoneNumber == phone);
+        }
+        else if (Username.IsValid(value))
+        {
+            // Username comparison follows the column collation (case-insensitive by default).
+            query = query.Where(user => user.Username == value);
         }
         else
         {
-            // Username comparison follows the column collation (case-insensitive by default).
-            query = query.Where(user => user.Username == value || user.PhoneNumber == value);
+            return null;
         }
 
-        // Two matches means the identifier is not unique across tenants (or a username equals
-        // someone else's phone number): refuse rather than guess which account was meant.
+        // Two matches means the identifier is not unique across tenants: refuse rather than
+        // guess which account was meant.
         var matches = await query.Take(2).ToListAsync(cancellationToken);
         return matches.Count == 1 ? matches[0] : null;
+    }
+
+    public Task<bool> PhoneNumberExistsAsync(Guid tenantId, string phoneNumber, Guid? exceptUserId, CancellationToken cancellationToken)
+    {
+        var value = PhoneNumber.Normalize(phoneNumber) ?? phoneNumber.Trim();
+        return dbContext.Users.AnyAsync(
+            user => user.TenantId == tenantId && user.PhoneNumber == value && (exceptUserId == null || user.Id != exceptUserId),
+            cancellationToken);
     }
 
     public Task<bool> UsernameExistsAsync(Guid tenantId, string username, Guid? exceptUserId, CancellationToken cancellationToken)
@@ -124,7 +124,8 @@ public sealed class IdentityRepository(NexusCoreDbContext dbContext) : IIdentity
         if (!string.IsNullOrWhiteSpace(search))
         {
             query = query.Where(user =>
-                user.Email.Contains(search) ||
+                (user.Username != null && user.Username.Contains(search)) ||
+                (user.Email != null && user.Email.Contains(search)) ||
                 user.DisplayName.Contains(search));
         }
 
@@ -160,10 +161,12 @@ public sealed class IdentityRepository(NexusCoreDbContext dbContext) : IIdentity
             total);
     }
 
-    public Task<bool> UserEmailExistsAsync(Guid tenantId, string email, CancellationToken cancellationToken)
+    public Task<bool> UserEmailExistsAsync(Guid tenantId, string email, Guid? exceptUserId, CancellationToken cancellationToken)
     {
         var normalizedEmail = email.Trim().ToLowerInvariant();
-        return dbContext.Users.AnyAsync(user => user.TenantId == tenantId && user.Email == normalizedEmail, cancellationToken);
+        return dbContext.Users.AnyAsync(
+            user => user.TenantId == tenantId && user.Email == normalizedEmail && (exceptUserId == null || user.Id != exceptUserId),
+            cancellationToken);
     }
 
     public async Task AddUserAsync(User user, CancellationToken cancellationToken) => await dbContext.Users.AddAsync(user, cancellationToken);
