@@ -1,6 +1,6 @@
 # Running the task manager on NexusCore alone
 
-This release lets the task-manager frontend run on NexusCore with no PocketBase at all:
+This release lets the task-manager frontend run entirely on NexusCore:
 accounts, profiles, teams, chat, notification gateways, tasks, files and live updates are all
 served by NexusCore.
 
