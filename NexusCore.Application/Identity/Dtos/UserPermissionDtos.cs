@@ -20,6 +20,6 @@ public sealed record UserPermissionEntryDto(
 public sealed record UserPermissionsDto(
     Guid UserId,
     string DisplayName,
-    string Email,
+    string? Email,
     IReadOnlyList<string> Roles,
     IReadOnlyList<UserPermissionEntryDto> Permissions);

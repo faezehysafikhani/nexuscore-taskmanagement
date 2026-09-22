@@ -20,5 +20,8 @@ internal static class IdentityMappings
             user.AvatarUrl,
             user.Theme,
             user.ColorPalette,
-            user.ThemeMode);
+            user.ThemeMode,
+            user.FirstName,
+            user.LastName,
+            user.IsSystem);
 }

@@ -29,7 +29,9 @@ public sealed class AuthSessionIssuer(
         user.MarkLoggedIn(DateTimeOffset.UtcNow);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        await platformService.AuditAsync("identity.login", nameof(User), user.Id.ToString(), user.Username ?? user.PhoneNumber, cancellationToken);
+        // Sign-in is an anonymous request: the tenant and user are named explicitly so the entry
+        // shows up in that user's sign-in history.
+        await platformService.AuditForAsync(user.TenantId, user.Id, "identity.login", nameof(User), user.Id.ToString(), user.Username ?? user.PhoneNumber, cancellationToken);
 
         return new AuthResponse(accessToken.Token, refreshToken, accessToken.ExpiresAtUtc, IdentityMappings.ToUserDto(user));
     }

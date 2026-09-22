@@ -52,20 +52,29 @@ public sealed class DefaultDataSeeder(
         }
 
         var adminUsername = seedOptions.Value.AdminUsername?.Trim();
+        // A national code or, for this one system account, a plain name such as "admin".
+        var adminUsernameUsable = Username.IsValid(adminUsername) || Username.IsLegacy(adminUsername);
         var builtInAdmin = await dbContext.Users.SingleOrDefaultAsync(user => user.Id == AdminUserId, cancellationToken);
         if (builtInAdmin is null)
         {
             var admin = new User(AdminUserId, DefaultTenantId, "admin@nexus.local", "System Administrator", passwordHasher.HashPassword("Admin@12345"), true);
-            admin.UpdateContactDetails(Username.IsValid(adminUsername) ? adminUsername : "admin", null, notifySms: true);
+            admin.UpdateContactDetails(adminUsernameUsable ? adminUsername : "admin", null, notifySms: true);
             admin.AssignRole(AdminRoleId);
+            admin.MarkAsSystemAccount();
             await dbContext.Users.AddAsync(admin, cancellationToken);
         }
-        else if (builtInAdmin.Username is null && builtInAdmin.PhoneNumber is null)
+        else if (!builtInAdmin.IsSystem)
+        {
+            // Databases from before the flag existed: the seeded administrator is the system account.
+            builtInAdmin.MarkAsSystemAccount();
+        }
+
+        if (builtInAdmin is not null && builtInAdmin.Username is null && builtInAdmin.PhoneNumber is null)
         {
             // Sign-in is by username or mobile number only. The built-in account from an older
             // version has neither, which would lock every administrator out; it gets the configured
             // username - only when nobody in the tenant uses that name already.
-            if (Username.IsValid(adminUsername)
+            if (adminUsernameUsable
                 && !await dbContext.Users.AnyAsync(user => user.TenantId == builtInAdmin.TenantId && user.Username == adminUsername, cancellationToken))
             {
                 builtInAdmin.UpdateContactDetails(adminUsername, null, builtInAdmin.NotifySms);

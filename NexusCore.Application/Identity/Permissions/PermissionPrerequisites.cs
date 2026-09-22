@@ -20,12 +20,17 @@ public static class PermissionPrerequisites
         [IdentityPermissions.UsersUpdate] = [IdentityPermissions.UsersView],
         [IdentityPermissions.UsersAssignRoles] = [IdentityPermissions.UsersView, IdentityPermissions.RolesView],
         [IdentityPermissions.UsersAssignPermissions] = [IdentityPermissions.UsersView, IdentityPermissions.PermissionsView],
+        [IdentityPermissions.UsersChangeStatus] = [IdentityPermissions.UsersView],
 
         [IdentityPermissions.RolesCreate] = [IdentityPermissions.RolesView],
         [IdentityPermissions.RolesUpdate] = [IdentityPermissions.RolesView],
         [IdentityPermissions.RolesAssignPermissions] = [IdentityPermissions.RolesView, IdentityPermissions.PermissionsView],
 
         [IdentityPermissions.SettingsUpdate] = [IdentityPermissions.SettingsView],
+        [IdentityPermissions.SmsSettingsUpdate] = [IdentityPermissions.SmsSettingsView],
+        [IdentityPermissions.SmsSettingsTest] = [IdentityPermissions.SmsSettingsView],
+        [IdentityPermissions.LdapSettingsUpdate] = [IdentityPermissions.LdapSettingsView],
+        [IdentityPermissions.LdapSettingsTest] = [IdentityPermissions.LdapSettingsView],
         [IdentityPermissions.TenantsCreate] = [IdentityPermissions.TenantsView],
 
         // Optional user-group feature. Remove these entries together with the feature.

@@ -22,7 +22,7 @@ internal static class ProfileRules
 {
     public const int MaxAvatarLength = 1_500_000;
 
-    public const string UsernameMessage = "Username must start with a letter and use 3-64 letters, digits, '_', '.' or '-'.";
+    public const string UsernameMessage = "Username must be a national code: exactly 10 digits.";
     public const string PhoneMessage = "Enter a valid mobile number (for example 09121234567 or +98 912 123 4567).";
 
     public static IRuleBuilderOptions<T, string?> ValidUsername<T>(this IRuleBuilder<T, string?> rule) =>
@@ -38,10 +38,11 @@ public sealed class CreateUserRequestValidator : AbstractValidator<CreateUserReq
     {
         RuleFor(x => x.TenantId).NotEmpty();
         RuleFor(x => x.Username).NotEmpty().ValidUsername();
-        RuleFor(x => x.DisplayName).NotEmpty().MaximumLength(160);
+        RuleFor(x => x.FirstName).NotEmpty().MaximumLength(80);
+        RuleFor(x => x.LastName).NotEmpty().MaximumLength(80);
+        RuleFor(x => x.PhoneNumber).NotEmpty().ValidPhoneNumber();
         RuleFor(x => x.Password).NotEmpty().MinimumLength(8).MaximumLength(128);
         RuleFor(x => x.Email).EmailAddress().MaximumLength(256).When(x => !string.IsNullOrWhiteSpace(x.Email));
-        RuleFor(x => x.PhoneNumber).ValidPhoneNumber().When(x => !string.IsNullOrWhiteSpace(x.PhoneNumber));
     }
 }
 
@@ -52,21 +53,22 @@ public sealed class UpdateUserRequestValidator : AbstractValidator<UpdateUserReq
         RuleFor(x => x.DisplayName).NotEmpty().MaximumLength(160);
         RuleFor(x => x.Email).EmailAddress().MaximumLength(256).When(x => !string.IsNullOrWhiteSpace(x.Email));
         RuleFor(x => x.Password).MinimumLength(8).MaximumLength(128).When(x => !string.IsNullOrWhiteSpace(x.Password));
-        // Null keeps the current username; it can be changed but never removed.
-        RuleFor(x => x.Username).ValidUsername().When(x => x.Username is not null);
+        // Null keeps the current username. A changed one must be a national code - checked by
+        // the service, which knows the current value (older usernames stay valid unchanged).
+        RuleFor(x => x.Username).NotEmpty().When(x => x.Username is not null);
+        RuleFor(x => x.FirstName).MaximumLength(80);
+        RuleFor(x => x.LastName).MaximumLength(80);
         RuleFor(x => x.PhoneNumber).ValidPhoneNumber().When(x => !string.IsNullOrWhiteSpace(x.PhoneNumber));
     }
 }
 
-public sealed class RegisterRequestValidator : AbstractValidator<RegisterRequest>
+public sealed class ChangeMyPasswordRequestValidator : AbstractValidator<ChangeMyPasswordRequest>
 {
-    public RegisterRequestValidator()
+    public ChangeMyPasswordRequestValidator()
     {
-        RuleFor(x => x.Username).NotEmpty().ValidUsername();
-        RuleFor(x => x.PhoneNumber).NotEmpty().ValidPhoneNumber();
-        RuleFor(x => x.Password).NotEmpty().MinimumLength(8).MaximumLength(128);
-        RuleFor(x => x.DisplayName).NotEmpty().MaximumLength(160);
-        RuleFor(x => x.Email).EmailAddress().MaximumLength(256).When(x => !string.IsNullOrWhiteSpace(x.Email));
+        RuleFor(x => x.CurrentPassword).NotEmpty().MaximumLength(128);
+        RuleFor(x => x.NewPassword).NotEmpty().MinimumLength(8).MaximumLength(128)
+            .NotEqual(x => x.CurrentPassword).WithMessage("The new password must differ from the current one.");
     }
 }
 
@@ -84,7 +86,8 @@ public sealed class UpdateMyProfileRequestValidator : AbstractValidator<UpdateMy
     public UpdateMyProfileRequestValidator()
     {
         RuleFor(x => x.DisplayName).NotEmpty().MaximumLength(160);
-        RuleFor(x => x.Username).NotEmpty().ValidUsername();
+        RuleFor(x => x.FirstName).MaximumLength(80);
+        RuleFor(x => x.LastName).MaximumLength(80);
         RuleFor(x => x.PhoneNumber).ValidPhoneNumber().When(x => !string.IsNullOrWhiteSpace(x.PhoneNumber));
         RuleFor(x => x.AvatarUrl).MaximumLength(ProfileRules.MaxAvatarLength)
             .WithMessage("The avatar image is too large.");

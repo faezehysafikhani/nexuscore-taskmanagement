@@ -3,15 +3,23 @@ using System.Text.RegularExpressions;
 namespace NexusCore.Domain.Identity;
 
 /// <summary>
-/// What a username may look like. It starts with a letter, so it can never be mistaken for a
-/// mobile number (or an email address) when someone signs in.
+/// Usernames are national codes (کد ملی): exactly 10 digits. Every new or changed username must
+/// follow this rule. Accounts from before the rule keep their existing username (letters first)
+/// until it is changed, and can still sign in with it.
 /// </summary>
 public static partial class Username
 {
-    public const string Pattern = @"^[A-Za-z][A-Za-z0-9_.-]{2,63}$";
+    public const string Pattern = @"^[0-9]{10}$";
 
-    public static bool IsValid(string? value) => value is not null && PatternRegex().IsMatch(value.Trim());
+    /// <summary>The rule for new and changed usernames.</summary>
+    public static bool IsValid(string? value) => value is not null && NationalCode().IsMatch(value);
+
+    /// <summary>A username created before the national-code rule: starts with a letter.</summary>
+    public static bool IsLegacy(string? value) => value is not null && Legacy().IsMatch(value.Trim());
 
     [GeneratedRegex(Pattern, RegexOptions.CultureInvariant)]
-    private static partial Regex PatternRegex();
+    private static partial Regex NationalCode();
+
+    [GeneratedRegex(@"^[A-Za-z][A-Za-z0-9_.-]{2,63}$", RegexOptions.CultureInvariant)]
+    private static partial Regex Legacy();
 }

@@ -23,7 +23,9 @@ public sealed class IdentityService(
     IValidator<CreateRoleRequest> createRoleValidator,
     IValidator<CreateTenantRequest> createTenantValidator,
     ILoginProtection loginProtection,
-    AuthSessionIssuer sessionIssuer) : IIdentityService
+    AuthSessionIssuer sessionIssuer,
+    ICurrentUserContext currentUser,
+    IUserGroupPermissionProvider groupPermissions) : IIdentityService
 {
     // One message for every way sign-in can fail on the credentials, so the answer never tells
     // whether a username or mobile number is registered.
@@ -43,6 +45,13 @@ public sealed class IdentityService(
             request.Identifier, request.CaptchaId, request.CaptchaAnswer, cancellationToken);
         if (guard.IsFailure)
         {
+            // A missing CAPTCHA is the normal next step, not an event; the rest is recorded.
+            if (guard.Error.Code != "captcha.required")
+            {
+                var action = guard.Error.Code == "too_many_requests" ? "identity.login_blocked" : "identity.login_captcha_failed";
+                await platformService.AuditForAsync(null, null, action, nameof(User), null, AuditIdentifier(request.Identifier), cancellationToken);
+            }
+
             return Result.Failure<AuthResponse>(guard.Error);
         }
 
@@ -52,6 +61,9 @@ public sealed class IdentityService(
         if (user is null || !user.IsActive || !passwordOk)
         {
             var captchaNext = await loginProtection.RecordFailedLoginAsync(request.Identifier, cancellationToken);
+            // The reason is for administrators only; the caller always gets the same answer.
+            var reason = user is null ? "unknown account" : !passwordOk ? "wrong password" : "account disabled";
+            await platformService.AuditForAsync(user?.TenantId, user?.Id, "identity.login_failed", nameof(User), user?.Id.ToString(), $"{AuditIdentifier(request.Identifier)} ({reason})", cancellationToken);
             return Result.Failure<AuthResponse>(captchaNext
                 ? new Error("unauthorized.captcha_required", InvalidCredentials)
                 : Error.Unauthorized(InvalidCredentials));
@@ -134,7 +146,9 @@ public sealed class IdentityService(
             return Result.Failure<UserDto>(taken);
         }
 
-        var user = new User(Guid.NewGuid(), request.TenantId, request.Email, request.DisplayName, passwordHasher.HashPassword(request.Password), request.IsActive);
+        // Never a system account: the built-in administrator only comes from the seeder.
+        var user = new User(Guid.NewGuid(), request.TenantId, request.Email, $"{request.FirstName} {request.LastName}", passwordHasher.HashPassword(request.Password), request.IsActive);
+        user.SetName(request.FirstName, request.LastName);
         user.UpdateContactDetails(request.Username, request.PhoneNumber, request.NotifySms);
         await repository.AddUserAsync(user, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -157,13 +171,47 @@ public sealed class IdentityService(
             return Result.Failure<UserDto>(Error.NotFound("User was not found."));
         }
 
-        var taken = await FindTakenSignInDetailAsync(user.TenantId, user.Id, request.Username, request.PhoneNumber, request.Email, cancellationToken);
+        var usernameChanges = request.Username is not null && !string.Equals(request.Username.Trim(), user.Username, StringComparison.OrdinalIgnoreCase);
+        if (user.IsSystem)
+        {
+            // Nobody changes the built-in administrator's identity, status or password through
+            // user administration. It changes its own password itself (auth/me/password).
+            var changesIdentity =
+                usernameChanges
+                || (request.Email is not null && !string.Equals(request.Email.Trim(), user.Email ?? string.Empty, StringComparison.OrdinalIgnoreCase))
+                || (request.PhoneNumber is not null && PhoneNumber.Normalize(request.PhoneNumber) != user.PhoneNumber && request.PhoneNumber.Trim() != (user.PhoneNumber ?? string.Empty))
+                || (request.FirstName is not null && request.FirstName.Trim() != (user.FirstName ?? string.Empty))
+                || (request.LastName is not null && request.LastName.Trim() != (user.LastName ?? string.Empty))
+                || request.DisplayName.Trim() != user.DisplayName
+                || !request.IsActive
+                || !string.IsNullOrWhiteSpace(request.Password);
+            if (changesIdentity)
+            {
+                return Result.Failure<UserDto>(Error.Forbidden("The built-in system administrator cannot be changed here. It changes its own password from its profile."));
+            }
+        }
+
+        if (usernameChanges && !Username.IsValid(request.Username!.Trim()))
+        {
+            return Result.Failure<UserDto>(Error.Validation("Username must be a national code: exactly 10 digits."));
+        }
+
+        if (currentUser.UserId == user.Id && !request.IsActive)
+        {
+            return Result.Failure<UserDto>(Error.Validation("You cannot disable your own account."));
+        }
+
+        var taken = await FindTakenSignInDetailAsync(user.TenantId, user.Id, usernameChanges ? request.Username : null, request.PhoneNumber, request.Email, cancellationToken);
         if (taken is not null)
         {
             return Result.Failure<UserDto>(taken);
         }
 
         user.UpdateProfile(request.DisplayName, request.IsActive);
+        if (request.FirstName is not null || request.LastName is not null)
+        {
+            user.SetName(request.FirstName ?? user.FirstName ?? string.Empty, request.LastName ?? user.LastName ?? string.Empty);
+        }
 
         // Null keeps the current value; an empty string clears email or mobile number.
         if (request.Email is not null)
@@ -172,7 +220,7 @@ public sealed class IdentityService(
         }
 
         user.UpdateContactDetails(
-            request.Username ?? user.Username,
+            usernameChanges ? request.Username!.Trim() : user.Username,
             request.PhoneNumber ?? user.PhoneNumber,
             request.NotifySms ?? user.NotifySms);
 
@@ -183,8 +231,43 @@ public sealed class IdentityService(
             await repository.RevokeRefreshTokensAsync(user.Id, cancellationToken);
         }
 
+        if (!user.IsActive)
+        {
+            await repository.RevokeRefreshTokensAsync(user.Id, cancellationToken);
+        }
+
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await platformService.AuditAsync("users.update", nameof(User), user.Id.ToString(), user.Username, cancellationToken);
+        return Result.Success(ToUserDto(user));
+    }
+
+    public async Task<Result<UserDto>> SetUserStatusAsync(Guid userId, SetUserStatusRequest request, CancellationToken cancellationToken)
+    {
+        var user = await repository.GetUserByIdAsync(userId, cancellationToken);
+        if (user is null)
+        {
+            return Result.Failure<UserDto>(Error.NotFound("User was not found."));
+        }
+
+        if (user.IsSystem && !request.IsActive)
+        {
+            return Result.Failure<UserDto>(Error.Forbidden("The built-in system administrator cannot be disabled."));
+        }
+
+        if (currentUser.UserId == user.Id && !request.IsActive)
+        {
+            return Result.Failure<UserDto>(Error.Validation("You cannot disable your own account."));
+        }
+
+        user.SetActive(request.IsActive);
+        if (!request.IsActive)
+        {
+            // A disabled account keeps no session: its refresh tokens stop working at once.
+            await repository.RevokeRefreshTokensAsync(user.Id, cancellationToken);
+        }
+
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        await platformService.AuditAsync(request.IsActive ? "users.enable" : "users.disable", nameof(User), user.Id.ToString(), user.Username, cancellationToken);
         return Result.Success(ToUserDto(user));
     }
 
@@ -196,9 +279,14 @@ public sealed class IdentityService(
             return Result.Failure(Error.NotFound("User was not found."));
         }
 
-        if (string.Equals(user.Email, "admin@nexus.local", StringComparison.OrdinalIgnoreCase))
+        if (user.IsSystem)
         {
-            return Result.Failure(Error.Validation("The built-in administrator account cannot be deleted."));
+            return Result.Failure(Error.Forbidden("The built-in system administrator cannot be deleted."));
+        }
+
+        if (currentUser.UserId == user.Id)
+        {
+            return Result.Failure(Error.Validation("You cannot delete your own account."));
         }
 
         var auditDetails = user.Username ?? user.Email;
@@ -225,9 +313,119 @@ public sealed class IdentityService(
             return Result.Failure(Error.NotFound("User was not found."));
         }
 
+        var guard = GuardAccessChange(user);
+        if (guard.IsFailure)
+        {
+            return guard;
+        }
+
         user.SetRoles(request.RoleIds);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await platformService.AuditAsync("users.assign_roles", nameof(User), user.Id.ToString(), string.Join(",", request.RoleIds), cancellationToken);
+        return Result.Success();
+    }
+
+    /// <summary>
+    /// What the user may do and why: every permission with whether it comes from the user
+    /// directly, from a role or from an organisational group. Only direct grants are editable
+    /// on the user; the others are changed on the role or group.
+    /// </summary>
+    public async Task<Result<UserPermissionsDto>> GetUserAccessAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var user = await repository.GetUserByIdAsync(userId, cancellationToken);
+        if (user is null)
+        {
+            return Result.Failure<UserPermissionsDto>(Error.NotFound("User was not found."));
+        }
+
+        var permissions = await repository.ListPermissionsAsync(cancellationToken);
+        var roles = await repository.ListRolesAsync(user.TenantId, cancellationToken);
+        var userRoleIds = user.Roles.Select(role => role.RoleId).ToHashSet();
+        var grantingRoles = roles
+            .Where(role => userRoleIds.Contains(role.Id))
+            .SelectMany(role => role.Permissions.Select(grant => (grant.PermissionId, role.Name)))
+            .GroupBy(pair => pair.PermissionId)
+            .ToDictionary(group => group.Key, group => (IReadOnlyList<string>)group.Select(pair => pair.Name).Distinct().ToList());
+        var grantingGroups = await groupPermissions.GetGrantingGroupsAsync(user.Id, cancellationToken);
+        var direct = user.Permissions.Select(grant => grant.PermissionId).ToHashSet();
+
+        var entries = permissions
+            .OrderBy(permission => permission.Module).ThenBy(permission => permission.Name)
+            .Select(permission =>
+            {
+                var byRole = grantingRoles.GetValueOrDefault(permission.Id, []);
+                var byGroup = grantingGroups.GetValueOrDefault(permission.Id, []);
+                return new UserPermissionEntryDto(
+                    permission.Id, permission.Name, permission.Module, permission.Description,
+                    direct.Contains(permission.Id), byRole.Count > 0, byRole, byGroup.Count > 0, byGroup);
+            })
+            .ToList();
+
+        return Result.Success(new UserPermissionsDto(
+            user.Id, user.DisplayName, user.Email,
+            user.Roles.Select(role => role.Role?.Name ?? role.RoleId.ToString()).ToList(),
+            entries));
+    }
+
+    /// <summary>
+    /// Replaces the permissions granted directly to the user. A caller can only hand out
+    /// permissions they hold themselves, so this cannot be used to escalate.
+    /// </summary>
+    public async Task<Result> SetUserDirectPermissionsAsync(Guid userId, AssignUserPermissionsRequest request, CancellationToken cancellationToken)
+    {
+        var user = await repository.GetUserByIdAsync(userId, cancellationToken);
+        if (user is null)
+        {
+            return Result.Failure(Error.NotFound("User was not found."));
+        }
+
+        var guard = GuardAccessChange(user);
+        if (guard.IsFailure)
+        {
+            return guard;
+        }
+
+        var requested = request.PermissionIds.Distinct().ToList();
+        var known = await repository.GetPermissionsByIdsAsync(requested, cancellationToken);
+        if (known.Count != requested.Count)
+        {
+            return Result.Failure(Error.Validation("One or more permissions do not exist."));
+        }
+
+        var alreadyDirect = user.Permissions.Select(grant => grant.PermissionId).ToHashSet();
+        var added = known.Where(permission => !alreadyDirect.Contains(permission.Id)).ToList();
+        if (added.Count > 0 && currentUser.UserId is { } callerId)
+        {
+            var callerPermissions = (await repository.GetUserPermissionNamesAsync(callerId, cancellationToken)).ToHashSet(StringComparer.Ordinal);
+            var notHeld = added.Where(permission => !callerPermissions.Contains(permission.Name)).Select(permission => permission.Name).ToList();
+            if (notHeld.Count > 0)
+            {
+                return Result.Failure(Error.Forbidden("You can only grant permissions you have yourself: " + string.Join(", ", notHeld)));
+            }
+        }
+
+        user.SetDirectPermissions(requested);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        await platformService.AuditAsync("users.assign_permissions", nameof(User), user.Id.ToString(), string.Join(",", known.Select(permission => permission.Name)), cancellationToken);
+        return Result.Success();
+    }
+
+    /// <summary>
+    /// Nobody changes the built-in administrator's access, and nobody changes their own - so
+    /// no one can make themselves more powerful through the user screens.
+    /// </summary>
+    private Result GuardAccessChange(User target)
+    {
+        if (target.IsSystem)
+        {
+            return Result.Failure(Error.Forbidden("The access of the built-in system administrator cannot be changed."));
+        }
+
+        if (currentUser.UserId == target.Id)
+        {
+            return Result.Failure(Error.Forbidden("You cannot change your own roles or permissions."));
+        }
+
         return Result.Success();
     }
 
@@ -350,6 +548,13 @@ public sealed class IdentityService(
         }
 
         return null;
+    }
+
+    /// <summary>What was typed as the sign-in name, shortened. Never the password.</summary>
+    private static string AuditIdentifier(string identifier)
+    {
+        var value = identifier.Trim();
+        return value.Length <= 64 ? value : value[..64];
     }
 
     private static UserDto ToUserDto(User user) => IdentityMappings.ToUserDto(user);

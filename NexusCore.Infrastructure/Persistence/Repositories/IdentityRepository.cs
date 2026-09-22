@@ -1,11 +1,14 @@
 using Microsoft.EntityFrameworkCore;
 using NexusCore.Application.Identity.Interfaces;
+using NexusCore.Application.Identity.Permissions;
 using NexusCore.Domain.Identity;
 using NexusCore.SharedKernel.Results;
 
 namespace NexusCore.Infrastructure.Persistence.Repositories;
 
-public sealed class IdentityRepository(NexusCoreDbContext dbContext) : IIdentityRepository
+public sealed class IdentityRepository(
+    NexusCoreDbContext dbContext,
+    IUserGroupPermissionProvider groupPermissions) : IIdentityRepository
 {
     public Task<User?> GetUserByIdAsync(Guid userId, CancellationToken cancellationToken) =>
         IncludeUserGraph(dbContext.Users).SingleOrDefaultAsync(user => user.Id == userId, cancellationToken);
@@ -24,13 +27,18 @@ public sealed class IdentityRepository(NexusCoreDbContext dbContext) : IIdentity
             query = query.Where(user => user.Tenant != null && user.Tenant.Slug == tenantSlug);
         }
 
-        // A username starts with a letter; a mobile number never does. So the identifier is one
-        // or the other (or neither - an email address, for example, matches nothing).
-        if (PhoneNumber.Normalize(value) is { } phone)
+        // Ten digits is a national code (the username). Otherwise a mobile number (11 digits in
+        // its canonical form, so the two never overlap), or a username from before the
+        // national-code rule. Anything else - an email address, for example - matches nothing.
+        if (Username.IsValid(value))
+        {
+            query = query.Where(user => user.Username == value);
+        }
+        else if (PhoneNumber.Normalize(value) is { } phone)
         {
             query = query.Where(user => user.PhoneNumber == phone);
         }
-        else if (Username.IsValid(value))
+        else if (Username.IsLegacy(value))
         {
             // Username comparison follows the column collation (case-insensitive by default).
             query = query.Where(user => user.Username == value);
@@ -123,10 +131,17 @@ public sealed class IdentityRepository(NexusCoreDbContext dbContext) : IIdentity
 
         if (!string.IsNullOrWhiteSpace(search))
         {
+            // Every searchable column; a mobile number is also matched in its canonical form.
+            var term = search.Trim();
+            var phone = PhoneNumber.Normalize(term);
             query = query.Where(user =>
-                (user.Username != null && user.Username.Contains(search)) ||
-                (user.Email != null && user.Email.Contains(search)) ||
-                user.DisplayName.Contains(search));
+                (user.Username != null && user.Username.Contains(term)) ||
+                (user.FirstName != null && user.FirstName.Contains(term)) ||
+                (user.LastName != null && user.LastName.Contains(term)) ||
+                (user.Email != null && user.Email.Contains(term)) ||
+                (user.PhoneNumber != null && (user.PhoneNumber.Contains(term) || (phone != null && user.PhoneNumber == phone))) ||
+                user.DisplayName.Contains(term) ||
+                user.Roles.Any(role => role.Role != null && role.Role.Name.Contains(term)));
         }
 
         var total = await query.CountAsync(cancellationToken);
@@ -223,15 +238,30 @@ public sealed class IdentityRepository(NexusCoreDbContext dbContext) : IIdentity
 
     public async Task AddTenantAsync(Tenant tenant, CancellationToken cancellationToken) => await dbContext.Tenants.AddAsync(tenant, cancellationToken);
 
-    public async Task<IReadOnlyList<string>> GetUserPermissionNamesAsync(Guid userId, CancellationToken cancellationToken) =>
-        await dbContext.Users
+    /// <summary>
+    /// Effective permissions: from the user's roles, granted to the user directly, and inherited
+    /// from the organisational groups they belong to.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> GetUserPermissionNamesAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var fromRoles = await dbContext.Users
             .Where(user => user.Id == userId)
             .SelectMany(user => user.Roles)
             .SelectMany(userRole => userRole.Role!.Permissions)
             .Select(rolePermission => rolePermission.Permission!.Name)
-            .Distinct()
-            .OrderBy(permission => permission)
             .ToListAsync(cancellationToken);
+        var direct = await dbContext.Set<UserPermission>()
+            .Where(grant => grant.UserId == userId)
+            .Select(grant => grant.Permission!.Name)
+            .ToListAsync(cancellationToken);
+        var fromGroups = await groupPermissions.GetPermissionNamesAsync(userId, cancellationToken);
+
+        // Plus what those permissions need to be usable (e.g. users.create needs users.view).
+        return PermissionPrerequisites.Expand(fromRoles.Concat(direct).Concat(fromGroups));
+    }
+
+    public async Task<IReadOnlyList<Permission>> GetPermissionsByIdsAsync(IReadOnlyCollection<Guid> permissionIds, CancellationToken cancellationToken) =>
+        await dbContext.Permissions.Where(permission => permissionIds.Contains(permission.Id)).ToListAsync(cancellationToken);
 
     public Task<RefreshToken?> FindActiveRefreshTokenAsync(string tokenHash, CancellationToken cancellationToken) =>
         dbContext.RefreshTokens
@@ -240,6 +270,7 @@ public sealed class IdentityRepository(NexusCoreDbContext dbContext) : IIdentity
 
     private static IQueryable<User> IncludeUserGraph(IQueryable<User> query) =>
         query.Include(user => user.Tenant)
+            .Include(user => user.Permissions)
             .Include(user => user.Roles)
             .ThenInclude(userRole => userRole.Role);
 

@@ -6,6 +6,7 @@ public sealed class User : AuditableEntity<Guid>
 {
     private readonly List<UserRole> _roles = [];
     private readonly List<RefreshToken> _refreshTokens = [];
+    private readonly List<UserPermission> _permissions = [];
 
     private User() : base(Guid.Empty)
     {
@@ -32,6 +33,17 @@ public sealed class User : AuditableEntity<Guid>
     /// </summary>
     public string? Email { get; private set; }
     public string DisplayName { get; private set; }
+
+    /// <summary>Given name and family name. DisplayName follows them when they are set.</summary>
+    public string? FirstName { get; private set; }
+    public string? LastName { get; private set; }
+
+    /// <summary>
+    /// The built-in system administrator created by the seeder (like Role.IsSystem). It cannot be
+    /// deleted, disabled, re-roled or renamed through the API, and no API can set this flag.
+    /// </summary>
+    public bool IsSystem { get; private set; }
+
     public string PasswordHash { get; private set; }
     public bool IsActive { get; private set; }
     public DateTimeOffset? LastLoginAtUtc { get; private set; }
@@ -57,6 +69,30 @@ public sealed class User : AuditableEntity<Guid>
 
     public IReadOnlyCollection<UserRole> Roles => _roles.AsReadOnly();
     public IReadOnlyCollection<RefreshToken> RefreshTokens => _refreshTokens.AsReadOnly();
+
+    /// <summary>Permissions granted directly to this user, on top of roles and groups.</summary>
+    public IReadOnlyCollection<UserPermission> Permissions => _permissions.AsReadOnly();
+
+    public void SetName(string firstName, string lastName)
+    {
+        FirstName = firstName.Trim();
+        LastName = lastName.Trim();
+        DisplayName = (FirstName + " " + LastName).Trim();
+    }
+
+    public void SetActive(bool isActive) => IsActive = isActive;
+
+    /// <summary>Only the seeder marks the built-in administrator.</summary>
+    public void MarkAsSystemAccount() => IsSystem = true;
+
+    public void SetDirectPermissions(IEnumerable<Guid> permissionIds)
+    {
+        _permissions.Clear();
+        foreach (var permissionId in permissionIds.Distinct())
+        {
+            _permissions.Add(new UserPermission(Id, permissionId));
+        }
+    }
 
     public void UpdateProfile(string displayName, bool isActive)
     {

@@ -7,7 +7,8 @@ using NexusCore.Application.Platform.Interfaces;
 namespace NexusCore.Application.Messaging;
 
 /// <summary>
-/// Reads and decrypts a tenant's SMS gateway settings from platform.Settings.
+/// Reads and decrypts a tenant's SMS gateway settings from platform.Settings - for the senders.
+/// The decrypted API key never leaves the server (NotificationChannelService masks it).
 /// Separate from <see cref="NotificationChannelService"/> because the senders need the
 /// settings and the service needs the senders (for its test actions).
 /// </summary>
@@ -25,7 +26,10 @@ public sealed class NotificationChannelSettingsReader(
     private readonly IDataProtector _protector = dataProtectionProvider.CreateProtector(ProtectorPurpose);
 
     public static NotificationChannelSettingsDto Defaults { get; } = new(
-        new SmsChannelSettingsDto(false, SmsProviders.Kavenegar, null, null, null, null));
+        new SmsChannelSettingsDto(false, KavenegarKey, null, null, null));
+
+    /// <summary>The provider a panel that was never saved starts on.</summary>
+    public const string KavenegarKey = "kavenegar";
 
     public async Task<NotificationChannelSettingsDto> ReadAsync(Guid tenantId, CancellationToken cancellationToken)
     {
@@ -51,14 +55,16 @@ public sealed class NotificationChannelSettingsReader(
             return Defaults;
         }
 
+        // A key that can no longer be decrypted counts as not configured: it has to be entered again.
+        var apiKey = Unprotect(stored.Sms?.ApiKey, tenantId);
         return new NotificationChannelSettingsDto(
             new SmsChannelSettingsDto(
                 stored.Sms?.Enabled ?? false,
-                stored.Sms?.Provider ?? SmsProviders.Kavenegar,
-                Unprotect(stored.Sms?.ApiKey, tenantId),
+                stored.Sms?.Provider ?? KavenegarKey,
+                stored.Sms?.ApiUrl,
+                apiKey,
                 stored.Sms?.LineNumber,
-                stored.Sms?.PatternCode,
-                stored.Sms?.ApiUrl));
+                apiKey is not null));
     }
 
     private string? Unprotect(string? protectedSecret, Guid tenantId)
@@ -81,7 +87,7 @@ public sealed class NotificationChannelSettingsReader(
         }
     }
 
-    internal sealed record StoredSms(bool Enabled, string Provider, string? ApiKey, string? LineNumber, string? PatternCode, string? ApiUrl);
+    internal sealed record StoredSms(bool Enabled, string Provider, string? ApiKey, string? LineNumber, string? ApiUrl);
 
     internal sealed record StoredSettings(StoredSms? Sms);
 }

@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NexusCore.Infrastructure.Persistence;
 
@@ -11,9 +12,11 @@ using NexusCore.Infrastructure.Persistence;
 namespace NexusCore.Infrastructure.Migrations
 {
     [DbContext(typeof(NexusCoreDbContext))]
-    partial class NexusCoreDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260922114548_UserNamesSystemAccountAndDirectPermissions")]
+    partial class UserNamesSystemAccountAndDirectPermissions
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

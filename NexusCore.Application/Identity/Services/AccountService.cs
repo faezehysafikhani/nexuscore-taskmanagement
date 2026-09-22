@@ -17,103 +17,31 @@ namespace NexusCore.Application.Identity.Services;
 
 public interface IAccountService
 {
-    Task<Result<AuthResponse>> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken);
     Task<Result<ForgotPasswordResponse>> ForgotPasswordAsync(ForgotPasswordRequest request, CancellationToken cancellationToken);
     Task<Result> ResetPasswordAsync(ResetPasswordRequest request, CancellationToken cancellationToken);
     Task<Result<UserDto>> UpdateMyProfileAsync(UpdateMyProfileRequest request, CancellationToken cancellationToken);
     Task<Result<UserDto>> UpdateMyPreferencesAsync(UpdateMyPreferencesRequest request, CancellationToken cancellationToken);
+    Task<Result> ChangeMyPasswordAsync(ChangeMyPasswordRequest request, CancellationToken cancellationToken);
 }
 
 /// <summary>
-/// What a user does for their own account: sign up, reset a forgotten password, keep their
-/// profile and preferences. Administration of other accounts stays in IdentityService.
+/// What a user does for their own account: reset a forgotten password, change it, keep their
+/// profile and preferences. Accounts are only ever created by an administrator
+/// (IdentityService.CreateUserAsync); there is no self-registration.
 /// </summary>
 public sealed class AccountService(
     IIdentityRepository repository,
-    AuthSessionIssuer sessionIssuer,
     ILoginProtection loginProtection,
     IPasswordHasher passwordHasher,
     IUnitOfWork unitOfWork,
     IPlatformService platformService,
     ICurrentUserContext currentUser,
     IPasswordResetLinkSender resetLinkSender,
-    IOptions<SelfRegistrationOptions> registrationOptions,
-    IValidator<RegisterRequest> registerValidator,
     IValidator<ResetPasswordRequest> resetValidator,
     IValidator<UpdateMyProfileRequest> profileValidator,
+    IValidator<ChangeMyPasswordRequest> changePasswordValidator,
     ILogger<AccountService> logger) : IAccountService
 {
-    public async Task<Result<AuthResponse>> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken)
-    {
-        var options = registrationOptions.Value;
-        if (!options.Enabled)
-        {
-            return Result.Failure<AuthResponse>(Error.Validation("Self-registration is disabled. Ask an administrator for an account."));
-        }
-
-        var throttled = await loginProtection.ThrottleAsync(AuthAction.Register, cancellationToken);
-        if (throttled.IsFailure)
-        {
-            return Result.Failure<AuthResponse>(throttled.Error);
-        }
-
-        var validation = await registerValidator.ValidateAsResultAsync(request, cancellationToken);
-        if (validation.IsFailure)
-        {
-            return Result.Failure<AuthResponse>(validation.Error);
-        }
-
-        var tenant = await ResolveRegistrationTenantAsync(options, cancellationToken);
-        if (tenant is null)
-        {
-            return Result.Failure<AuthResponse>(Error.Validation(
-                "Self-registration has no target tenant. Set Identity:SelfRegistration:TenantSlug."));
-        }
-
-        // A username has to be chosen freely, so a taken one is named as such. A mobile number or
-        // email that is already registered is not confirmed: the answer is the same for both, and
-        // points the owner to sign-in or password reset instead.
-        if (await repository.UsernameExistsAsync(tenant.Id, request.Username, null, cancellationToken))
-        {
-            return Result.Failure<AuthResponse>(Error.Conflict("This username is already taken. Choose another one."));
-        }
-
-        if (await repository.PhoneNumberExistsAsync(tenant.Id, request.PhoneNumber, null, cancellationToken)
-            || (!string.IsNullOrWhiteSpace(request.Email)
-                && await repository.UserEmailExistsAsync(tenant.Id, request.Email, null, cancellationToken)))
-        {
-            return Result.Failure<AuthResponse>(Error.Conflict(
-                "This mobile number or email cannot be used for a new account. If you already have an account, sign in or reset your password."));
-        }
-
-        var user = new User(Guid.NewGuid(), tenant.Id, request.Email, request.DisplayName, passwordHasher.HashPassword(request.Password));
-        user.UpdateContactDetails(request.Username, request.PhoneNumber, request.NotifySms);
-        user.SetPreferences(request.Theme, request.ColorPalette, request.ThemeMode);
-
-        if (!string.IsNullOrWhiteSpace(options.DefaultRoleName))
-        {
-            var role = await repository.GetRoleByNameAsync(tenant.Id, options.DefaultRoleName, cancellationToken);
-            if (role is null)
-            {
-                logger.LogWarning(
-                    "Self-registration role '{Role}' does not exist in tenant {Tenant}; the new account has no role.",
-                    options.DefaultRoleName, tenant.Slug);
-            }
-            else
-            {
-                user.AssignRole(role.Id);
-            }
-        }
-
-        await repository.AddUserAsync(user, cancellationToken);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-        await platformService.AuditAsync("users.register", nameof(User), user.Id.ToString(), user.Username, cancellationToken);
-
-        // The account was just created with this password: sign the user in with the same
-        // session a login issues.
-        return Result.Success(await sessionIssuer.IssueAsync(user, cancellationToken));
-    }
-
     public async Task<Result<ForgotPasswordResponse>> ForgotPasswordAsync(
         ForgotPasswordRequest request, CancellationToken cancellationToken)
     {
@@ -220,19 +148,23 @@ public sealed class AccountService(
             return Result.Failure<UserDto>(Error.NotFound("User was not found."));
         }
 
-        if (await repository.UsernameExistsAsync(user.TenantId, request.Username, user.Id, cancellationToken))
-        {
-            return Result.Failure<UserDto>(Error.Conflict("This username is already taken."));
-        }
-
         if (!string.IsNullOrWhiteSpace(request.PhoneNumber)
             && await repository.PhoneNumberExistsAsync(user.TenantId, request.PhoneNumber, user.Id, cancellationToken))
         {
             return Result.Failure<UserDto>(Error.Conflict("This mobile number cannot be used. Enter another one."));
         }
 
-        user.ChangeDisplayName(request.DisplayName);
-        user.UpdateContactDetails(request.Username, request.PhoneNumber, request.NotifySms);
+        // The username (national code) is identity data: only an administrator changes it.
+        if (!string.IsNullOrWhiteSpace(request.FirstName) || !string.IsNullOrWhiteSpace(request.LastName))
+        {
+            user.SetName(request.FirstName ?? string.Empty, request.LastName ?? string.Empty);
+        }
+        else
+        {
+            user.ChangeDisplayName(request.DisplayName);
+        }
+
+        user.UpdateContactDetails(user.Username, request.PhoneNumber, request.NotifySms);
         user.SetAvatar(request.AvatarUrl);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await platformService.AuditAsync("users.update_own_profile", nameof(User), user.Id.ToString(), null, cancellationToken);
@@ -257,15 +189,38 @@ public sealed class AccountService(
         return Result.Success(IdentityMappings.ToUserDto(user));
     }
 
-    private async Task<Tenant?> ResolveRegistrationTenantAsync(SelfRegistrationOptions options, CancellationToken cancellationToken)
+    /// <summary>
+    /// The signed-in user changes their own password, proving the current one. This is also how
+    /// the built-in system administrator changes theirs - nobody else can.
+    /// </summary>
+    public async Task<Result> ChangeMyPasswordAsync(ChangeMyPasswordRequest request, CancellationToken cancellationToken)
     {
-        if (!string.IsNullOrWhiteSpace(options.TenantSlug))
+        if (currentUser.UserId is not { } userId)
         {
-            return await repository.GetTenantBySlugAsync(options.TenantSlug.Trim(), cancellationToken);
+            return Result.Failure(Error.Unauthorized());
         }
 
-        var tenants = await repository.ListTenantsAsync(cancellationToken);
-        return tenants.Count == 1 ? tenants[0] : null;
+        var validation = await changePasswordValidator.ValidateAsResultAsync(request, cancellationToken);
+        if (validation.IsFailure)
+        {
+            return validation;
+        }
+
+        var user = await repository.GetUserByIdAsync(userId, cancellationToken);
+        if (user is null)
+        {
+            return Result.Failure(Error.NotFound("User was not found."));
+        }
+
+        if (!passwordHasher.Verify(request.CurrentPassword, user.PasswordHash))
+        {
+            return Result.Failure(Error.Validation("The current password is not correct."));
+        }
+
+        user.ChangePassword(passwordHasher.HashPassword(request.NewPassword));
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        await platformService.AuditAsync("users.change_own_password", nameof(User), user.Id.ToString(), null, cancellationToken);
+        return Result.Success();
     }
 
     private static string? Limit(string? value, int maxLength) =>

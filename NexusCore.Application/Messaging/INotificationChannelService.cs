@@ -4,6 +4,9 @@ namespace NexusCore.Application.Messaging;
 
 public interface INotificationChannelService
 {
+    /// <summary>The SMS providers the panel can use.</summary>
+    IReadOnlyList<SmsProviderDto> ListProviders();
+
     /// <summary>Settings of the caller's tenant (defaults when nothing was saved yet).</summary>
     Task<Result<NotificationChannelSettingsDto>> GetAsync(CancellationToken cancellationToken);
 

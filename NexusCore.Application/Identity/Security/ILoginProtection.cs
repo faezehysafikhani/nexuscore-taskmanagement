@@ -8,7 +8,6 @@ public enum AuthAction
 {
     Login,
     Captcha,
-    Register,
     ForgotPassword
 }
 
@@ -65,8 +64,6 @@ public sealed class LoginProtectionOptions
     public int LoginWindowMinutes { get; set; } = 5;
     public int MaxCaptchasPerClient { get; set; } = 30;
     public int CaptchaWindowMinutes { get; set; } = 5;
-    public int MaxRegistrationsPerClient { get; set; } = 10;
-    public int RegistrationWindowMinutes { get; set; } = 60;
     public int MaxPasswordResetRequestsPerClient { get; set; } = 10;
     public int PasswordResetWindowMinutes { get; set; } = 15;
 }

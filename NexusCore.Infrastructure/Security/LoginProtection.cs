@@ -113,7 +113,6 @@ public sealed class LoginProtection(
         {
             AuthAction.Login => (o.MaxLoginAttemptsPerClient, o.LoginWindowMinutes),
             AuthAction.Captcha => (o.MaxCaptchasPerClient, o.CaptchaWindowMinutes),
-            AuthAction.Register => (o.MaxRegistrationsPerClient, o.RegistrationWindowMinutes),
             AuthAction.ForgotPassword => (o.MaxPasswordResetRequestsPerClient, o.PasswordResetWindowMinutes),
             _ => throw new ArgumentOutOfRangeException(nameof(action))
         };
@@ -190,7 +189,7 @@ public sealed class LoginProtection(
     private static string IdentifierKey(string identifier)
     {
         var value = identifier.Trim();
-        var canonical = PhoneNumber.Normalize(value) ?? value.ToLowerInvariant();
+        var canonical = Username.IsValid(value) ? value : PhoneNumber.Normalize(value) ?? value.ToLowerInvariant();
         return $"{Prefix}fail:id:{Hash("id", canonical)}";
     }
 

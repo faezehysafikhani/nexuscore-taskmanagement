@@ -28,14 +28,23 @@ public sealed class PlatformService(
         await unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<Result<PagedResult<AuditLogDto>>> ListAuditLogsAsync(Guid? tenantId, int pageNumber, int pageSize, CancellationToken cancellationToken)
+    public async Task AuditForAsync(Guid? tenantId, Guid? userId, string action, string? entityName, string? entityId, string? details, CancellationToken cancellationToken)
     {
-        var logs = await repository.ListAuditLogsAsync(tenantId, Math.Max(1, pageNumber), Math.Clamp(pageSize, 1, 100), cancellationToken);
-        return Result.Success(new PagedResult<AuditLogDto>(
-            logs.Items.Select(ToAuditLogDto).ToList(),
-            logs.PageNumber,
-            logs.PageSize,
-            logs.TotalCount));
+        var auditLog = new AuditLog(Guid.NewGuid(), tenantId, userId, action, entityName, entityId, details, currentUserContext.IpAddress);
+        await repository.AddAuditLogAsync(auditLog, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<Result<PagedResult<AuditLogDto>>> ListAuditLogsAsync(AuditLogQuery query, CancellationToken cancellationToken)
+    {
+        var safe = query with
+        {
+            PageNumber = Math.Max(1, query.PageNumber),
+            PageSize = Math.Clamp(query.PageSize, 1, 100),
+            Search = string.IsNullOrWhiteSpace(query.Search) ? null : query.Search.Trim(),
+            ActionPrefix = string.IsNullOrWhiteSpace(query.ActionPrefix) ? null : query.ActionPrefix.Trim(),
+        };
+        return Result.Success(await repository.ListAuditLogsAsync(safe, cancellationToken));
     }
 
     public async Task<Result<IReadOnlyList<SettingDto>>> ListSettingsAsync(Guid? tenantId, CancellationToken cancellationToken)
@@ -66,9 +75,6 @@ public sealed class PlatformService(
         await AuditAsync("settings.upsert", nameof(SystemSetting), setting.Id.ToString(), setting.Key, cancellationToken);
         return Result.Success(ToSettingDto(setting));
     }
-
-    private static AuditLogDto ToAuditLogDto(AuditLog log) =>
-        new(log.Id, log.TenantId, log.UserId, log.Action, log.EntityName, log.EntityId, log.Details, log.IpAddress, log.OccurredAtUtc);
 
     private static SettingDto ToSettingDto(SystemSetting setting) =>
         new(setting.Id, setting.TenantId, setting.Key, setting.Value, setting.Scope);

@@ -10,6 +10,7 @@ using NexusCore.Application.Identity.Options;
 using NexusCore.Infrastructure.Security;
 using NexusCore.Application.Identity.Permissions;
 using NexusCore.Application.Identity.Security;
+using NexusCore.Application.Ldap;
 using NexusCore.Application.Messaging;
 using NexusCore.Application.Platform.Interfaces;
 using NexusCore.Application.Security;
@@ -68,7 +69,6 @@ public static class DependencyInjection
         services.Configure<LoginProtectionOptions>(configuration.GetSection(LoginProtectionOptions.SectionName));
         services.AddScoped<ILoginProtection, LoginProtection>();
 
-        services.Configure<SelfRegistrationOptions>(configuration.GetSection(SelfRegistrationOptions.SectionName));
         services.Configure<IdentitySeedOptions>(configuration.GetSection(IdentitySeedOptions.SectionName));
         services.Configure<PasswordResetOptions>(configuration.GetSection(PasswordResetOptions.SectionName));
         services.AddScoped<IPasswordResetLinkSender, EmailPasswordResetLinkSender>();
@@ -76,8 +76,15 @@ public static class DependencyInjection
 
         // Outgoing messages. Request logging is removed from this client: the SMS API key is part
         // of the request URL and must not reach the logs.
-        services.AddHttpClient(GatewaySmsSender.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(15)).RemoveAllLoggers();
+        services.AddHttpClient(KavenegarSmsProvider.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(15)).RemoveAllLoggers();
+        // SMS providers: one implementation each; the panel setting picks one. Add a provider here.
+        services.AddScoped<ISmsProvider, KavenegarSmsProvider>();
         services.AddScoped<ISmsSender, GatewaySmsSender>();
+        services.AddScoped<ISmsTemplateService, SmsTemplateService>();
+
+        // LDAP / Active Directory connection settings and test.
+        services.AddScoped<ILdapDirectoryClient, NexusCore.Infrastructure.Ldap.LdapDirectoryClient>();
+        services.AddScoped<ILdapSettingsService, LdapSettingsService>();
         services.AddScoped<IEmailSender, SmtpEmailSender>();
 
         return services;

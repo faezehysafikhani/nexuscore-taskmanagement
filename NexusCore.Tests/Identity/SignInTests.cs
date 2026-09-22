@@ -48,16 +48,26 @@ public sealed class SignInTests
     public void PhoneNumber_RejectsWhatIsNotAMobileNumber(string typed) =>
         Assert.Null(PhoneNumber.Normalize(typed));
 
+    // New and changed usernames are national codes: exactly ten ASCII digits.
+    [Theory]
+    [InlineData("0012345678", true)]
+    [InlineData("9876543210", true)]
+    [InlineData("012345678", false)]    // nine digits
+    [InlineData("00123456789", false)]  // eleven digits (a mobile number is 11)
+    [InlineData("00123 45678", false)]
+    [InlineData("۰۰۱۲۳۴۵۶۷۸", false)]  // the frontend converts Persian digits before sending
+    [InlineData("alice", false)]
+    [InlineData("a123456789", false)]
+    [InlineData("", false)]
+    public void Username_IsANationalCode(string value, bool valid) => Assert.Equal(valid, Username.IsValid(value));
+
+    // Usernames from before the rule stay usable for sign-in until changed.
     [Theory]
     [InlineData("alice", true)]
-    [InlineData("Alice.Smith-2", true)]
-    [InlineData("a_b", true)]
-    [InlineData("ab", false)]           // too short
-    [InlineData("9alice", false)]       // must start with a letter: never mistaken for a number
+    [InlineData("parspmi_admin", true)]
+    [InlineData("9alice", false)]
     [InlineData("alice@example.com", false)]
-    [InlineData("علی", false)]
-    [InlineData("", false)]
-    public void Username_Rules(string value, bool valid) => Assert.Equal(valid, Username.IsValid(value));
+    public void Username_LegacyNames(string value, bool legacy) => Assert.Equal(legacy, Username.IsLegacy(value));
 
     [Fact]
     public void User_StoresThePhoneNumberInCanonicalForm_AndRefusesAnInvalidNewOne()
@@ -210,13 +220,13 @@ public sealed class SignInTests
     [Fact]
     public async Task PerClientLimits_ApplyToEveryAnonymousAction()
     {
-        var (protection, _, _) = Create(configure: o => o.MaxRegistrationsPerClient = 2);
+        var (protection, _, _) = Create(configure: o => o.MaxPasswordResetRequestsPerClient = 2);
 
-        Assert.True((await protection.ThrottleAsync(AuthAction.Register, default)).IsSuccess);
-        Assert.True((await protection.ThrottleAsync(AuthAction.Register, default)).IsSuccess);
-        Assert.Equal("too_many_requests", (await protection.ThrottleAsync(AuthAction.Register, default)).Error.Code);
-        // Separate budgets per action.
         Assert.True((await protection.ThrottleAsync(AuthAction.ForgotPassword, default)).IsSuccess);
+        Assert.True((await protection.ThrottleAsync(AuthAction.ForgotPassword, default)).IsSuccess);
+        Assert.Equal("too_many_requests", (await protection.ThrottleAsync(AuthAction.ForgotPassword, default)).Error.Code);
+        // Separate budgets per action.
+        Assert.True((await protection.ThrottleAsync(AuthAction.Captcha, default)).IsSuccess);
     }
 
     [Fact]

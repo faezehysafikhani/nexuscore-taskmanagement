@@ -1,79 +1,39 @@
-using System.Text.Json;
-using Microsoft.Extensions.Logging;
 using NexusCore.Application.Messaging;
 using NexusCore.SharedKernel.Results;
 
 namespace NexusCore.Infrastructure.Messaging;
 
 /// <summary>
-/// Sends SMS through the tenant's configured gateway. Kavenegar is the only gateway with a
-/// real implementation (its REST API: GET {base}/{apiKey}/sms/send.json). Any other provider
-/// is refused with an explicit error rather than reported as sent.
+/// The Core SMS sender: reads the tenant's SMS panel settings and hands the message to the
+/// provider they name. Knows nothing about any provider's protocol.
 /// </summary>
 public sealed class GatewaySmsSender(
     INotificationChannelSettingsReader settingsReader,
-    IHttpClientFactory httpClientFactory,
-    ILogger<GatewaySmsSender> logger) : ISmsSender
+    IEnumerable<ISmsProvider> providers) : ISmsSender
 {
-    public const string HttpClientName = "NexusCore.Messaging.Sms";
-    private const string KavenegarDefaultBaseUrl = "https://api.kavenegar.com/v1";
-
     public async Task<Result<string>> SendAsync(Guid tenantId, string phoneNumber, string text, CancellationToken cancellationToken)
     {
         var settings = (await settingsReader.ReadAsync(tenantId, cancellationToken)).Sms;
 
         if (!settings.Enabled)
         {
-            return Result.Failure<string>(Error.Validation("SMS delivery is disabled in the notification settings."));
+            return Result.Failure<string>(Error.Validation("پنل پیامکی در تنظیمات غیرفعال است."));
         }
 
         if (string.IsNullOrWhiteSpace(settings.ApiKey))
         {
-            return Result.Failure<string>(Error.Validation("The SMS API key is not set."));
+            return Result.Failure<string>(Error.Validation("کلید API پنل پیامکی ثبت نشده است."));
         }
 
-        if (!string.Equals(settings.Provider, SmsProviders.Kavenegar, StringComparison.OrdinalIgnoreCase))
+        var provider = providers.FirstOrDefault(p => string.Equals(p.Key, settings.Provider, StringComparison.OrdinalIgnoreCase));
+        if (provider is null)
         {
-            return Result.Failure<string>(Error.Validation($"Sending SMS through '{settings.Provider}' is not implemented."));
+            return Result.Failure<string>(Error.Validation($"سرویس‌دهنده پیامک «{settings.Provider}» پشتیبانی نمی‌شود."));
         }
 
-        var baseUrl = string.IsNullOrWhiteSpace(settings.ApiUrl) ? KavenegarDefaultBaseUrl : settings.ApiUrl.TrimEnd('/');
-        var url = $"{baseUrl}/{Uri.EscapeDataString(settings.ApiKey)}/sms/send.json"
-                  + $"?receptor={Uri.EscapeDataString(phoneNumber)}"
-                  + $"&sender={Uri.EscapeDataString(settings.LineNumber ?? string.Empty)}"
-                  + $"&message={Uri.EscapeDataString(text)}";
-
-        try
-        {
-            using var response = await httpClientFactory.CreateClient(HttpClientName).GetAsync(url, cancellationToken);
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
-
-            using var json = JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
-            var hasReturn = json.RootElement.TryGetProperty("return", out var ret) && ret.ValueKind == JsonValueKind.Object;
-            var status = hasReturn && ret.TryGetProperty("status", out var s) && s.TryGetInt32(out var code)
-                ? code
-                : (int)response.StatusCode;
-
-            if (status is 200 or 201)
-            {
-                var messageId = json.RootElement.TryGetProperty("entries", out var entries)
-                                && entries.ValueKind == JsonValueKind.Array
-                                && entries.GetArrayLength() > 0
-                                && entries[0].TryGetProperty("messageid", out var id)
-                    ? id.ToString()
-                    : "accepted";
-                return Result.Success(messageId);
-            }
-
-            var reason = hasReturn && ret.TryGetProperty("message", out var m) ? m.GetString() : response.ReasonPhrase;
-            logger.LogWarning("Kavenegar rejected an SMS (status {Status}).", status);
-            return Result.Failure<string>(Error.Validation($"Kavenegar error {status}: {reason}"));
-        }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
-        {
-            // The exception message can contain the request URL, and with it the API key.
-            logger.LogWarning("SMS gateway request failed: {ErrorType}.", ex.GetType().Name);
-            return Result.Failure<string>(Error.Validation("The SMS gateway could not be reached."));
-        }
+        var receiver = NexusCore.Domain.Identity.PhoneNumber.Normalize(phoneNumber) ?? phoneNumber.Trim();
+        return await provider.SendAsync(
+            new SmsProviderSettings(settings.ApiUrl ?? provider.DefaultBaseUrl, settings.ApiKey, settings.LineNumber),
+            receiver, text, cancellationToken);
     }
 }

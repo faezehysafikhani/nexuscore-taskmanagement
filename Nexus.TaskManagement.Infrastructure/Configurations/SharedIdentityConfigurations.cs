@@ -32,6 +32,7 @@ internal sealed class SharedUserConfiguration : IEntityTypeConfiguration<User>
 
         builder.Ignore(x => x.Roles);
         builder.Ignore(x => x.RefreshTokens);
+        builder.Ignore(x => x.Permissions);
         builder.Ignore(x => x.Tenant);
         builder.Ignore(x => x.PasswordHash);
         builder.Ignore(x => x.DomainEvents);

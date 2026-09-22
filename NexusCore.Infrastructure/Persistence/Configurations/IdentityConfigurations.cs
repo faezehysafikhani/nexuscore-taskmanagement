@@ -30,6 +30,9 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
         // Optional contact address; unique when present.
         builder.Property(x => x.Email).HasMaxLength(256);
         builder.Property(x => x.DisplayName).HasMaxLength(160).IsRequired();
+        builder.Property(x => x.FirstName).HasMaxLength(80);
+        builder.Property(x => x.LastName).HasMaxLength(80);
+        builder.Property(x => x.IsSystem).HasDefaultValue(false);
         builder.Property(x => x.PasswordHash).HasMaxLength(256).IsRequired();
         builder.HasIndex(x => new { x.TenantId, x.Email }).IsUnique().HasFilter("[Email] IS NOT NULL");
         builder.Property(x => x.Username).HasMaxLength(64);
@@ -45,6 +48,7 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
         builder.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
         builder.Navigation(x => x.Roles).UsePropertyAccessMode(PropertyAccessMode.Field);
         builder.Navigation(x => x.RefreshTokens).UsePropertyAccessMode(PropertyAccessMode.Field);
+        builder.Navigation(x => x.Permissions).UsePropertyAccessMode(PropertyAccessMode.Field);
     }
 }
 
@@ -96,6 +100,18 @@ public sealed class RolePermissionConfiguration : IEntityTypeConfiguration<RoleP
         builder.ToTable("RolePermissions", "identity");
         builder.HasKey(x => new { x.RoleId, x.PermissionId });
         builder.HasOne(x => x.Role).WithMany(x => x.Permissions).HasForeignKey(x => x.RoleId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne(x => x.Permission).WithMany().HasForeignKey(x => x.PermissionId).OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+/// <summary>Permissions granted directly to a user (mirrors RolePermissions).</summary>
+public sealed class UserPermissionConfiguration : IEntityTypeConfiguration<UserPermission>
+{
+    public void Configure(EntityTypeBuilder<UserPermission> builder)
+    {
+        builder.ToTable("UserPermissions", "identity");
+        builder.HasKey(x => new { x.UserId, x.PermissionId });
+        builder.HasOne(x => x.User).WithMany(x => x.Permissions).HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne(x => x.Permission).WithMany().HasForeignKey(x => x.PermissionId).OnDelete(DeleteBehavior.Cascade);
     }
 }

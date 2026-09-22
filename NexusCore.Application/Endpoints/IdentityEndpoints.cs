@@ -4,6 +4,7 @@ using NexusCore.Application.Identity.Interfaces;
 using NexusCore.Application.Identity.Permissions;
 using NexusCore.Application.Identity.Security;
 using NexusCore.Application.Identity.Services;
+using NexusCore.Application.Ldap;
 using NexusCore.Application.Messaging;
 using NexusCore.Application.Platform.Dtos;
 using NexusCore.Application.Platform.Interfaces;
@@ -48,11 +49,8 @@ public static class IdentityEndpoints
 
         // --- Self-service account -------------------------------------------------------------
 
-        auth.MapPost("/register", async (RegisterRequest request, IAccountService accounts, CancellationToken cancellationToken) =>
-                (await accounts.RegisterAsync(request, cancellationToken)).ToApiResult())
-            .AllowAnonymous()
-            .WithName("Register")
-            .WithSummary("Create an account (only when Identity:SelfRegistration:Enabled)");
+        // There is no self-registration: accounts are created by administrators
+        // (POST /api/identity/users, users.create).
 
         auth.MapPost("/forgot-password", async (ForgotPasswordRequest request, IAccountService accounts, CancellationToken cancellationToken) =>
                 (await accounts.ForgotPasswordAsync(request, cancellationToken)).ToApiResult())
@@ -74,6 +72,12 @@ public static class IdentityEndpoints
                 (await accounts.UpdateMyPreferencesAsync(request, cancellationToken)).ToApiResult())
             .RequireAuthorization()
             .WithName("UpdateMyPreferences");
+
+        auth.MapPut("/me/password", async (ChangeMyPasswordRequest request, IAccountService accounts, CancellationToken cancellationToken) =>
+                (await accounts.ChangeMyPasswordAsync(request, cancellationToken)).ToApiResult())
+            .RequireAuthorization()
+            .WithName("ChangeMyPassword")
+            .WithSummary("Change your own password (the current one is required)");
 
         var users = app.MapGroup("/api/identity/users").WithTags("Users").RequireAuthorization();
 
@@ -107,6 +111,21 @@ public static class IdentityEndpoints
         users.MapDelete("/{userId:guid}", async (Guid userId, IIdentityService identityService, CancellationToken cancellationToken) =>
                 (await identityService.DeleteUserAsync(userId, cancellationToken)).ToApiResult())
             .RequireAuthorization(IdentityPermissions.UsersDelete);
+
+        users.MapPatch("/{userId:guid}/status", async (Guid userId, SetUserStatusRequest request, IIdentityService identityService, CancellationToken cancellationToken) =>
+                (await identityService.SetUserStatusAsync(userId, request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(IdentityPermissions.UsersChangeStatus)
+            .WithSummary("Enable or disable a user (not the built-in system administrator, not yourself)");
+
+        // Access of one user: every permission and where it comes from (direct, role, group).
+        users.MapGet("/{userId:guid}/permissions", async (Guid userId, IIdentityService identityService, CancellationToken cancellationToken) =>
+                (await identityService.GetUserAccessAsync(userId, cancellationToken)).ToApiResult())
+            .RequireAuthorization(IdentityPermissions.UsersView);
+
+        users.MapPut("/{userId:guid}/permissions", async (Guid userId, AssignUserPermissionsRequest request, IIdentityService identityService, CancellationToken cancellationToken) =>
+                (await identityService.SetUserDirectPermissionsAsync(userId, request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(IdentityPermissions.UsersAssignPermissions)
+            .WithSummary("Replace the permissions granted directly to a user (only permissions the caller holds)");
 
         users.MapPut("/{userId:guid}/roles", async (Guid userId, AssignUserRolesRequest request, IIdentityService identityService, CancellationToken cancellationToken) =>
                 (await identityService.AssignRolesAsync(userId, request, cancellationToken)).ToApiResult())
@@ -147,8 +166,10 @@ public static class IdentityEndpoints
 
         var platform = app.MapGroup("/api/platform").WithTags("Platform").RequireAuthorization();
 
-        platform.MapGet("/audit-logs", async (Guid? tenantId, int pageNumber, int pageSize, IPlatformService platformService, CancellationToken cancellationToken) =>
-                (await platformService.ListAuditLogsAsync(tenantId, pageNumber, pageSize, cancellationToken)).ToApiResult())
+        // The audit log, also the source of sign-in history (action=identity.login). Without an
+        // explicit tenantId it is the caller's own tenant.
+        platform.MapGet("/audit-logs", async (Guid? tenantId, int? pageNumber, int? pageSize, string? search, string? action, string? sort, ICurrentUserContext currentUser, IPlatformService platformService, CancellationToken cancellationToken) =>
+                (await platformService.ListAuditLogsAsync(new AuditLogQuery(tenantId ?? currentUser.TenantId, pageNumber ?? 1, pageSize ?? 20, search, action, sort != "asc"), cancellationToken)).ToApiResult())
             .RequireAuthorization(IdentityPermissions.AuditLogsView);
 
         platform.MapGet("/settings", async (Guid? tenantId, IPlatformService platformService, CancellationToken cancellationToken) =>
@@ -159,21 +180,48 @@ public static class IdentityEndpoints
                 (await platformService.UpsertSettingAsync(request, cancellationToken)).ToApiResult())
             .RequireAuthorization(IdentityPermissions.SettingsUpdate);
 
-        // The SMS gateway of the caller's tenant. The API key is returned only to holders of
-        // settings.view and is stored encrypted.
-        var channels = platform.MapGroup("/notification-channels").WithTags("Platform - Notification channels");
+        // The SMS panel (پنل پیامکی) of the caller's tenant: provider settings, texts and a test
+        // message. The API key is write-only and stored encrypted.
+        var channels = platform.MapGroup("/notification-channels").WithTags("Platform - SMS panel");
 
         channels.MapGet("/", async (INotificationChannelService service, CancellationToken cancellationToken) =>
                 (await service.GetAsync(cancellationToken)).ToApiResult())
-            .RequireAuthorization(IdentityPermissions.SettingsView);
+            .RequireAuthorization(IdentityPermissions.SmsSettingsView);
+
+        channels.MapGet("/providers", (INotificationChannelService service) => Results.Ok(service.ListProviders()))
+            .RequireAuthorization(IdentityPermissions.SmsSettingsView);
 
         channels.MapPut("/", async (NotificationChannelSettingsDto request, INotificationChannelService service, CancellationToken cancellationToken) =>
                 (await service.SaveAsync(request, cancellationToken)).ToApiResult())
-            .RequireAuthorization(IdentityPermissions.SettingsUpdate);
+            .RequireAuthorization(IdentityPermissions.SmsSettingsUpdate);
 
         channels.MapPost("/test-sms", async (TestSmsRequest request, INotificationChannelService service, CancellationToken cancellationToken) =>
                 (await service.TestSmsAsync(request, cancellationToken)).ToApiResult())
-            .RequireAuthorization(IdentityPermissions.SettingsUpdate);
+            .RequireAuthorization(IdentityPermissions.SmsSettingsTest);
+
+        channels.MapGet("/templates", async (ISmsTemplateService service, CancellationToken cancellationToken) =>
+                (await service.ListAsync(cancellationToken)).ToApiResult())
+            .RequireAuthorization(IdentityPermissions.SmsSettingsView);
+
+        channels.MapPut("/templates", async (SaveSmsTemplatesRequest request, ISmsTemplateService service, CancellationToken cancellationToken) =>
+                (await service.SaveAsync(request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(IdentityPermissions.SmsSettingsUpdate);
+
+        // LDAP / Active Directory of the caller's tenant. The bind password is write-only and
+        // stored encrypted; the test runs the given (unsaved) settings or the saved ones.
+        var ldap = platform.MapGroup("/ldap").WithTags("Platform - LDAP");
+
+        ldap.MapGet("/", async (ILdapSettingsService service, CancellationToken cancellationToken) =>
+                (await service.GetAsync(cancellationToken)).ToApiResult())
+            .RequireAuthorization(IdentityPermissions.LdapSettingsView);
+
+        ldap.MapPut("/", async (LdapSettingsDto request, ILdapSettingsService service, CancellationToken cancellationToken) =>
+                (await service.SaveAsync(request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(IdentityPermissions.LdapSettingsUpdate);
+
+        ldap.MapPost("/test", async (LdapSettingsDto? request, ILdapSettingsService service, CancellationToken cancellationToken) =>
+                (await service.TestAsync(request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(IdentityPermissions.LdapSettingsTest);
 
         return app;
     }
