@@ -23,11 +23,13 @@ public class NotificationService : INotificationService
         string title,
         string message,
         string type,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Guid? tenantId = null)
     {
+        // Background work (scheduled reminders) has no signed-in user: it names the tenant.
         var notification = new Notification(
             Guid.NewGuid(),
-            _currentUser.TenantId,
+            tenantId ?? _currentUser.TenantId,
             userId,
             title,
             message,

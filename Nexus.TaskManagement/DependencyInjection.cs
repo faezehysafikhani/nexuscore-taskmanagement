@@ -28,7 +28,9 @@ public static class DependencyInjection
         services.AddScoped<ITaskCommentService, TaskCommentService>();
         services.AddScoped<ITaskAccessScope, TaskAccessScope>();
 
-        services.AddSingleton<IRecurrenceCalculator, RecurrenceCalculator>();
+        // In the users' time zone (TaskManagement:Recurrence:TimeZone, Asia/Tehran by default).
+        services.AddSingleton<IRecurrenceCalculator>(provider => new RecurrenceCalculator(RecurrenceCalculator.ResolveTimeZone(
+            (provider.GetService<Microsoft.Extensions.Options.IOptions<RecurrenceOptions>>()?.Value ?? new RecurrenceOptions()).TimeZone)));
 
         // Reacts to a recurring task falling due. Dispatched by DomainEventDispatchInterceptor.
         services.AddScoped<IDomainEventHandler<RepetitiveTaskDue>, RepetitiveTaskDueHandler>();

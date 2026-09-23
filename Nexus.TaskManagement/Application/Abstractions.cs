@@ -229,6 +229,21 @@ public interface ITaskActivityService
 public interface IRecurrenceCalculator
 {
     DateTimeOffset? CalculateNextExecution(RepetitiveTask schedule, DateTimeOffset afterUtc);
+
+    /// <summary>A UTC moment as the wall-clock time users entered the schedule in.</summary>
+    DateTimeOffset ToLocalTime(DateTimeOffset utc);
+}
+
+/// <summary>
+/// TaskManagement:Recurrence. Schedules are entered in the users' wall-clock time (a date and a
+/// time of day in the UI); this is the time zone they mean.
+/// </summary>
+public sealed class RecurrenceOptions
+{
+    public const string SectionName = "TaskManagement:Recurrence";
+
+    /// <summary>IANA or Windows id. Iran has no daylight saving time since 2022.</summary>
+    public string TimeZone { get; set; } = "Asia/Tehran";
 }
 
 /// <summary>

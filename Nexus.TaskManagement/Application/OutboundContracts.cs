@@ -11,7 +11,8 @@ public sealed record TaskDueNotification(
     string Title,
     string? Description,
     DateOnly DueDate,
-    IReadOnlyList<Guid> RecipientUserIds);
+    IReadOnlyList<Guid> RecipientUserIds,
+    string? DueAtText = null);
 
 /// <summary>
 /// How this module asks for a notification to be raised.

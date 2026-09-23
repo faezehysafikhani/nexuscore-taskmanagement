@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Nexus.TaskManagement.Application;
 using Notifications.Application.Abstractions;
 
@@ -16,20 +17,30 @@ namespace Nexus.Integrations.TaskNotifications;
 /// Leave it out of a deployment and TaskManagement still runs: its own no-op publisher takes
 /// over and nothing else changes.
 /// </summary>
-public sealed class TaskNotificationPublisher(INotificationService notifications) : ITaskNotificationPublisher
+public sealed class TaskNotificationPublisher(
+    INotificationService notifications,
+    ILogger<TaskNotificationPublisher> logger) : ITaskNotificationPublisher
 {
     public async Task PublishAsync(TaskDueNotification notification, CancellationToken cancellationToken)
     {
         var title = $"یادآوری وظیفه: {notification.Title}";
+        var when = notification.DueAtText ?? TaskCreatedChannelNotifier.ToPersianDate(notification.DueDate);
         var message = string.IsNullOrWhiteSpace(notification.Description)
-            ? $"موعد انجام وظیفه «{notification.Title}» فرا رسیده است. (تاریخ: {notification.DueDate:yyyy-MM-dd})"
-            : $"موعد انجام وظیفه «{notification.Title}» فرا رسیده است. (تاریخ: {notification.DueDate:yyyy-MM-dd}) - {notification.Description}";
+            ? $"موعد انجام وظیفه «{notification.Title}» فرا رسیده است. (موعد: {when})"
+            : $"موعد انجام وظیفه «{notification.Title}» فرا رسیده است. (موعد: {when}) - {notification.Description}";
 
-        // Only the people the task named. RecipientUserIds is already de-duplicated and
-        // limited to the assignee, the collaborators and the owner.
+        // Only the people the task names, already limited to active users of its organization.
+        // Each is stored on its own, so one failure does not cost the others theirs.
         foreach (var userId in notification.RecipientUserIds)
         {
-            await notifications.NotifyAsync(userId, title, message, "Warning", cancellationToken);
+            try
+            {
+                await notifications.NotifyAsync(userId, title, message, "Warning", cancellationToken, notification.TenantId);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Notification for user {UserId} about task {TaskId} was not stored.", userId, notification.TaskId);
+            }
         }
     }
 }

@@ -12,6 +12,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="8.0.12" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.24" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.24" />
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="8.0.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
@@ -41,6 +42,8 @@
     <ProjectReference Include="..\Ticketing.Api\Ticketing.Api.csproj" />
     <ProjectReference Include="..\Ticketing.Application\Ticketing.Application.csproj" />
     <ProjectReference Include="..\Ticketing.Infrastructure\Ticketing.Infrastructure.csproj" />
+    <!-- RecurringTaskReminderTests: due recurring tasks through notifications and SMS. -->
+    <ProjectReference Include="..\Nexus.Integrations.TaskNotifications\Nexus.Integrations.TaskNotifications.csproj" />
 
     <ProjectReference Include="..\Nexus.Actions\Nexus.Actions.csproj" />
     <ProjectReference Include="..\Nexus.Actions.Infrastructure\Nexus.Actions.Infrastructure.csproj" />

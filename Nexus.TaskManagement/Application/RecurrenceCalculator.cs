@@ -9,11 +9,22 @@ namespace Nexus.TaskManagement.Application;
 /// <see cref="DayOfWeek"/>'s numbering (0 = Sunday), so every conversion goes through
 /// <see cref="ToJalaliDayIndex"/> rather than casting.
 ///
-/// Everything is computed in UTC. Times of day come from the schedule's StartTime; with none
-/// set, midnight is used.
+/// Dates and the StartTime (with none set, midnight) are the users' wall-clock values, in the
+/// configured time zone (<see cref="RecurrenceOptions"/>); the result is a UTC moment. The
+/// parameterless constructor keeps everything in UTC.
 /// </summary>
-public sealed class RecurrenceCalculator : IRecurrenceCalculator
+public sealed class RecurrenceCalculator(TimeZoneInfo timeZone) : IRecurrenceCalculator
 {
+    public RecurrenceCalculator() : this(TimeZoneInfo.Utc)
+    {
+    }
+
+    /// <summary>The configured zone, or UTC (with the reason logged by the caller) when the id is unknown.</summary>
+    public static TimeZoneInfo ResolveTimeZone(string? id) =>
+        !string.IsNullOrWhiteSpace(id) && TimeZoneInfo.TryFindSystemTimeZoneById(id, out var zone) ? zone : TimeZoneInfo.Utc;
+
+    public DateTimeOffset ToLocalTime(DateTimeOffset utc) => TimeZoneInfo.ConvertTime(utc, timeZone);
+
     public DateTimeOffset? CalculateNextExecution(RepetitiveTask schedule, DateTimeOffset afterUtc)
     {
         if (!schedule.IsActive)
@@ -25,7 +36,7 @@ public sealed class RecurrenceCalculator : IRecurrenceCalculator
 
         // Never look further ahead than two years - a schedule whose rules can never match
         // (an empty weekly day list, say) must terminate instead of spinning.
-        var cursor = DateOnly.FromDateTime(afterUtc.UtcDateTime.Date);
+        var cursor = DateOnly.FromDateTime(ToLocalTime(afterUtc).Date);
         if (cursor < schedule.StartDate)
         {
             cursor = schedule.StartDate;
@@ -42,7 +53,8 @@ public sealed class RecurrenceCalculator : IRecurrenceCalculator
 
             if (Matches(schedule, cursor))
             {
-                var candidate = new DateTimeOffset(cursor.ToDateTime(timeOfDay), TimeSpan.Zero);
+                var local = cursor.ToDateTime(timeOfDay);
+                var candidate = new DateTimeOffset(local, timeZone.GetUtcOffset(local)).ToUniversalTime();
                 if (candidate > afterUtc)
                 {
                     return candidate;
