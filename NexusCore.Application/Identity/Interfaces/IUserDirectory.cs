@@ -21,4 +21,7 @@ public interface IUserDirectory
     Task<IReadOnlyList<UserContact>> GetUsersAsync(IReadOnlyCollection<Guid> userIds, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<Guid>> GetGroupMemberIdsAsync(Guid groupId, CancellationToken cancellationToken);
+
+    /// <summary>The active groups (and work teams) the user is a member or the owner of.</summary>
+    Task<IReadOnlyList<Guid>> GetGroupIdsOfUserAsync(Guid userId, CancellationToken cancellationToken);
 }

@@ -16,6 +16,12 @@ public static class IdentityPermissions
     public const string PermissionsView = "permissions.view";
     public const string TenantsView = "tenants.view";
     public const string TenantsCreate = "tenants.create";
+
+    /// <summary>
+    /// Platform-wide administration: acting on users, roles, groups, settings and audit logs of
+    /// organizations other than one's own. Everyone else is confined to their own organization.
+    /// </summary>
+    public const string TenantsManageAll = "tenants.manage_all";
     public const string AuditLogsView = "audit_logs.view";
     public const string SettingsView = "settings.view";
     public const string SettingsUpdate = "settings.update";
@@ -28,29 +34,30 @@ public static class IdentityPermissions
 
     public static IReadOnlyList<PermissionDefinition> All { get; } =
     [
-        new(UsersView, "Identity", "View users"),
-        new(UsersCreate, "Identity", "Create users"),
-        new(UsersUpdate, "Identity", "Update users"),
-        new(UsersDelete, "Identity", "Delete users"),
-        new(UsersAssignRoles, "Identity", "Assign roles to users"),
-        new(UsersAssignPermissions, "Identity", "Grant permissions directly to users"),
-        new(UsersChangeStatus, "Identity", "Enable or disable users"),
-        new(RolesView, "Identity", "View roles"),
-        new(RolesCreate, "Identity", "Create roles"),
-        new(RolesUpdate, "Identity", "Update roles"),
-        new(RolesAssignPermissions, "Identity", "Assign permissions to roles"),
-        new(PermissionsView, "Identity", "View permissions"),
-        new(TenantsView, "Platform", "View tenants"),
-        new(TenantsCreate, "Platform", "Create tenants"),
-        new(AuditLogsView, "Platform", "View audit logs"),
-        new(SettingsView, "Platform", "View settings"),
-        new(SettingsUpdate, "Platform", "Update settings"),
-        new(SmsSettingsView, "Platform", "View the SMS panel settings and templates"),
-        new(SmsSettingsUpdate, "Platform", "Change the SMS panel settings and templates"),
-        new(SmsSettingsTest, "Platform", "Send test SMS messages"),
-        new(LdapSettingsView, "Platform", "View the LDAP settings"),
-        new(LdapSettingsUpdate, "Platform", "Change the LDAP settings"),
-        new(LdapSettingsTest, "Platform", "Test the LDAP connection")
+        new(UsersView, "Identity", "مشاهده کاربران"),
+        new(UsersCreate, "Identity", "ایجاد کاربر"),
+        new(UsersUpdate, "Identity", "ویرایش کاربران"),
+        new(UsersDelete, "Identity", "حذف کاربران"),
+        new(UsersAssignRoles, "Identity", "تخصیص نقش به کاربران"),
+        new(UsersAssignPermissions, "Identity", "اعطای مستقیم مجوز به کاربران"),
+        new(UsersChangeStatus, "Identity", "فعال یا غیرفعال کردن کاربران"),
+        new(RolesView, "Identity", "مشاهده نقش‌ها"),
+        new(RolesCreate, "Identity", "ایجاد نقش"),
+        new(RolesUpdate, "Identity", "ویرایش نقش‌ها"),
+        new(RolesAssignPermissions, "Identity", "تخصیص مجوز به نقش‌ها"),
+        new(PermissionsView, "Identity", "مشاهده مجوزها"),
+        new(TenantsView, "Platform", "مشاهده سازمان‌ها"),
+        new(TenantsCreate, "Platform", "ایجاد سازمان"),
+        new(TenantsManageAll, "Platform", "مدیریت همه سازمان‌ها (دسترسی فراسازمانی)"),
+        new(AuditLogsView, "Platform", "مشاهده گزارش رویدادها و تاریخچه ورود"),
+        new(SettingsView, "Platform", "مشاهده تنظیمات"),
+        new(SettingsUpdate, "Platform", "ویرایش تنظیمات"),
+        new(SmsSettingsView, "Platform", "مشاهده تنظیمات و متن‌های پنل پیامکی"),
+        new(SmsSettingsUpdate, "Platform", "ویرایش تنظیمات و متن‌های پنل پیامکی"),
+        new(SmsSettingsTest, "Platform", "ارسال پیامک آزمایشی"),
+        new(LdapSettingsView, "Platform", "مشاهده تنظیمات LDAP"),
+        new(LdapSettingsUpdate, "Platform", "ویرایش تنظیمات LDAP"),
+        new(LdapSettingsTest, "Platform", "آزمایش اتصال LDAP")
     ];
 }
 

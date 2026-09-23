@@ -21,4 +21,11 @@ public sealed class Permission : Entity<Guid>
     public string Name { get; private set; }
     public string Module { get; private set; }
     public string Description { get; private set; }
+
+    /// <summary>The name is the stable identifier; module and display text may be revised.</summary>
+    public void UpdateDisplay(string module, string description)
+    {
+        Module = module;
+        Description = description;
+    }
 }

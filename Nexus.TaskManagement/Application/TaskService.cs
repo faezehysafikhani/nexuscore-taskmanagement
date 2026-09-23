@@ -12,8 +12,17 @@ public sealed class TaskService(
     ITaskManagementUnitOfWork unitOfWork,
     ICurrentUserContext currentUser,
     ITaskActivityService activity,
-    IFileStorage fileStorage) : ITaskService
+    IFileStorage fileStorage,
+    ITaskAccessScope access) : ITaskService
 {
+    /// <summary>
+    /// Seeing a task (owner, assignee, collaborator, team) lets a user work on it; changing what
+    /// the task is - details, priority, assignment, schedule - or deleting it is for its owner
+    /// and for Tasks.ManageAll holders. Same rule as the task screen.
+    /// </summary>
+    internal static Error NotTaskOwner() =>
+        Error.Forbidden("Only the owner of this task, or a user who manages all tasks, can do this.");
+
     public async Task<Result<PagedResult<TaskListItemDto>>> ListAsync(
         ListTasksRequest request, CancellationToken cancellationToken)
     {
@@ -168,6 +177,11 @@ public sealed class TaskService(
             return Result.Failure<TaskDto>(Error.NotFound("Task not found."));
         }
 
+        if (!access.CanManage(task))
+        {
+            return Result.Failure<TaskDto>(NotTaskOwner());
+        }
+
         var referenceCheck = await ValidateReferencesAsync(
             tenantId, request.AssignedUserId, request.AssignedUserGroupId, request.AssigneeUserIds, cancellationToken);
         if (referenceCheck.IsFailure)
@@ -224,6 +238,11 @@ public sealed class TaskService(
         if (task is null)
         {
             return Result.Failure(Error.NotFound("Task not found."));
+        }
+
+        if (!access.CanManage(task))
+        {
+            return Result.Failure(NotTaskOwner());
         }
 
         // Junction rows use NoAction, so they have to go before the task does.
@@ -285,6 +304,11 @@ public sealed class TaskService(
             return Result.Failure<TaskDto>(Error.NotFound("Task not found."));
         }
 
+        if (!access.CanManage(task))
+        {
+            return Result.Failure<TaskDto>(NotTaskOwner());
+        }
+
         var previous = task.Priority;
         task.UpdateDetails(
             task.Title, task.Description, task.DueDate, request.Priority,
@@ -310,6 +334,11 @@ public sealed class TaskService(
         if (task is null)
         {
             return Result.Failure<TaskDto>(Error.NotFound("Task not found."));
+        }
+
+        if (!access.CanManage(task))
+        {
+            return Result.Failure<TaskDto>(NotTaskOwner());
         }
 
         var referenceCheck = await ValidateReferencesAsync(
@@ -348,6 +377,11 @@ public sealed class TaskService(
         if (task is null)
         {
             return Result.Failure<TaskDto>(Error.NotFound("Task not found."));
+        }
+
+        if (!access.CanManage(task))
+        {
+            return Result.Failure<TaskDto>(NotTaskOwner());
         }
 
         var referenceCheck = await ValidateReferencesAsync(

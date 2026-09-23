@@ -11,10 +11,10 @@ public static class WorkflowPermissions
 
     public static IReadOnlyList<PermissionDefinition> All { get; } =
     [
-        new(View, "Workflow", "View workflow definitions and the approval center"),
-        new(Configure, "Workflow", "Create and edit workflow definitions and steps"),
-        new(Approve, "Workflow", "Approve a pending workflow step"),
-        new(Reject, "Workflow", "Reject a pending workflow step")
+        new(View, "Workflow", "مشاهده تعاریف گردش‌کار و کارتابل تأیید"),
+        new(Configure, "Workflow", "ایجاد و ویرایش تعاریف و مراحل گردش‌کار"),
+        new(Approve, "Workflow", "تأیید مرحله در انتظار گردش‌کار"),
+        new(Reject, "Workflow", "رد مرحله در انتظار گردش‌کار")
     ];
 }
 

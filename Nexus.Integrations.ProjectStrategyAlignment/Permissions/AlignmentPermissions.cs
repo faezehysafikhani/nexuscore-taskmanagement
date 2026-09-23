@@ -9,8 +9,8 @@ public static class AlignmentPermissions
 
     public static IReadOnlyList<PermissionDefinition> All { get; } =
     [
-        new(View, "ProjectStrategyAlignment", "View the project x strategy alignment matrix"),
-        new(Manage, "ProjectStrategyAlignment", "Create or edit project x strategy alignments")
+        new(View, "ProjectStrategyAlignment", "مشاهده ماتریس هم‌راستایی پروژه و راهبرد"),
+        new(Manage, "ProjectStrategyAlignment", "ایجاد یا ویرایش هم‌راستایی پروژه و راهبرد")
     ];
 }
 

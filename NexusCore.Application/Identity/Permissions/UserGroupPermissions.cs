@@ -24,12 +24,12 @@ public static class UserGroupPermissions
 
     public static IReadOnlyList<PermissionDefinition> All { get; } =
     [
-        new(GroupsView, "Identity", "View user groups"),
-        new(GroupsCreate, "Identity", "Create user groups"),
-        new(GroupsUpdate, "Identity", "Update user groups"),
-        new(GroupsAssignPermissions, "Identity", "Assign permissions to user groups"),
-        new(GroupsManageMembers, "Identity", "Add or remove group members"),
-        new(GroupsDelete, "Identity", "Delete user groups"),
-        new(GroupsManageOwn, "Identity", "Create and manage own work teams")
+        new(GroupsView, "Identity", "مشاهده گروه‌های کاربری"),
+        new(GroupsCreate, "Identity", "ایجاد گروه کاربری"),
+        new(GroupsUpdate, "Identity", "ویرایش گروه‌های کاربری"),
+        new(GroupsAssignPermissions, "Identity", "تخصیص مجوز به گروه‌های کاربری"),
+        new(GroupsManageMembers, "Identity", "افزودن یا حذف اعضای گروه"),
+        new(GroupsDelete, "Identity", "حذف گروه‌های کاربری"),
+        new(GroupsManageOwn, "Identity", "ایجاد و مدیریت تیم‌های کاری خود")
     ];
 }

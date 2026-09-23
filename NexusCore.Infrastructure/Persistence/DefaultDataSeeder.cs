@@ -40,9 +40,16 @@ public sealed class DefaultDataSeeder(
 
         foreach (var permission in allPermissions)
         {
-            if (!await dbContext.Permissions.AnyAsync(x => x.Name == permission.Name, cancellationToken))
+            var existing = await dbContext.Permissions.SingleOrDefaultAsync(x => x.Name == permission.Name, cancellationToken);
+            if (existing is null)
             {
                 await dbContext.Permissions.AddAsync(new Permission(CreateStableGuid(permission.Name), permission.Name, permission.Module, permission.Description), cancellationToken);
+            }
+            else if (existing.Description != permission.Description || existing.Module != permission.Module)
+            {
+                // Display text follows the catalogue (e.g. the Persian titles); the name, id and
+                // every assignment stay as they are.
+                existing.UpdateDisplay(permission.Module, permission.Description);
             }
         }
 

@@ -91,6 +91,9 @@ public interface ITaskFileRepository
 
     Task<TaskFile?> GetLinkAsync(Guid linkId, CancellationToken cancellationToken);
 
+    /// <summary>Whether the file hangs off a task, subtask or comment the caller may reach.</summary>
+    Task<bool> IsReachableAsync(Guid fileId, CancellationToken cancellationToken);
+
     Task<IReadOnlyList<TaskFile>> ListForTaskAsync(Guid tenantId, Guid taskId, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<TaskFile>> ListForSubTaskAsync(Guid tenantId, Guid subTaskId, CancellationToken cancellationToken);

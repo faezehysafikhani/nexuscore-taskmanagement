@@ -1,3 +1,4 @@
+using NexusCore.Application.Identity.Permissions;
 using NexusCore.Application.Platform.Dtos;
 using NexusCore.Application.Platform.Interfaces;
 using NexusCore.Domain.Auditing;
@@ -39,6 +40,8 @@ public sealed class PlatformService(
     {
         var safe = query with
         {
+            // Only the caller's own organization, unless they may see every organization.
+            TenantId = currentUserContext.ResolveTenant(query.TenantId),
             PageNumber = Math.Max(1, query.PageNumber),
             PageSize = Math.Clamp(query.PageSize, 1, 100),
             Search = string.IsNullOrWhiteSpace(query.Search) ? null : query.Search.Trim(),
@@ -49,7 +52,7 @@ public sealed class PlatformService(
 
     public async Task<Result<IReadOnlyList<SettingDto>>> ListSettingsAsync(Guid? tenantId, CancellationToken cancellationToken)
     {
-        var settings = await repository.ListSettingsAsync(tenantId, cancellationToken);
+        var settings = await repository.ListSettingsAsync(currentUserContext.ResolveTenant(tenantId), cancellationToken);
         return Result.Success<IReadOnlyList<SettingDto>>(settings.Select(ToSettingDto).ToList());
     }
 
@@ -58,6 +61,12 @@ public sealed class PlatformService(
         if (string.IsNullOrWhiteSpace(request.Key))
         {
             return Result.Failure<SettingDto>(Error.Validation("Setting key is required."));
+        }
+
+        // A system-wide setting (no tenant) or another organization's needs tenants.manage_all.
+        if (!currentUserContext.CanAccessTenant(request.TenantId))
+        {
+            return Result.Failure<SettingDto>(Error.Forbidden("You can only change the settings of your own organization."));
         }
 
         var setting = await repository.FindSettingAsync(request.TenantId, request.Key, request.Scope, cancellationToken);

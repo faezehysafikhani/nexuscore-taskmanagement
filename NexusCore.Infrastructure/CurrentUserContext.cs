@@ -12,4 +12,5 @@ public sealed class CurrentUserContext(IHttpContextAccessor httpContextAccessor)
     public Guid? TenantId => Guid.TryParse(HttpContext?.User.FindFirst("tenant_id")?.Value, out var tenantId) ? tenantId : null;
     public string? Email => HttpContext?.User.FindFirst(JwtRegisteredClaimNames.Email)?.Value;
     public string? IpAddress => HttpContext?.Connection.RemoteIpAddress?.ToString();
+    public bool HasPermission(string permission) => HttpContext?.User.HasClaim("permission", permission) ?? false;
 }

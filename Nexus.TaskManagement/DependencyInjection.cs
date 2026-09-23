@@ -26,6 +26,7 @@ public static class DependencyInjection
         services.AddScoped<ITaskFileService, TaskFileService>();
         services.AddScoped<INoteService, NoteService>();
         services.AddScoped<ITaskCommentService, TaskCommentService>();
+        services.AddScoped<ITaskAccessScope, TaskAccessScope>();
 
         services.AddSingleton<IRecurrenceCalculator, RecurrenceCalculator>();
 

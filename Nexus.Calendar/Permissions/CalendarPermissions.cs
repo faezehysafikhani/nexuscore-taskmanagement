@@ -10,9 +10,9 @@ public static class CalendarPermissions
 
     public static IReadOnlyList<PermissionDefinition> All { get; } =
     [
-        new(View, "Calendar", "View work calendars"),
-        new(Create, "Calendar", "Create work calendars"),
-        new(Update, "Calendar", "Update work calendars and their exceptions")
+        new(View, "Calendar", "مشاهده تقویم‌های کاری"),
+        new(Create, "Calendar", "ایجاد تقویم کاری"),
+        new(Update, "Calendar", "ویرایش تقویم‌های کاری و استثناهای آن‌ها")
     ];
 }
 

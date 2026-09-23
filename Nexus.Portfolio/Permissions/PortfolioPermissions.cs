@@ -15,8 +15,8 @@ public static class PortfolioPermissions
 
     public static IReadOnlyList<PermissionDefinition> All { get; } =
     [
-        new(View, "Portfolio", "View the portfolio for items you own, manage, or are responsible for"),
-        new(ViewAll, "Portfolio", "View the full portfolio regardless of ownership")
+        new(View, "Portfolio", "مشاهده سبد پروژه‌های تحت مسئولیت خود"),
+        new(ViewAll, "Portfolio", "مشاهده کل سبد پروژه‌ها")
     ];
 }
 

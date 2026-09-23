@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using NexusCore.SharedKernel.Interfaces;
 using NexusCore.SharedKernel.Results;
 using Ticketing.Application.Abstractions;
+using Ticketing.Application.Common.Security;
 using Ticketing.Domain.Entities;
 
 namespace Ticketing.Application.Tickets.Commands.AddComment;
@@ -26,6 +27,7 @@ public class AddCommentCommandHandler
         CancellationToken cancellationToken)
     {
         var exists = await _db.Tickets
+            .VisibleTo(_currentUser)
             .AnyAsync(x => x.Id == request.TicketId, cancellationToken);
 
         if (!exists)

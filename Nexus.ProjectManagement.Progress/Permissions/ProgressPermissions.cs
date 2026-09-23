@@ -11,10 +11,10 @@ public static class ProgressPermissions
 
     public static IReadOnlyList<PermissionDefinition> All { get; } =
     [
-        new(View, "ProgressManagement", "View project status updates"),
-        new(Create, "ProgressManagement", "Create project status updates"),
-        new(Edit, "ProgressManagement", "Edit project status updates"),
-        new(Submit, "ProgressManagement", "Submit status updates for approval")
+        new(View, "ProgressManagement", "مشاهده گزارش‌های وضعیت پروژه"),
+        new(Create, "ProgressManagement", "ایجاد گزارش وضعیت پروژه"),
+        new(Edit, "ProgressManagement", "ویرایش گزارش‌های وضعیت پروژه"),
+        new(Submit, "ProgressManagement", "ارسال گزارش‌های وضعیت برای تأیید")
     ];
 }
 

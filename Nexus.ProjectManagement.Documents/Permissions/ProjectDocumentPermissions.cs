@@ -12,11 +12,11 @@ public static class ProjectDocumentPermissions
 
     public static IReadOnlyList<PermissionDefinition> All { get; } =
     [
-        new(View, "ProjectDocuments", "View and download project documents"),
-        new(Upload, "ProjectDocuments", "Upload project documents"),
-        new(Edit, "ProjectDocuments", "Edit project document metadata"),
-        new(Delete, "ProjectDocuments", "Delete project documents"),
-        new(Submit, "ProjectDocuments", "Submit project documents for approval")
+        new(View, "ProjectDocuments", "مشاهده و دریافت مستندات پروژه"),
+        new(Upload, "ProjectDocuments", "بارگذاری مستندات پروژه"),
+        new(Edit, "ProjectDocuments", "ویرایش مشخصات مستندات پروژه"),
+        new(Delete, "ProjectDocuments", "حذف مستندات پروژه"),
+        new(Submit, "ProjectDocuments", "ارسال مستندات پروژه برای تأیید")
     ];
 }
 

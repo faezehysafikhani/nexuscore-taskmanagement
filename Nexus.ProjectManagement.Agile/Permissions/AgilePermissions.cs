@@ -12,11 +12,11 @@ public static class AgilePermissions
 
     public static IReadOnlyList<PermissionDefinition> All { get; } =
     [
-        new(View, "AgilePlanning", "View the agile task board"),
-        new(Create, "AgilePlanning", "Create agile tasks"),
-        new(Edit, "AgilePlanning", "Edit agile tasks"),
-        new(Delete, "AgilePlanning", "Delete agile tasks"),
-        new(Submit, "AgilePlanning", "Submit agile tasks for approval")
+        new(View, "AgilePlanning", "مشاهده بورد وظایف چابک"),
+        new(Create, "AgilePlanning", "ایجاد وظیفه چابک"),
+        new(Edit, "AgilePlanning", "ویرایش وظایف چابک"),
+        new(Delete, "AgilePlanning", "حذف وظایف چابک"),
+        new(Submit, "AgilePlanning", "ارسال وظایف چابک برای تأیید")
     ];
 }
 

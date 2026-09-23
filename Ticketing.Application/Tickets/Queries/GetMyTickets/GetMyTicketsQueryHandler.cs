@@ -26,6 +26,7 @@ public class GetMyTicketsQueryHandler
         CancellationToken cancellationToken)
     {
         var tickets = await _db.Tickets
+            .Where(x => x.TenantId == _currentUser.TenantId)
             .Where(x => x.CreatedByUserId == _currentUser.UserId
                      || x.AssignedToUserId == _currentUser.UserId)
             .OrderByDescending(x => x.CreatedAtUtc)

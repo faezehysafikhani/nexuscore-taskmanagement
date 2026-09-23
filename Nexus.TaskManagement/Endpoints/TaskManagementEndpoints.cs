@@ -34,6 +34,7 @@ public static class TaskManagementEndpoints
         var group = app.MapGroup("/api/task-management/tasks")
             .WithTags("Tasks")
             .RequireAuthorization()
+            .AddEndpointFilter<TaskAccessScopeFilter>()
             .AddEndpointFilter<RequestValidationFilter>()
             .AddEndpointFilter<TaskChangeBroadcastFilter>();
 
@@ -160,6 +161,7 @@ public static class TaskManagementEndpoints
         var group = app.MapGroup("/api/task-management/subtasks")
             .WithTags("Subtasks")
             .RequireAuthorization()
+            .AddEndpointFilter<TaskAccessScopeFilter>()
             .AddEndpointFilter<RequestValidationFilter>()
             .AddEndpointFilter<TaskChangeBroadcastFilter>();
 
@@ -201,6 +203,7 @@ public static class TaskManagementEndpoints
         var group = app.MapGroup("/api/task-management/repetitive-tasks")
             .WithTags("Recurring tasks")
             .RequireAuthorization()
+            .AddEndpointFilter<TaskAccessScopeFilter>()
             .AddEndpointFilter<RequestValidationFilter>()
             .AddEndpointFilter<TaskChangeBroadcastFilter>();
 
@@ -254,6 +257,7 @@ public static class TaskManagementEndpoints
         var group = app.MapGroup("/api/task-management/tags")
             .WithTags("Task tags")
             .RequireAuthorization()
+            .AddEndpointFilter<TaskAccessScopeFilter>()
             .AddEndpointFilter<RequestValidationFilter>()
             .AddEndpointFilter<TaskChangeBroadcastFilter>();
 
@@ -281,6 +285,7 @@ public static class TaskManagementEndpoints
         var group = app.MapGroup("/api/task-management/files")
             .WithTags("Task files")
             .RequireAuthorization()
+            .AddEndpointFilter<TaskAccessScopeFilter>()
             .AddEndpointFilter<RequestValidationFilter>()
             .AddEndpointFilter<TaskChangeBroadcastFilter>();
 
@@ -342,6 +347,7 @@ public static class TaskManagementEndpoints
         var group = app.MapGroup("/api/task-management/notes")
             .WithTags("Personal notes")
             .RequireAuthorization()
+            .AddEndpointFilter<TaskAccessScopeFilter>()
             .AddEndpointFilter<RequestValidationFilter>();
 
         // Notes are private, so there is no "list another user's notes" route by design -
@@ -371,6 +377,7 @@ public static class TaskManagementEndpoints
         var comments = app.MapGroup("/api/task-management/comments")
             .WithTags("Task comments")
             .RequireAuthorization()
+            .AddEndpointFilter<TaskAccessScopeFilter>()
             .AddEndpointFilter<RequestValidationFilter>()
             .AddEndpointFilter<TaskChangeBroadcastFilter>();
 

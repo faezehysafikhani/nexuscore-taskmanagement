@@ -15,8 +15,8 @@ public static class ReportingPermissions
 
     public static IReadOnlyList<PermissionDefinition> All { get; } =
     [
-        new(View, "Reporting", "View your own dashboard"),
-        new(ViewAll, "Reporting", "View tenant/organization-wide summaries and any project's dashboard")
+        new(View, "Reporting", "مشاهده داشبورد شخصی"),
+        new(ViewAll, "Reporting", "مشاهده خلاصه‌های کل سازمان و داشبورد همه پروژه‌ها")
     ];
 }
 

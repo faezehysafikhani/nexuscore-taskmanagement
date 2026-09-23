@@ -291,6 +291,10 @@ public sealed class TaskFileRepository(TaskManagementDbContext db) : ITaskFileRe
     public Task<TaskFile?> GetLinkAsync(Guid linkId, CancellationToken cancellationToken) =>
         db.TaskFiles.FirstOrDefaultAsync(f => f.Id == linkId, cancellationToken);
 
+    // TaskFiles carries the access query filter, so only links to reachable owners count.
+    public Task<bool> IsReachableAsync(Guid fileId, CancellationToken cancellationToken) =>
+        db.TaskFiles.AnyAsync(f => f.FileId == fileId, cancellationToken);
+
     public async Task<IReadOnlyList<TaskFile>> ListForTaskAsync(
         Guid tenantId, Guid taskId, CancellationToken cancellationToken) =>
         await db.TaskFiles

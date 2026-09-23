@@ -1,7 +1,9 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using NexusCore.SharedKernel.Interfaces;
 using NexusCore.SharedKernel.Results;
 using Ticketing.Application.Abstractions;
+using Ticketing.Application.Common.Security;
 using Ticketing.Application.Common.Dtos;
 
 namespace Ticketing.Application.Tickets.Queries.GetTicketDetails;
@@ -10,10 +12,12 @@ public class GetTicketDetailsQueryHandler
     : IRequestHandler<GetTicketDetailsQuery, Result<TicketDetailsDto>>
 {
     private readonly ITicketingDbContext _db;
+    private readonly ICurrentUserContext _currentUser;
 
-    public GetTicketDetailsQueryHandler(ITicketingDbContext db)
+    public GetTicketDetailsQueryHandler(ITicketingDbContext db, ICurrentUserContext currentUser)
     {
         _db = db;
+        _currentUser = currentUser;
     }
 
     public async Task<Result<TicketDetailsDto>> Handle(
@@ -21,6 +25,7 @@ public class GetTicketDetailsQueryHandler
         CancellationToken cancellationToken)
     {
         var ticket = await _db.Tickets
+            .VisibleTo(_currentUser)
             .FirstOrDefaultAsync(x => x.Id == request.TicketId, cancellationToken);
 
         if (ticket is null)

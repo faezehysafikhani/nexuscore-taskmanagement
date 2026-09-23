@@ -149,7 +149,7 @@ public sealed class IdentityService(
     public async Task<Result<PagedResult<UserDto>>> ListUsersAsync(Guid? tenantId, int? pageNumber, int? pageSize, string? search, CancellationToken cancellationToken)
     {
         var users = await repository.ListUsersAsync(
-    tenantId,
+    currentUser.ResolveTenant(tenantId),
     pageNumber,
     pageSize,
     search,
@@ -170,7 +170,8 @@ public sealed class IdentityService(
             return Result.Failure<UserDto>(validation.Error);
         }
 
-        if (await repository.GetTenantByIdAsync(request.TenantId, cancellationToken) is null)
+        if (!currentUser.CanAccessTenant(request.TenantId)
+            || await repository.GetTenantByIdAsync(request.TenantId, cancellationToken) is null)
         {
             return Result.Failure<UserDto>(Error.NotFound("Tenant was not found."));
         }
@@ -201,7 +202,8 @@ public sealed class IdentityService(
         }
 
         var user = await repository.GetUserByIdAsync(userId, cancellationToken);
-        if (user is null)
+        // Another organization's user does not exist for this caller.
+        if (user is null || !currentUser.CanAccessTenant(user.TenantId))
         {
             return Result.Failure<UserDto>(Error.NotFound("User was not found."));
         }
@@ -292,7 +294,8 @@ public sealed class IdentityService(
     public async Task<Result<UserDto>> SetUserStatusAsync(Guid userId, SetUserStatusRequest request, CancellationToken cancellationToken)
     {
         var user = await repository.GetUserByIdAsync(userId, cancellationToken);
-        if (user is null)
+        // Another organization's user does not exist for this caller.
+        if (user is null || !currentUser.CanAccessTenant(user.TenantId))
         {
             return Result.Failure<UserDto>(Error.NotFound("User was not found."));
         }
@@ -322,7 +325,8 @@ public sealed class IdentityService(
     public async Task<Result> DeleteUserAsync(Guid userId, CancellationToken cancellationToken)
     {
         var user = await repository.GetUserByIdAsync(userId, cancellationToken);
-        if (user is null)
+        // Another organization's user does not exist for this caller.
+        if (user is null || !currentUser.CanAccessTenant(user.TenantId))
         {
             return Result.Failure(Error.NotFound("User was not found."));
         }
@@ -356,7 +360,8 @@ public sealed class IdentityService(
     public async Task<Result> AssignRolesAsync(Guid userId, AssignUserRolesRequest request, CancellationToken cancellationToken)
     {
         var user = await repository.GetUserByIdAsync(userId, cancellationToken);
-        if (user is null)
+        // Another organization's user does not exist for this caller.
+        if (user is null || !currentUser.CanAccessTenant(user.TenantId))
         {
             return Result.Failure(Error.NotFound("User was not found."));
         }
@@ -367,7 +372,26 @@ public sealed class IdentityService(
             return guard;
         }
 
-        user.SetRoles(request.RoleIds);
+        var requestedRoles = request.RoleIds.Distinct().ToList();
+        var tenantRoles = (await repository.ListRolesAsync(user.TenantId, cancellationToken)).ToDictionary(role => role.Id);
+        if (requestedRoles.Any(id => !tenantRoles.ContainsKey(id)))
+        {
+            return Result.Failure(Error.Validation("One or more roles do not exist in the user's organization."));
+        }
+
+        var currentRoles = user.Roles.Select(role => role.RoleId).ToHashSet();
+        var notHeld = requestedRoles
+            .Where(id => !currentRoles.Contains(id))
+            .SelectMany(id => tenantRoles[id].Permissions.Select(grant => grant.Permission?.Name ?? string.Empty))
+            .Where(name => name.Length > 0 && !CallerHolds(name))
+            .Distinct()
+            .ToList();
+        if (notHeld.Count > 0)
+        {
+            return Result.Failure(Error.Forbidden("You can only assign roles whose permissions you have yourself: " + string.Join(", ", notHeld)));
+        }
+
+        user.SetRoles(requestedRoles);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await platformService.AuditAsync("users.assign_roles", nameof(User), user.Id.ToString(), string.Join(",", request.RoleIds), cancellationToken);
         return Result.Success();
@@ -381,7 +405,8 @@ public sealed class IdentityService(
     public async Task<Result<UserPermissionsDto>> GetUserAccessAsync(Guid userId, CancellationToken cancellationToken)
     {
         var user = await repository.GetUserByIdAsync(userId, cancellationToken);
-        if (user is null)
+        // Another organization's user does not exist for this caller.
+        if (user is null || !currentUser.CanAccessTenant(user.TenantId))
         {
             return Result.Failure<UserPermissionsDto>(Error.NotFound("User was not found."));
         }
@@ -422,7 +447,8 @@ public sealed class IdentityService(
     public async Task<Result> SetUserDirectPermissionsAsync(Guid userId, AssignUserPermissionsRequest request, CancellationToken cancellationToken)
     {
         var user = await repository.GetUserByIdAsync(userId, cancellationToken);
-        if (user is null)
+        // Another organization's user does not exist for this caller.
+        if (user is null || !currentUser.CanAccessTenant(user.TenantId))
         {
             return Result.Failure(Error.NotFound("User was not found."));
         }
@@ -479,7 +505,7 @@ public sealed class IdentityService(
 
     public async Task<Result<IReadOnlyList<RoleDto>>> ListRolesAsync(Guid? tenantId, CancellationToken cancellationToken)
     {
-        var roles = await repository.ListRolesAsync(tenantId, cancellationToken);
+        var roles = await repository.ListRolesAsync(currentUser.ResolveTenant(tenantId), cancellationToken);
         return Result.Success<IReadOnlyList<RoleDto>>(roles.Select(ToRoleDto).ToList());
     }
 
@@ -489,6 +515,11 @@ public sealed class IdentityService(
         if (validation.IsFailure)
         {
             return Result.Failure<RoleDto>(validation.Error);
+        }
+
+        if (!currentUser.CanAccessTenant(request.TenantId))
+        {
+            return Result.Failure<RoleDto>(Error.NotFound("Tenant was not found."));
         }
 
         if (await repository.RoleNameExistsAsync(request.TenantId, request.Name, cancellationToken))
@@ -506,9 +537,14 @@ public sealed class IdentityService(
     public async Task<Result<RoleDto>> UpdateRoleAsync(Guid roleId, UpdateRoleRequest request, CancellationToken cancellationToken)
     {
         var role = await repository.GetRoleByIdAsync(roleId, cancellationToken);
-        if (role is null)
+        if (role is null || !currentUser.CanAccessTenant(role.TenantId))
         {
             return Result.Failure<RoleDto>(Error.NotFound("Role was not found."));
+        }
+
+        if (role.IsSystem)
+        {
+            return Result.Failure<RoleDto>(Error.Forbidden("The built-in Administrator role cannot be changed."));
         }
 
         role.Update(request.Name, request.Description);
@@ -520,12 +556,33 @@ public sealed class IdentityService(
     public async Task<Result> AssignPermissionsAsync(Guid roleId, AssignRolePermissionsRequest request, CancellationToken cancellationToken)
     {
         var role = await repository.GetRoleByIdAsync(roleId, cancellationToken);
-        if (role is null)
+        if (role is null || !currentUser.CanAccessTenant(role.TenantId))
         {
             return Result.Failure(Error.NotFound("Role was not found."));
         }
 
-        role.SetPermissions(request.PermissionIds);
+        // The Administrator role always carries every permission (the seeder restores it);
+        // editing it could only lock administrators out.
+        if (role.IsSystem)
+        {
+            return Result.Failure(Error.Forbidden("The permissions of the built-in Administrator role cannot be changed."));
+        }
+
+        var requested = request.PermissionIds.Distinct().ToList();
+        var known = await repository.GetPermissionsByIdsAsync(requested, cancellationToken);
+        if (known.Count != requested.Count)
+        {
+            return Result.Failure(Error.Validation("One or more permissions do not exist."));
+        }
+
+        var already = role.Permissions.Select(grant => grant.PermissionId).ToHashSet();
+        var notHeld = known.Where(permission => !already.Contains(permission.Id) && !CallerHolds(permission.Name)).Select(permission => permission.Name).ToList();
+        if (notHeld.Count > 0)
+        {
+            return Result.Failure(Error.Forbidden("You can only grant permissions you have yourself: " + string.Join(", ", notHeld)));
+        }
+
+        role.SetPermissions(requested);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await platformService.AuditAsync("roles.assign_permissions", nameof(Role), role.Id.ToString(), string.Join(",", request.PermissionIds), cancellationToken);
         return Result.Success();
@@ -604,6 +661,9 @@ public sealed class IdentityService(
         var value = identifier.Trim();
         return value.Length <= 64 ? value : value[..64];
     }
+
+    /// <summary>Background work has no caller and is not limited; a person needs the permission.</summary>
+    private bool CallerHolds(string permission) => currentUser.UserId is null || currentUser.HasPermission(permission);
 
     private static UserDto ToUserDto(User user) => IdentityMappings.ToUserDto(user);
 

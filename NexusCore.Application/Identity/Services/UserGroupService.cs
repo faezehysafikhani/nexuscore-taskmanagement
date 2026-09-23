@@ -1,5 +1,6 @@
 ﻿using NexusCore.Application.Identity.Dtos;
 using NexusCore.Application.Identity.Interfaces;
+using NexusCore.Application.Identity.Permissions;
 using NexusCore.Application.Platform.Interfaces;
 using NexusCore.Domain.Identity;
 using NexusCore.SharedKernel.Interfaces;
@@ -17,7 +18,7 @@ public sealed class UserGroupService(
 {
     public async Task<Result<IReadOnlyList<UserGroupDto>>> ListAsync(Guid? tenantId, CancellationToken cancellationToken)
     {
-        var groups = await repository.ListAsync(tenantId, cancellationToken);
+        var groups = await repository.ListAsync(currentUser.ResolveTenant(tenantId), cancellationToken);
         var users = await LoadMemberUsersAsync(groups, cancellationToken);
         return Result.Success<IReadOnlyList<UserGroupDto>>(groups.Select(group => ToDto(group, users)).ToList());
     }
@@ -25,7 +26,7 @@ public sealed class UserGroupService(
     public async Task<Result<UserGroupDto>> GetAsync(Guid groupId, CancellationToken cancellationToken)
     {
         var group = await repository.GetByIdAsync(groupId, cancellationToken);
-        if (group is null)
+        if (group is null || !currentUser.CanAccessTenant(group.TenantId))
         {
             return Result.Failure<UserGroupDto>(Error.NotFound("User group was not found."));
         }
@@ -39,6 +40,11 @@ public sealed class UserGroupService(
         if (string.IsNullOrWhiteSpace(request.Name))
         {
             return Result.Failure<UserGroupDto>(Error.Validation("Group name is required."));
+        }
+
+        if (!currentUser.CanAccessTenant(request.TenantId))
+        {
+            return Result.Failure<UserGroupDto>(Error.NotFound("Tenant was not found."));
         }
 
         var normalized = request.Name.Trim().ToUpperInvariant();
@@ -58,7 +64,7 @@ public sealed class UserGroupService(
     public async Task<Result<UserGroupDto>> UpdateAsync(Guid groupId, UpdateUserGroupRequest request, CancellationToken cancellationToken)
     {
         var group = await repository.GetByIdAsync(groupId, cancellationToken);
-        if (group is null)
+        if (group is null || !currentUser.CanAccessTenant(group.TenantId))
         {
             return Result.Failure<UserGroupDto>(Error.NotFound("User group was not found."));
         }
@@ -85,7 +91,7 @@ public sealed class UserGroupService(
     public async Task<Result> AssignPermissionsAsync(Guid groupId, AssignGroupPermissionsRequest request, CancellationToken cancellationToken)
     {
         var group = await repository.GetByIdAsync(groupId, cancellationToken);
-        if (group is null)
+        if (group is null || !currentUser.CanAccessTenant(group.TenantId))
         {
             return Result.Failure(Error.NotFound("User group was not found."));
         }
@@ -97,10 +103,22 @@ public sealed class UserGroupService(
             return Result.Failure(Error.Validation("A personal work team cannot carry permissions."));
         }
 
-        var known = (await identityRepository.ListPermissionsAsync(cancellationToken)).Select(permission => permission.Id).ToHashSet();
-        if (request.PermissionIds.Any(id => !known.Contains(id)))
+        var known = (await identityRepository.ListPermissionsAsync(cancellationToken)).ToDictionary(permission => permission.Id);
+        if (request.PermissionIds.Any(id => !known.ContainsKey(id)))
         {
             return Result.Failure(Error.Validation("One or more permissions do not exist."));
+        }
+
+        // Same rule as for users and roles: nobody hands out a permission they do not have.
+        var already = group.Permissions.Select(grant => grant.PermissionId).ToHashSet();
+        var notHeld = request.PermissionIds.Distinct()
+            .Where(id => !already.Contains(id))
+            .Select(id => known[id].Name)
+            .Where(name => currentUser.UserId is not null && !currentUser.HasPermission(name))
+            .ToList();
+        if (notHeld.Count > 0)
+        {
+            return Result.Failure(Error.Forbidden("You can only grant permissions you have yourself: " + string.Join(", ", notHeld)));
         }
 
         group.SetPermissions(request.PermissionIds);
@@ -112,7 +130,7 @@ public sealed class UserGroupService(
     public async Task<Result> AssignMembersAsync(Guid groupId, AssignGroupMembersRequest request, CancellationToken cancellationToken)
     {
         var group = await repository.GetByIdAsync(groupId, cancellationToken);
-        if (group is null)
+        if (group is null || !currentUser.CanAccessTenant(group.TenantId))
         {
             return Result.Failure(Error.NotFound("User group was not found."));
         }
@@ -138,7 +156,7 @@ public sealed class UserGroupService(
     public async Task<Result> DeleteAsync(Guid groupId, CancellationToken cancellationToken)
     {
         var group = await repository.GetByIdAsync(groupId, cancellationToken);
-        if (group is null)
+        if (group is null || !currentUser.CanAccessTenant(group.TenantId))
         {
             return Result.Failure(Error.NotFound("User group was not found."));
         }

@@ -22,6 +22,7 @@ namespace Nexus.TaskManagement.Infrastructure;
 /// </summary>
 public sealed class TaskActivityService(
     NexusCoreDbContext coreDb,
+    TaskManagementDbContext taskDb,
     ICurrentUserContext currentUser) : ITaskActivityService
 {
     public const string TaskEntityName = "TaskManagement.Task";
@@ -36,6 +37,12 @@ public sealed class TaskActivityService(
 
         var tenantId = currentUser.TenantId.Value;
         var key = taskId.ToString();
+
+        // The history is the task's: only for a task the caller may see (query filter).
+        if (!await taskDb.Tasks.AnyAsync(task => task.Id == taskId && task.TenantId == tenantId, cancellationToken))
+        {
+            return Result.Failure<IReadOnlyList<TaskActivityDto>>(Error.NotFound("Task not found."));
+        }
 
         var entries = await coreDb.AuditLogs
             .Where(a => a.TenantId == tenantId && a.EntityName == TaskEntityName && a.EntityId == key)

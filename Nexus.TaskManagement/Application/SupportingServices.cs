@@ -15,8 +15,13 @@ public sealed class RepetitiveTaskService(
     ITaskRepository taskRepository,
     IRecurrenceCalculator calculator,
     ITaskManagementUnitOfWork unitOfWork,
-    ICurrentUserContext currentUser) : IRepetitiveTaskService
+    ICurrentUserContext currentUser,
+    ITaskAccessScope access) : IRepetitiveTaskService
 {
+    /// <summary>A schedule is part of its task: only the task's owner (or Tasks.ManageAll) changes it.</summary>
+    private async Task<bool> CanManageTaskAsync(Guid tenantId, Guid taskId, CancellationToken cancellationToken) =>
+        await taskRepository.GetForUpdateAsync(tenantId, taskId, cancellationToken) is { } task && access.CanManage(task);
+
     public async Task<Result<PagedResult<RepetitiveTaskDto>>> ListAsync(
         ListRepetitiveTasksRequest request, CancellationToken cancellationToken)
     {
@@ -67,6 +72,11 @@ public sealed class RepetitiveTaskService(
             return Result.Failure<RepetitiveTaskDto>(Error.NotFound("Task not found."));
         }
 
+        if (!access.CanManage(task))
+        {
+            return Result.Failure<RepetitiveTaskDto>(TaskService.NotTaskOwner());
+        }
+
         // One schedule per task - the database enforces it too, but failing here gives a
         // usable message instead of a unique-index violation.
         var existing = await repository.GetByTaskIdAsync(tenantId, request.TaskId, cancellationToken);
@@ -102,6 +112,11 @@ public sealed class RepetitiveTaskService(
             return Result.Failure<RepetitiveTaskDto>(Error.NotFound("Recurrence schedule not found."));
         }
 
+        if (!await CanManageTaskAsync(currentUser.TenantId.Value, schedule.TaskId, cancellationToken))
+        {
+            return Result.Failure<RepetitiveTaskDto>(TaskService.NotTaskOwner());
+        }
+
         TaskService.ApplyRecurrence(schedule, request.Recurrence);
         schedule.SetNextExecution(calculator.CalculateNextExecution(schedule, DateTimeOffset.UtcNow));
 
@@ -122,6 +137,11 @@ public sealed class RepetitiveTaskService(
             return Result.Failure(Error.NotFound("Recurrence schedule not found."));
         }
 
+        if (!await CanManageTaskAsync(currentUser.TenantId.Value, schedule.TaskId, cancellationToken))
+        {
+            return Result.Failure(TaskService.NotTaskOwner());
+        }
+
         repository.Remove(schedule);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success();
@@ -139,6 +159,11 @@ public sealed class RepetitiveTaskService(
         if (schedule is null)
         {
             return Result.Failure<RepetitiveTaskDto>(Error.NotFound("Recurrence schedule not found."));
+        }
+
+        if (!await CanManageTaskAsync(currentUser.TenantId.Value, schedule.TaskId, cancellationToken))
+        {
+            return Result.Failure<RepetitiveTaskDto>(TaskService.NotTaskOwner());
         }
 
         if (isActive)
@@ -458,7 +483,8 @@ public sealed class TaskFileService(
         }
 
         var asset = await repository.GetAssetAsync(currentUser.TenantId.Value, fileId, cancellationToken);
-        if (asset is null)
+        // Knowing a file's id is not enough: it must belong to something the caller can see.
+        if (asset is null || !await repository.IsReachableAsync(fileId, cancellationToken))
         {
             return Result.Failure<FileDownload>(Error.NotFound("File not found."));
         }

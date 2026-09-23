@@ -12,11 +12,11 @@ public static class ProjectPermissions
 
     public static IReadOnlyList<PermissionDefinition> All { get; } =
     [
-        new(View, "ProjectManagement", "View projects"),
-        new(Create, "ProjectManagement", "Create projects"),
-        new(Edit, "ProjectManagement", "Edit projects"),
-        new(Delete, "ProjectManagement", "Archive projects"),
-        new(Submit, "ProjectManagement", "Submit projects for approval")
+        new(View, "ProjectManagement", "مشاهده پروژه‌ها"),
+        new(Create, "ProjectManagement", "ایجاد پروژه"),
+        new(Edit, "ProjectManagement", "ویرایش پروژه‌ها"),
+        new(Delete, "ProjectManagement", "بایگانی پروژه‌ها"),
+        new(Submit, "ProjectManagement", "ارسال پروژه‌ها برای تأیید")
     ];
 }
 

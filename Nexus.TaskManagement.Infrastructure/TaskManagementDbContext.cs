@@ -16,7 +16,9 @@ namespace Nexus.TaskManagement.Infrastructure;
 /// SharedIdentityConfigurations, so this context references those tables and never creates,
 /// alters or drops them - NexusCoreDbContext remains their single owner.
 /// </summary>
-public sealed class TaskManagementDbContext(DbContextOptions<TaskManagementDbContext> options)
+public sealed class TaskManagementDbContext(
+    DbContextOptions<TaskManagementDbContext> options,
+    ITaskAccessScope? access = null)
     : DbContext(options), ITaskManagementUnitOfWork
 {
     public DbSet<TaskItem> Tasks => Set<TaskItem>();
@@ -34,8 +36,37 @@ public sealed class TaskManagementDbContext(DbContextOptions<TaskManagementDbCon
     public DbSet<User> Users => Set<User>();
     public DbSet<UserGroup> UserGroups => Set<UserGroup>();
 
+    // Read per query from this context instance (EF parameterises them), so one cached model
+    // serves every user. See ITaskAccessScope for the rule.
+    private bool AccessRestricted => access?.IsRestricted ?? false;
+    private Guid? AccessUserId => access?.UserId;
+    private List<Guid> AccessGroupIds => access?.GroupIds.ToList() ?? [];
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(TaskManagementDbContext).Assembly);
+
+        // Resource-level access, inside every query. A task the user may not reach is filtered
+        // out, and everything hanging off it follows through its navigation: each of those
+        // filters reads a non-key column of the task, so EF joins the (filtered) task instead of
+        // short-circuiting to the foreign key.
+        modelBuilder.Entity<TaskItem>().HasQueryFilter(task =>
+            !AccessRestricted
+            || task.OwnerUserId == null
+            || task.OwnerUserId == AccessUserId
+            || task.AssignedUserId == AccessUserId
+            || task.Assignees.Any(assignee => assignee.UserId == AccessUserId)
+            || (task.AssignedUserGroupId != null && AccessGroupIds.Contains(task.AssignedUserGroupId.Value)));
+
+        modelBuilder.Entity<SubTask>().HasQueryFilter(subTask => subTask.Task!.Title != null);
+        modelBuilder.Entity<RepetitiveTask>().HasQueryFilter(schedule => schedule.Task!.Title != null);
+        modelBuilder.Entity<TaskComment>().HasQueryFilter(comment => comment.Task!.Title != null);
+        modelBuilder.Entity<TaskFile>().HasQueryFilter(link =>
+            (link.TaskId == null || link.Task!.Title != null)
+            && (link.SubTaskId == null || link.SubTask!.Title != null)
+            && (link.CommentId == null || link.Comment!.Text != null));
+        modelBuilder.Entity<TaskTag>().HasQueryFilter(link =>
+            (link.TaskId == null || link.Task!.Title != null)
+            && (link.SubTaskId == null || link.SubTask!.Title != null));
     }
 }
