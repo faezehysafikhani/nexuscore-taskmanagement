@@ -21,6 +21,9 @@ public interface IIdentityRepository
     Task<Tenant?> GetTenantBySlugAsync(string slug, CancellationToken cancellationToken);
     Task AddPasswordResetTokenAsync(PasswordResetToken token, CancellationToken cancellationToken);
     Task<PasswordResetToken?> FindActivePasswordResetTokenAsync(string tokenHash, CancellationToken cancellationToken);
+
+    /// <summary>The user's newest reset token that is neither used nor withdrawn - expired or not.</summary>
+    Task<PasswordResetToken?> FindLatestOutstandingPasswordResetTokenAsync(Guid userId, CancellationToken cancellationToken);
     /// <summary>Revokes every active refresh token of the user: signs them out everywhere.</summary>
     Task RevokeRefreshTokensAsync(Guid userId, CancellationToken cancellationToken);
     Task InvalidatePasswordResetTokensAsync(Guid userId, DateTimeOffset nowUtc, CancellationToken cancellationToken);

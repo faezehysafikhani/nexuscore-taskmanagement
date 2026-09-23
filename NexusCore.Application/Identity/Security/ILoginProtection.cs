@@ -8,7 +8,8 @@ public enum AuthAction
 {
     Login,
     Captcha,
-    ForgotPassword
+    ForgotPassword,
+    ResetCode
 }
 
 /// <summary>
@@ -40,6 +41,21 @@ public interface ILoginProtection
 
     /// <summary>Counts one use of an anonymous action by the calling client; too_many_requests when over the limit.</summary>
     Task<Result> ThrottleAsync(AuthAction action, CancellationToken cancellationToken);
+
+    // Password recovery. Keyed by the identifier as typed, never by an account, so the answers
+    // are the same whether or not the account exists.
+
+    /// <summary>Before an SMS code is sent: a pause between codes and a cap per window; too_many_requests otherwise.</summary>
+    Task<Result> BeforeResetCodeRequestAsync(string identifier, CancellationToken cancellationToken);
+
+    /// <summary>Before a code is checked: too_many_requests once the identifier used up its attempts.</summary>
+    Task<Result> BeforeResetCodeAttemptAsync(string identifier, CancellationToken cancellationToken);
+
+    /// <summary>Records a wrong code. Returns true when that was the last attempt allowed.</summary>
+    Task<bool> RecordFailedResetCodeAsync(string identifier, CancellationToken cancellationToken);
+
+    /// <summary>After a code was confirmed.</summary>
+    Task ClearResetCodeFailuresAsync(string identifier, CancellationToken cancellationToken);
 }
 
 /// <summary>Identity:LoginProtection. The defaults are the intended production behaviour.</summary>
@@ -66,4 +82,16 @@ public sealed class LoginProtectionOptions
     public int CaptchaWindowMinutes { get; set; } = 5;
     public int MaxPasswordResetRequestsPerClient { get; set; } = 10;
     public int PasswordResetWindowMinutes { get; set; } = 15;
+
+    /// <summary>Code checks per client and window (on top of the per-identifier attempts).</summary>
+    public int MaxResetCodeChecksPerClient { get; set; } = 20;
+
+    /// <summary>Seconds between two SMS codes for the same identifier.</summary>
+    public int ResetCodeCooldownSeconds { get; set; } = 60;
+
+    /// <summary>SMS codes per identifier within PasswordResetWindowMinutes.</summary>
+    public int MaxResetCodesPerIdentifier { get; set; } = 3;
+
+    /// <summary>Wrong codes per identifier within PasswordResetWindowMinutes; the outstanding code is then withdrawn.</summary>
+    public int MaxResetCodeAttempts { get; set; } = 5;
 }

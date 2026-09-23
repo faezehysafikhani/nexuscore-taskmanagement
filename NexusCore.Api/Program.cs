@@ -1,3 +1,4 @@
+using NexusCore.Application.Common;
 using Chat.Api.Endpoints;
 using Chat.Api.Hubs;
 using Chat.Application;
@@ -144,6 +145,9 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+// Unexpected exceptions: logged here, answered with a Persian message and no internals.
+app.UseSafeErrorResponses();
 
 if (app.Environment.IsDevelopment())
 {

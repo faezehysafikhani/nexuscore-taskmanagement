@@ -114,12 +114,47 @@ public sealed class LoginProtection(
             AuthAction.Login => (o.MaxLoginAttemptsPerClient, o.LoginWindowMinutes),
             AuthAction.Captcha => (o.MaxCaptchasPerClient, o.CaptchaWindowMinutes),
             AuthAction.ForgotPassword => (o.MaxPasswordResetRequestsPerClient, o.PasswordResetWindowMinutes),
+            AuthAction.ResetCode => (o.MaxResetCodeChecksPerClient, o.PasswordResetWindowMinutes),
             _ => throw new ArgumentOutOfRangeException(nameof(action))
         };
 
         var count = await IncrementAsync($"{Prefix}rate:{action}:{ClientKey}", TimeSpan.FromMinutes(Math.Max(1, minutes)), cancellationToken);
         return count > Math.Max(1, max) ? Result.Failure(Error.TooManyRequests()) : Result.Success();
     }
+
+    public async Task<Result> BeforeResetCodeRequestAsync(string identifier, CancellationToken cancellationToken)
+    {
+        var o = Options;
+        var cooldownKey = ResetKey("cooldown", identifier);
+        if (await cache.GetStringAsync(cooldownKey, cancellationToken) is not null)
+        {
+            return Result.Failure(Error.TooManyRequests("A code was sent a moment ago. Please wait before asking for another one."));
+        }
+
+        await cache.SetStringAsync(cooldownKey, "1",
+            new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(Math.Max(1, o.ResetCodeCooldownSeconds)) },
+            cancellationToken);
+
+        var sent = await IncrementAsync(ResetKey("sent", identifier), TimeSpan.FromMinutes(Math.Max(1, o.PasswordResetWindowMinutes)), cancellationToken);
+        return sent > Math.Max(1, o.MaxResetCodesPerIdentifier)
+            ? Result.Failure(Error.TooManyRequests())
+            : Result.Success();
+    }
+
+    public async Task<Result> BeforeResetCodeAttemptAsync(string identifier, CancellationToken cancellationToken) =>
+        await ReadCounterAsync(ResetKey("fail", identifier), cancellationToken) >= Math.Max(1, Options.MaxResetCodeAttempts)
+            ? Result.Failure(Error.TooManyRequests())
+            : Result.Success();
+
+    public async Task<bool> RecordFailedResetCodeAsync(string identifier, CancellationToken cancellationToken) =>
+        await IncrementAsync(ResetKey("fail", identifier), TimeSpan.FromMinutes(Math.Max(1, Options.PasswordResetWindowMinutes)), cancellationToken)
+            >= Math.Max(1, Options.MaxResetCodeAttempts);
+
+    public Task ClearResetCodeFailuresAsync(string identifier, CancellationToken cancellationToken) =>
+        cache.RemoveAsync(ResetKey("fail", identifier), cancellationToken);
+
+    private static string ResetKey(string kind, string identifier) =>
+        $"{Prefix}reset:{kind}:{Hash("reset", CanonicalIdentifier(identifier))}";
 
     private async Task<bool> IsCaptchaRequiredAsync(int identifierFailures, CancellationToken cancellationToken)
     {
@@ -186,11 +221,12 @@ public sealed class LoginProtection(
     /// Keyed by the identifier as typed, in the same canonical form sign-in uses, so "0912..."
     /// and "+98 912..." share one counter.
     /// </summary>
-    private static string IdentifierKey(string identifier)
+    private static string IdentifierKey(string identifier) => $"{Prefix}fail:id:{Hash("id", CanonicalIdentifier(identifier))}";
+
+    private static string CanonicalIdentifier(string identifier)
     {
         var value = identifier.Trim();
-        var canonical = Username.IsValid(value) ? value : PhoneNumber.Normalize(value) ?? value.ToLowerInvariant();
-        return $"{Prefix}fail:id:{Hash("id", canonical)}";
+        return Username.IsValid(value) ? value : PhoneNumber.Normalize(value) ?? value.ToLowerInvariant();
     }
 
     private static string CaptchaKey(string id) => $"{Prefix}captcha:{id}";

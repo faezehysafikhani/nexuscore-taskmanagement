@@ -92,6 +92,12 @@ public sealed class IdentityRepository(
                 cancellationToken);
     }
 
+    public Task<PasswordResetToken?> FindLatestOutstandingPasswordResetTokenAsync(Guid userId, CancellationToken cancellationToken) =>
+        dbContext.Set<PasswordResetToken>()
+            .Where(token => token.UserId == userId && token.UsedAtUtc == null && token.InvalidatedAtUtc == null)
+            .OrderByDescending(token => token.CreatedAtUtc)
+            .FirstOrDefaultAsync(cancellationToken);
+
     public async Task RevokeRefreshTokensAsync(Guid userId, CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;

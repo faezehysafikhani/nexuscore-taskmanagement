@@ -74,8 +74,8 @@ public static class DependencyInjection
         services.AddScoped<ILoginProtection, LoginProtection>();
 
         services.Configure<IdentitySeedOptions>(configuration.GetSection(IdentitySeedOptions.SectionName));
-        services.Configure<PasswordResetOptions>(configuration.GetSection(PasswordResetOptions.SectionName));
-        services.AddScoped<IPasswordResetLinkSender, EmailPasswordResetLinkSender>();
+        // Password recovery sends its one-time code through ISmsSender (below); no email.
+        services.Configure<PasswordRecoveryOptions>(configuration.GetSection(PasswordRecoveryOptions.SectionName));
         services.Configure<SmtpEmailOptions>(configuration.GetSection(SmtpEmailOptions.SectionName));
 
         // Outgoing messages. Request logging is removed from this client: the SMS API key is part

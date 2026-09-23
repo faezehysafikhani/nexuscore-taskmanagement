@@ -64,12 +64,19 @@ public static class IdentityEndpoints
                 (await accounts.ForgotPasswordAsync(request, cancellationToken)).ToApiResult())
             .AllowAnonymous()
             .WithName("ForgotPassword")
-            .WithSummary("Email a password-reset link. The answer never reveals whether the account exists.");
+            .WithSummary("Step 1: send a one-time code by SMS to the account's mobile number. The answer never reveals whether the account exists.");
+
+        auth.MapPost("/forgot-password/verify", async (VerifyResetCodeRequest request, IAccountService accounts, CancellationToken cancellationToken) =>
+                (await accounts.VerifyResetCodeAsync(request, cancellationToken)).ToApiResult())
+            .AllowAnonymous()
+            .WithName("VerifyPasswordResetCode")
+            .WithSummary("Step 2: check the SMS code; returns a short-lived token for setting the new password");
 
         auth.MapPost("/reset-password", async (ResetPasswordRequest request, IAccountService accounts, CancellationToken cancellationToken) =>
                 (await accounts.ResetPasswordAsync(request, cancellationToken)).ToApiResult())
             .AllowAnonymous()
-            .WithName("ResetPassword");
+            .WithName("ResetPassword")
+            .WithSummary("Step 3: set the new password with the token from step 2; every session of the user ends");
 
         auth.MapPut("/me/profile", async (UpdateMyProfileRequest request, IAccountService accounts, CancellationToken cancellationToken) =>
                 (await accounts.UpdateMyProfileAsync(request, cancellationToken)).ToApiResult())

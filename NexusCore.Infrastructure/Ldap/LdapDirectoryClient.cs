@@ -87,7 +87,8 @@ public sealed class LdapDirectoryClient(ILogger<LdapDirectoryClient> logger) : I
         }
         catch (LdapException ex)
         {
-            logger.LogWarning("LDAP test against {Host}:{Port} failed with LDAP error {Code}.", settings.Host, settings.Port, ex.ErrorCode);
+            // The server's own text stays in the log; the administrator gets a Persian message.
+            logger.LogWarning("LDAP test against {Host}:{Port} failed with LDAP error {Code}: {Message}", settings.Host, settings.Port, ex.ErrorCode, ex.Message);
             return new LdapTestResultDto(false, ex.ErrorCode switch
             {
                 49 => "نام کاربری یا رمز عبور اتصال (Bind) نادرست است.",
@@ -95,7 +96,7 @@ public sealed class LdapDirectoryClient(ILogger<LdapDirectoryClient> logger) : I
                 85 => "زمان اتصال به سرور LDAP به پایان رسید.",
                 91 => "اتصال به سرور LDAP برقرار نشد.",
                 52 => "سرور LDAP در حال حاضر پاسخگو نیست.",
-                _ => $"خطای LDAP ({ex.ErrorCode}): {ex.Message}",
+                _ => $"اتصال به سرور LDAP ناموفق بود (کد خطای {ex.ErrorCode}). جزئیات در گزارش رویدادهای سرور ثبت شد.",
             }, null, watch.ElapsedMilliseconds);
         }
         catch (DirectoryOperationException ex)
@@ -107,7 +108,7 @@ public sealed class LdapDirectoryClient(ILogger<LdapDirectoryClient> logger) : I
                 ResultCode.NoSuchObject => "مسیر جستجو (Base DN / User Search Base) در سرور وجود ندارد.",
                 ResultCode.InsufficientAccessRights => "حساب اتصال اجازه جستجو در این مسیر را ندارد.",
                 ResultCode.ProtocolError => "فیلتر کاربران معتبر نیست.",
-                _ => $"خطای LDAP: {code}",
+                _ => "سرور LDAP درخواست را نپذیرفت. جزئیات در گزارش رویدادهای سرور ثبت شد.",
             }, null, watch.ElapsedMilliseconds);
         }
         catch (Exception ex) when (ex is DirectoryException or ArgumentException or PlatformNotSupportedException or DllNotFoundException)

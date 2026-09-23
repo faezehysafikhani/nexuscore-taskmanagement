@@ -122,7 +122,7 @@ Deleting a team that tasks are still assigned to answers 409.
   "SelfRegistration": { "Enabled": true, "TenantSlug": "", "DefaultRoleName": "Member" },
   "SeedRoles": [ { "Name": "Member", "Permissions": [ "Tasks.View", "...", "groups.manage_own" ] } ]
 },
-"PasswordReset": { "TokenLifetimeMinutes": 30, "ResetUrlTemplate": "http://localhost:3030/reset-password" },
+"PasswordReset": { "CodeLength": 6, "CodeLifetimeMinutes": 5, "ResetTokenLifetimeMinutes": 10 },
 "Email": { "Smtp": { "Host": "", "Port": 587, "EnableSsl": true, "UserName": "", "Password": "", "FromAddress": "" } },
 "Chat": { "MaxAttachmentBytes": 5242880 }
 ```
