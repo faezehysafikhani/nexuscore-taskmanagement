@@ -2,6 +2,7 @@ using FluentValidation;
 using NexusCore.Application.Common;
 using NexusCore.Application.Identity.Dtos;
 using NexusCore.Application.Identity.Interfaces;
+using NexusCore.Application.Identity.Permissions;
 using NexusCore.Application.Identity.Security;
 using NexusCore.Application.Platform.Interfaces;
 using NexusCore.Application.Security;
@@ -30,6 +31,9 @@ public sealed class IdentityService(
     // One message for every way sign-in can fail on the credentials, so the answer never tells
     // whether a username or mobile number is registered.
     private const string InvalidCredentials = "Invalid username/mobile number or password.";
+
+    /// <summary>Sign-in with the right password to a disabled account (HTTP 403).</summary>
+    public static readonly Error AccountDisabled = new("account.disabled", "This account has been disabled. Contact the system administrator.");
 
     public async Task<Result<AuthResponse>> LoginAsync(LoginRequest request, CancellationToken cancellationToken)
     {
@@ -61,9 +65,17 @@ public sealed class IdentityService(
         if (user is null || !user.IsActive || !passwordOk)
         {
             var captchaNext = await loginProtection.RecordFailedLoginAsync(request.Identifier, cancellationToken);
-            // The reason is for administrators only; the caller always gets the same answer.
+            // The reason is for administrators only.
             var reason = user is null ? "unknown account" : !passwordOk ? "wrong password" : "account disabled";
             await platformService.AuditForAsync(user?.TenantId, user?.Id, "identity.login_failed", nameof(User), user?.Id.ToString(), $"{AuditIdentifier(request.Identifier)} ({reason})", cancellationToken);
+
+            // Only someone who knows the password learns that the account is disabled; a wrong
+            // password gets the same answer as an unknown account, so the status stays hidden.
+            if (passwordOk)
+            {
+                return Result.Failure<AuthResponse>(AccountDisabled);
+            }
+
             return Result.Failure<AuthResponse>(captchaNext
                 ? new Error("unauthorized.captcha_required", InvalidCredentials)
                 : Error.Unauthorized(InvalidCredentials));
@@ -97,6 +109,29 @@ public sealed class IdentityService(
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result.Success(new AuthResponse(accessToken.Token, nextRefreshToken, accessToken.ExpiresAtUtc, ToUserDto(refreshToken.User)));
+    }
+
+    /// <summary>
+    /// Ends the session the refresh token belongs to. The same answer whether or not the token
+    /// was still valid, so the call reveals nothing about it.
+    /// </summary>
+    public async Task<Result> LogoutAsync(RefreshTokenRequest request, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.RefreshToken))
+        {
+            return Result.Success();
+        }
+
+        var refreshToken = await repository.FindActiveRefreshTokenAsync(passwordHasher.HashToken(request.RefreshToken), cancellationToken);
+        if (refreshToken is null)
+        {
+            return Result.Success();
+        }
+
+        refreshToken.Revoke(null);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        await platformService.AuditForAsync(refreshToken.User?.TenantId, refreshToken.UserId, "identity.logout", nameof(User), refreshToken.UserId.ToString(), null, cancellationToken);
+        return Result.Success();
     }
 
     public async Task<Result<CurrentUserResponse>> GetCurrentUserAsync(Guid userId, CancellationToken cancellationToken)
@@ -201,6 +236,14 @@ public sealed class IdentityService(
             return Result.Failure<UserDto>(Error.Validation("You cannot disable your own account."));
         }
 
+        // Enabling or disabling is users.change_status, also when it comes in with an edit.
+        var statusChanges = request.IsActive != user.IsActive;
+        if (statusChanges && currentUser.UserId is { } callerId
+            && !(await repository.GetUserPermissionNamesAsync(callerId, cancellationToken)).Contains(IdentityPermissions.UsersChangeStatus))
+        {
+            return Result.Failure<UserDto>(Error.Forbidden("Enabling or disabling users needs the users.change_status permission."));
+        }
+
         var taken = await FindTakenSignInDetailAsync(user.TenantId, user.Id, usernameChanges ? request.Username : null, request.PhoneNumber, request.Email, cancellationToken);
         if (taken is not null)
         {
@@ -238,6 +281,11 @@ public sealed class IdentityService(
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await platformService.AuditAsync("users.update", nameof(User), user.Id.ToString(), user.Username, cancellationToken);
+        if (statusChanges)
+        {
+            await platformService.AuditAsync(user.IsActive ? "users.enable" : "users.disable", nameof(User), user.Id.ToString(), user.Username, cancellationToken);
+        }
+
         return Result.Success(ToUserDto(user));
     }
 

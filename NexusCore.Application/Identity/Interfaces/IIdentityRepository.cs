@@ -43,6 +43,9 @@ public interface IIdentityRepository
     Task<bool> TenantSlugExistsAsync(string slug, CancellationToken cancellationToken);
     Task AddTenantAsync(Tenant tenant, CancellationToken cancellationToken);
     Task<IReadOnlyList<string>> GetUserPermissionNamesAsync(Guid userId, CancellationToken cancellationToken);
+
+    /// <summary>True when the user exists and is enabled. Checked on every authenticated request.</summary>
+    Task<bool> IsUserActiveAsync(Guid userId, CancellationToken cancellationToken);
     Task<IReadOnlyList<Permission>> GetPermissionsByIdsAsync(IReadOnlyCollection<Guid> permissionIds, CancellationToken cancellationToken);
     Task<RefreshToken?> FindActiveRefreshTokenAsync(string tokenHash, CancellationToken cancellationToken);
 }

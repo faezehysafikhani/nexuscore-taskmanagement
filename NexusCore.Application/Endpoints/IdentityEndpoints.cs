@@ -35,6 +35,14 @@ public static class IdentityEndpoints
             .AllowAnonymous()
             .WithName("RefreshToken");
 
+        // Anonymous like /refresh: the refresh token itself is the proof, and signing out must
+        // work after the access token has expired.
+        auth.MapPost("/logout", async (RefreshTokenRequest request, IIdentityService identityService, CancellationToken cancellationToken) =>
+                (await identityService.LogoutAsync(request, cancellationToken)).ToApiResult())
+            .AllowAnonymous()
+            .WithName("Logout")
+            .WithSummary("Sign out: the refresh token stops working at once");
+
         auth.MapGet("/me", async (ICurrentUserContext currentUser, IIdentityService identityService, CancellationToken cancellationToken) =>
             {
                 if (currentUser.UserId is null)

@@ -1,7 +1,9 @@
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using NexusCore.Application.Approvals;
 using NexusCore.Application.Common;
 using NexusCore.Application.Files;
@@ -53,6 +55,8 @@ public static class DependencyInjection
         services.AddScoped<IPlatformRepository, PlatformRepository>();
         services.AddScoped<IPasswordHasher, BCryptPasswordHasher>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
+        // Access tokens of a disabled or deleted user stop working on the next request.
+        services.AddSingleton<IPostConfigureOptions<JwtBearerOptions>, ActiveUserTokenValidation>();
         services.AddScoped<DefaultDataSeeder>();
         services.AddUserGroupFeature(configuration);
 

@@ -263,6 +263,9 @@ public sealed class IdentityRepository(
     public async Task<IReadOnlyList<Permission>> GetPermissionsByIdsAsync(IReadOnlyCollection<Guid> permissionIds, CancellationToken cancellationToken) =>
         await dbContext.Permissions.Where(permission => permissionIds.Contains(permission.Id)).ToListAsync(cancellationToken);
 
+    public Task<bool> IsUserActiveAsync(Guid userId, CancellationToken cancellationToken) =>
+        dbContext.Users.AsNoTracking().AnyAsync(user => user.Id == userId && user.IsActive, cancellationToken);
+
     public Task<RefreshToken?> FindActiveRefreshTokenAsync(string tokenHash, CancellationToken cancellationToken) =>
         dbContext.RefreshTokens
             .Include(token => token.User)!.ThenInclude(user => user!.Roles).ThenInclude(role => role.Role)

@@ -42,6 +42,8 @@ public static class EndpointResults
             "unauthorized.captcha_required" => StatusCodes.Status401Unauthorized,
             "too_many_requests" => StatusCodes.Status429TooManyRequests,
             "forbidden" => StatusCodes.Status403Forbidden,
+            // The right password for a disabled account (IdentityService.AccountDisabled).
+            "account.disabled" => StatusCodes.Status403Forbidden,
             _ => StatusCodes.Status400BadRequest
         };
 
