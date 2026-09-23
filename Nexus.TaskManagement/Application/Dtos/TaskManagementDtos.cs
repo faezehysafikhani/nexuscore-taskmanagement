@@ -115,7 +115,9 @@ public sealed record TaskDto(
     RepetitiveTaskDto? Recurrence,
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset? ModifiedAtUtc,
-    TimeOnly? DueTime = null);
+    TimeOnly? DueTime = null,
+    TimeOnly? CharterStartTime = null,
+    TimeOnly? CharterEndTime = null);
 
 /// <summary>Trimmed shape for list and board views - no subtasks, files or charter.</summary>
 public sealed record TaskListItemDto(
@@ -192,7 +194,9 @@ public sealed record CreateTaskRequest(
     IReadOnlyList<SubTaskInput>? SubTasks = null,
     IReadOnlyList<string>? Tags = null,
     RecurrenceInput? Recurrence = null,
-    TimeOnly? DueTime = null);
+    TimeOnly? DueTime = null,
+    TimeOnly? CharterStartTime = null,
+    TimeOnly? CharterEndTime = null);
 
 /// <summary>
 /// Replaces the task's details. Like every other field here, DueTime is replaced as sent: null
@@ -212,7 +216,9 @@ public sealed record UpdateTaskRequest(
     string? CharterProjectManager = null,
     DateOnly? CharterStartDate = null,
     DateOnly? CharterEndDate = null,
-    TimeOnly? DueTime = null);
+    TimeOnly? DueTime = null,
+    TimeOnly? CharterStartTime = null,
+    TimeOnly? CharterEndTime = null);
 
 public sealed record ChangeTaskStatusRequest(TaskItemStatus Status);
 

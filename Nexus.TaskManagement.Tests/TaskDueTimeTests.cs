@@ -66,6 +66,31 @@ public sealed class TaskDueTimeTests(SqlServerFixture fixture)
     }
 
     [Fact]
+    public async Task CharterTimes_AreStoredWithTheirDates_AndReplacedOnEdit()
+    {
+        if (Skip) return;
+
+        var project = await fixture.ScopedAsync(sp => sp.GetRequiredService<ITaskService>().CreateAsync(
+            new CreateTaskRequest("Chartered", new DateOnly(2026, 11, 30), IsProject: true,
+                CharterStartDate: new DateOnly(2026, 11, 1), CharterEndDate: new DateOnly(2026, 11, 30),
+                CharterStartTime: new TimeOnly(8, 15), CharterEndTime: new TimeOnly(17, 45),
+                SubTasks: [new SubTaskInput("Design", SubTaskImportance.Medium)]), default));
+        Assert.True(project.IsSuccess, project.IsFailure ? project.Error.Message : null);
+
+        var read = await fixture.ScopedAsync(sp => sp.GetRequiredService<ITaskService>().GetAsync(project.Value!.Id, default));
+        Assert.Equal(new DateOnly(2026, 11, 1), read.Value!.CharterStartDate);
+        Assert.Equal(new TimeOnly(8, 15), read.Value.CharterStartTime);
+        Assert.Equal(new TimeOnly(17, 45), read.Value.CharterEndTime);
+
+        var edited = await fixture.ScopedAsync(sp => sp.GetRequiredService<ITaskService>().UpdateAsync(read.Value!.Id,
+            new UpdateTaskRequest(read.Value.Title, read.Value.DueDate, read.Value.Priority, IsProject: true,
+                CharterStartDate: new DateOnly(2026, 11, 2), CharterEndDate: new DateOnly(2026, 11, 30),
+                CharterStartTime: TimeOnly.MinValue), default));
+        Assert.Equal(TimeOnly.MinValue, edited.Value!.CharterStartTime);
+        Assert.Null(edited.Value.CharterEndTime);
+    }
+
+    [Fact]
     public async Task SubTaskTimes_AreStoredWithTheirDates()
     {
         if (Skip) return;

@@ -86,6 +86,10 @@ public sealed class TaskItem : AuditableEntity<Guid>
     public DateOnly? CharterStartDate { get; private set; }
     public DateOnly? CharterEndDate { get; private set; }
 
+    /// <summary>Wall-clock times on the charter dates, like <see cref="DueTime"/>; null when only a date was given.</summary>
+    public TimeOnly? CharterStartTime { get; private set; }
+    public TimeOnly? CharterEndTime { get; private set; }
+
     /// <summary>
     /// The recurrence schedule, when this task repeats. Null for a one-off task, so
     /// "is this task recurring" is answered by this being non-null rather than by a
@@ -126,6 +130,12 @@ public sealed class TaskItem : AuditableEntity<Guid>
         CharterProjectManager = projectManager;
         CharterStartDate = startDate;
         CharterEndDate = endDate;
+    }
+
+    public void SetCharterTimes(TimeOnly? startTime, TimeOnly? endTime)
+    {
+        CharterStartTime = startTime;
+        CharterEndTime = endTime;
     }
 
     public void ChangeStatus(TaskItemStatus status, DateTimeOffset nowUtc)

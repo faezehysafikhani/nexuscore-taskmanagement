@@ -123,6 +123,7 @@ public sealed class TaskService(
         task.UpdateCharter(
             request.CharterDescription, request.CharterProjectManager,
             request.CharterStartDate, request.CharterEndDate);
+        task.SetCharterTimes(request.CharterStartTime, request.CharterEndTime);
 
         if (request.AssigneeUserIds is { Count: > 0 })
         {
@@ -209,6 +210,7 @@ public sealed class TaskService(
         task.UpdateCharter(
             request.CharterDescription, request.CharterProjectManager,
             request.CharterStartDate, request.CharterEndDate);
+        task.SetCharterTimes(request.CharterStartTime, request.CharterEndTime);
 
         if (request.IsProject is { } isProject)
         {
@@ -723,6 +725,8 @@ public sealed class TaskService(
             task.Recurrence is null ? null : ToDto(task.Recurrence),
             task.CreatedAtUtc,
             task.ModifiedAtUtc,
-            task.DueTime);
+            task.DueTime,
+            task.CharterStartTime,
+            task.CharterEndTime);
     }
 }
