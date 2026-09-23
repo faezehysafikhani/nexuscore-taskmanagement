@@ -71,9 +71,11 @@ public sealed class RepetitiveTaskDueHandler(
     }
 
     /// <summary>
-    /// Everyone actually connected to the task: its assignee, its collaborators, the members of
-    /// its team and its owner - and of those only active users of the task's own organization.
-    /// Nobody else: a notification to an unrelated user is a bug, not a nicety.
+    /// The people responsible for doing the task: its assignee, its collaborators and the members
+    /// of its team - and of those only active users of the task's own organization, each once.
+    /// The creator is not reminded for having created it; only when nobody is assigned at all
+    /// is the task the creator's own, and then the creator is the one responsible. Nobody else:
+    /// a notification to an unrelated user is a bug, not a nicety.
     /// </summary>
     private async Task<IReadOnlyList<Guid>> ResolveRecipientsAsync(TaskItem task, CancellationToken cancellationToken)
     {
@@ -91,7 +93,7 @@ public sealed class RepetitiveTaskDueHandler(
             candidates.UnionWith(await userDirectory.GetGroupMemberIdsAsync(groupId, cancellationToken));
         }
 
-        if (task.OwnerUserId is { } owner)
+        if (candidates.Count == 0 && task.OwnerUserId is { } owner)
         {
             candidates.Add(owner);
         }

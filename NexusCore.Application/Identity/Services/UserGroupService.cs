@@ -1,5 +1,7 @@
-﻿using NexusCore.Application.Identity.Dtos;
+﻿using Microsoft.Extensions.Options;
+using NexusCore.Application.Identity.Dtos;
 using NexusCore.Application.Identity.Interfaces;
+using NexusCore.Application.Identity.Options;
 using NexusCore.Application.Identity.Permissions;
 using NexusCore.Application.Platform.Interfaces;
 using NexusCore.Domain.Identity;
@@ -14,8 +16,11 @@ public sealed class UserGroupService(
     IIdentityRepository identityRepository,
     IUnitOfWork unitOfWork,
     IPlatformService platformService,
-    ICurrentUserContext currentUser) : IUserGroupService
+    ICurrentUserContext currentUser,
+    IOptions<ManagedPermissionOptions> managedPermissionOptions) : IUserGroupService
 {
+    private readonly ManagedPermissionOptions _managed = managedPermissionOptions.Value;
+
     public async Task<Result<IReadOnlyList<UserGroupDto>>> ListAsync(Guid? tenantId, CancellationToken cancellationToken)
     {
         var groups = await repository.ListAsync(currentUser.ResolveTenant(tenantId), cancellationToken);
@@ -109,6 +114,12 @@ public sealed class UserGroupService(
             return Result.Failure(Error.Validation("One or more permissions do not exist."));
         }
 
+        var unmanaged = request.PermissionIds.Distinct().Select(id => known[id]).Where(permission => !_managed.IsManaged(permission)).Select(permission => permission.Name).ToList();
+        if (unmanaged.Count > 0)
+        {
+            return Result.Failure(Error.Validation("These permissions are not managed in this product: " + string.Join(", ", unmanaged)));
+        }
+
         // Same rule as for users and roles: nobody hands out a permission they do not have.
         var already = group.Permissions.Select(grant => grant.PermissionId).ToHashSet();
         var notHeld = request.PermissionIds.Distinct()
@@ -121,7 +132,10 @@ public sealed class UserGroupService(
             return Result.Failure(Error.Forbidden("You can only grant permissions you have yourself: " + string.Join(", ", notHeld)));
         }
 
-        group.SetPermissions(request.PermissionIds);
+        // The group's permissions of modules this product does not manage stay as they were.
+        group.SetPermissions(request.PermissionIds.Concat(group.Permissions
+            .Where(grant => known.TryGetValue(grant.PermissionId, out var permission) && !_managed.IsManaged(permission))
+            .Select(grant => grant.PermissionId)).Distinct().ToList());
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await platformService.AuditAsync("groups.assign_permissions", nameof(UserGroup), group.Id.ToString(), string.Join(",", request.PermissionIds), cancellationToken);
         return Result.Success();
@@ -316,9 +330,11 @@ public sealed class UserGroupService(
         return userIds.Count == 0 ? [] : await repository.ListUsersAsync(userIds, cancellationToken);
     }
 
-    private static UserGroupDto ToDto(UserGroup group, IReadOnlyList<User> users)
+    private UserGroupDto ToDto(UserGroup group, IReadOnlyList<User> users)
     {
         var byId = users.ToDictionary(user => user.Id);
+        // Lists the group's permissions this product manages; the others stay on the group, unlisted.
+        var permissions = group.Permissions.Where(grant => grant.Permission is null || _managed.IsManaged(grant.Permission)).ToList();
 
         return new UserGroupDto(
             group.Id,
@@ -327,8 +343,8 @@ public sealed class UserGroupService(
             group.Description,
             group.IsActive,
             group.Members.Count,
-            group.Permissions.Select(permission => permission.Permission?.Name ?? string.Empty).Where(name => name.Length > 0).OrderBy(name => name).ToList(),
-            group.Permissions.Select(permission => permission.PermissionId).ToList(),
+            permissions.Select(permission => permission.Permission?.Name ?? string.Empty).Where(name => name.Length > 0).OrderBy(name => name).ToList(),
+            permissions.Select(permission => permission.PermissionId).ToList(),
             group.Members
                 .Where(member => byId.ContainsKey(member.UserId))
                 .Select(member => new UserGroupMemberDto(member.UserId, byId[member.UserId].DisplayName, byId[member.UserId].Email))

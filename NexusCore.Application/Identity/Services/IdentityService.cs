@@ -1,7 +1,9 @@
 using FluentValidation;
+using Microsoft.Extensions.Options;
 using NexusCore.Application.Common;
 using NexusCore.Application.Identity.Dtos;
 using NexusCore.Application.Identity.Interfaces;
+using NexusCore.Application.Identity.Options;
 using NexusCore.Application.Identity.Permissions;
 using NexusCore.Application.Identity.Security;
 using NexusCore.Application.Platform.Interfaces;
@@ -26,8 +28,11 @@ public sealed class IdentityService(
     ILoginProtection loginProtection,
     AuthSessionIssuer sessionIssuer,
     ICurrentUserContext currentUser,
-    IUserGroupPermissionProvider groupPermissions) : IIdentityService
+    IUserGroupPermissionProvider groupPermissions,
+    IOptions<ManagedPermissionOptions> managedPermissionOptions) : IIdentityService
 {
+    private readonly ManagedPermissionOptions _managed = managedPermissionOptions.Value;
+
     // One message for every way sign-in can fail on the credentials, so the answer never tells
     // whether a username or mobile number is registered.
     private const string InvalidCredentials = "Invalid username/mobile number or password.";
@@ -398,9 +403,11 @@ public sealed class IdentityService(
     }
 
     /// <summary>
-    /// What the user may do and why: every permission with whether it comes from the user
-    /// directly, from a role or from an organisational group. Only direct grants are editable
-    /// on the user; the others are changed on the role or group.
+    /// What the user may do and why: every permission this product manages, with whether it comes
+    /// from the user directly, from a role or from an organisational group, whether it is denied
+    /// to the user, and whether the user actually has it. On the user, a permission can be granted
+    /// directly or denied (which overrides roles and groups); roles and groups are changed on
+    /// themselves.
     /// </summary>
     public async Task<Result<UserPermissionsDto>> GetUserAccessAsync(Guid userId, CancellationToken cancellationToken)
     {
@@ -411,7 +418,7 @@ public sealed class IdentityService(
             return Result.Failure<UserPermissionsDto>(Error.NotFound("User was not found."));
         }
 
-        var permissions = await repository.ListPermissionsAsync(cancellationToken);
+        var permissions = _managed.Managed(await repository.ListPermissionsAsync(cancellationToken));
         var roles = await repository.ListRolesAsync(user.TenantId, cancellationToken);
         var userRoleIds = user.Roles.Select(role => role.RoleId).ToHashSet();
         var grantingRoles = roles
@@ -420,7 +427,10 @@ public sealed class IdentityService(
             .GroupBy(pair => pair.PermissionId)
             .ToDictionary(group => group.Key, group => (IReadOnlyList<string>)group.Select(pair => pair.Name).Distinct().ToList());
         var grantingGroups = await groupPermissions.GetGrantingGroupsAsync(user.Id, cancellationToken);
-        var direct = user.Permissions.Select(grant => grant.PermissionId).ToHashSet();
+        var direct = user.Permissions.Where(entry => !entry.IsDenied).Select(entry => entry.PermissionId).ToHashSet();
+        var denied = user.Permissions.Where(entry => entry.IsDenied).Select(entry => entry.PermissionId).ToHashSet();
+        // Exactly what the authorization checks use, so the page cannot disagree with the server.
+        var effective = (await repository.GetUserPermissionNamesAsync(user.Id, cancellationToken)).ToHashSet(StringComparer.Ordinal);
 
         var entries = permissions
             .OrderBy(permission => permission.Module).ThenBy(permission => permission.Name)
@@ -428,9 +438,14 @@ public sealed class IdentityService(
             {
                 var byRole = grantingRoles.GetValueOrDefault(permission.Id, []);
                 var byGroup = grantingGroups.GetValueOrDefault(permission.Id, []);
+                var isDirect = direct.Contains(permission.Id);
+                var isEffective = effective.Contains(permission.Name);
                 return new UserPermissionEntryDto(
                     permission.Id, permission.Name, permission.Module, permission.Description,
-                    direct.Contains(permission.Id), byRole.Count > 0, byRole, byGroup.Count > 0, byGroup);
+                    isDirect, byRole.Count > 0, byRole, byGroup.Count > 0, byGroup,
+                    DeniedForUser: denied.Contains(permission.Id),
+                    Effective: isEffective,
+                    GrantedAsPrerequisite: isEffective && !isDirect && byRole.Count == 0 && byGroup.Count == 0);
             })
             .ToList();
 
@@ -441,8 +456,11 @@ public sealed class IdentityService(
     }
 
     /// <summary>
-    /// Replaces the permissions granted directly to the user. A caller can only hand out
-    /// permissions they hold themselves, so this cannot be used to escalate.
+    /// Replaces the permissions granted directly to the user and, when the request carries them,
+    /// the user's explicit denials. A caller can only hand out permissions they hold themselves -
+    /// and lifting a denial hands the permission back, so the same rule applies to denials - so
+    /// this cannot be used to escalate. Only this product's managed permissions can be set; the
+    /// user's grants and denials of other modules are kept as they are.
     /// </summary>
     public async Task<Result> SetUserDirectPermissionsAsync(Guid userId, AssignUserPermissionsRequest request, CancellationToken cancellationToken)
     {
@@ -460,27 +478,59 @@ public sealed class IdentityService(
         }
 
         var requested = request.PermissionIds.Distinct().ToList();
-        var known = await repository.GetPermissionsByIdsAsync(requested, cancellationToken);
-        if (known.Count != requested.Count)
+        var requestedDenied = request.DeniedPermissionIds?.Distinct().ToList();
+        if (requestedDenied is not null && requestedDenied.Intersect(requested).Any())
+        {
+            return Result.Failure(Error.Validation("A permission cannot be both granted and denied to the same user."));
+        }
+
+        var named = requested.Concat(requestedDenied ?? []).Distinct().ToList();
+        var currentGranted = user.Permissions.Where(entry => !entry.IsDenied).Select(entry => entry.PermissionId).ToHashSet();
+        var currentDenied = user.Permissions.Where(entry => entry.IsDenied).Select(entry => entry.PermissionId).ToHashSet();
+        var byId = (await repository.GetPermissionsByIdsAsync(named.Concat(currentGranted).Concat(currentDenied).Distinct().ToList(), cancellationToken))
+            .ToDictionary(permission => permission.Id);
+        if (named.Any(id => !byId.ContainsKey(id)))
         {
             return Result.Failure(Error.Validation("One or more permissions do not exist."));
         }
 
-        var alreadyDirect = user.Permissions.Select(grant => grant.PermissionId).ToHashSet();
-        var added = known.Where(permission => !alreadyDirect.Contains(permission.Id)).ToList();
-        if (added.Count > 0 && currentUser.UserId is { } callerId)
+        var unmanaged = named.Select(id => byId[id]).Where(permission => !_managed.IsManaged(permission)).Select(permission => permission.Name).ToList();
+        if (unmanaged.Count > 0)
+        {
+            return Result.Failure(Error.Validation("These permissions are not managed in this product: " + string.Join(", ", unmanaged)));
+        }
+
+        bool Managed(Guid id) => byId.TryGetValue(id, out var permission) && _managed.IsManaged(permission);
+
+        // Every change that gives something back needs the caller to hold it: a new grant, and a
+        // denial that is added or lifted.
+        var changed = requested.Where(id => !currentGranted.Contains(id))
+            .Concat(requestedDenied is null ? [] : requestedDenied.Where(id => !currentDenied.Contains(id)))
+            .Concat(requestedDenied is null ? [] : currentDenied.Where(id => Managed(id) && !requestedDenied.Contains(id)))
+            .Distinct()
+            .ToList();
+        if (changed.Count > 0 && currentUser.UserId is { } callerId)
         {
             var callerPermissions = (await repository.GetUserPermissionNamesAsync(callerId, cancellationToken)).ToHashSet(StringComparer.Ordinal);
-            var notHeld = added.Where(permission => !callerPermissions.Contains(permission.Name)).Select(permission => permission.Name).ToList();
+            var notHeld = changed.Select(id => byId[id].Name).Where(name => !callerPermissions.Contains(name)).ToList();
             if (notHeld.Count > 0)
             {
                 return Result.Failure(Error.Forbidden("You can only grant permissions you have yourself: " + string.Join(", ", notHeld)));
             }
         }
 
-        user.SetDirectPermissions(requested);
+        // Grants and denials of modules this product does not manage stay as they were.
+        user.SetDirectPermissions(
+            requested.Concat(currentGranted.Where(id => !Managed(id))),
+            requestedDenied?.Concat(currentDenied.Where(id => !Managed(id))));
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        await platformService.AuditAsync("users.assign_permissions", nameof(User), user.Id.ToString(), string.Join(",", known.Select(permission => permission.Name)), cancellationToken);
+        var audit = string.Join(",", requested.Select(id => byId[id].Name));
+        if (requestedDenied is not null)
+        {
+            audit += "; denied: " + string.Join(",", requestedDenied.Select(id => byId[id].Name));
+        }
+
+        await platformService.AuditAsync("users.assign_permissions", nameof(User), user.Id.ToString(), audit, cancellationToken);
         return Result.Success();
     }
 
@@ -575,6 +625,12 @@ public sealed class IdentityService(
             return Result.Failure(Error.Validation("One or more permissions do not exist."));
         }
 
+        var unmanaged = known.Where(permission => !_managed.IsManaged(permission)).Select(permission => permission.Name).ToList();
+        if (unmanaged.Count > 0)
+        {
+            return Result.Failure(Error.Validation("These permissions are not managed in this product: " + string.Join(", ", unmanaged)));
+        }
+
         var already = role.Permissions.Select(grant => grant.PermissionId).ToHashSet();
         var notHeld = known.Where(permission => !already.Contains(permission.Id) && !CallerHolds(permission.Name)).Select(permission => permission.Name).ToList();
         if (notHeld.Count > 0)
@@ -582,15 +638,19 @@ public sealed class IdentityService(
             return Result.Failure(Error.Forbidden("You can only grant permissions you have yourself: " + string.Join(", ", notHeld)));
         }
 
-        role.SetPermissions(requested);
+        // The role's permissions of modules this product does not manage stay as they were.
+        role.SetPermissions(requested.Concat(role.Permissions
+            .Where(grant => grant.Permission is { } permission && !_managed.IsManaged(permission))
+            .Select(grant => grant.PermissionId)).ToList());
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await platformService.AuditAsync("roles.assign_permissions", nameof(Role), role.Id.ToString(), string.Join(",", request.PermissionIds), cancellationToken);
         return Result.Success();
     }
 
+    /// <summary>The permissions this product manages (all when it does not narrow them), by module.</summary>
     public async Task<Result<IReadOnlyList<PermissionGroupDto>>> ListPermissionsGroupedAsync(CancellationToken cancellationToken)
     {
-        var permissions = await repository.ListPermissionsAsync(cancellationToken);
+        var permissions = _managed.Managed(await repository.ListPermissionsAsync(cancellationToken));
         var groups = permissions
             .GroupBy(permission => permission.Module)
             .OrderBy(group => group.Key)
@@ -667,8 +727,11 @@ public sealed class IdentityService(
 
     private static UserDto ToUserDto(User user) => IdentityMappings.ToUserDto(user);
 
-    private static RoleDto ToRoleDto(Role role) =>
-        new(role.Id, role.TenantId, role.Name, role.Description, role.IsSystem, role.Permissions.Select(permission => permission.Permission?.Name ?? permission.PermissionId.ToString()).ToList());
+    /// <summary>Lists the role's permissions this product manages; the others stay on the role, unlisted.</summary>
+    private RoleDto ToRoleDto(Role role) =>
+        new(role.Id, role.TenantId, role.Name, role.Description, role.IsSystem, role.Permissions
+            .Where(grant => grant.Permission is null || _managed.IsManaged(grant.Permission))
+            .Select(permission => permission.Permission?.Name ?? permission.PermissionId.ToString()).ToList());
 
     private static PermissionDto ToPermissionDto(Permission permission) =>
         new(permission.Id, permission.Name, permission.Module, permission.Description);

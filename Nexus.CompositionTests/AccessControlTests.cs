@@ -351,6 +351,11 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
             builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["Features:UserGroups:Enabled"] = "true",
+                // Like Rozet: this product manages identity, platform and task permissions only;
+                // Ticketing's still exist and are enforced for whoever holds them.
+                ["Identity:ManagedPermissionModules:0"] = "Identity",
+                ["Identity:ManagedPermissionModules:1"] = "Platform",
+                ["Identity:ManagedPermissionModules:2"] = "TaskManagement",
                 ["FileStorage:RootPath"] = Path.Combine(Path.GetTempPath(), $"access-tests-{Guid.NewGuid():N}"),
             });
 

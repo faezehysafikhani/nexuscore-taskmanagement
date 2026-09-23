@@ -122,10 +122,11 @@ public sealed class RecurringTaskReminderTests : IDisposable
 
         await PassAsync();
 
-        Assert.Equal(new[] { owner.Id, assignee.Id }.Order(), _notifications.Sent.Select(n => n.UserId).Order());
+        // Only the person responsible; the creator is not reminded for having created the task.
+        Assert.Equal(assignee.Id, Assert.Single(_notifications.Sent).UserId);
         Assert.All(_notifications.Sent, n => Assert.Equal(_tenant, n.TenantId));
         Assert.All(_notifications.Sent, n => Assert.Contains("یادآوری وظیفه", n.Title));
-        Assert.Equal(new[] { "09120000001", "09120000002" }, _smsProvider.Sent.Select(s => s.Phone).Order());
+        Assert.Equal("09120000002", Assert.Single(_smsProvider.Sent).Phone);
         Assert.All(_smsProvider.Sent, s => Assert.Contains("موعد: ", s.Text));
 
         // The next run is tomorrow at 09:00 in Tehran - not 09:00 UTC.
@@ -224,8 +225,9 @@ public sealed class RecurringTaskReminderTests : IDisposable
     {
         var owner = User("09120000001");
         var assignee = User("09120000002");
-        _notifications.FailFor.Add(owner.Id);
-        var (_, scheduleId) = await RecurringTaskAsync(owner, assignedUserId: assignee.Id);
+        var colleague = User("09120000003");
+        _notifications.FailFor.Add(colleague.Id);
+        var (_, scheduleId) = await RecurringTaskAsync(owner, assignedUserId: assignee.Id, collaboratorIds: [colleague.Id]);
 
         await PassAsync();
 
@@ -240,8 +242,9 @@ public sealed class RecurringTaskReminderTests : IDisposable
     {
         var owner = User("09120000001");
         var assignee = User("09120000002");
-        _smsProvider.FailFor.Add("09120000001");
-        await RecurringTaskAsync(owner, assignedUserId: assignee.Id);
+        var colleague = User("09120000003");
+        _smsProvider.FailFor.Add("09120000003");
+        await RecurringTaskAsync(owner, assignedUserId: assignee.Id, collaboratorIds: [colleague.Id]);
 
         await PassAsync();
 
@@ -269,20 +272,22 @@ public sealed class RecurringTaskReminderTests : IDisposable
         var owner = User("09120000001");
         var inactive = User("09120000002", isActive: false);
         var stranger = User("09120000003", tenantId: _otherTenant);
+        var colleague = User("09120000004");
         var (taskId, _) = await RecurringTaskAsync(owner, assignedUserId: inactive.Id);
         using (var scope = _services.CreateScope())
         {
             // A collaborator from another organization slipped in (the API refuses one).
             var db = scope.ServiceProvider.GetRequiredService<TaskManagementDbContext>();
             var task = await db.Tasks.Include(t => t.Assignees).SingleAsync(t => t.Id == taskId);
-            task.AssignUsers([stranger.Id]);
+            task.AssignUsers([stranger.Id, colleague.Id]);
             await db.SaveChangesAsync();
         }
 
         await PassAsync();
 
-        Assert.Equal(owner.Id, Assert.Single(_notifications.Sent).UserId);
-        Assert.Equal("09120000001", Assert.Single(_smsProvider.Sent).Phone);
+        // Only the active collaborator of this organization; the creator is not responsible here.
+        Assert.Equal(colleague.Id, Assert.Single(_notifications.Sent).UserId);
+        Assert.Equal("09120000004", Assert.Single(_smsProvider.Sent).Phone);
     }
 
     [Fact]
@@ -298,6 +303,65 @@ public sealed class RecurringTaskReminderTests : IDisposable
 
         Assert.Contains(_notifications.Sent, n => n.UserId == member.Id);
         Assert.Contains(_smsProvider.Sent, s => s.Phone == "09120000002");
+        Assert.DoesNotContain(_notifications.Sent, n => n.UserId == owner.Id);
+        Assert.DoesNotContain(_smsProvider.Sent, s => s.Phone == "09120000001");
+    }
+
+    [Fact]
+    public async Task ACreatorWhoIsNotResponsible_GetsNoReminder_NorSms()
+    {
+        var owner = User("09120000001");
+        var assignee = User("09120000002");
+        var colleague = User("09120000003");
+        var member = User("09120000004");
+        var teamId = Guid.NewGuid();
+        _directory.Groups[teamId] = [member.Id];
+        await RecurringTaskAsync(owner, assignedUserId: assignee.Id, assignedUserGroupId: teamId, collaboratorIds: [colleague.Id]);
+
+        await PassAsync();
+
+        Assert.Equal(new[] { assignee.Id, colleague.Id, member.Id }.Order(), _notifications.Sent.Select(n => n.UserId).Order());
+        Assert.Equal(new[] { "09120000002", "09120000003", "09120000004" }, _smsProvider.Sent.Select(s => s.Phone).Order());
+    }
+
+    [Fact]
+    public async Task ACreatorWhoIsAlsoResponsible_InSeveralWays_IsRemindedOnce()
+    {
+        var owner = User("09120000001");
+        var teamId = Guid.NewGuid();
+        _directory.Groups[teamId] = [owner.Id];
+        // Assignee, collaborator and team member at once.
+        await RecurringTaskAsync(owner, assignedUserId: owner.Id, assignedUserGroupId: teamId, collaboratorIds: [owner.Id]);
+
+        await PassAsync();
+
+        Assert.Equal(owner.Id, Assert.Single(_notifications.Sent).UserId);
+        Assert.Equal("09120000001", Assert.Single(_smsProvider.Sent).Phone);
+    }
+
+    [Fact]
+    public async Task AnUnassignedTask_IsItsCreatorsOwn_AndRemindsTheCreator()
+    {
+        var owner = User("09120000001");
+        await RecurringTaskAsync(owner);
+
+        await PassAsync();
+
+        Assert.Equal(owner.Id, Assert.Single(_notifications.Sent).UserId);
+        Assert.Equal("09120000001", Assert.Single(_smsProvider.Sent).Phone);
+    }
+
+    [Fact]
+    public async Task AnAssigneeWhoLeft_DoesNotTurnTheReminderToTheCreator()
+    {
+        var owner = User("09120000001");
+        var inactive = User("09120000002", isActive: false);
+        await RecurringTaskAsync(owner, assignedUserId: inactive.Id);
+
+        await PassAsync();
+
+        Assert.Empty(_notifications.Sent);
+        Assert.Empty(_smsProvider.Sent);
     }
 
     [Fact]
@@ -347,8 +411,9 @@ public sealed class RecurringTaskReminderTests : IDisposable
     {
         var owner = User("09120000001");
         var withoutPhone = User(phone: null);
-        _smsProvider.FailFor.Add("09120000001");
-        await RecurringTaskAsync(owner, assignedUserId: withoutPhone.Id);
+        var colleague = User("09120000005");
+        _smsProvider.FailFor.Add("09120000005");
+        await RecurringTaskAsync(owner, assignedUserId: withoutPhone.Id, collaboratorIds: [colleague.Id]);
 
         await PassAsync();
 
@@ -421,7 +486,8 @@ public sealed class RecurringTaskReminderTests : IDisposable
 
     private async Task<(Guid TaskId, Guid ScheduleId)> RecurringTaskAsync(
         UserContact owner, Guid? assignedUserId = null, Guid? assignedUserGroupId = null,
-        DateTimeOffset? nextRunUtc = null, bool active = true, TimeOnly? startTime = null, string title = "Weekly report")
+        DateTimeOffset? nextRunUtc = null, bool active = true, TimeOnly? startTime = null, string title = "Weekly report",
+        IReadOnlyList<Guid>? collaboratorIds = null)
     {
         using var scope = _services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<TaskManagementDbContext>();
@@ -439,6 +505,10 @@ public sealed class RecurringTaskReminderTests : IDisposable
 
         var task = new TaskItem(Guid.NewGuid(), _tenant, title, new DateOnly(2026, 1, 1), TaskPriority.Medium, false, owner.Id, "confidential detail");
         task.UpdateDetails(title, "confidential detail", new DateOnly(2026, 1, 1), TaskPriority.Medium, assignedUserId, assignedUserGroupId, true);
+        if (collaboratorIds is not null)
+        {
+            task.AssignUsers(collaboratorIds);
+        }
         var schedule = new RepetitiveTask(Guid.NewGuid(), _tenant, task.Id, RecurrenceFrequency.Daily, new DateOnly(2026, 1, 1));
         schedule.UpdateSchedule(RecurrenceFrequency.Daily, null, startTime, null, null, null, null, null, new DateOnly(2026, 1, 1), null);
         schedule.SetNextExecution(nextRunUtc ?? DateTimeOffset.UtcNow.AddMinutes(-1));

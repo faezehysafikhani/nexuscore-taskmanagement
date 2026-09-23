@@ -74,6 +74,7 @@ public static class DependencyInjection
         services.AddScoped<ILoginProtection, LoginProtection>();
 
         services.Configure<IdentitySeedOptions>(configuration.GetSection(IdentitySeedOptions.SectionName));
+        services.Configure<ManagedPermissionOptions>(configuration.GetSection(ManagedPermissionOptions.SectionName));
         // Password recovery sends its one-time code through ISmsSender (below); no email.
         services.Configure<PasswordRecoveryOptions>(configuration.GetSection(PasswordRecoveryOptions.SectionName));
         services.Configure<SmtpEmailOptions>(configuration.GetSection(SmtpEmailOptions.SectionName));
