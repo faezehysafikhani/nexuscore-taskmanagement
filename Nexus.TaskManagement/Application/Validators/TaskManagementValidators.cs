@@ -73,6 +73,12 @@ public sealed class CreateTaskRequestValidator : AbstractValidator<CreateTaskReq
         RuleFor(x => x.CharterDescription).MaximumLength(4000);
         RuleFor(x => x.CharterProjectManager).MaximumLength(200);
 
+        // Every new task has someone responsible for doing it (the creator may pick themselves).
+        // Existing tasks without one stay valid: this applies to creation only.
+        RuleFor(x => x.AssignedUserId)
+            .NotNull().WithMessage("Choose who is responsible for the task.")
+            .NotEqual(Guid.Empty).WithMessage("Choose who is responsible for the task.");
+
         RuleFor(x => x.CharterEndDate)
             .GreaterThanOrEqualTo(x => x.CharterStartDate!.Value)
             .When(x => x.CharterStartDate.HasValue && x.CharterEndDate.HasValue)

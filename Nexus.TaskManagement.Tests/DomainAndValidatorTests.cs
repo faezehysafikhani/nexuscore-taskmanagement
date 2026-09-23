@@ -230,6 +230,19 @@ public sealed class ValidatorTests
     }
 
     [Fact]
+    public void SomeoneResponsibleIsRequired()
+    {
+        var validator = new CreateTaskRequestValidator();
+
+        validator.TestValidate(new CreateTaskRequest("Buy milk", new DateOnly(2026, 3, 1)))
+            .ShouldHaveValidationErrorFor(x => x.AssignedUserId);
+        validator.TestValidate(new CreateTaskRequest("Buy milk", new DateOnly(2026, 3, 1), AssignedUserId: Guid.Empty))
+            .ShouldHaveValidationErrorFor(x => x.AssignedUserId);
+        validator.TestValidate(new CreateTaskRequest("Buy milk", new DateOnly(2026, 3, 1), AssignedUserId: Guid.NewGuid()))
+            .ShouldNotHaveValidationErrorFor(x => x.AssignedUserId);
+    }
+
+    [Fact]
     public void ATitleIsRequired()
     {
         var result = new CreateTaskRequestValidator().TestValidate(new CreateTaskRequest(

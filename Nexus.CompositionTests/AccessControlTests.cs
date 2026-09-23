@@ -521,7 +521,8 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
         public Task<HttpResponseMessage> CreateTaskAsync(Caller caller, string title, Guid? assignedUserId = null, Guid? assignedUserGroupId = null) =>
             SendAsync(caller, HttpMethod.Post, "/api/task-management/tasks", new
             {
-                title, dueDate = "2030-01-01", priority = "Medium", isProject = false, assignedUserId, assignedUserGroupId
+                // Every new task has someone responsible; unless a test names one, the creator.
+                title, dueDate = "2030-01-01", priority = "Medium", isProject = false, assignedUserId = assignedUserId ?? caller.Id, assignedUserGroupId
             });
 
         public async Task<Guid> CreatedTaskIdAsync(Caller caller, string title, Guid? assignedUserId = null, Guid? assignedUserGroupId = null)

@@ -24,7 +24,7 @@ public sealed class TaskDueTimeTests(SqlServerFixture fixture)
         if (Skip) return;
 
         var created = await fixture.ScopedAsync(sp => sp.GetRequiredService<ITaskService>().CreateAsync(
-            new CreateTaskRequest("Meeting", new DateOnly(2026, 9, 23), DueTime: new TimeOnly(14, 30)), default));
+            new CreateTaskRequest("Meeting", new DateOnly(2026, 9, 23), DueTime: new TimeOnly(14, 30), AssignedUserId: fixture.OwnerUserId), default));
         Assert.True(created.IsSuccess, created.IsFailure ? created.Error.Message : null);
         Assert.Equal(new TimeOnly(14, 30), created.Value!.DueTime);
 
@@ -53,11 +53,11 @@ public sealed class TaskDueTimeTests(SqlServerFixture fixture)
         if (Skip) return;
 
         var midnight = await fixture.ScopedAsync(sp => sp.GetRequiredService<ITaskService>().CreateAsync(
-            new CreateTaskRequest("At midnight", new DateOnly(2026, 9, 24), DueTime: TimeOnly.MinValue), default));
+            new CreateTaskRequest("At midnight", new DateOnly(2026, 9, 24), DueTime: TimeOnly.MinValue, AssignedUserId: fixture.OwnerUserId), default));
         Assert.Equal(TimeOnly.MinValue, midnight.Value!.DueTime);
 
         var dateOnly = await fixture.ScopedAsync(sp => sp.GetRequiredService<ITaskService>().CreateAsync(
-            new CreateTaskRequest("Any time that day", new DateOnly(2026, 9, 24)), default));
+            new CreateTaskRequest("Any time that day", new DateOnly(2026, 9, 24), AssignedUserId: fixture.OwnerUserId), default));
         Assert.Null(dateOnly.Value!.DueTime);
 
         var changed = await fixture.ScopedAsync(sp => sp.GetRequiredService<ITaskService>()
@@ -74,7 +74,7 @@ public sealed class TaskDueTimeTests(SqlServerFixture fixture)
             new CreateTaskRequest("Chartered", new DateOnly(2026, 11, 30), IsProject: true,
                 CharterStartDate: new DateOnly(2026, 11, 1), CharterEndDate: new DateOnly(2026, 11, 30),
                 CharterStartTime: new TimeOnly(8, 15), CharterEndTime: new TimeOnly(17, 45),
-                SubTasks: [new SubTaskInput("Design", SubTaskImportance.Medium)]), default));
+                SubTasks: [new SubTaskInput("Design", SubTaskImportance.Medium)], AssignedUserId: fixture.OwnerUserId), default));
         Assert.True(project.IsSuccess, project.IsFailure ? project.Error.Message : null);
 
         var read = await fixture.ScopedAsync(sp => sp.GetRequiredService<ITaskService>().GetAsync(project.Value!.Id, default));
@@ -100,7 +100,7 @@ public sealed class TaskDueTimeTests(SqlServerFixture fixture)
             [
                 new SubTaskInput("Design", StartDate: new DateOnly(2026, 10, 1), EndDate: new DateOnly(2026, 10, 2),
                     StartTime: new TimeOnly(9, 0), EndTime: new TimeOnly(17, 45)),
-            ]), default));
+            ], AssignedUserId: fixture.OwnerUserId), default));
         Assert.True(project.IsSuccess, project.IsFailure ? project.Error.Message : null);
         var design = Assert.Single(project.Value!.SubTasks);
         Assert.Equal(new TimeOnly(9, 0), design.StartTime);

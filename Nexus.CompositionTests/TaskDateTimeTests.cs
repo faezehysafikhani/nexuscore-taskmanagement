@@ -20,7 +20,7 @@ public sealed class TaskDateTimeTests(AccessControlTests.Host host) : IClassFixt
 
         var created = await host.SendAsync(user, HttpMethod.Post, "/api/task-management/tasks", new
         {
-            title = "Project with times", dueDate = "2030-05-10", dueTime = "14:30:00", priority = "Medium", isProject = true,
+            title = "Project with times", dueDate = "2030-05-10", dueTime = "14:30:00", priority = "Medium", isProject = true, assignedUserId = user.Id,
             charterStartDate = "2030-05-01", charterStartTime = "08:15:00", charterEndDate = "2030-06-01", charterEndTime = "17:45:00",
             subTasks = new[] { new { title = "Design", importance = "Medium" } },
         });

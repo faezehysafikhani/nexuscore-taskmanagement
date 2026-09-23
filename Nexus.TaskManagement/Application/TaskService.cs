@@ -111,6 +111,20 @@ public sealed class TaskService(
             return Result.Failure<TaskDto>(referenceCheck.Error);
         }
 
+        // Every new task has someone responsible (the endpoint's validator says so too; this also
+        // covers callers of the service itself), and it must be someone who can act on it: an
+        // active user of this organization. Edits keep accepting an existing assignee who was
+        // disabled later, so older tasks are not made invalid.
+        if (request.AssignedUserId is not { } responsibleId || responsibleId == Guid.Empty)
+        {
+            return Result.Failure<TaskDto>(Error.Validation("Choose who is responsible for the task."));
+        }
+
+        if (!await repository.ActiveUserExistsAsync(tenantId, responsibleId, cancellationToken))
+        {
+            return Result.Failure<TaskDto>(Error.Validation("The responsible user is not an active user of this organization."));
+        }
+
         var task = new TaskItem(
             Guid.NewGuid(), tenantId, request.Title, request.DueDate, request.Priority,
             request.IsProject, currentUser.UserId, request.Description);

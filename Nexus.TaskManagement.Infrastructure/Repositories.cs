@@ -171,6 +171,9 @@ public sealed class TaskRepository(TaskManagementDbContext db) : ITaskRepository
     public Task<bool> UserExistsAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken) =>
         db.Users.AnyAsync(u => u.Id == userId && u.TenantId == tenantId, cancellationToken);
 
+    public Task<bool> ActiveUserExistsAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken) =>
+        db.Users.AnyAsync(u => u.Id == userId && u.TenantId == tenantId && u.IsActive, cancellationToken);
+
     public Task<bool> UserGroupExistsAsync(Guid tenantId, Guid userGroupId, CancellationToken cancellationToken) =>
         db.UserGroups.AnyAsync(g => g.Id == userGroupId && g.TenantId == tenantId, cancellationToken);
 

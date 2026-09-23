@@ -194,7 +194,7 @@ public sealed class TaskManagementIntegrationTests(SqlServerFixture fixture)
                     "Weekly report", new DateOnly(2026, 6, 1), TaskPriority.High,
                     Description: "Every Sunday",
                     Recurrence: new RecurrenceInput(
-                        RecurrenceFrequency.Weekly, new DateOnly(2026, 1, 1), WeeklyDays: [1])),
+                        RecurrenceFrequency.Weekly, new DateOnly(2026, 1, 1), WeeklyDays: [1]), AssignedUserId: fixture.OwnerUserId),
                 default));
 
         Assert.True(created.IsSuccess);
@@ -227,7 +227,7 @@ public sealed class TaskManagementIntegrationTests(SqlServerFixture fixture)
             sp.GetRequiredService<ITaskService>().CreateAsync(
                 new CreateTaskRequest(
                     title, new DateOnly(2026, 6, 1),
-                    Recurrence: new RecurrenceInput(RecurrenceFrequency.Daily, new DateOnly(2026, 1, 1))),
+                    Recurrence: new RecurrenceInput(RecurrenceFrequency.Daily, new DateOnly(2026, 1, 1)), AssignedUserId: fixture.OwnerUserId),
                 default));
 
         var rows = await fixture.ScopedAsync(sp =>
@@ -245,7 +245,7 @@ public sealed class TaskManagementIntegrationTests(SqlServerFixture fixture)
             sp.GetRequiredService<ITaskService>().CreateAsync(
                 new CreateTaskRequest(
                     "Already recurring", new DateOnly(2026, 6, 1),
-                    Recurrence: new RecurrenceInput(RecurrenceFrequency.Daily, new DateOnly(2026, 1, 1))),
+                    Recurrence: new RecurrenceInput(RecurrenceFrequency.Daily, new DateOnly(2026, 1, 1)), AssignedUserId: fixture.OwnerUserId),
                 default));
 
         var second = await fixture.ScopedAsync(sp =>
@@ -282,7 +282,7 @@ public sealed class TaskManagementIntegrationTests(SqlServerFixture fixture)
             sp.GetRequiredService<ITaskService>().CreateAsync(
                 new CreateTaskRequest(
                     "Stop repeating me", new DateOnly(2026, 6, 1),
-                    Recurrence: new RecurrenceInput(RecurrenceFrequency.Daily, new DateOnly(2026, 1, 1))),
+                    Recurrence: new RecurrenceInput(RecurrenceFrequency.Daily, new DateOnly(2026, 1, 1)), AssignedUserId: fixture.OwnerUserId),
                 default));
 
         var scheduleId = task.Value.Recurrence!.Id;
@@ -308,7 +308,7 @@ public sealed class TaskManagementIntegrationTests(SqlServerFixture fixture)
             sp.GetRequiredService<ITaskService>().CreateAsync(
                 new CreateTaskRequest(
                     "Pause me", new DateOnly(2026, 6, 1),
-                    Recurrence: new RecurrenceInput(RecurrenceFrequency.Daily, new DateOnly(2026, 1, 1))),
+                    Recurrence: new RecurrenceInput(RecurrenceFrequency.Daily, new DateOnly(2026, 1, 1)), AssignedUserId: fixture.OwnerUserId),
                 default));
 
         var disabled = await fixture.ScopedAsync(sp =>
@@ -328,7 +328,7 @@ public sealed class TaskManagementIntegrationTests(SqlServerFixture fixture)
             sp.GetRequiredService<ITaskService>().CreateAsync(
                 new CreateTaskRequest(
                     "Delete everything", new DateOnly(2026, 6, 1),
-                    Recurrence: new RecurrenceInput(RecurrenceFrequency.Daily, new DateOnly(2026, 1, 1))),
+                    Recurrence: new RecurrenceInput(RecurrenceFrequency.Daily, new DateOnly(2026, 1, 1)), AssignedUserId: fixture.OwnerUserId),
                 default));
 
         await fixture.ScopedAsync(sp =>
@@ -351,7 +351,7 @@ public sealed class TaskManagementIntegrationTests(SqlServerFixture fixture)
             sp.GetRequiredService<ITaskService>().CreateAsync(
                 new CreateTaskRequest(
                     "Recurring plain task", new DateOnly(2026, 6, 1),
-                    Recurrence: new RecurrenceInput(RecurrenceFrequency.Daily, new DateOnly(2026, 1, 1))),
+                    Recurrence: new RecurrenceInput(RecurrenceFrequency.Daily, new DateOnly(2026, 1, 1)), AssignedUserId: fixture.OwnerUserId),
                 default));
 
         var recurring = await fixture.ScopedAsync(sp =>
@@ -704,7 +704,7 @@ public sealed class TaskManagementIntegrationTests(SqlServerFixture fixture)
         var result = await fixture.ScopedAsync(sp =>
             sp.GetRequiredService<ITaskService>().CreateAsync(
                 new CreateTaskRequest(
-                    "Bad team", new DateOnly(2026, 6, 1), AssignedUserGroupId: Guid.NewGuid()),
+                    "Bad team", new DateOnly(2026, 6, 1), AssignedUserGroupId: Guid.NewGuid(), AssignedUserId: fixture.OwnerUserId),
                 default));
 
         Assert.True(result.IsFailure);

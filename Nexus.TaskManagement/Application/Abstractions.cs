@@ -44,6 +44,9 @@ public interface ITaskRepository
 
     Task<bool> UserExistsAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken);
 
+    /// <summary>The user exists in the tenant and is not disabled.</summary>
+    Task<bool> ActiveUserExistsAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken);
+
     Task<bool> UserGroupExistsAsync(Guid tenantId, Guid userGroupId, CancellationToken cancellationToken);
 
     Task<IReadOnlyDictionary<Guid, UserSummaryDto>> GetUserSummariesAsync(
