@@ -8,6 +8,9 @@ namespace Nexus.TaskManagement.Infrastructure;
 
 public sealed class TaskRepository(TaskManagementDbContext db) : ITaskRepository
 {
+    // One query per collection: in a single query the collections multiply each other's rows
+    // (subtasks x their tags x files x task tags x files x assignees), and a recurring task with
+    // its occurrences came back as thousands of rows - slow enough to time out.
     public Task<TaskItem?> GetByIdAsync(Guid tenantId, Guid id, CancellationToken cancellationToken) =>
         db.Tasks
             .Include(t => t.SubTasks).ThenInclude(s => s.Tags).ThenInclude(tt => tt.Tag)
@@ -16,6 +19,7 @@ public sealed class TaskRepository(TaskManagementDbContext db) : ITaskRepository
             .Include(t => t.Files).ThenInclude(tf => tf.File)
             .Include(t => t.Assignees)
             .Include(t => t.Recurrence)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(t => t.TenantId == tenantId && t.Id == id, cancellationToken);
 
     public Task<TaskItem?> GetForUpdateAsync(Guid tenantId, Guid id, CancellationToken cancellationToken) =>
