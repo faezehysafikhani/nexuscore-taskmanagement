@@ -1,4 +1,5 @@
 using MediatR;
+using NexusCore.Application.Common;
 using Microsoft.AspNetCore.Hosting.Server;
 using Notifications.Application.Commands.MarkAllAsRead;
 using Notifications.Application.Commands.MarkAsRead;
@@ -12,6 +13,8 @@ public static class NotificationEndpoints
     public static IEndpointRouteBuilder MapNotificationEndpoints(
         this IEndpointRouteBuilder app)
     {
+        // The caller's own notifications, in the platform's usual shapes: the list or count on
+        // success, ProblemDetails with an error code otherwise (EndpointResults).
         var group = app.MapGroup("/api/notifications")
             .RequireAuthorization()
             .WithTags("Notifications");
@@ -22,16 +25,16 @@ public static class NotificationEndpoints
             ISender sender,
             CancellationToken ct) =>
         {
-            return Results.Ok(await sender.Send(
-                new GetMyNotificationsQuery(pageNumber ?? 1, pageSize ?? 20), ct));
+            return (await sender.Send(
+                new GetMyNotificationsQuery(pageNumber ?? 1, pageSize ?? 20), ct)).ToApiResult();
         });
 
         group.MapGet("/unread-count", async (
             ISender sender,
             CancellationToken ct) =>
         {
-            return Results.Ok(await sender.Send(
-                new GetUnreadCountQuery(), ct));
+            return (await sender.Send(
+                new GetUnreadCountQuery(), ct)).ToApiResult();
         });
 
         group.MapPut("/{id:guid}/read", async (
@@ -39,16 +42,16 @@ public static class NotificationEndpoints
             ISender sender,
             CancellationToken ct) =>
         {
-            return Results.Ok(await sender.Send(
-                new MarkAsReadCommand(id), ct));
+            return (await sender.Send(
+                new MarkAsReadCommand(id), ct)).ToApiResult();
         });
 
         group.MapPut("/read-all", async (
             ISender sender,
             CancellationToken ct) =>
         {
-            return Results.Ok(await sender.Send(
-                new MarkAllAsReadCommand(), ct));
+            return (await sender.Send(
+                new MarkAllAsReadCommand(), ct)).ToApiResult();
         });
 
         return app;

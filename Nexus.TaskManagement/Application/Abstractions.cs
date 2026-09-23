@@ -232,6 +232,12 @@ public interface IRecurrenceCalculator
 
     /// <summary>A UTC moment as the wall-clock time users entered the schedule in.</summary>
     DateTimeOffset ToLocalTime(DateTimeOffset utc);
+
+    /// <summary>A wall-clock date and time of the users' zone, as a UTC moment.</summary>
+    DateTimeOffset FromLocal(DateOnly date, TimeOnly time);
+
+    /// <summary>False when the zone is UTC itself: then wall-clock and UTC times cannot be told apart.</summary>
+    bool HasOffsetFromUtc { get; }
 }
 
 /// <summary>

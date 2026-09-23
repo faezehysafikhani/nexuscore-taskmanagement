@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Notifications.Application\Notifications.Application.csproj" />
+    <ProjectReference Include="..\NexusCore.Application\NexusCore.Application.csproj" />
   </ItemGroup>
 
 </Project>

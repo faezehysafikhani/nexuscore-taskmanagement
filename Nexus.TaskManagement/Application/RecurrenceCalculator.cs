@@ -25,6 +25,14 @@ public sealed class RecurrenceCalculator(TimeZoneInfo timeZone) : IRecurrenceCal
 
     public DateTimeOffset ToLocalTime(DateTimeOffset utc) => TimeZoneInfo.ConvertTime(utc, timeZone);
 
+    public DateTimeOffset FromLocal(DateOnly date, TimeOnly time)
+    {
+        var local = date.ToDateTime(time);
+        return new DateTimeOffset(local, timeZone.GetUtcOffset(local)).ToUniversalTime();
+    }
+
+    public bool HasOffsetFromUtc => timeZone.BaseUtcOffset != TimeSpan.Zero || timeZone.SupportsDaylightSavingTime;
+
     public DateTimeOffset? CalculateNextExecution(RepetitiveTask schedule, DateTimeOffset afterUtc)
     {
         if (!schedule.IsActive)
@@ -53,8 +61,7 @@ public sealed class RecurrenceCalculator(TimeZoneInfo timeZone) : IRecurrenceCal
 
             if (Matches(schedule, cursor))
             {
-                var local = cursor.ToDateTime(timeOfDay);
-                var candidate = new DateTimeOffset(local, timeZone.GetUtcOffset(local)).ToUniversalTime();
+                var candidate = FromLocal(cursor, timeOfDay);
                 if (candidate > afterUtc)
                 {
                     return candidate;

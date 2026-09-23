@@ -138,7 +138,7 @@ public sealed class RepetitiveTaskDueHandler(
         {
             if (!await smsSender.IsEnabledAsync(task.TenantId, cancellationToken))
             {
-                logger.LogInformation(
+                logger.LogInformation(ReminderDeliveryEvents.SmsSkipped,
                     "Recurring task {TaskId}: SMS is turned off in the SMS panel settings; no SMS sent.", task.Id);
                 return;
             }
@@ -148,7 +148,7 @@ public sealed class RepetitiveTaskDueHandler(
 
             foreach (var userId in recipients.Where(id => !phoneNumbers.ContainsKey(id)))
             {
-                logger.LogWarning(
+                logger.LogWarning(ReminderDeliveryEvents.SmsSkipped,
                     "Recurring task {TaskId}: no SMS for user {UserId} - no mobile number, or SMS notifications turned off.",
                     task.Id, userId);
             }
@@ -162,9 +162,16 @@ public sealed class RepetitiveTaskDueHandler(
                 if (result.IsFailure)
                 {
                     // The gateway's reason: SMS panel incomplete, provider refused, network...
-                    logger.LogWarning(
+                    // Not re-sent: when the provider took the message but its answer was lost,
+                    // a retry would text the user twice.
+                    logger.LogWarning(ReminderDeliveryEvents.SmsFailed,
                         "SMS to user {UserId} for task {TaskId} was not sent: {Error}",
                         userId, task.Id, result.Error.Message);
+                }
+                else
+                {
+                    logger.LogInformation(ReminderDeliveryEvents.SmsAccepted,
+                        "Reminder SMS for user {UserId}, task {TaskId} accepted by the SMS gateway.", userId, task.Id);
                 }
             }
         }

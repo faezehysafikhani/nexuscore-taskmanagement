@@ -18,7 +18,7 @@ namespace Nexus.Integrations.TaskNotifications;
 /// over and nothing else changes.
 /// </summary>
 public sealed class TaskNotificationPublisher(
-    INotificationService notifications,
+    IServiceScopeFactory scopeFactory,
     ILogger<TaskNotificationPublisher> logger) : ITaskNotificationPublisher
 {
     public async Task PublishAsync(TaskDueNotification notification, CancellationToken cancellationToken)
@@ -33,13 +33,44 @@ public sealed class TaskNotificationPublisher(
         // Each is stored on its own, so one failure does not cost the others theirs.
         foreach (var userId in notification.RecipientUserIds)
         {
+            await StoreWithRetryAsync(notification, userId, title, message, cancellationToken);
+        }
+    }
+
+    /// <summary>Attempts per recipient, and the pause before each retry.</summary>
+    internal static readonly TimeSpan[] RetryDelays = [TimeSpan.FromMilliseconds(200), TimeSpan.FromSeconds(1)];
+
+    /// <summary>
+    /// Storing a notification is a database insert: a failed attempt left nothing behind, so
+    /// trying again cannot create a second copy. Each attempt uses a fresh scope - a failed
+    /// insert stays in its DbContext and would otherwise be saved along with the retry.
+    /// </summary>
+    private async Task StoreWithRetryAsync(
+        TaskDueNotification notification, Guid userId, string title, string message, CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
             try
             {
-                await notifications.NotifyAsync(userId, title, message, "Warning", cancellationToken, notification.TenantId);
+                await using var scope = scopeFactory.CreateAsyncScope();
+                await scope.ServiceProvider.GetRequiredService<INotificationService>()
+                    .NotifyAsync(userId, title, message, "Warning", cancellationToken, notification.TenantId);
+                logger.LogInformation(ReminderDeliveryEvents.NotificationStored,
+                    "Reminder notification stored for user {UserId}, task {TaskId}.", userId, notification.TaskId);
+                return;
+            }
+            catch (Exception ex) when (attempt < RetryDelays.Length && !cancellationToken.IsCancellationRequested)
+            {
+                logger.LogWarning(ReminderDeliveryEvents.RetryPending, ex,
+                    "Reminder notification for user {UserId}, task {TaskId} failed (attempt {Attempt}); trying again.",
+                    userId, notification.TaskId, attempt + 1);
+                await Task.Delay(RetryDelays[attempt], cancellationToken);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Notification for user {UserId} about task {TaskId} was not stored.", userId, notification.TaskId);
+                logger.LogError(ReminderDeliveryEvents.NotificationFailed, ex,
+                    "Reminder notification for user {UserId} about task {TaskId} was not stored.", userId, notification.TaskId);
+                return;
             }
         }
     }

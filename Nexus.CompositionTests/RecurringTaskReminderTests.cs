@@ -328,6 +328,88 @@ public sealed class RecurringTaskReminderTests : IDisposable
         Assert.Contains(_logs.Entries, e => e.Level == LogLevel.Warning && e.Message.Contains("کلید API"));
     }
 
+    [Fact]
+    public async Task ANotificationThatFailsOnce_IsStoredOnRetry_Once()
+    {
+        var owner = User("09120000001");
+        _notifications.FailOnceFor.Add(owner.Id);
+        await RecurringTaskAsync(owner);
+
+        await PassAsync();
+
+        Assert.Equal(owner.Id, Assert.Single(_notifications.Sent).UserId);
+        Assert.Contains(_logs.Entries, e => e.EventId == ReminderDeliveryEvents.RetryPending.Id);
+        Assert.Contains(_logs.Entries, e => e.EventId == ReminderDeliveryEvents.NotificationStored.Id);
+    }
+
+    [Fact]
+    public async Task EveryDeliveryState_IsLoggedWithItsOwnEvent()
+    {
+        var owner = User("09120000001");
+        var withoutPhone = User(phone: null);
+        _smsProvider.FailFor.Add("09120000001");
+        await RecurringTaskAsync(owner, assignedUserId: withoutPhone.Id);
+
+        await PassAsync();
+
+        var ids = _logs.Entries.Select(e => e.EventId).ToHashSet();
+        Assert.Contains(ReminderDeliveryEvents.OccurrenceClaimed.Id, ids);
+        Assert.Contains(ReminderDeliveryEvents.NotificationStored.Id, ids);
+        Assert.Contains(ReminderDeliveryEvents.SmsFailed.Id, ids);
+        Assert.Contains(ReminderDeliveryEvents.SmsSkipped.Id, ids);
+        // A failed SMS is never sent a second time.
+        Assert.Empty(_smsProvider.Sent);
+    }
+
+    // ---------------------------------------------------------------- next runs from the old calculation
+
+    [Fact]
+    public async Task OldNextRuns_AreReportedOnly_UntilApplyIsChosen_AndThenCorrectedWithoutSendingAnything()
+    {
+        var owner = User("09120000001");
+        var future = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(3));
+        // The old calculation: 09:00 taken as UTC.
+        var legacyValue = new DateTimeOffset(future.ToDateTime(new TimeOnly(9, 0)), TimeSpan.Zero);
+        var (_, legacy) = await RecurringTaskAsync(owner, nextRunUtc: legacyValue, startTime: new TimeOnly(9, 0));
+        // Already correct: 09:00 in Tehran.
+        var correctValue = new RecurrenceCalculator(Tehran).FromLocal(future, new TimeOnly(9, 0));
+        var (_, correct) = await RecurringTaskAsync(owner, nextRunUtc: correctValue, startTime: new TimeOnly(9, 0), title: "Correct");
+        // Matches neither: not touched.
+        var oddValue = new DateTimeOffset(future.ToDateTime(new TimeOnly(14, 17)), TimeSpan.Zero);
+        var (_, odd) = await RecurringTaskAsync(owner, nextRunUtc: oddValue, startTime: new TimeOnly(9, 0), title: "Odd");
+
+        Assert.Equal(1, await Scheduler().RealignLegacyOccurrencesAsync("Report", CancellationToken.None));
+        Assert.Equal(legacyValue, (await ScheduleAsync(legacy)).NextExecutionAtUtc);
+
+        Assert.Equal(1, await Scheduler().RealignLegacyOccurrencesAsync("Apply", CancellationToken.None));
+        var realigned = await ScheduleAsync(legacy);
+        Assert.Equal(correctValue, realigned.NextExecutionAtUtc);
+        Assert.Equal(new TimeOnly(9, 0), realigned.StartTime);
+        Assert.Equal(RecurrenceFrequency.Daily, realigned.Frequency);
+        Assert.Equal(correctValue, (await ScheduleAsync(correct)).NextExecutionAtUtc);
+        Assert.Equal(oddValue, (await ScheduleAsync(odd)).NextExecutionAtUtc);
+        Assert.Contains(_logs.Entries, e => e.EventId == ReminderDeliveryEvents.LegacyTimeFound.Id && e.Message.Contains(odd.ToString()));
+
+        // Running it again finds nothing; nothing was announced along the way.
+        Assert.Equal(0, await Scheduler().RealignLegacyOccurrencesAsync("Apply", CancellationToken.None));
+        Assert.Empty(_notifications.Sent);
+        Assert.Empty(_smsProvider.Sent);
+    }
+
+    [Fact]
+    public async Task OldNextRuns_WithoutATimeOfDay_UseMidnightInTehran()
+    {
+        var owner = User("09120000001");
+        var future = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(3));
+        var legacyValue = new DateTimeOffset(future.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+        var (_, legacy) = await RecurringTaskAsync(owner, nextRunUtc: legacyValue);
+
+        await Scheduler().RealignLegacyOccurrencesAsync("Apply", CancellationToken.None);
+
+        var next = TimeZoneInfo.ConvertTime((await ScheduleAsync(legacy)).NextExecutionAtUtc!.Value, Tehran);
+        Assert.Equal(future.ToDateTime(TimeOnly.MinValue), next.DateTime);
+    }
+
     // ---------------------------------------------------------------- helpers
 
     private UserContact User(string? phone, bool isActive = true, Guid? tenantId = null)
@@ -435,10 +517,11 @@ public sealed class RecurringTaskReminderTests : IDisposable
         public ConcurrentQueue<(Guid UserId, Guid? TenantId, string Title, string Message)> Queue { get; } = new();
         public IReadOnlyList<(Guid UserId, Guid? TenantId, string Title, string Message)> Sent => Queue.ToList();
         public HashSet<Guid> FailFor { get; } = [];
+        public HashSet<Guid> FailOnceFor { get; } = [];
 
         public Task NotifyAsync(Guid userId, string title, string message, string type, CancellationToken cancellationToken = default, Guid? tenantId = null)
         {
-            if (FailFor.Contains(userId))
+            if (FailFor.Contains(userId) || FailOnceFor.Remove(userId))
             {
                 throw new InvalidOperationException("Notification store unavailable.");
             }
@@ -480,8 +563,8 @@ public sealed class RecurringTaskReminderTests : IDisposable
 
     private sealed class RecordingLogs : ILoggerProvider
     {
-        public ConcurrentQueue<(LogLevel Level, string Message)> Queue { get; } = new();
-        public IReadOnlyList<(LogLevel Level, string Message)> Entries => Queue.ToList();
+        public ConcurrentQueue<(LogLevel Level, int EventId, string Message)> Queue { get; } = new();
+        public IReadOnlyList<(LogLevel Level, int EventId, string Message)> Entries => Queue.ToList();
         public ILogger CreateLogger(string categoryName) => new Logger(this);
         public void Dispose() { }
 
@@ -491,7 +574,7 @@ public sealed class RecurringTaskReminderTests : IDisposable
             public bool IsEnabled(LogLevel logLevel) => true;
 
             public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
-                owner.Queue.Enqueue((logLevel, formatter(state, exception)));
+                owner.Queue.Enqueue((logLevel, eventId.Id, formatter(state, exception)));
         }
     }
 }

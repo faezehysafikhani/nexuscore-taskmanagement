@@ -44,6 +44,9 @@
     <ProjectReference Include="..\Ticketing.Infrastructure\Ticketing.Infrastructure.csproj" />
     <!-- RecurringTaskReminderTests: due recurring tasks through notifications and SMS. -->
     <ProjectReference Include="..\Nexus.Integrations.TaskNotifications\Nexus.Integrations.TaskNotifications.csproj" />
+    <!-- NotificationInboxTests: the notification endpoints the bell reads. -->
+    <ProjectReference Include="..\Notifications.Api\Notifications.Api.csproj" />
+    <ProjectReference Include="..\Notifications.Infrastructure\Notifications.Infrastructure.csproj" />
 
     <ProjectReference Include="..\Nexus.Actions\Nexus.Actions.csproj" />
     <ProjectReference Include="..\Nexus.Actions.Infrastructure\Nexus.Actions.Infrastructure.csproj" />
@@ -59,5 +62,15 @@
     <ProjectReference Include="..\Nexus.ProjectManagement.Risk\Nexus.ProjectManagement.Risk.csproj" />
     <ProjectReference Include="..\Nexus.ProjectManagement.Risk.Infrastructure\Nexus.ProjectManagement.Risk.Infrastructure.csproj" />
   </ItemGroup>
+
+  <!-- Notifications.Api ships an appsettings.json that is not valid JSON; keep it out of this
+       project's output so the test hosts keep loading the one they loaded before. -->
+  <Target Name="SkipNotificationsApiSettings" AfterTargets="GetCopyToOutputDirectoryItems">
+    <ItemGroup>
+      <_NotificationsApiSettings Include="@(_SourceItemsToCopyToOutputDirectory);@(_SourceItemsToCopyToOutputDirectoryAlways)" Condition="$([System.String]::Copy('%(FullPath)').Contains('Notifications.Api')) And '%(Filename)' == 'appsettings'" />
+      <_SourceItemsToCopyToOutputDirectory Remove="@(_NotificationsApiSettings)" />
+      <_SourceItemsToCopyToOutputDirectoryAlways Remove="@(_NotificationsApiSettings)" />
+    </ItemGroup>
+  </Target>
 
 </Project>

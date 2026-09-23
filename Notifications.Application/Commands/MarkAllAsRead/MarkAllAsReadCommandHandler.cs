@@ -25,7 +25,7 @@ public sealed class MarkAllAsReadCommandHandler
         CancellationToken cancellationToken)
     {
         var unread = await _db.Notifications
-            .Where(n => n.UserId == _currentUser.UserId && !n.IsRead)
+            .Where(n => n.UserId == _currentUser.UserId && (n.TenantId == null || n.TenantId == _currentUser.TenantId) && !n.IsRead)
             .ToListAsync(cancellationToken);
 
         if (unread.Count == 0)

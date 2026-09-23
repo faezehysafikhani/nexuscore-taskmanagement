@@ -27,7 +27,7 @@ public sealed class MarkAsReadCommandHandler
         var notification = await _db.Notifications
             .SingleOrDefaultAsync(
                 n => n.Id == request.NotificationId &&
-                     n.UserId == _currentUser.UserId,
+                     n.UserId == _currentUser.UserId && (n.TenantId == null || n.TenantId == _currentUser.TenantId),
                 cancellationToken);
 
         if (notification is null)
