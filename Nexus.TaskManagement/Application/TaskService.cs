@@ -97,8 +97,6 @@ public sealed class TaskService(
 
         var tenantId = currentUser.TenantId.Value;
 
-        // A project is defined by having work under it, so refuse to create an empty one
-        // rather than leaving a project that breaks its own rule.
         if (request.IsProject && (request.SubTasks is null || request.SubTasks.Count == 0))
         {
             return Result.Failure<TaskDto>(Error.Validation("A project must have at least one subtask."));
@@ -111,10 +109,6 @@ public sealed class TaskService(
             return Result.Failure<TaskDto>(referenceCheck.Error);
         }
 
-        // Every new task has someone responsible (the endpoint's validator says so too; this also
-        // covers callers of the service itself), and it must be someone who can act on it: an
-        // active user of this organization. Edits keep accepting an existing assignee who was
-        // disabled later, so older tasks are not made invalid.
         if (request.AssignedUserId is not { } responsibleId || responsibleId == Guid.Empty)
         {
             return Result.Failure<TaskDto>(Error.Validation("Choose who is responsible for the task."));
@@ -169,8 +163,6 @@ public sealed class TaskService(
             await ApplyTagsAsync(tenantId, task.Id, request.Tags, cancellationToken);
         }
 
-        // The task, its subtasks, its schedule and its tags all land in one SaveChanges, so a
-        // failure anywhere leaves no half-built project behind.
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await activity.RecordAsync(task.Id, "Task created", task.Title, cancellationToken);
 
@@ -204,8 +196,6 @@ public sealed class TaskService(
             return Result.Failure<TaskDto>(referenceCheck.Error);
         }
 
-        // Promoting a plain task to a project needs the work to already be there. Demoting
-        // is always fine, and a plain task is never held to the subtask rule.
         if (request.IsProject is true && !task.IsProject)
         {
             var subTaskCount = await repository.CountSubTasksAsync(tenantId, id, cancellationToken);
@@ -261,7 +251,6 @@ public sealed class TaskService(
             return Result.Failure(NotTaskOwner());
         }
 
-        // Junction rows use NoAction, so they have to go before the task does.
         var storedFiles = await repository.ClearLinksForTaskAsync(id, cancellationToken);
         repository.Remove(task);
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -286,7 +275,6 @@ public sealed class TaskService(
             return Result.Failure<TaskDto>(Error.NotFound("Task not found."));
         }
 
-        // Mirrors the UI rule: the assignee may move the status only while the owner allows it.
         if (!task.AllowAssigneeStatusUpdate
             && currentUser.UserId is { } actor
             && task.AssignedUserId == actor
@@ -437,6 +425,11 @@ public sealed class TaskService(
             return Result.Failure<SubTaskDto>(Error.NotFound("Task not found."));
         }
 
+        if (!access.CanManage(task))
+        {
+            return Result.Failure<SubTaskDto>(NotTaskOwner());
+        }
+
         var count = await repository.CountSubTasksAsync(tenantId, taskId, cancellationToken);
         var subTask = task.AddSubTask(
             Guid.NewGuid(), request.Title, request.Importance,
@@ -459,10 +452,22 @@ public sealed class TaskService(
             return Result.Failure<SubTaskDto>(Error.Unauthorized());
         }
 
-        var subTask = await repository.GetSubTaskAsync(currentUser.TenantId.Value, subTaskId, cancellationToken);
+        var tenantId = currentUser.TenantId.Value;
+        var subTask = await repository.GetSubTaskAsync(tenantId, subTaskId, cancellationToken);
         if (subTask is null)
         {
             return Result.Failure<SubTaskDto>(Error.NotFound("Subtask not found."));
+        }
+
+        var parent = await repository.GetForUpdateAsync(tenantId, subTask.TaskId, cancellationToken);
+        if (parent is null)
+        {
+            return Result.Failure<SubTaskDto>(Error.NotFound("Task not found."));
+        }
+
+        if (!access.CanManage(parent))
+        {
+            return Result.Failure<SubTaskDto>(NotTaskOwner());
         }
 
         subTask.UpdateDetails(request.Title, request.Importance, request.StartDate, request.EndDate, request.SortOrder);
@@ -481,10 +486,22 @@ public sealed class TaskService(
             return Result.Failure<SubTaskDto>(Error.Unauthorized());
         }
 
-        var subTask = await repository.GetSubTaskAsync(currentUser.TenantId.Value, subTaskId, cancellationToken);
+        var tenantId = currentUser.TenantId.Value;
+        var subTask = await repository.GetSubTaskAsync(tenantId, subTaskId, cancellationToken);
         if (subTask is null)
         {
             return Result.Failure<SubTaskDto>(Error.NotFound("Subtask not found."));
+        }
+
+        var parent = await repository.GetForUpdateAsync(tenantId, subTask.TaskId, cancellationToken);
+        if (parent is null)
+        {
+            return Result.Failure<SubTaskDto>(Error.NotFound("Task not found."));
+        }
+
+        if (!access.CanManage(parent))
+        {
+            return Result.Failure<SubTaskDto>(NotTaskOwner());
         }
 
         subTask.SetCompleted(request.IsCompleted);
@@ -535,7 +552,17 @@ public sealed class TaskService(
         }
 
         var parent = await repository.GetForUpdateAsync(tenantId, subTask.TaskId, cancellationToken);
-        if (parent is not null && parent.IsProject)
+        if (parent is null)
+        {
+            return Result.Failure(Error.NotFound("Task not found."));
+        }
+
+        if (!access.CanManage(parent))
+        {
+            return Result.Failure(NotTaskOwner());
+        }
+
+        if (parent.IsProject)
         {
             var count = await repository.CountSubTasksAsync(tenantId, subTask.TaskId, cancellationToken);
             if (count <= 1)
@@ -624,7 +651,6 @@ public sealed class TaskService(
             return Result.Failure(Error.Unauthorized());
         }
 
-        // AuditLog.Action is 120 characters; details are kept to a sensible size.
         if (string.IsNullOrWhiteSpace(request.Action) || request.Action.Trim().Length > 120)
         {
             return Result.Failure(Error.Validation("An activity action of 1-120 characters is required."));
@@ -640,7 +666,6 @@ public sealed class TaskService(
             return Result.Failure(Error.NotFound("Task not found."));
         }
 
-        // Recorded under the signed-in user; the request cannot name someone else.
         await activity.RecordAsync(taskId, request.Action.Trim(), request.Details?.Trim(), cancellationToken);
         return Result.Success();
     }
