@@ -180,12 +180,12 @@ public sealed class UserGroupService(
 
     public async Task<Result<IReadOnlyList<UserGroupDto>>> ListMyTeamsAsync(CancellationToken cancellationToken)
     {
-        if (currentUser.UserId is not { } ownerId || currentUser.TenantId is not { } tenantId)
+        if (currentUser.UserId is not { } userId || currentUser.TenantId is not { } tenantId)
         {
             return Result.Failure<IReadOnlyList<UserGroupDto>>(Error.Unauthorized());
         }
 
-        var teams = await repository.ListOwnedAsync(tenantId, ownerId, cancellationToken);
+        var teams = await repository.ListVisibleToUserAsync(tenantId, userId, cancellationToken);
         var users = await LoadMemberUsersAsync(teams, cancellationToken);
         return Result.Success<IReadOnlyList<UserGroupDto>>(teams.Select(team => ToDto(team, users)).ToList());
     }
