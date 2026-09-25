@@ -30,10 +30,14 @@ $projects = @(
 
 foreach ($project in $projects) {
     $projectPath = Join-Path $repoRoot $project
-    Write-Host "Packing $project"
+    $packageId = [System.IO.Path]::GetFileNameWithoutExtension($projectPath)
+
+    Write-Host "Packing $packageId from $project"
     dotnet pack $projectPath `
         --configuration $Configuration `
+        -p:PackageId=$packageId `
         -p:PackageVersion=$Version `
+        -p:IsPackable=true `
         -p:ContinuousIntegrationBuild=true `
         -p:IncludeSymbols=false `
         --output $outputPath
