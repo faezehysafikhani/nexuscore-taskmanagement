@@ -23,6 +23,12 @@ public sealed class TaskService(
     internal static Error NotTaskOwner() =>
         Error.Forbidden("Only the owner of this task, or a user who manages all tasks, can do this.");
 
+    private bool CanChangeStatus(TaskItem task) =>
+        access.CanManage(task)
+        || (task.AllowAssigneeStatusUpdate
+            && currentUser.UserId is { } actor
+            && task.AssignedUserId == actor);
+
     public async Task<Result<PagedResult<TaskListItemDto>>> ListAsync(
         ListTasksRequest request, CancellationToken cancellationToken)
     {
@@ -275,13 +281,10 @@ public sealed class TaskService(
             return Result.Failure<TaskDto>(Error.NotFound("Task not found."));
         }
 
-        if (!task.AllowAssigneeStatusUpdate
-            && currentUser.UserId is { } actor
-            && task.AssignedUserId == actor
-            && task.OwnerUserId != actor)
+        if (!CanChangeStatus(task))
         {
             return Result.Failure<TaskDto>(
-                Error.Validation("The owner of this task has not allowed the assignee to change its status."));
+                Error.Forbidden("Only the task owner, a task manager, or the assigned user when status updates are allowed can change the status."));
         }
 
         var previous = task.Status;
