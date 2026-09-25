@@ -1,0 +1,15 @@
+<Project>
+  <PropertyGroup>
+    <Authors>NexusCore Platform Team</Authors>
+    <Company>NexusCore Platform Team</Company>
+    <Product>NexusCore Platform</Product>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/faezehysafikhani/nexuscore-taskmanagement</RepositoryUrl>
+    <PackageLicenseExpression>Proprietary</PackageLicenseExpression>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <PackageReadmeFile Condition="Exists('README.md')">README.md</PackageReadmeFile>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <IncludeSymbols>false</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+</Project>
