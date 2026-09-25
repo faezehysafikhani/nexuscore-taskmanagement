@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using NexusCore.Application.Files;
 using NexusCore.Application.Identity.Interfaces;
+using NexusCore.Application.Identity.Permissions;
 using NexusCore.SharedKernel.Interfaces;
 using NexusCore.SharedKernel.Results;
 
@@ -23,7 +24,7 @@ public sealed class DirectConversationService(
 {
     public const int MaxTextLength = 4000;
 
-    /// <summary>The signed-in user and the partner, checked: both exist, are active and share a tenant.</summary>
+    /// <summary>The signed-in user and the partner, checked: both exist, are active, share a tenant and may talk.</summary>
     public async Task<Result<(UserContact Me, UserContact Other)>> ResolvePairAsync(Guid otherUserId, CancellationToken cancellationToken)
     {
         if (currentUser.UserId is not { } meId || currentUser.TenantId is not { } tenantId)
@@ -42,6 +43,12 @@ public sealed class DirectConversationService(
 
         // Someone in another tenant is reported exactly like someone who does not exist.
         if (me is null || other is null || other.TenantId != tenantId || !other.IsActive)
+        {
+            return Result.Failure<(UserContact, UserContact)>(Error.NotFound("User was not found."));
+        }
+
+        if (!currentUser.HasPermission(UserGroupPermissions.GroupsManageMembers)
+            && !await ShareAnyWorkTeamAsync(meId, otherUserId, cancellationToken))
         {
             return Result.Failure<(UserContact, UserContact)>(Error.NotFound("User was not found."));
         }
@@ -101,6 +108,18 @@ public sealed class DirectConversationService(
             message.HasAttachment
                 ? new ChatAttachmentDto(message.AttachmentFileName!, message.AttachmentContentType ?? "application/octet-stream", message.AttachmentSizeBytes ?? 0)
                 : null);
+
+    private async Task<bool> ShareAnyWorkTeamAsync(Guid meId, Guid otherUserId, CancellationToken cancellationToken)
+    {
+        var myGroups = await userDirectory.GetGroupIdsOfUserAsync(meId, cancellationToken);
+        if (myGroups.Count == 0)
+        {
+            return false;
+        }
+
+        var otherGroups = await userDirectory.GetGroupIdsOfUserAsync(otherUserId, cancellationToken);
+        return myGroups.Intersect(otherGroups).Any();
+    }
 }
 
 public sealed class GetDirectMessagesQueryHandler(
@@ -217,8 +236,7 @@ public sealed class SendDirectMessageCommandHandler(
 
         return Result.Success(DirectConversationService.ToDto(message, me, other.Id, isRead: false));
     }
-}
-
+}\n
 public sealed class MarkDirectConversationReadCommandHandler(
     IChatDbContext db,
     DirectConversationService conversations)
