@@ -37,7 +37,7 @@ builder.Services.AddApplication();
 builder.Services.AddChatApplication();
 builder.Services.AddNotificationApplication();
 builder.Services.AddTaskManagement();
-builder.Services.AddTaskNotificationIntegration();
+builder.Services.AddTaskNotificationsIntegration();
 
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddChatInfrastructure(builder.Configuration);
@@ -70,7 +70,7 @@ builder.Services.AddSwaggerGen(options =>
         {
             new OpenApiSecurityScheme
             {
-                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
+                Reference = new OpenApiReference { Type = SecuritySchemeType.Http, Id = "Bearer" }
             },
             []
         }
