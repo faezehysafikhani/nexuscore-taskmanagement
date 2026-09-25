@@ -49,7 +49,8 @@ Integrations.
 MediatR CQRS (`IRequest`/`IRequestHandler`, Commands/Queries folders) with their own `*.Api` host
 projects.
 
-**`Rozet.Api` is the real composition host** (port 5151) and composes both families.
+Product hosts compose the reusable NexusCore modules they need. In this repository, reusable
+modules remain in Core while product-specific hosts can live in their own repositories.
 
 > **Decision: TaskManagement follows Style A (`Nexus.*`).** It is the style the architecture tests
 > police, it is what every recent module uses, and `Nexus.ProjectManagement.Core` is the closest
@@ -97,12 +98,12 @@ Nexus.<Module>.Infrastructure/
 
 Adding a module means editing exactly these places:
 
-1. `NexusCore.sln` — add both projects
-2. `Rozet.Api.csproj` — two `ProjectReference`s
-3. `Program.cs` application tier — `builder.Services.AddTaskManagement();`
-4. `Program.cs` infrastructure tier — `builder.Services.AddTaskManagementInfrastructure(builder.Configuration);`
-5. `Program.cs` endpoints — `app.MapTaskManagementEndpoints();`
-6. `Program.cs` seed block — `await ModuleSchemaInitializer.EnsureCreatedAsync(services.GetRequiredService<TaskManagementDbContext>(), ct);`
+1. `NexusCore.sln` — add both module projects
+2. Package-generation classification — add the module projects to `eng/pack-core-modules.ps1`
+3. Product host application tier — `builder.Services.AddTaskManagement();`
+4. Product host infrastructure tier — `builder.Services.AddTaskManagementInfrastructure(builder.Configuration);`
+5. Product host endpoints — `app.MapTaskManagementEndpoints();`
+6. Product host seed block — `await ModuleSchemaInitializer.EnsureCreatedAsync(services.GetRequiredService<TaskManagementDbContext>(), ct);`
 
 ## 1.5 Migrations — an important caveat
 
@@ -114,7 +115,7 @@ available should replace this with real per-module Migrations."*
 Consequences:
 
 - At runtime the host **does not run migrations**. Six projects contain migrations, but they are
-  never applied by `Rozet.Api`.
+  not applied automatically by a product host.
 - `CreateTablesAsync` emits the model, **including CHECK constraints** declared via
   `ToTable(t => t.HasCheckConstraint(...))`. So the two mandated CHECK constraints will exist
   either way.
@@ -267,7 +268,7 @@ three task types = **NoAction**, with the service deleting join rows inside the 
 
 ## C6 — UserGroups is switched off
 
-`Rozet.Api/appsettings.json` has `"Features": { "UserGroups": { "Enabled": false } }`, and
+The product host configuration had `"Features": { "UserGroups": { "Enabled": false } }`, and
 `Program.cs` only maps the UserGroup endpoints when it is on. Team assignment therefore has no
 management UI unless the flag is enabled.
 

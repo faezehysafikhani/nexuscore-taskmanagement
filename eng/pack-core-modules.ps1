@@ -432,11 +432,7 @@ $excludedProjects = @(
 
     "Nexus.CompositionTests/Nexus.CompositionTests.csproj",
 
-    "NexusCore.Api/NexusCore.Api.csproj",
-
-    "Rozet.Api/Rozet.Api.csproj",
-
-    "PostbankPM/PostbankPM.csproj"
+    "NexusCore.Api/NexusCore.Api.csproj"
 
 )
 

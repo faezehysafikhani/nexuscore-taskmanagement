@@ -264,7 +264,7 @@ public sealed class AccountStatusTests
                 .UseInMemoryDatabase(database)
                 .AddInterceptors(provider.GetRequiredService<AuditingInterceptor>(), provider.GetRequiredService<DomainEventDispatchInterceptor>()));
 
-            // The same bearer and policy set-up as the API hosts (NexusCore.Api, Rozet.Api).
+            // The same bearer and policy set-up as the API hosts.
             var jwt = new JwtOptions();
             builder.Services
                 .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

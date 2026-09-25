@@ -260,7 +260,7 @@ Verified against a live database: 204,800 bytes accepted, 204,801 rejected by `C
 
 ### C6 — UserGroups: **resolved**
 
-- *Cause:* `Features:UserGroups:Enabled` was `false` in `Rozet.Api/appsettings.json`.
+- *Cause:* `Features:UserGroups:Enabled` was disabled in the product host's `appsettings.json`.
   `AddUserGroupFeature` (already called from `AddInfrastructure`) registered a null permission
   provider and no group services, and `Program.cs` skipped `MapUserGroupEndpoints`.
 - *Change:* the flag is now `true`. One line; no code change was needed.
@@ -343,8 +343,8 @@ the endpoint definitions. Real SMS delivery is untested because there is nothing
 ## 11. Running it
 
 ```bash
-dotnet run --project Rozet.Api --launch-profile http     # API on :5151, Swagger at /swagger
-cd <frontend> && npm install && npm run dev              # UI on :3030
+dotnet run --project <product-host> --launch-profile http
+cd <frontend> && npm install && npm run dev
 ```
 
 ### Enabling the scheduler

@@ -29,9 +29,9 @@
   </ItemGroup>
 
   <!-- This project intentionally reaches across module boundaries no other project is allowed
-       to - its whole job is to compose modules together and check the results, the same way a
-       Project Application like Rozet.Api does. See ArchitectureDependencyTests for the
-       complementary check that every *other* project's boundaries are respected. -->
+       to - its whole job is to compose modules together and check the results, the same way an
+       external product host does. See ArchitectureDependencyTests for the complementary check
+       that every *other* project's boundaries are respected. -->
   <ItemGroup>
     <ProjectReference Include="..\NexusCore.Application\NexusCore.Application.csproj" />
     <ProjectReference Include="..\NexusCore.Infrastructure\NexusCore.Infrastructure.csproj" />

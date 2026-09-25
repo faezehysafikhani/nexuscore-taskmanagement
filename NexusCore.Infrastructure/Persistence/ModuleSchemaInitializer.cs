@@ -12,7 +12,7 @@ namespace NexusCore.Infrastructure.Persistence;
 /// created the shared DefaultConnection database, every other module's plain EnsureCreatedAsync()
 /// call sees an existing, non-empty database and silently does nothing - its own tables never
 /// get created. That matters here because every module owns its own DbContext, but a host that
-/// composes several of them (see Rozet.Api) points them all at the same DefaultConnection
+/// composes several of them points them all at the same DefaultConnection
 /// database, isolated by schema rather than by physical database (see each module's own
 /// ToTable(name, schema) configuration). With no EF Core Migrations tooling available in this
 /// environment to give each module a real, independent migration history, this instead talks to

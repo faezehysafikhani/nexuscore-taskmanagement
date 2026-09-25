@@ -15,10 +15,10 @@
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
   </ItemGroup>
 
-  <!-- PostBank is a second consumer of the Nexus Platform, alongside Rozet: same NexusCore
+  <!-- PostBank is a consumer of the Nexus Platform: same NexusCore
        foundation plus the reusable modules this product chooses to compose. Trimming PostBank is
        a matter of deleting the matching ProjectReference/AddXxx()/MapXxxEndpoints() lines; nothing
-       here is load-bearing for any other application host (Rozet.Api included). -->
+       here is load-bearing for any other application host. -->
   <ItemGroup>
     <!-- NexusCore foundation -->
     <ProjectReference Include="..\Chat.Api\Chat.Api.csproj" />
