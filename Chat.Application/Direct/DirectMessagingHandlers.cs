@@ -41,7 +41,6 @@ public sealed class DirectConversationService(
         var me = users.FirstOrDefault(user => user.Id == meId);
         var other = users.FirstOrDefault(user => user.Id == otherUserId);
 
-        // Someone in another tenant is reported exactly like someone who does not exist.
         if (me is null || other is null || other.TenantId != tenantId || !other.IsActive)
         {
             return Result.Failure<(UserContact, UserContact)>(Error.NotFound("User was not found."));
@@ -83,8 +82,6 @@ public sealed class DirectConversationService(
         }
         catch (DbUpdateException)
         {
-            // Both users opened the chat at the same moment: the unique DirectKey kept one
-            // conversation, so use that one.
             db.ChangeTracker.Clear();
             return await FindAsync(meId, otherUserId, cancellationToken)
                    ?? throw new InvalidOperationException("The direct conversation could not be created.");
@@ -213,13 +210,10 @@ public sealed class SendDirectMessageCommandHandler(
 
         var (me, other) = pair.Value;
         var conversation = await conversations.FindOrCreateAsync(me.Id, other.Id, cancellationToken);
-
-        // The sender is always the signed-in user; nothing in the request can change that.
         var message = new Message(Guid.NewGuid(), conversation.Id, me.Id, text);
 
         if (request.Attachment is { } attachment)
         {
-            // Only the display name is kept from the client; the storage key is generated.
             var fileName = Path.GetFileName(attachment.FileName);
             if (string.IsNullOrWhiteSpace(fileName))
             {
@@ -236,7 +230,8 @@ public sealed class SendDirectMessageCommandHandler(
 
         return Result.Success(DirectConversationService.ToDto(message, me, other.Id, isRead: false));
     }
-}\n
+}
+
 public sealed class MarkDirectConversationReadCommandHandler(
     IChatDbContext db,
     DirectConversationService conversations)
@@ -275,7 +270,6 @@ public sealed class MarkDirectConversationReadCommandHandler(
         }
         catch (DbUpdateException)
         {
-            // The same messages were marked by a parallel request (the chat polls): already read.
             return Result.Success(0);
         }
 
@@ -322,7 +316,6 @@ public sealed class GetMessageAttachmentQueryHandler(
             return Result.Failure<ChatAttachmentDownload>(Error.Unauthorized());
         }
 
-        // Only participants can read an attachment; anyone else gets the same "not found".
         var message = await db.Messages
             .AsNoTracking()
             .Where(m => m.Id == request.MessageId && !m.IsDeleted)
