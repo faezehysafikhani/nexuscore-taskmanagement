@@ -1,9 +1,26 @@
-# NexusCore + TaskManagement
+# NexusCore platform packages + TMPB
 
-NexusCore contains a modular .NET 8 API and a React/Vite administration UI.
+NexusCore is the shared .NET 8 platform for identity, tenants, permissions, audit, settings and
+reusable modules. Product hosts should consume it through internal NuGet packages instead of
+referencing this source tree directly.
 
-This copy adds the **TaskManagement** module. It is an independent snapshot: it carries no git
-history from, and no remote pointing at, the upstream NexusCore repository.
+This branch adds the **TMPB** host as a separate .NET 8 project under `TMPB/TMPB.Api`. TMPB is not
+added to `NexusCore.sln`; it is intentionally independent and consumes the approved Core packages
+through `PackageReference`.
+
+## TMPB composition
+
+TMPB currently composes only the modules needed by this product:
+
+| Area | Packages/modules |
+|---|---|
+| Shared Core | `NexusCore.Application`, `NexusCore.Infrastructure`, `NexusCore.SharedKernel` |
+| Chat | `Chat.Api`, `Chat.Application`, `Chat.Infrastructure` |
+| Notifications | `Notifications.Api`, `Notifications.Application`, `Notifications.Infrastructure` |
+| Task Manager | `Nexus.TaskManagement`, `Nexus.TaskManagement.Infrastructure` |
+| Integration | `Nexus.Integrations.TaskNotifications` |
+
+Rozet and PostBank are product hosts and are not part of the TMPB package surface.
 
 ## TaskManagement
 
@@ -14,59 +31,43 @@ A task, project and recurring-task module built on the `Nexus.*` module template
 | `Nexus.TaskManagement` | domain, application services, validators, endpoints, permissions |
 | `Nexus.TaskManagement.Infrastructure` | `TaskManagementDbContext`, repositories, migrations, scheduler |
 | `Nexus.Integrations.TaskNotifications` | bridge to the Notifications module |
-| `Nexus.TaskManagement.Tests` | 85 unit and integration tests |
+| `Nexus.TaskManagement.Tests` | unit and integration tests |
 
-Every task — plain, project and recurring — is a row in `task_management.Tasks`, distinguished
-by `IsProject`. `RepetitiveTasks` holds only the recurrence schedule and links back through a
-unique `TaskId`. The module owns its own schema and holds real foreign keys into the shared
-`identity` schema without owning those tables.
-
-API surface: 30 routes under `/api/task-management`, all permission-gated and visible in Swagger.
+Every task — plain, project and recurring — is a row in `task_management.Tasks`, distinguished by
+`IsProject`. `RepetitiveTasks` holds only the recurrence schedule and links back through a unique
+`TaskId`. The module owns its own schema and holds real foreign keys into the shared `identity`
+schema without owning those tables.
 
 See [docs/TaskManagement-Implementation.md](docs/TaskManagement-Implementation.md) for the full
-design, the business rules, what is verified and what is not, and the remaining dependencies.
+design and business rules.
 
-See [docs/Accounts-Teams-Chat-Notifications.md](docs/Accounts-Teams-Chat-Notifications.md)
-for accounts, teams, chat, notification gateways and live updates, and for upgrading an
-existing database.
+See [docs/Accounts-Teams-Chat-Notifications.md](docs/Accounts-Teams-Chat-Notifications.md) for
+accounts, teams, chat, notification gateways and live updates.
 
-### Enabling the recurring-task scheduler
+See [docs/Core-Packaging-Government-Deployment.md](docs/Core-Packaging-Government-Deployment.md)
+for the internal NuGet packaging and offline/bank-network deployment workflow.
 
-Off by default. In `Rozet.Api/appsettings.json`:
+## Package Core for TMPB
 
-```jsonc
-"TaskManagement": {
-  "Scheduler": { "Enabled": true, "PollIntervalSeconds": 60, "BatchSize": 100 }
-}
+```powershell
+pwsh ./eng/pack-core-modules.ps1 -Configuration Release -Version 0.1.0 -Output artifacts/packages
 ```
 
-### Configuration
+Copy the produced `.nupkg` files to the approved internal NuGet feed or to an offline package
+share. Do not restore TMPB from public feeds in production networks.
 
-`appsettings.json` ships development defaults only: connection strings use Windows
-authentication and the JWT `SigningKey` is a placeholder. Replace both before any real
-deployment, and supply secrets through user-secrets, environment variables or a vault rather
-than the settings file.
+## Restore and run TMPB
 
-## Prerequisites
+```powershell
+dotnet restore TMPB/TMPB.Api/TMPB.Api.csproj --configfile TMPB/nuget.config
+dotnet run --project TMPB/TMPB.Api/TMPB.Api.csproj
+```
 
-- .NET SDK 8
-- Node.js and npm
-- SQL Server with the connection strings configured in
-  `NexusCore.Api/appsettings.json` or environment variables
+`TMPB/TMPB.Api/appsettings.json` contains development placeholders only. Replace connection
+strings, JWT signing keys and CORS origins through environment variables or a vault for real
+deployments.
 
-## Run locally
-
-1. Start the full application API (HTTP port 5151):
-   `dotnet run --project Rozet.Api/Rozet.Api.csproj --launch-profile http`
-2. In a second terminal, install the UI dependencies:
-   `npm install`
-3. Start the administration UI on port 3030:
-   `npm run dev`
-
-The UI development script points `VITE_API_BASE_URL` at
-`http://localhost:5151`. Override it when the API runs elsewhere.
-
-## Verify
+## Verify Core
 
 - UI type-check: `npm run lint`
 - UI production build: `npm run build`
