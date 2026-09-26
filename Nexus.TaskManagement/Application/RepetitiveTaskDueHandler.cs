@@ -62,10 +62,11 @@ public sealed class RepetitiveTaskDueHandler(
             // Independent: a failed notification does not stop the SMS, and the reverse.
             await PublishNotificationAsync(task, recipients, DateOnly.FromDateTime(occurrence.DateTime), when, cancellationToken);
 
-            // The SMS is only for the task's responsible person (AssignedUserId) - if they are among
-            // the active users above. Collaborators, team members and a creator who is not
+            // The SMS is only for the task's responsible people - each of them who is among the
+            // active users above, once. People on the access list and a creator who is not
             // responsible get the notification only; a task without one gets no SMS at all.
-            var smsRecipients = recipients.Where(id => id == task.AssignedUserId).ToList();
+            var responsible = task.ResponsibleUserIds;
+            var smsRecipients = recipients.Where(responsible.Contains).ToList();
             await SendSmsAsync(task, smsRecipients, when, cancellationToken);
         }
         catch (Exception ex)
@@ -76,8 +77,9 @@ public sealed class RepetitiveTaskDueHandler(
     }
 
     /// <summary>
-    /// The people responsible for doing the task: its assignee, its collaborators and the members
-    /// of its team - and of those only active users of the task's own organization, each once.
+    /// The people the task is for: those responsible for it and those on its access list (the
+    /// task's team is only its context - its members are reminded when they are on that list) -
+    /// and of those only active users of the task's own organization, each once.
     /// The creator is not reminded for having created it; only when nobody is assigned at all
     /// is the task the creator's own, and then the creator is the one responsible. Nobody else:
     /// a notification to an unrelated user is a bug, not a nicety.
@@ -86,17 +88,8 @@ public sealed class RepetitiveTaskDueHandler(
     {
         var candidates = new HashSet<Guid>();
 
-        if (task.AssignedUserId is { } assigned)
-        {
-            candidates.Add(assigned);
-        }
-
+        candidates.UnionWith(task.ResponsibleUserIds);
         candidates.UnionWith(task.Assignees.Select(a => a.UserId));
-
-        if (task.AssignedUserGroupId is { } groupId)
-        {
-            candidates.UnionWith(await userDirectory.GetGroupMemberIdsAsync(groupId, cancellationToken));
-        }
 
         if (candidates.Count == 0 && task.OwnerUserId is { } owner)
         {

@@ -65,6 +65,9 @@ internal static class RecurrenceRules
 
 public sealed class CreateTaskRequestValidator : AbstractValidator<CreateTaskRequest>
 {
+    /// <summary>Most people one task can be the responsibility of.</summary>
+    public const int MaxResponsible = 50;
+
     public CreateTaskRequestValidator()
     {
         RuleFor(x => x.Title).NotEmpty().MaximumLength(200);
@@ -73,11 +76,17 @@ public sealed class CreateTaskRequestValidator : AbstractValidator<CreateTaskReq
         RuleFor(x => x.CharterDescription).MaximumLength(4000);
         RuleFor(x => x.CharterProjectManager).MaximumLength(200);
 
-        // Every new task has someone responsible for doing it (the creator may pick themselves).
+        // Every new task has someone responsible for doing it (the creator may pick themselves) -
+        // one or more in ResponsibleUserIds, or the single AssignedUserId older clients send.
         // Existing tasks without one stay valid: this applies to creation only.
         RuleFor(x => x.AssignedUserId)
             .NotNull().WithMessage("Choose who is responsible for the task.")
-            .NotEqual(Guid.Empty).WithMessage("Choose who is responsible for the task.");
+            .NotEqual(Guid.Empty).WithMessage("Choose who is responsible for the task.")
+            .When(x => x.ResponsibleUserIds is not { Count: > 0 });
+        RuleForEach(x => x.ResponsibleUserIds!).NotEqual(Guid.Empty).WithMessage("Choose who is responsible for the task.");
+        RuleFor(x => x.ResponsibleUserIds!.Count).LessThanOrEqualTo(MaxResponsible)
+            .When(x => x.ResponsibleUserIds is not null)
+            .WithMessage($"A task can have at most {MaxResponsible} responsible people.");
 
         RuleFor(x => x.CharterEndDate)
             .GreaterThanOrEqualTo(x => x.CharterStartDate!.Value)
@@ -118,6 +127,10 @@ public sealed class UpdateTaskRequestValidator : AbstractValidator<UpdateTaskReq
         RuleFor(x => x.CharterEndDate)
             .GreaterThanOrEqualTo(x => x.CharterStartDate!.Value)
             .When(x => x.CharterStartDate.HasValue && x.CharterEndDate.HasValue);
+
+        RuleForEach(x => x.ResponsibleUserIds!).NotEqual(Guid.Empty);
+        RuleFor(x => x.ResponsibleUserIds!.Count).LessThanOrEqualTo(CreateTaskRequestValidator.MaxResponsible)
+            .When(x => x.ResponsibleUserIds is not null);
     }
 }
 
@@ -137,6 +150,9 @@ public sealed class AssignUserRequestValidator : AbstractValidator<AssignUserReq
     {
         RuleFor(x => x.AssignedUserId).NotEqual(Guid.Empty).When(x => x.AssignedUserId.HasValue);
         RuleForEach(x => x.AssigneeUserIds!).NotEqual(Guid.Empty);
+        RuleForEach(x => x.ResponsibleUserIds!).NotEqual(Guid.Empty);
+        RuleFor(x => x.ResponsibleUserIds!.Count).LessThanOrEqualTo(CreateTaskRequestValidator.MaxResponsible)
+            .When(x => x.ResponsibleUserIds is not null);
     }
 }
 

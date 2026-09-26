@@ -146,6 +146,15 @@ public static class IdentityEndpoints
                 (await identityService.AssignRolesAsync(userId, request, cancellationToken)).ToApiResult())
             .RequireAuthorization(IdentityPermissions.UsersAssignRoles);
 
+        // Online/offline of users of the caller's own organization (e.g. a chat partner), from their
+        // live connections. Any signed-in user; others' organizations and disabled accounts are
+        // never reported online.
+        app.MapGet("/api/identity/presence", async (Guid[]? userIds, IUserPresenceService presence, CancellationToken cancellationToken) =>
+                (await presence.GetAsync(userIds ?? [], cancellationToken)).ToApiResult())
+            .RequireAuthorization()
+            .WithTags("Users")
+            .WithSummary("Online or offline for users of your organization (?userIds=...&userIds=...)");
+
         var roles = app.MapGroup("/api/identity/roles").WithTags("Roles").RequireAuthorization();
 
         roles.MapGet("/", async (Guid? tenantId, IIdentityService identityService, CancellationToken cancellationToken) =>

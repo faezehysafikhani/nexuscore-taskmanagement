@@ -161,6 +161,65 @@ public sealed class TaskSmsTests(AccessControlTests.Host host) : IClassFixture<A
     }
 
     [Fact]
+    public async Task SeveralResponsiblePeople_EachGetOneSms_AndNobodyElse()
+    {
+        await EnableSmsAsync();
+        var (creator, creatorPhone) = await UserWithPhoneAsync(Permissions);
+        var (first, firstPhone) = await UserWithPhoneAsync([TaskManagementPermissions.View]);
+        var (second, secondPhone) = await UserWithPhoneAsync([TaskManagementPermissions.View]);
+        var (onAccessList, accessPhone) = await UserWithPhoneAsync([TaskManagementPermissions.View]);
+
+        var response = await host.SendAsync(creator, HttpMethod.Post, "/api/task-management/tasks", new
+        {
+            title = "Split work", dueDate = "2030-01-01", priority = "Medium",
+            responsibleUserIds = new[] { creator.Id, first.Id, second.Id }, assigneeUserIds = new[] { onAccessList.Id, first.Id },
+        });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        foreach (var phone in new[] { creatorPhone, firstPhone, secondPhone })
+        {
+            Assert.Contains("«Split work» به شما ارجاع شد", Assert.Single(await WaitForAsync(phone)));
+        }
+
+        await SettleAsync();
+        Assert.Single(host.Sms.SentTo(creatorPhone));
+        Assert.Single(host.Sms.SentTo(firstPhone));
+        Assert.Single(host.Sms.SentTo(secondPhone));
+        Assert.Empty(host.Sms.SentTo(accessPhone));
+    }
+
+    [Fact]
+    public async Task AddingAResponsiblePerson_TextsOnlyThem_AndAMovedDate_TextsThoseWhoStayed()
+    {
+        await EnableSmsAsync();
+        var (owner, ownerPhone) = await UserWithPhoneAsync(Permissions);
+        var (first, firstPhone) = await UserWithPhoneAsync([TaskManagementPermissions.View]);
+        var (second, secondPhone) = await UserWithPhoneAsync([TaskManagementPermissions.View]);
+        var created = await host.SendAsync(owner, HttpMethod.Post, "/api/task-management/tasks", new
+        {
+            title = "Growing", dueDate = "2030-01-01", priority = "Medium", responsibleUserIds = new[] { owner.Id, first.Id },
+        });
+        var id = JsonDocument.Parse(await created.Content.ReadAsStringAsync()).RootElement.GetProperty("id").GetGuid();
+        Assert.Single(await WaitForAsync(firstPhone));
+        Assert.Single(await WaitForAsync(ownerPhone));
+
+        // Second joins and the date moves in one edit: second is told about the task (with its
+        // new date), first about the new date, the owner - who made the change - about nothing.
+        var edit = await host.SendAsync(owner, HttpMethod.Put, $"/api/task-management/tasks/{id}", new
+        {
+            title = "Growing", dueDate = "2030-01-02", priority = "Medium", responsibleUserIds = new[] { owner.Id, first.Id, second.Id },
+        });
+        Assert.Equal(HttpStatusCode.OK, edit.StatusCode);
+
+        Assert.Contains("به شما ارجاع شد", Assert.Single(await WaitForAsync(secondPhone)));
+        Assert.StartsWith("موعد فعالیت «Growing» تغییر کرد.", (await WaitForAsync(firstPhone, count: 2))[1]);
+        await SettleAsync();
+        Assert.Single(host.Sms.SentTo(ownerPhone));
+        Assert.Equal(2, host.Sms.SentTo(firstPhone).Count);
+        Assert.Single(host.Sms.SentTo(secondPhone));
+    }
+
+    [Fact]
     public async Task ThePanel_ListsOnlyTheProductsTemplates_WithTheirPlaceholders()
     {
         var templates = (await TemplatesAsync()).EnumerateArray().ToList();

@@ -9,8 +9,9 @@ namespace Nexus.TaskManagement.Application;
 /// Which tasks the signed-in user may reach - the resource-level half of authorization, next
 /// to the permission policies on the endpoints.
 ///
-/// A user sees a task they own, are assigned to (directly, as a collaborator or through a team
-/// they belong to), and tasks without an owner. Holders of Tasks.ManageAll see every task of
+/// A user sees a task they own, are responsible for, are on the access list of (the task's
+/// team is only its context: its members see it when they are on that list), and tasks
+/// without an owner. Holders of Tasks.ManageAll see every task of
 /// their organization. The rule is applied inside the database queries (a query filter on
 /// TaskManagementDbContext), so subtasks, comments, files, tags, schedules and history of a task
 /// the user cannot see are unreachable too, whatever id is sent.

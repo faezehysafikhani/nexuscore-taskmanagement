@@ -75,9 +75,9 @@ public sealed class DirectoryUserContactResolver(IUserDirectory directory) : IUs
 }
 
 /// <summary>
-/// When a task is created, tells its responsible person (AssignedUserId) by SMS with the
-/// "task_assigned" template - only them: not the creator for creating it, nor collaborators or
-/// team members. A creator who is also the responsible person gets it once.
+/// When a task is created, tells each of its responsible people by SMS with the "task_assigned"
+/// template - only them: not the creator for creating it, nor people on its access list or team
+/// members. Each gets it once; a creator who is also responsible gets it once too.
 ///
 /// Runs after the task is saved and in the background, so a slow or unreachable gateway
 /// never delays or fails the request that created the task. Delivery is best-effort: a failed
@@ -88,7 +88,8 @@ public sealed class TaskCreatedChannelNotifier(IServiceScopeFactory scopeFactory
     public Task HandleAsync(TaskItemCreated domainEvent, CancellationToken cancellationToken)
     {
         _ = Task.Run(() => ResponsibleSms.SendAsync(
-            scopeFactory, domainEvent.TenantId, domainEvent.TaskId, TaskSmsTemplateKeys.TaskAssigned, skipUserId: null));
+            scopeFactory, domainEvent.TenantId, domainEvent.TaskId, TaskSmsTemplateKeys.TaskAssigned,
+            task => task.ResponsibleUserIds, skipUserId: null));
         return Task.CompletedTask;
     }
 
@@ -106,9 +107,9 @@ public sealed class TaskCreatedChannelNotifier(IServiceScopeFactory scopeFactory
 }
 
 /// <summary>
-/// After an edit: a task's new responsible person gets "task_assigned"; a responsible person
-/// whose due date moved gets "task_due_changed". Nobody is texted about their own change, and a
-/// recurring task's date (its schedule start) is not announced - its occurrences are.
+/// After an edit: each person newly responsible for a task gets "task_assigned"; those who stayed
+/// responsible while the due date moved get "task_due_changed". Nobody is texted about their own
+/// change, and a recurring task's date (its schedule start) is not announced - its occurrences are.
 /// </summary>
 public sealed class TaskChangeSmsNotifier(IServiceScopeFactory scopeFactory)
     : IDomainEventHandler<TaskItemAssigneeChanged>, IDomainEventHandler<TaskItemDueChanged>
@@ -116,25 +117,30 @@ public sealed class TaskChangeSmsNotifier(IServiceScopeFactory scopeFactory)
     public Task HandleAsync(TaskItemAssigneeChanged domainEvent, CancellationToken cancellationToken)
     {
         _ = Task.Run(() => ResponsibleSms.SendAsync(
-            scopeFactory, domainEvent.TenantId, domainEvent.TaskId, TaskSmsTemplateKeys.TaskAssigned, domainEvent.ChangedByUserId));
+            scopeFactory, domainEvent.TenantId, domainEvent.TaskId, TaskSmsTemplateKeys.TaskAssigned,
+            _ => [domainEvent.AssignedUserId], domainEvent.ChangedByUserId));
         return Task.CompletedTask;
     }
 
     public Task HandleAsync(TaskItemDueChanged domainEvent, CancellationToken cancellationToken)
     {
         _ = Task.Run(() => ResponsibleSms.SendAsync(
-            scopeFactory, domainEvent.TenantId, domainEvent.TaskId, TaskSmsTemplateKeys.TaskDueChanged, domainEvent.ChangedByUserId));
+            scopeFactory, domainEvent.TenantId, domainEvent.TaskId, TaskSmsTemplateKeys.TaskDueChanged,
+            task => domainEvent.ResponsibleUserIds ?? task.ResponsibleUserIds, domainEvent.ChangedByUserId));
         return Task.CompletedTask;
     }
 }
 
 /// <summary>
-/// One task SMS to the task's responsible person, and to nobody else: an active user of the
-/// task's organization with a mobile number and SMS notifications on (IUserContactResolver).
+/// One task SMS to each of the given people who is (still) responsible for the task, and to
+/// nobody else: an active user of the task's organization with a mobile number and SMS
+/// notifications on (IUserContactResolver). Each person - and each phone number - once.
 /// </summary>
 internal static class ResponsibleSms
 {
-    public static async Task SendAsync(IServiceScopeFactory scopeFactory, Guid tenantId, Guid taskId, string templateKey, Guid? skipUserId)
+    public static async Task SendAsync(
+        IServiceScopeFactory scopeFactory, Guid tenantId, Guid taskId, string templateKey,
+        Func<TaskItem, IEnumerable<Guid>> recipients, Guid? skipUserId)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var services = scope.ServiceProvider;
@@ -149,7 +155,7 @@ internal static class ResponsibleSms
             }
 
             var task = await services.GetRequiredService<ITaskRepository>().GetByIdAsync(tenantId, taskId, CancellationToken.None);
-            if (task?.AssignedUserId is not { } assignee || assignee == skipUserId)
+            if (task is null)
             {
                 return;
             }
@@ -159,12 +165,18 @@ internal static class ResponsibleSms
                 return;
             }
 
-            var phones = await services.GetRequiredService<IUserContactResolver>()
-                .GetPhoneNumbersAsync(tenantId, [assignee], CancellationToken.None);
-            if (!phones.TryGetValue(assignee, out var phoneNumber))
+            var responsible = task.ResponsibleUserIds;
+            var userIds = recipients(task).Distinct().Where(id => id != skipUserId && responsible.Contains(id)).ToList();
+            if (userIds.Count == 0)
             {
-                logger.LogInformation("Task {TaskId}: no SMS for user {UserId} - inactive, no mobile number, or SMS notifications off.", task.Id, assignee);
                 return;
+            }
+
+            var phones = await services.GetRequiredService<IUserContactResolver>()
+                .GetPhoneNumbersAsync(tenantId, userIds, CancellationToken.None);
+            foreach (var skipped in userIds.Where(id => !phones.ContainsKey(id)))
+            {
+                logger.LogInformation("Task {TaskId}: no SMS for user {UserId} - inactive, no mobile number, or SMS notifications off.", task.Id, skipped);
             }
 
             string? creator = null;
@@ -185,10 +197,19 @@ internal static class ResponsibleSms
                 ? $"موعد فعالیت «{task.Title}» تغییر کرد.\nموعد جدید: {due}"
                 : $"فعالیت جدیدی با عنوان «{task.Title}» به شما ارجاع شد.\nموعد انجام: {due}";
 
-            var sent = await sms.SendTemplateAsync(tenantId, phoneNumber, templateKey, values, fallback, CancellationToken.None);
-            if (sent.IsFailure)
+            var texted = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var (userId, phoneNumber) in userIds.Where(phones.ContainsKey).Select(id => (id, phones[id])))
             {
-                logger.LogWarning("Task {TaskId}: SMS {Template} to user {UserId} not sent: {Error}", task.Id, templateKey, assignee, sent.Error.Message);
+                if (!texted.Add(phoneNumber))
+                {
+                    continue;
+                }
+
+                var sent = await sms.SendTemplateAsync(tenantId, phoneNumber, templateKey, values, fallback, CancellationToken.None);
+                if (sent.IsFailure)
+                {
+                    logger.LogWarning("Task {TaskId}: SMS {Template} to user {UserId} not sent: {Error}", task.Id, templateKey, userId, sent.Error.Message);
+                }
             }
         }
         catch (Exception ex)

@@ -9,8 +9,9 @@ namespace Nexus.TaskManagement.Domain;
 public sealed record TaskItemCreated(Guid TaskId, Guid TenantId, string Title, bool IsProject) : DomainEvent;
 
 /// <summary>
-/// Raised when an existing task gets a new responsible person (AssignedUserId). Not raised on
-/// creation (<see cref="TaskItemCreated"/> covers that) nor when the same person is set again.
+/// Raised for each person who became responsible for an existing task (AssignedUserId is that
+/// person). Not raised on creation (<see cref="TaskItemCreated"/> covers that) nor for someone
+/// who already was responsible.
 /// </summary>
 public sealed record TaskItemAssigneeChanged(
     Guid TaskId,
@@ -20,10 +21,15 @@ public sealed record TaskItemAssigneeChanged(
     Guid? ChangedByUserId) : DomainEvent;
 
 /// <summary>
-/// Raised when the due date or time of an existing task really changed, and its responsible
-/// person stayed the same (a new responsible person is told the due date anyway).
+/// Raised when the due date or time of an existing task really changed. ResponsibleUserIds are
+/// those who were responsible before and still are (a new responsible person is told the due
+/// date anyway); null means every responsible person.
 /// </summary>
-public sealed record TaskItemDueChanged(Guid TaskId, Guid TenantId, Guid? ChangedByUserId) : DomainEvent;
+public sealed record TaskItemDueChanged(
+    Guid TaskId,
+    Guid TenantId,
+    Guid? ChangedByUserId,
+    IReadOnlyList<Guid>? ResponsibleUserIds = null) : DomainEvent;
 
 /// <summary>Raised when a task changes status.</summary>
 public sealed record TaskItemStatusChanged(Guid TaskId, Guid TenantId, TaskItemStatus Status) : DomainEvent;

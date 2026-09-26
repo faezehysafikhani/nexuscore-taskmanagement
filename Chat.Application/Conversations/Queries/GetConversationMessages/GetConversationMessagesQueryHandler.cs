@@ -1,5 +1,6 @@
 using Chat.Application.Abstractions;
 using Chat.Application.Common.Dtos;
+using Chat.Application.Teams;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using NexusCore.SharedKernel.Interfaces;
@@ -12,13 +13,16 @@ public sealed class GetConversationMessagesQueryHandler
 {
     private readonly IChatDbContext _db;
     private readonly ICurrentUserContext _currentUser;
+    private readonly TeamConversationService _teams;
 
     public GetConversationMessagesQueryHandler(
         IChatDbContext db,
-        ICurrentUserContext currentUser)
+        ICurrentUserContext currentUser,
+        TeamConversationService teams)
     {
         _db = db;
         _currentUser = currentUser;
+        _teams = teams;
     }
 
     public async Task<Result<List<MessageDto>>> Handle(
@@ -31,7 +35,8 @@ public sealed class GetConversationMessagesQueryHandler
                 x.UserId == _currentUser.UserId,
                 cancellationToken);
 
-        if (!isParticipant)
+        if (!isParticipant
+            || !await _teams.IsCurrentMemberAsync(request.ConversationId, _currentUser.UserId!.Value, cancellationToken))
             return Result.Failure<List<MessageDto>>(Error.NotFound("Conversation not found."));
 
         var messages = await _db.Messages

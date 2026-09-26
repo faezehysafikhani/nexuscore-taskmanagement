@@ -115,15 +115,24 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
     }
 
     [Fact]
-    public async Task ATeamMember_SeesTheTeamsTasks()
+    public async Task ATeamMember_SeesTheTeamsTask_WhenOnItsAccessList()
     {
         var owner = await host.UserAsync(host.TenantA, MemberPermissions);
         var member = await host.UserAsync(host.TenantA, MemberPermissions);
+        var teammateWithoutAccess = await host.UserAsync(host.TenantA, MemberPermissions);
         var outsider = await host.UserAsync(host.TenantA, MemberPermissions);
-        var teamId = await host.TeamAsync(host.TenantA, member.Id);
-        var id = await host.CreatedTaskIdAsync(owner, "For the team", assignedUserGroupId: teamId);
+        var teamId = await host.TeamAsync(host.TenantA, member.Id, teammateWithoutAccess.Id);
+        var created = await host.SendAsync(owner, HttpMethod.Post, "/api/task-management/tasks", new
+        {
+            title = "For the team", dueDate = "2030-01-01", priority = "Medium", assignedUserId = owner.Id,
+            assignedUserGroupId = teamId, assigneeUserIds = new[] { member.Id },
+        });
+        var id = (await Json(created)).GetProperty("id").GetGuid();
 
         Assert.Contains(id, await host.ListTaskIdsAsync(member));
+        // The team is the task's context, not a grant: only those on the access list see it.
+        Assert.DoesNotContain(id, await host.ListTaskIdsAsync(teammateWithoutAccess));
+        Assert.Equal(HttpStatusCode.NotFound, (await host.SendAsync(teammateWithoutAccess, HttpMethod.Get, $"/api/task-management/tasks/{id}")).StatusCode);
         Assert.DoesNotContain(id, await host.ListTaskIdsAsync(outsider));
     }
 

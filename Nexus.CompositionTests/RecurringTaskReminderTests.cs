@@ -306,18 +306,21 @@ public sealed class RecurringTaskReminderTests : IDisposable
     }
 
     [Fact]
-    public async Task TheTeamsMembers_AreReminded_Too()
+    public async Task TheTeamsMembers_OnTheTasksAccessList_AreReminded_Too()
     {
         var owner = User("09120000001");
         var member = User("09120000002");
+        var teammateWithoutAccess = User("09120000003");
         var teamId = Guid.NewGuid();
-        _directory.Groups[teamId] = [member.Id];
-        await RecurringTaskAsync(owner, assignedUserGroupId: teamId);
+        _directory.Groups[teamId] = [member.Id, teammateWithoutAccess.Id];
+        await RecurringTaskAsync(owner, assignedUserGroupId: teamId, collaboratorIds: [member.Id]);
 
         await PassAsync();
 
         Assert.Contains(_notifications.Sent, n => n.UserId == member.Id);
-        // Team members are reminded in the app; the SMS is only for a responsible person, and there is none.
+        // The team is the task's context, not a grant: a teammate who may not see it is not reminded.
+        Assert.DoesNotContain(_notifications.Sent, n => n.UserId == teammateWithoutAccess.Id);
+        // Reminded in the app; the SMS is only for a responsible person, and there is none.
         Assert.DoesNotContain(_smsProvider.Sent, s => s.Phone == "09120000002");
         Assert.DoesNotContain(_notifications.Sent, n => n.UserId == owner.Id);
         Assert.DoesNotContain(_smsProvider.Sent, s => s.Phone == "09120000001");
@@ -336,9 +339,27 @@ public sealed class RecurringTaskReminderTests : IDisposable
 
         await PassAsync();
 
-        Assert.Equal(new[] { assignee.Id, colleague.Id, member.Id }.Order(), _notifications.Sent.Select(n => n.UserId).Order());
-        // In the app all three responsible people; by SMS the responsible person (AssignedUserId) only.
+        // In the app the responsible person and the one on the access list (the team's member is
+        // not on it); by SMS the responsible person only.
+        Assert.Equal(new[] { assignee.Id, colleague.Id }.Order(), _notifications.Sent.Select(n => n.UserId).Order());
+        Assert.DoesNotContain(_notifications.Sent, n => n.UserId == member.Id);
         Assert.Equal("09120000002", Assert.Single(_smsProvider.Sent).Phone);
+    }
+
+    [Fact]
+    public async Task EveryResponsiblePerson_IsTextedOnce_AndSomeoneOnlyOnTheAccessList_IsNot()
+    {
+        var owner = User("09120000001");
+        var first = User("09120000002");
+        var second = User("09120000003");
+        var withoutPhone = User(null);
+        var onAccessList = User("09120000004");
+        await RecurringTaskAsync(owner, responsibleIds: [first.Id, second.Id, withoutPhone.Id], collaboratorIds: [onAccessList.Id, first.Id]);
+
+        await PassAsync();
+
+        Assert.Equal(new[] { first.Id, second.Id, withoutPhone.Id, onAccessList.Id }.Order(), _notifications.Sent.Select(n => n.UserId).Order());
+        Assert.Equal(new[] { "09120000002", "09120000003" }, _smsProvider.Sent.Select(s => s.Phone).Order().ToArray());
     }
 
     [Fact]
@@ -535,7 +556,7 @@ public sealed class RecurringTaskReminderTests : IDisposable
     private async Task<(Guid TaskId, Guid ScheduleId)> RecurringTaskAsync(
         UserContact owner, Guid? assignedUserId = null, Guid? assignedUserGroupId = null,
         DateTimeOffset? nextRunUtc = null, bool active = true, TimeOnly? startTime = null, string title = "Weekly report",
-        IReadOnlyList<Guid>? collaboratorIds = null)
+        IReadOnlyList<Guid>? collaboratorIds = null, IReadOnlyList<Guid>? responsibleIds = null)
     {
         using var scope = _services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<TaskManagementDbContext>();
@@ -553,6 +574,11 @@ public sealed class RecurringTaskReminderTests : IDisposable
 
         var task = new TaskItem(Guid.NewGuid(), _tenant, title, new DateOnly(2026, 1, 1), TaskPriority.Medium, false, owner.Id, "confidential detail");
         task.UpdateDetails(title, "confidential detail", new DateOnly(2026, 1, 1), TaskPriority.Medium, assignedUserId, assignedUserGroupId, true);
+        if (responsibleIds is not null)
+        {
+            task.SetResponsibleUsers(responsibleIds);
+        }
+
         if (collaboratorIds is not null)
         {
             task.AssignUsers(collaboratorIds);

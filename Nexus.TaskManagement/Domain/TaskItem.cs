@@ -104,6 +104,53 @@ public sealed class TaskItem : AuditableEntity<Guid>
 
     public bool IsRecurring => Recurrence is not null;
 
+    /// <summary>
+    /// Everyone responsible for doing the task, each once, <see cref="AssignedUserId"/> first.
+    /// Tasks saved before responsibility could be shared have only AssignedUserId.
+    /// </summary>
+    public IReadOnlyList<Guid> ResponsibleUserIds
+    {
+        get
+        {
+            var ids = new List<Guid>();
+            if (AssignedUserId is { } primary)
+            {
+                ids.Add(primary);
+            }
+
+            ids.AddRange(_assignees.Where(a => a.IsResponsible && !ids.Contains(a.UserId)).Select(a => a.UserId));
+            return ids;
+        }
+    }
+
+    public bool IsResponsible(Guid userId) => ResponsibleUserIds.Contains(userId);
+
+    /// <summary>
+    /// Makes exactly these users responsible (none leaves the task without one - only older
+    /// tasks may be like that). The first becomes <see cref="AssignedUserId"/>. Someone no
+    /// longer responsible loses the access that came with it; <see cref="AssignUsers"/> decides
+    /// who else may see the task.
+    /// </summary>
+    public void SetResponsibleUsers(IEnumerable<Guid> userIds)
+    {
+        var ids = userIds.Where(id => id != Guid.Empty).Distinct().ToList();
+        AssignedUserId = ids.Count > 0 ? ids[0] : null;
+
+        _assignees.RemoveAll(a => a.IsResponsible && !ids.Contains(a.UserId));
+        foreach (var id in ids)
+        {
+            var row = _assignees.FirstOrDefault(a => a.UserId == id);
+            if (row is null)
+            {
+                _assignees.Add(new TaskAssignee(Guid.NewGuid(), Id, id, isResponsible: true));
+            }
+            else
+            {
+                row.SetResponsible(true);
+            }
+        }
+    }
+
     public void UpdateDetails(
         string title,
         string? description,
@@ -117,32 +164,46 @@ public sealed class TaskItem : AuditableEntity<Guid>
         Description = description;
         DueDate = dueDate;
         Priority = priority;
-        AssignedUserId = assignedUserId;
         AssignedUserGroupId = assignedUserGroupId;
         AllowAssigneeStatusUpdate = allowAssigneeStatusUpdate;
+
+        // The single-responsible form older callers use: naming one of the current responsible
+        // people keeps them all (that one first); naming someone else makes them the only one.
+        if (assignedUserId != AssignedUserId)
+        {
+            var current = ResponsibleUserIds;
+            if (assignedUserId is { } named && current.Contains(named))
+            {
+                SetResponsibleUsers(current.Where(id => id != named).Prepend(named));
+            }
+            else
+            {
+                SetResponsibleUsers(assignedUserId is { } single ? [single] : []);
+            }
+        }
     }
 
     public void SetDueTime(TimeOnly? dueTime) => DueTime = dueTime;
 
     /// <summary>
-    /// After an edit, announces what the responsible person needs to know: that the task is now
-    /// theirs, or - when they keep it - that its due date or time moved. Unchanged values raise
+    /// After an edit, announces what the responsible people need to know: each newly responsible
+    /// person that the task is now theirs, and - when the due date or time moved - those who
+    /// stayed responsible (a new one is told the due date anyway). Unchanged values raise
     /// nothing, so edits of other fields stay silent.
     /// </summary>
-    public void RecordAssignmentAndDueChanges(Guid? previousAssignedUserId, DateOnly previousDueDate, TimeOnly? previousDueTime, Guid? changedByUserId)
+    public void RecordAssignmentAndDueChanges(IReadOnlyCollection<Guid> previousResponsible, DateOnly previousDueDate, TimeOnly? previousDueTime, Guid? changedByUserId)
     {
-        if (AssignedUserId is not { } assignee)
+        var current = ResponsibleUserIds;
+        var previousPrimary = previousResponsible.Count > 0 ? previousResponsible.First() : (Guid?)null;
+        foreach (var added in current.Where(id => !previousResponsible.Contains(id)))
         {
-            return;
+            RaiseDomainEvent(new TaskItemAssigneeChanged(Id, TenantId, added, previousPrimary, changedByUserId));
         }
 
-        if (assignee != previousAssignedUserId)
+        var kept = current.Where(previousResponsible.Contains).ToList();
+        if (kept.Count > 0 && (DueDate != previousDueDate || DueTime != previousDueTime))
         {
-            RaiseDomainEvent(new TaskItemAssigneeChanged(Id, TenantId, assignee, previousAssignedUserId, changedByUserId));
-        }
-        else if (DueDate != previousDueDate || DueTime != previousDueTime)
-        {
-            RaiseDomainEvent(new TaskItemDueChanged(Id, TenantId, changedByUserId));
+            RaiseDomainEvent(new TaskItemDueChanged(Id, TenantId, changedByUserId, kept));
         }
     }
 
@@ -181,10 +242,15 @@ public sealed class TaskItem : AuditableEntity<Guid>
         return subTask;
     }
 
+    /// <summary>
+    /// Sets the task's access list: exactly these users may see and work on it, besides its
+    /// owner and the responsible people, who always keep access.
+    /// </summary>
     public void AssignUsers(IEnumerable<Guid> userIds)
     {
-        _assignees.Clear();
-        foreach (var userId in userIds.Distinct())
+        var ids = userIds.Where(id => id != Guid.Empty).Distinct().ToList();
+        _assignees.RemoveAll(a => !a.IsResponsible && !ids.Contains(a.UserId));
+        foreach (var userId in ids.Where(id => _assignees.All(a => a.UserId != id)))
         {
             _assignees.Add(new TaskAssignee(Guid.NewGuid(), Id, userId));
         }

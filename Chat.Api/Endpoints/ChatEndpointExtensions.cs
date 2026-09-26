@@ -7,6 +7,7 @@ public static class ChatEndpointExtensions
         app.MapConversationEndpoints();
         app.MapMessageEndpoints();
         app.MapDirectMessageEndpoints();
+        app.MapTeamChatEndpoints();
 
         return app;
     }

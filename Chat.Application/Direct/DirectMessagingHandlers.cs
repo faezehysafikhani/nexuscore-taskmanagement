@@ -306,7 +306,8 @@ public sealed class GetUnreadCountsBySenderQueryHandler(
 public sealed class GetMessageAttachmentQueryHandler(
     IChatDbContext db,
     ICurrentUserContext currentUser,
-    IFileStorage fileStorage)
+    IFileStorage fileStorage,
+    Chat.Application.Teams.TeamConversationService teams)
     : IRequestHandler<GetMessageAttachmentQuery, Result<ChatAttachmentDownload>>
 {
     public async Task<Result<ChatAttachmentDownload>> Handle(GetMessageAttachmentQuery request, CancellationToken cancellationToken)
@@ -322,7 +323,8 @@ public sealed class GetMessageAttachmentQueryHandler(
             .Where(m => db.ConversationParticipants.Any(p => p.ConversationId == m.ConversationId && p.UserId == meId))
             .FirstOrDefaultAsync(cancellationToken);
 
-        if (message is null || !message.HasAttachment)
+        if (message is null || !message.HasAttachment
+            || !await teams.IsCurrentMemberAsync(message.ConversationId, meId, cancellationToken))
         {
             return Result.Failure<ChatAttachmentDownload>(Error.NotFound("Attachment was not found."));
         }

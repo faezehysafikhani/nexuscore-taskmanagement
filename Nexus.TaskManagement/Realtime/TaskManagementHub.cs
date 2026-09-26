@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.SignalR;
+using NexusCore.Application.Identity.Services;
 using NexusCore.SharedKernel.Interfaces;
 
 namespace Nexus.TaskManagement.Realtime;
@@ -11,9 +12,12 @@ namespace Nexus.TaskManagement.Realtime;
 /// "TasksChanged" and reloads. The message carries no task data - clients re-read through the
 /// normal, permission-checked endpoints, so the hub can never leak something the reader may
 /// not see.
+///
+/// Each connection also counts toward its user's presence (online while at least one of their
+/// connections is open), since the app keeps this connection open for as long as it is signed in.
 /// </summary>
 [Authorize]
-public sealed class TaskManagementHub(ICurrentUserContext currentUser) : Hub
+public sealed class TaskManagementHub(ICurrentUserContext currentUser, IUserPresenceTracker presence) : Hub
 {
     public const string Route = "/hubs/task-management";
     public const string TasksChangedEvent = "TasksChanged";
@@ -27,8 +31,26 @@ public sealed class TaskManagementHub(ICurrentUserContext currentUser) : Hub
             await Groups.AddToGroupAsync(Context.ConnectionId, TenantGroup(tenantId));
         }
 
+        if (currentUser.UserId is { } userId)
+        {
+            Context.Items[PresenceUserKey] = userId;
+            presence.Connected(userId, Context.ConnectionId);
+        }
+
         await base.OnConnectedAsync();
     }
+
+    public override Task OnDisconnectedAsync(Exception? exception)
+    {
+        if (Context.Items.TryGetValue(PresenceUserKey, out var value) && value is Guid userId)
+        {
+            presence.Disconnected(userId, Context.ConnectionId);
+        }
+
+        return base.OnDisconnectedAsync(exception);
+    }
+
+    private const string PresenceUserKey = "presence-user";
 }
 
 public sealed record TasksChangedMessage(string Resource, string Method, DateTimeOffset AtUtc);

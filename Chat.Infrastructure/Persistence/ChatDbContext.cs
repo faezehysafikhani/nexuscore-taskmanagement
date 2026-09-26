@@ -38,6 +38,10 @@ public class ChatDbContext : DbContext, IChatDbContext
         modelBuilder.Entity<Conversation>()
             .HasIndex(x => x.DirectKey).IsUnique().HasFilter("[DirectKey] IS NOT NULL");
 
+        // One conversation per team.
+        modelBuilder.Entity<Conversation>()
+            .HasIndex(x => x.TeamId).IsUnique().HasFilter("[TeamId] IS NOT NULL");
+
         modelBuilder.Entity<Message>(message =>
         {
             message.Property(x => x.AttachmentFileName).HasMaxLength(260);

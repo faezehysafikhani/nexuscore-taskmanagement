@@ -53,8 +53,9 @@ public sealed class Note : AuditableEntity<Guid>
 }
 
 /// <summary>
-/// One of the extra users a task is shared with - the UI's teamMemberIds. The single main
-/// assignee stays on <see cref="TaskItem.AssignedUserId"/>; this is the collaborator list.
+/// A user a task is shared with - the task's access list (the UI's teamMemberIds). Those marked
+/// <see cref="IsResponsible"/> are the people responsible for doing it (one or more); the first
+/// of them is also kept on <see cref="TaskItem.AssignedUserId"/> for older clients.
 /// </summary>
 public sealed class TaskAssignee : Entity<Guid>
 {
@@ -62,11 +63,17 @@ public sealed class TaskAssignee : Entity<Guid>
     {
     }
 
-    public TaskAssignee(Guid id, Guid taskId, Guid userId) : base(id)
+    public TaskAssignee(Guid id, Guid taskId, Guid userId, bool isResponsible = false) : base(id)
     {
         TaskId = taskId;
         UserId = userId;
+        IsResponsible = isResponsible;
     }
+
+    /// <summary>Responsible for doing the task, not only allowed to see and work on it.</summary>
+    public bool IsResponsible { get; private set; }
+
+    internal void SetResponsible(bool isResponsible) => IsResponsible = isResponsible;
 
     public Guid TaskId { get; private set; }
     public TaskItem? Task { get; private set; }

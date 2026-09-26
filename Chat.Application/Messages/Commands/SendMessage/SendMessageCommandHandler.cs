@@ -1,4 +1,5 @@
 using Chat.Application.Abstractions;
+using Chat.Application.Teams;
 using Chat.Domain.Entities;
 using Chat.Domain.Identity;
 using MediatR;
@@ -13,13 +14,16 @@ public sealed class SendMessageCommandHandler
 {
     private readonly IChatDbContext _db;
     private readonly ICurrentUserContext _currentUser;
+    private readonly TeamConversationService _teams;
 
     public SendMessageCommandHandler(
         IChatDbContext db,
-        ICurrentUserContext currentUser)
+        ICurrentUserContext currentUser,
+        TeamConversationService teams)
     {
         _db = db;
         _currentUser = currentUser;
+        _teams = teams;
     }
 
     public async Task<Result<Guid>> Handle(
@@ -35,7 +39,8 @@ public sealed class SendMessageCommandHandler
                 x.UserId == _currentUser.UserId,
                 cancellationToken);
 
-        if (!isParticipant)
+        if (!isParticipant
+            || !await _teams.IsCurrentMemberAsync(request.ConversationId, _currentUser.UserId!.Value, cancellationToken))
             return Result.Failure<Guid>(Error.NotFound("Conversation not found."));
 
         var message = new Message(

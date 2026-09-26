@@ -42,7 +42,9 @@ public sealed class TaskRepository(TaskManagementDbContext db) : ITaskRepository
         if (request.Status is { } status) query = query.Where(t => t.Status == status);
         if (request.Priority is { } priority) query = query.Where(t => t.Priority == priority);
         if (request.IsProject is { } isProject) query = query.Where(t => t.IsProject == isProject);
-        if (request.AssignedUserId is { } userId) query = query.Where(t => t.AssignedUserId == userId);
+        // Any of the task's responsible people, not only the first.
+        if (request.AssignedUserId is { } userId)
+            query = query.Where(t => t.AssignedUserId == userId || t.Assignees.Any(a => a.UserId == userId && a.IsResponsible));
         if (request.AssignedUserGroupId is { } groupId) query = query.Where(t => t.AssignedUserGroupId == groupId);
         if (request.DueFrom is { } from) query = query.Where(t => t.DueDate >= from);
         if (request.DueTo is { } to) query = query.Where(t => t.DueDate <= to);

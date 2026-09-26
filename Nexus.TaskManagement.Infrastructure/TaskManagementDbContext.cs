@@ -40,7 +40,6 @@ public sealed class TaskManagementDbContext(
     // serves every user. See ITaskAccessScope for the rule.
     private bool AccessRestricted => access?.IsRestricted ?? false;
     private Guid? AccessUserId => access?.UserId;
-    private List<Guid> AccessGroupIds => access?.GroupIds.ToList() ?? [];
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -50,13 +49,15 @@ public sealed class TaskManagementDbContext(
         // out, and everything hanging off it follows through its navigation: each of those
         // filters reads a non-key column of the task, so EF joins the (filtered) task instead of
         // short-circuiting to the foreign key.
+        //
+        // A task's team is its context, not a grant: the members who may see it are on its
+        // access list (Assignees), so taking one off the list really takes the task away.
         modelBuilder.Entity<TaskItem>().HasQueryFilter(task =>
             !AccessRestricted
             || task.OwnerUserId == null
             || task.OwnerUserId == AccessUserId
             || task.AssignedUserId == AccessUserId
-            || task.Assignees.Any(assignee => assignee.UserId == AccessUserId)
-            || (task.AssignedUserGroupId != null && AccessGroupIds.Contains(task.AssignedUserGroupId.Value)));
+            || task.Assignees.Any(assignee => assignee.UserId == AccessUserId));
 
         modelBuilder.Entity<SubTask>().HasQueryFilter(subTask => subTask.Task!.Title != null);
         modelBuilder.Entity<RepetitiveTask>().HasQueryFilter(schedule => schedule.Task!.Title != null);
