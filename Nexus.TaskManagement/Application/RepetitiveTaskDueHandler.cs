@@ -61,7 +61,12 @@ public sealed class RepetitiveTaskDueHandler(
 
             // Independent: a failed notification does not stop the SMS, and the reverse.
             await PublishNotificationAsync(task, recipients, DateOnly.FromDateTime(occurrence.DateTime), when, cancellationToken);
-            await SendSmsAsync(task, recipients, when, cancellationToken);
+
+            // The SMS is only for the task's responsible person (AssignedUserId) - if they are among
+            // the active users above. Collaborators, team members and a creator who is not
+            // responsible get the notification only; a task without one gets no SMS at all.
+            var smsRecipients = recipients.Where(id => id == task.AssignedUserId).ToList();
+            await SendSmsAsync(task, smsRecipients, when, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -138,6 +143,13 @@ public sealed class RepetitiveTaskDueHandler(
     {
         try
         {
+            if (recipients.Count == 0)
+            {
+                logger.LogInformation(ReminderDeliveryEvents.SmsSkipped,
+                    "Recurring task {TaskId}: no active responsible person; no SMS sent.", task.Id);
+                return;
+            }
+
             if (!await smsSender.IsEnabledAsync(task.TenantId, cancellationToken))
             {
                 logger.LogInformation(ReminderDeliveryEvents.SmsSkipped,
@@ -155,12 +167,22 @@ public sealed class RepetitiveTaskDueHandler(
                     task.Id, userId);
             }
 
-            // Title and time only: the description stays inside the application.
+            // Title and time only: the description stays inside the application. The wording is the
+            // tenant's "recurring_task_reminder" template; this text is only for senders without one.
             var message = $"یادآوری وظیفه: {task.Title}\nموعد: {when}";
+            var parts = when.Split(" - ", 2);
+            var values = new Dictionary<string, string?>
+            {
+                ["TaskTitle"] = task.Title,
+                ["ExecutionDateTime"] = when,
+                ["ExecutionDate"] = parts[0],
+                ["ExecutionTime"] = parts.Length > 1 ? parts[1] : null,
+            };
 
             foreach (var (userId, phoneNumber) in phoneNumbers)
             {
-                var result = await smsSender.SendAsync(task.TenantId, phoneNumber, message, cancellationToken);
+                var result = await smsSender.SendTemplateAsync(
+                    task.TenantId, phoneNumber, TaskSmsTemplateKeys.RecurringTaskReminder, values, message, cancellationToken);
                 if (result.IsFailure)
                 {
                     // The gateway's reason: SMS panel incomplete, provider refused, network...

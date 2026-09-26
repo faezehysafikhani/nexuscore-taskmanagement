@@ -22,8 +22,19 @@ public sealed record TestSmsRequest(string PhoneNumber, string? Message = null);
 
 public sealed record ChannelTestResultDto(bool Success, string Message);
 
-/// <summary>One SMS text of the system, e.g. the one sent for a referral.</summary>
-public sealed record SmsTemplateDto(string Key, string Title, string Text, IReadOnlyList<string> Placeholders);
+/// <summary>
+/// One SMS text of the system, e.g. the one sent for a referral: its current text, the
+/// placeholders it may use (those in RequiredPlaceholders must stay), when it is sent and its
+/// default wording.
+/// </summary>
+public sealed record SmsTemplateDto(
+    string Key,
+    string Title,
+    string Text,
+    IReadOnlyList<string> Placeholders,
+    string? Description = null,
+    IReadOnlyList<string>? RequiredPlaceholders = null,
+    string? DefaultText = null);
 
 public sealed record SmsTemplateTextDto(string Key, string Text);
 

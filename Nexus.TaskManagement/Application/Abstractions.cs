@@ -267,4 +267,29 @@ public interface ITaskSmsSender
     Task<bool> IsEnabledAsync(Guid tenantId, CancellationToken cancellationToken);
 
     Task<Result> SendAsync(Guid tenantId, string phoneNumber, string message, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Sends one of the module's SMS templates (<see cref="TaskSmsTemplateKeys"/>) with these
+    /// placeholder values. A sender without templates sends <paramref name="fallbackText"/>.
+    /// </summary>
+    Task<Result> SendTemplateAsync(
+        Guid tenantId, string phoneNumber, string templateKey, IReadOnlyDictionary<string, string?> values,
+        string fallbackText, CancellationToken cancellationToken) =>
+        SendAsync(tenantId, phoneNumber, fallbackText, cancellationToken);
+}
+
+/// <summary>
+/// The SMS templates TaskManagement sends, by key. Their titles and default texts are registered
+/// with the platform's SMS templates by Nexus.Integrations.TaskNotifications.
+/// </summary>
+public static class TaskSmsTemplateKeys
+{
+    /// <summary>A task was given to someone as its responsible person (new task, or a new responsible). TaskTitle, DueDate, CreatorName.</summary>
+    public const string TaskAssigned = "task_assigned";
+
+    /// <summary>The due date or time of a task changed. TaskTitle, DueDate.</summary>
+    public const string TaskDueChanged = "task_due_changed";
+
+    /// <summary>An occurrence of a recurring task is due. TaskTitle, ExecutionDateTime, ExecutionDate, ExecutionTime.</summary>
+    public const string RecurringTaskReminder = "recurring_task_reminder";
 }

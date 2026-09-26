@@ -212,10 +212,12 @@ public sealed class TaskService(
             }
         }
 
+        var (previousAssignee, previousDueDate, previousDueTime) = (task.AssignedUserId, task.DueDate, task.DueTime);
         task.UpdateDetails(
             request.Title, request.Description, request.DueDate, request.Priority,
             request.AssignedUserId, request.AssignedUserGroupId, request.AllowAssigneeStatusUpdate);
         task.SetDueTime(request.DueTime);
+        task.RecordAssignmentAndDueChanges(previousAssignee, previousDueDate, previousDueTime, currentUser.UserId);
 
         task.UpdateCharter(
             request.CharterDescription, request.CharterProjectManager,
@@ -355,9 +357,11 @@ public sealed class TaskService(
             return Result.Failure<TaskDto>(referenceCheck.Error);
         }
 
+        var previousAssignee = task.AssignedUserId;
         task.UpdateDetails(
             task.Title, task.Description, task.DueDate, task.Priority,
             request.AssignedUserId, task.AssignedUserGroupId, task.AllowAssigneeStatusUpdate);
+        task.RecordAssignmentAndDueChanges(previousAssignee, task.DueDate, task.DueTime, currentUser.UserId);
 
         if (request.AssigneeUserIds is not null)
         {

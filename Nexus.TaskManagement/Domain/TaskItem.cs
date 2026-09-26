@@ -124,6 +124,28 @@ public sealed class TaskItem : AuditableEntity<Guid>
 
     public void SetDueTime(TimeOnly? dueTime) => DueTime = dueTime;
 
+    /// <summary>
+    /// After an edit, announces what the responsible person needs to know: that the task is now
+    /// theirs, or - when they keep it - that its due date or time moved. Unchanged values raise
+    /// nothing, so edits of other fields stay silent.
+    /// </summary>
+    public void RecordAssignmentAndDueChanges(Guid? previousAssignedUserId, DateOnly previousDueDate, TimeOnly? previousDueTime, Guid? changedByUserId)
+    {
+        if (AssignedUserId is not { } assignee)
+        {
+            return;
+        }
+
+        if (assignee != previousAssignedUserId)
+        {
+            RaiseDomainEvent(new TaskItemAssigneeChanged(Id, TenantId, assignee, previousAssignedUserId, changedByUserId));
+        }
+        else if (DueDate != previousDueDate || DueTime != previousDueTime)
+        {
+            RaiseDomainEvent(new TaskItemDueChanged(Id, TenantId, changedByUserId));
+        }
+    }
+
     public void UpdateCharter(string? description, string? projectManager, DateOnly? startDate, DateOnly? endDate)
     {
         CharterDescription = description;

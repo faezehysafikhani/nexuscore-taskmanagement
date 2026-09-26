@@ -15,6 +15,10 @@ using Nexus.TaskManagement.Infrastructure;
 using NexusCore.Application.Common;
 using NexusCore.Application.Identity.Interfaces;
 using NexusCore.Application.Messaging;
+using NexusCore.Application.Platform.Dtos;
+using NexusCore.Application.Platform.Interfaces;
+using NexusCore.Domain.Auditing;
+using NexusCore.Domain.Settings;
 using NexusCore.Domain.Identity;
 using NexusCore.Infrastructure.Messaging;
 using NexusCore.Infrastructure.Persistence;
@@ -44,6 +48,7 @@ public sealed class RecurringTaskReminderTests : IDisposable
     private readonly RecordingSmsProvider _smsProvider = new();
     private readonly Channels _channels = new();
     private readonly RecordingLogs _logs = new();
+    private readonly TemplateStore _templateStore = new();
 
     private readonly Guid _tenant = Guid.NewGuid();
     private readonly Guid _otherTenant = Guid.NewGuid();
@@ -70,6 +75,12 @@ public sealed class RecurringTaskReminderTests : IDisposable
         services.AddSingleton<INotificationChannelSettingsReader>(_channels);
         services.AddSingleton<ISmsProvider>(_smsProvider);
         services.AddScoped<ISmsSender, GatewaySmsSender>();
+        // The real SMS templates over an in-memory settings store (an edited text lives there).
+        services.AddSingleton<IPlatformRepository>(_templateStore);
+        services.AddSingleton<IPlatformService, NoAudit>();
+        services.AddSingleton<IUnitOfWork, NoUnitOfWork>();
+        services.AddSingleton<ISmsTemplateCatalog, CoreSmsTemplateCatalog>();
+        services.AddScoped<ISmsTemplateService, SmsTemplateService>();
 
         services.AddDbContext<TaskManagementDbContext>((provider, options) => options
             .UseSqlite($"Data Source={_databaseFile};Pooling=False;Default Timeout=30")
@@ -127,7 +138,8 @@ public sealed class RecurringTaskReminderTests : IDisposable
         Assert.All(_notifications.Sent, n => Assert.Equal(_tenant, n.TenantId));
         Assert.All(_notifications.Sent, n => Assert.Contains("یادآوری وظیفه", n.Title));
         Assert.Equal("09120000002", Assert.Single(_smsProvider.Sent).Phone);
-        Assert.All(_smsProvider.Sent, s => Assert.Contains("موعد: ", s.Text));
+        // The default "recurring_task_reminder" template: title and time, in Iran time.
+        Assert.All(_smsProvider.Sent, s => Assert.StartsWith("یادآوری فعالیت تکرارشونده:\nWeekly report\nزمان انجام: ", s.Text));
 
         // The next run is tomorrow at 09:00 in Tehran - not 09:00 UTC.
         var schedule = await ScheduleAsync(scheduleId);
@@ -190,7 +202,7 @@ public sealed class RecurringTaskReminderTests : IDisposable
     public async Task RunningThePassAgain_DoesNotRepeatTheOccurrence()
     {
         var owner = User("09120000001");
-        await RecurringTaskAsync(owner);
+        await RecurringTaskAsync(owner, assignedUserId: owner.Id);
 
         await PassAsync();
         await PassAsync();
@@ -204,8 +216,8 @@ public sealed class RecurringTaskReminderTests : IDisposable
     public async Task ConcurrentPasses_OfSeparateInstances_ProcessEachOccurrenceOnce()
     {
         var owner = User("09120000001");
-        await RecurringTaskAsync(owner);
-        await RecurringTaskAsync(owner, title: "Second");
+        await RecurringTaskAsync(owner, assignedUserId: owner.Id);
+        await RecurringTaskAsync(owner, assignedUserId: owner.Id, title: "Second");
 
         // Two scheduler instances (as two app servers would have), started together.
         var first = Scheduler();
@@ -232,7 +244,8 @@ public sealed class RecurringTaskReminderTests : IDisposable
         await PassAsync();
 
         Assert.Equal(assignee.Id, Assert.Single(_notifications.Sent).UserId);
-        Assert.Equal(2, _smsProvider.Sent.Count);
+        // The SMS is the responsible person's only; the collaborator is notified in the app.
+        Assert.Equal("09120000002", Assert.Single(_smsProvider.Sent).Phone);
         Assert.NotNull((await ScheduleAsync(scheduleId)).LastExecutionAtUtc);
         Assert.Contains(_logs.Entries, e => e.Level == LogLevel.Error && e.Message.Contains("was not stored"));
     }
@@ -243,12 +256,13 @@ public sealed class RecurringTaskReminderTests : IDisposable
         var owner = User("09120000001");
         var assignee = User("09120000002");
         var colleague = User("09120000003");
-        _smsProvider.FailFor.Add("09120000003");
+        _smsProvider.FailFor.Add("09120000002");
         await RecurringTaskAsync(owner, assignedUserId: assignee.Id, collaboratorIds: [colleague.Id]);
 
         await PassAsync();
 
-        Assert.Equal("09120000002", Assert.Single(_smsProvider.Sent).Phone);
+        // The responsible person's SMS failed; the reminders in the app still went out.
+        Assert.Empty(_smsProvider.Sent);
         Assert.Equal(2, _notifications.Sent.Count);
         Assert.Contains(_logs.Entries, e => e.Level == LogLevel.Warning && e.Message.Contains("was not sent"));
     }
@@ -257,7 +271,7 @@ public sealed class RecurringTaskReminderTests : IDisposable
     public async Task AUserWithoutAPhoneNumber_GetsTheNotification_AndTheMissingNumberIsLogged()
     {
         var owner = User(phone: null);
-        await RecurringTaskAsync(owner);
+        await RecurringTaskAsync(owner, assignedUserId: owner.Id);
 
         await PassAsync();
 
@@ -285,9 +299,10 @@ public sealed class RecurringTaskReminderTests : IDisposable
 
         await PassAsync();
 
-        // Only the active collaborator of this organization; the creator is not responsible here.
+        // Only the active collaborator of this organization is notified; the creator is not
+        // responsible here. No SMS: the responsible person is disabled, and a collaborator is not texted.
         Assert.Equal(colleague.Id, Assert.Single(_notifications.Sent).UserId);
-        Assert.Equal("09120000004", Assert.Single(_smsProvider.Sent).Phone);
+        Assert.Empty(_smsProvider.Sent);
     }
 
     [Fact]
@@ -302,7 +317,8 @@ public sealed class RecurringTaskReminderTests : IDisposable
         await PassAsync();
 
         Assert.Contains(_notifications.Sent, n => n.UserId == member.Id);
-        Assert.Contains(_smsProvider.Sent, s => s.Phone == "09120000002");
+        // Team members are reminded in the app; the SMS is only for a responsible person, and there is none.
+        Assert.DoesNotContain(_smsProvider.Sent, s => s.Phone == "09120000002");
         Assert.DoesNotContain(_notifications.Sent, n => n.UserId == owner.Id);
         Assert.DoesNotContain(_smsProvider.Sent, s => s.Phone == "09120000001");
     }
@@ -321,7 +337,8 @@ public sealed class RecurringTaskReminderTests : IDisposable
         await PassAsync();
 
         Assert.Equal(new[] { assignee.Id, colleague.Id, member.Id }.Order(), _notifications.Sent.Select(n => n.UserId).Order());
-        Assert.Equal(new[] { "09120000002", "09120000003", "09120000004" }, _smsProvider.Sent.Select(s => s.Phone).Order());
+        // In the app all three responsible people; by SMS the responsible person (AssignedUserId) only.
+        Assert.Equal("09120000002", Assert.Single(_smsProvider.Sent).Phone);
     }
 
     [Fact]
@@ -340,7 +357,7 @@ public sealed class RecurringTaskReminderTests : IDisposable
     }
 
     [Fact]
-    public async Task AnUnassignedTask_IsItsCreatorsOwn_AndRemindsTheCreator()
+    public async Task AnUnassignedTask_RemindsItsCreatorInTheApp_ButTextsNobody()
     {
         var owner = User("09120000001");
         await RecurringTaskAsync(owner);
@@ -348,7 +365,8 @@ public sealed class RecurringTaskReminderTests : IDisposable
         await PassAsync();
 
         Assert.Equal(owner.Id, Assert.Single(_notifications.Sent).UserId);
-        Assert.Equal("09120000001", Assert.Single(_smsProvider.Sent).Phone);
+        // No responsible person, so no SMS: the creator is not a fallback recipient.
+        Assert.Empty(_smsProvider.Sent);
     }
 
     [Fact]
@@ -365,11 +383,40 @@ public sealed class RecurringTaskReminderTests : IDisposable
     }
 
     [Fact]
+    public async Task TheReminderSms_UsesTheTenantsEditedTemplate_InIranTime()
+    {
+        var owner = User("09120000001");
+        _templateStore.Set(_tenant, TaskSmsTemplateKeys.RecurringTaskReminder, "{TaskTitle} ساعت {ExecutionTime} روز {ExecutionDate}");
+        // The occurrence at 06:00 UTC yesterday is 09:30 in Tehran (UTC+03:30).
+        var yesterday = DateTime.UtcNow.Date.AddDays(-1);
+        var occurrenceUtc = new DateTimeOffset(yesterday.AddHours(6), TimeSpan.Zero);
+        await RecurringTaskAsync(owner, assignedUserId: owner.Id, startTime: new TimeOnly(9, 30), nextRunUtc: occurrenceUtc);
+
+        await PassAsync();
+
+        var text = Assert.Single(_smsProvider.Sent).Text;
+        Assert.StartsWith("Weekly report ساعت ۰۹:۳۰ روز ۱۴", text);
+    }
+
+    [Fact]
+    public async Task ABrokenStoredTemplate_FallsBackToTheDefault_InsteadOfFailing()
+    {
+        var owner = User("09120000001");
+        // Saved outside the panel's checks: the required {TaskTitle} is gone.
+        _templateStore.Set(_tenant, TaskSmsTemplateKeys.RecurringTaskReminder, "بدون عنوان {Unknown}");
+        await RecurringTaskAsync(owner, assignedUserId: owner.Id);
+
+        await PassAsync();
+
+        Assert.StartsWith("یادآوری فعالیت تکرارشونده:\nWeekly report\n", Assert.Single(_smsProvider.Sent).Text);
+    }
+
+    [Fact]
     public async Task SmsTurnedOff_SendsNoSms_ButStillNotifies()
     {
         _channels.Settings = _channels.Settings with { Enabled = false };
         var owner = User("09120000001");
-        await RecurringTaskAsync(owner);
+        await RecurringTaskAsync(owner, assignedUserId: owner.Id);
 
         await PassAsync();
 
@@ -383,7 +430,7 @@ public sealed class RecurringTaskReminderTests : IDisposable
     {
         _channels.Settings = _channels.Settings with { ApiKey = null };
         var owner = User("09120000001");
-        await RecurringTaskAsync(owner);
+        await RecurringTaskAsync(owner, assignedUserId: owner.Id);
 
         await PassAsync();
 
@@ -413,7 +460,8 @@ public sealed class RecurringTaskReminderTests : IDisposable
         var withoutPhone = User(phone: null);
         var colleague = User("09120000005");
         _smsProvider.FailFor.Add("09120000005");
-        await RecurringTaskAsync(owner, assignedUserId: withoutPhone.Id, collaboratorIds: [colleague.Id]);
+        await RecurringTaskAsync(owner, assignedUserId: withoutPhone.Id);
+        await RecurringTaskAsync(owner, assignedUserId: colleague.Id, title: "Second");
 
         await PassAsync();
 
@@ -559,6 +607,43 @@ public sealed class RecurringTaskReminderTests : IDisposable
         }
     }
 
+    /// <summary>platform.Settings in memory: where an administrator's edited SMS text is kept.</summary>
+    private sealed class TemplateStore : IPlatformRepository
+    {
+        public ConcurrentDictionary<string, SystemSetting> Settings { get; } = new();
+
+        public void Set(Guid tenantId, string templateKey, string text) =>
+            Settings[$"{tenantId}|Notifications.SmsTemplates.{templateKey}"] =
+                new SystemSetting(Guid.NewGuid(), tenantId, "Notifications.SmsTemplates." + templateKey, text, "Integrations");
+
+        public Task<SystemSetting?> FindSettingAsync(Guid? tenantId, string key, string scope, CancellationToken cancellationToken) =>
+            Task.FromResult(Settings.GetValueOrDefault($"{tenantId}|{key}"));
+
+        public Task AddSettingAsync(SystemSetting setting, CancellationToken cancellationToken)
+        {
+            Settings[$"{setting.TenantId}|{setting.Key}"] = setting;
+            return Task.CompletedTask;
+        }
+
+        public Task AddAuditLogAsync(AuditLog auditLog, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task<PagedResult<AuditLogDto>> ListAuditLogsAsync(AuditLogQuery query, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<SystemSetting>> ListSettingsAsync(Guid? tenantId, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class NoAudit : IPlatformService
+    {
+        public Task AuditAsync(string action, string? entityName, string? entityId, string? details, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task AuditForAsync(Guid? tenantId, Guid? userId, string action, string? entityName, string? entityId, string? details, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task<Result<PagedResult<AuditLogDto>>> ListAuditLogsAsync(AuditLogQuery query, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<Result<IReadOnlyList<SettingDto>>> ListSettingsAsync(Guid? tenantId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<Result<SettingDto>> UpsertSettingAsync(UpsertSettingRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class NoUnitOfWork : IUnitOfWork
+    {
+        public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) => Task.FromResult(0);
+    }
+
     private sealed class NoUser : ICurrentUserContext
     {
         public Guid? UserId => null;
@@ -610,27 +695,6 @@ public sealed class RecurringTaskReminderTests : IDisposable
     }
 
     /// <summary>Stands in for Kavenegar: records instead of sending.</summary>
-    private sealed class RecordingSmsProvider : ISmsProvider
-    {
-        public ConcurrentQueue<(string Phone, string Text)> Queue { get; } = new();
-        public IReadOnlyList<(string Phone, string Text)> Sent => Queue.ToList();
-        public HashSet<string> FailFor { get; } = [];
-        public string Key => "test";
-        public string DisplayName => "Test";
-        public string DefaultBaseUrl => "https://sms.invalid";
-
-        public Task<Result<string>> SendAsync(SmsProviderSettings settings, string phoneNumber, string text, CancellationToken cancellationToken)
-        {
-            if (FailFor.Contains(phoneNumber))
-            {
-                return Task.FromResult(Result.Failure<string>(Error.Validation("سرویس‌دهنده پیامک را نپذیرفت.")));
-            }
-
-            Queue.Enqueue((phoneNumber, text));
-            return Task.FromResult(Result.Success(Guid.NewGuid().ToString()));
-        }
-    }
-
     private sealed class RecordingLogs : ILoggerProvider
     {
         public ConcurrentQueue<(LogLevel Level, int EventId, string Message)> Queue { get; } = new();

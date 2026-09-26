@@ -21,6 +21,7 @@ using NexusCore.Application.Endpoints;
 using NexusCore.Application.Messaging;
 using NexusCore.Application.Security;
 using NexusCore.Domain.Identity;
+using NexusCore.Domain.Settings;
 using NexusCore.Infrastructure;
 using NexusCore.Infrastructure.Persistence;
 using NexusCore.Infrastructure.Security;
@@ -283,6 +284,63 @@ public sealed class PasswordRecoveryTests
 
     // ---------------------------------------------------------------- host
 
+    // ---------------------------------------------------------------- the SMS text
+
+    [Fact]
+    public async Task TheSms_IsTheResetTemplate_WithTheCodeAndItsLifetime_AndNoPassword()
+    {
+        await using var api = await Api.StartAsync(settings: new() { ["PasswordReset:CodeLifetimeMinutes"] = "10" });
+
+        var before = DateTimeOffset.UtcNow;
+        var code = await api.CodeForAsync(UserName);
+
+        Assert.Matches("^[0-9]{6}$", code);
+        Assert.Equal($"کد بازیابی رمز عبور شما: {code}\nاین کد تا 10 دقیقه معتبر است.", api.Sms.Sent[^1].Text);
+        Assert.DoesNotContain(OldPassword, api.Sms.Sent[^1].Text);
+        var token = Assert.Single(await api.ResetTokensAsync());
+        Assert.InRange(token.ExpiresAtUtc, before.AddMinutes(10).AddSeconds(-5), DateTimeOffset.UtcNow.AddMinutes(10).AddSeconds(5));
+        Assert.Equal(HttpStatusCode.OK, (await api.VerifyAsync(UserName, code)).StatusCode);
+    }
+
+    [Fact]
+    public async Task TheOrganizationsEditedText_IsUsed_WithTheConfiguredProductName()
+    {
+        await using var api = await Api.StartAsync(settings: new() { ["Notifications:SmsTemplates:ProductName"] = "سامانه آزمایشی" });
+        await api.StoreResetTemplateAsync("{ProductName}\nکد: {Code} (تا {ExpireMinutes} دقیقه)");
+
+        var code = await api.CodeForAsync(UserName);
+
+        Assert.Equal($"سامانه آزمایشی\nکد: {code} (تا 5 دقیقه)", api.Sms.Sent[^1].Text);
+        Assert.Equal(HttpStatusCode.OK, (await api.VerifyAsync(UserName, code)).StatusCode);
+    }
+
+    [Theory]
+    [InlineData("رمز شما به زودی ارسال می‌شود")]
+    [InlineData("   ")]
+    public async Task AStoredTextWithoutTheCode_FallsBackToTheDefault_AndRecoveryStillWorks(string broken)
+    {
+        await using var api = await Api.StartAsync();
+        await api.StoreResetTemplateAsync(broken);
+
+        var code = await api.CodeForAsync(UserName);
+
+        Assert.Equal($"کد بازیابی رمز عبور شما: {code}\nاین کد تا 5 دقیقه معتبر است.", api.Sms.Sent[^1].Text);
+        Assert.Equal(HttpStatusCode.OK, (await api.VerifyAsync(UserName, code)).StatusCode);
+    }
+
+    [Fact]
+    public async Task AnAccountWithoutAMobile_GetsTheSameAnswer_AndNoSms()
+    {
+        await using var api = await Api.StartAsync();
+        await api.ClearPhoneAsync();
+
+        var response = await api.RequestCodeAsync(UserName);
+
+        Assert.Equal(Answer, (await Json(response)).GetProperty("message").GetString());
+        Assert.Empty(api.Sms.Sent);
+        Assert.Empty(await api.ResetTokensAsync());
+    }
+
     private static async Task<JsonElement> Json(HttpResponseMessage response) =>
         JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
 
@@ -315,7 +373,7 @@ public sealed class PasswordRecoveryTests
 
         public RecordingSms Sms { get; }
 
-        public static async Task<Api> StartAsync(int cooldownSeconds = 60, int maxCodes = 3, string environment = "Testing")
+        public static async Task<Api> StartAsync(int cooldownSeconds = 60, int maxCodes = 3, string environment = "Testing", Dictionary<string, string?>? settings = null)
         {
             var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = environment });
             builder.WebHost.UseTestServer();
@@ -326,6 +384,10 @@ public sealed class PasswordRecoveryTests
                 ["Identity:LoginProtection:ResetCodeCooldownSeconds"] = cooldownSeconds.ToString(),
                 ["Identity:LoginProtection:MaxResetCodesPerIdentifier"] = maxCodes.ToString(),
             });
+            if (settings is not null)
+            {
+                builder.Configuration.AddInMemoryCollection(settings);
+            }
 
             builder.Services.AddApplication();
             builder.Services.AddInfrastructure(builder.Configuration);
@@ -404,6 +466,25 @@ public sealed class PasswordRecoveryTests
             using var scope = _app.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<NexusCoreDbContext>();
             (await db.Users.SingleAsync()).SetActive(isActive);
+            await db.SaveChangesAsync();
+        }
+
+        /// <summary>The organization's own password-reset text, as the SMS panel stores it.</summary>
+        public async Task StoreResetTemplateAsync(string text)
+        {
+            using var scope = _app.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<NexusCoreDbContext>();
+            var user = await db.Users.SingleAsync();
+            db.Settings.Add(new SystemSetting(Guid.NewGuid(), user.TenantId, "Notifications.SmsTemplates." + SmsTemplateKeys.PasswordReset, text, "Integrations"));
+            await db.SaveChangesAsync();
+        }
+
+        public async Task ClearPhoneAsync()
+        {
+            using var scope = _app.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<NexusCoreDbContext>();
+            var user = await db.Users.SingleAsync();
+            user.UpdateContactDetails(user.Username, null, notifySms: false);
             await db.SaveChangesAsync();
         }
 

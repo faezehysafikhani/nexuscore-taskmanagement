@@ -90,6 +90,11 @@ public static class DependencyInjection
         services.AddScoped<ITaskSmsSender, PlatformTaskSmsSender>();
         services.AddScoped<IUserContactResolver, DirectoryUserContactResolver>();
         services.AddScoped<NexusCore.SharedKernel.Domain.IDomainEventHandler<Nexus.TaskManagement.Domain.TaskItemCreated>, TaskCreatedChannelNotifier>();
+        // A new responsible person, or a moved due date, is told by SMS too (the responsible person only).
+        services.AddScoped<NexusCore.SharedKernel.Domain.IDomainEventHandler<Nexus.TaskManagement.Domain.TaskItemAssigneeChanged>, TaskChangeSmsNotifier>();
+        services.AddScoped<NexusCore.SharedKernel.Domain.IDomainEventHandler<Nexus.TaskManagement.Domain.TaskItemDueChanged>, TaskChangeSmsNotifier>();
+        // The texts of those SMS, editable in the SMS panel.
+        services.AddSingleton<NexusCore.Application.Messaging.ISmsTemplateCatalog, TaskSmsTemplateCatalog>();
         return services;
     }
 }

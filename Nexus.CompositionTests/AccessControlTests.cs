@@ -14,6 +14,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
+using Nexus.Integrations.TaskNotifications;
 using Nexus.TaskManagement;
 using Nexus.TaskManagement.Endpoints;
 using Nexus.TaskManagement.Infrastructure;
@@ -21,6 +22,7 @@ using Nexus.TaskManagement.Permissions;
 using NexusCore.Application;
 using NexusCore.Application.Endpoints;
 using NexusCore.Application.Identity.Permissions;
+using NexusCore.Application.Messaging;
 using NexusCore.Application.Security;
 using NexusCore.Domain.Identity;
 using NexusCore.Infrastructure;
@@ -343,6 +345,9 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
         public Caller AdminB { get; private set; } = null!;
         public IServiceProvider Services => _app.Services;
 
+        /// <summary>The SMS the platform handed to its provider ("test"; off until a tenant enables it).</summary>
+        public RecordingSmsProvider Sms { get; } = new();
+
         public async Task InitializeAsync()
         {
             var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Testing" });
@@ -356,6 +361,11 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
                 ["Identity:ManagedPermissionModules:0"] = "Identity",
                 ["Identity:ManagedPermissionModules:1"] = "Platform",
                 ["Identity:ManagedPermissionModules:2"] = "TaskManagement",
+                // Like the task-management product: its SMS panel shows only its own templates.
+                ["Notifications:SmsTemplates:Keys:0"] = "password_reset",
+                ["Notifications:SmsTemplates:Keys:1"] = "task_assigned",
+                ["Notifications:SmsTemplates:Keys:2"] = "recurring_task_reminder",
+                ["Notifications:SmsTemplates:Keys:3"] = "task_due_changed",
                 ["FileStorage:RootPath"] = Path.Combine(Path.GetTempPath(), $"access-tests-{Guid.NewGuid():N}"),
             });
 
@@ -364,6 +374,9 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
             builder.Services.AddInfrastructure(builder.Configuration);
             builder.Services.AddTaskManagement();
             builder.Services.AddTaskManagementInfrastructure(builder.Configuration);
+            // Task SMS through the platform's SMS panel, to a recording provider (never a real gateway).
+            builder.Services.AddTaskNotificationsIntegration();
+            builder.Services.AddSingleton<ISmsProvider>(Sms);
             builder.Services.AddTicketingApplication();
             builder.Services.AddTicketingInfrastructure(builder.Configuration);
             builder.Services.AddSignalR();

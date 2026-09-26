@@ -86,6 +86,9 @@ public static class DependencyInjection
         services.AddScoped<ISmsProvider, KavenegarSmsProvider>();
         services.AddScoped<ISmsSender, GatewaySmsSender>();
         services.AddScoped<ISmsTemplateService, SmsTemplateService>();
+        // Each module adds its own SMS templates the same way (ISmsTemplateCatalog).
+        services.AddSingleton<ISmsTemplateCatalog, CoreSmsTemplateCatalog>();
+        services.Configure<SmsTemplateOptions>(configuration.GetSection(SmsTemplateOptions.SectionName));
 
         // LDAP / Active Directory connection settings and test.
         services.AddScoped<ILdapDirectoryClient, NexusCore.Infrastructure.Ldap.LdapDirectoryClient>();

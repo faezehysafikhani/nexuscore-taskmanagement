@@ -39,6 +39,7 @@ public sealed class AccountService(
     IPlatformService platformService,
     ICurrentUserContext currentUser,
     ISmsSender smsSender,
+    ISmsTemplateService smsTemplates,
     IOptions<PasswordRecoveryOptions> recoveryOptions,
     IValidator<ResetPasswordRequest> resetValidator,
     IValidator<UpdateMyProfileRequest> profileValidator,
@@ -107,7 +108,13 @@ public sealed class AccountService(
             cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        var text = $"کد بازیابی رمز عبور شما: {code}\nاین کد تا {options.CodeLifetimeMinutes} دقیقه معتبر است. آن را در اختیار دیگران قرار ندهید.";
+        // The wording is the tenant's "password_reset" SMS template; it always carries {Code}.
+        var lifetimeMinutes = Math.Max(1, options.CodeLifetimeMinutes).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var rendered = await smsTemplates.RenderAsync(user.TenantId, SmsTemplateKeys.PasswordReset,
+            new Dictionary<string, string?> { ["Code"] = code, ["ExpireMinutes"] = lifetimeMinutes }, cancellationToken);
+        var text = rendered.IsSuccess
+            ? rendered.Value!
+            : $"کد بازیابی رمز عبور شما: {code}\nاین کد تا {lifetimeMinutes} دقیقه معتبر است.";
         var sent = await smsSender.SendAsync(user.TenantId, user.PhoneNumber, text, cancellationToken);
         if (sent.IsFailure)
         {
