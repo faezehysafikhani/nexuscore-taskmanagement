@@ -324,7 +324,19 @@ if (builder.Configuration.GetValue("Database:SeedOnStartup", true))
 
     // Chat and in-app notifications. Chat uses its own connection string/database.
     await ModuleSchemaInitializer.EnsureCreatedAsync(services.GetRequiredService<NotificationDbContext>(), cancellationToken);
-    await ModuleSchemaInitializer.EnsureCreatedAsync(services.GetRequiredService<ChatDbContext>(), cancellationToken);
+    var chatDb = services.GetRequiredService<ChatDbContext>();
+    await ModuleSchemaInitializer.EnsureCreatedAsync(chatDb, cancellationToken);
+
+    // Columns added to Chat's model after a deployment's Conversations table already existed
+    // (team conversations): EnsureCreatedAsync above cannot add these to an existing table on
+    // its own, so a live database that predates them would otherwise 500 on any query that
+    // touches Conversations. Safe to call on every restart.
+    await ModuleSchemaInitializer.EnsureColumnAsync(
+        chatDb, "dbo.Conversations", "TeamId",
+        "ALTER TABLE dbo.Conversations ADD TeamId uniqueidentifier NULL;",
+        "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Conversations_TeamId' AND object_id = OBJECT_ID(N'dbo.Conversations')) " +
+        "CREATE UNIQUE INDEX IX_Conversations_TeamId ON dbo.Conversations(TeamId) WHERE TeamId IS NOT NULL;",
+        cancellationToken);
 }
 
 app.Run();

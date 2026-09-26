@@ -3,11 +3,17 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using Chat.Api.Endpoints;
+using Chat.Api.Hubs;
+using Chat.Application;
+using Chat.Infrastructure;
+using Chat.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -357,6 +363,9 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
         /// <summary>The SMS the platform handed to its provider ("test"; off until a tenant enables it).</summary>
         public RecordingSmsProvider Sms { get; } = new();
 
+        /// <summary>Chat's own database (a real relational engine, so its unique indexes are enforced), file per Host.</summary>
+        private readonly string _chatDbFile = Path.Combine(Path.GetTempPath(), $"chat-tests-{Guid.NewGuid():N}.db");
+
         public async Task InitializeAsync()
         {
             var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Testing" });
@@ -376,6 +385,8 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
                 ["Notifications:SmsTemplates:Keys:2"] = "recurring_task_reminder",
                 ["Notifications:SmsTemplates:Keys:3"] = "task_due_changed",
                 ["FileStorage:RootPath"] = Path.Combine(Path.GetTempPath(), $"access-tests-{Guid.NewGuid():N}"),
+                // Replaced below by SQLite; AddChatInfrastructure only needs a non-null value to build.
+                ["ConnectionStrings:Chat"] = "Data Source=unused",
             });
 
             // The Rozet composition, minus the modules these tests do not reach.
@@ -388,6 +399,8 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
             builder.Services.AddSingleton<ISmsProvider>(Sms);
             builder.Services.AddTicketingApplication();
             builder.Services.AddTicketingInfrastructure(builder.Configuration);
+            builder.Services.AddChatApplication();
+            builder.Services.AddChatInfrastructure(builder.Configuration);
             builder.Services.AddSignalR();
 
             // One in-memory store per context: each maps the shared identity tables with its own
@@ -396,6 +409,11 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
             UseInMemory<NexusCoreDbContext>(builder.Services, Guid.NewGuid().ToString(), withInterceptors: true);
             UseInMemory<TaskManagementDbContext>(builder.Services, Guid.NewGuid().ToString(), withInterceptors: true);
             UseInMemory<TicketingDbContext>(builder.Services, Guid.NewGuid().ToString(), withInterceptors: false);
+            // Chat's own database, on SQLite (a real relational engine): its unique indexes
+            // (one conversation per pair, one per team) are actually enforced, unlike InMemory.
+            builder.Services.RemoveAll<DbContextOptions<ChatDbContext>>();
+            builder.Services.AddDbContext<ChatDbContext>(options =>
+                options.UseSqlite($"Data Source={_chatDbFile};Pooling=False;Default Timeout=30"));
 
             var jwt = new JwtOptions();
             builder.Services
@@ -429,6 +447,14 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
             _app.MapUserGroupEndpoints();
             _app.MapTaskManagementEndpoints();
             _app.MapTicketEndpoints();
+            _app.MapChatEndpoints();
+            _app.MapHub<ChatHub>("/hubs/chat");
+
+            using (var scope = _app.Services.CreateScope())
+            {
+                await scope.ServiceProvider.GetRequiredService<ChatDbContext>().Database.EnsureCreatedAsync();
+            }
+
             await _app.StartAsync();
             _client = _app.GetTestClient();
 
@@ -577,11 +603,35 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
             return await _client.SendAsync(request);
         }
 
+        /// <summary>multipart/form-data, as the chat send-message endpoints (text + optional file) take it.</summary>
+        public async Task<HttpResponseMessage> SendFormAsync(Caller caller, HttpMethod method, string path, string? text)
+        {
+            using var request = new HttpRequestMessage(method, path);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", caller.Token);
+            var form = new MultipartFormDataContent();
+            if (text is not null)
+            {
+                form.Add(new StringContent(text), "text");
+            }
+
+            request.Content = form;
+            return await _client.SendAsync(request);
+        }
+
         public async Task DisposeAsync()
         {
             _client.Dispose();
             await _app.StopAsync();
             await _app.DisposeAsync();
+            SqliteConnection.ClearAllPools();
+            try
+            {
+                File.Delete(_chatDbFile);
+            }
+            catch (IOException)
+            {
+                // A leftover temp file is harmless.
+            }
         }
     }
 }

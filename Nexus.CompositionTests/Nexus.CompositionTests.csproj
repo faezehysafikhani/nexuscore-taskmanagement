@@ -47,6 +47,10 @@
     <!-- NotificationInboxTests: the notification endpoints the bell reads. -->
     <ProjectReference Include="..\Notifications.Api\Notifications.Api.csproj" />
     <ProjectReference Include="..\Notifications.Infrastructure\Notifications.Infrastructure.csproj" />
+    <!-- ChatTests: direct and team conversations through the real endpoints. -->
+    <ProjectReference Include="..\Chat.Api\Chat.Api.csproj" />
+    <ProjectReference Include="..\Chat.Application\Chat.Application.csproj" />
+    <ProjectReference Include="..\Chat.Infrastructure\Chat.Infrastructure.csproj" />
 
     <ProjectReference Include="..\Nexus.Actions\Nexus.Actions.csproj" />
     <ProjectReference Include="..\Nexus.Actions.Infrastructure\Nexus.Actions.Infrastructure.csproj" />

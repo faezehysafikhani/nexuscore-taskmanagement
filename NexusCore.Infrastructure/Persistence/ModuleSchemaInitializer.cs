@@ -41,4 +41,47 @@ public static class ModuleSchemaInitializer
         {
         }
     }
+
+    /// <summary>
+    /// A column added to a module's model after CreateTablesAsync above had already created its
+    /// table elsewhere: that call only creates tables that do not exist yet, so a later column
+    /// (or its index) never reaches an existing deployment on its own. This applies one such
+    /// patch - safe to call on every restart, and a no-op once the column (or index) is there.
+    /// A production deployment with dotnet ef tooling available should apply the module's real
+    /// Migrations instead, the same gap <see cref="EnsureCreatedAsync"/> documents.
+    /// </summary>
+    public static async Task EnsureColumnAsync(
+        DbContext dbContext, string table, string column, string addColumnSql, string? addIndexSql, CancellationToken cancellationToken)
+    {
+        var connection = dbContext.Database.GetDbConnection();
+        var wasClosed = connection.State != System.Data.ConnectionState.Open;
+        if (wasClosed)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        try
+        {
+            await using (var command = connection.CreateCommand())
+            {
+                command.CommandText =
+                    $"IF COL_LENGTH(N'{table}', N'{column}') IS NULL " + addColumnSql;
+                await command.ExecuteNonQueryAsync(cancellationToken);
+            }
+
+            if (addIndexSql is not null)
+            {
+                await using var command = connection.CreateCommand();
+                command.CommandText = addIndexSql;
+                await command.ExecuteNonQueryAsync(cancellationToken);
+            }
+        }
+        finally
+        {
+            if (wasClosed)
+            {
+                await connection.CloseAsync();
+            }
+        }
+    }
 }
