@@ -25,6 +25,10 @@ public static class DirectMessageEndpoints
                 (await sender.Send(new GetUnreadCountsBySenderQuery(), cancellationToken)).ToApiResult())
             .WithSummary("Unread messages per sender");
 
+        direct.MapGet("/directory", async (ISender sender, CancellationToken cancellationToken) =>
+                (await sender.Send(new GetChatDirectoryQuery(), cancellationToken)).ToApiResult())
+            .WithSummary("Every active user of your tenant you may start a direct chat with");
+
         direct.MapGet("/{userId:guid}/messages", async (
                 Guid userId,
                 int? page,

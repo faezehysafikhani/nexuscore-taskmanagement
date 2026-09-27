@@ -120,10 +120,10 @@ public sealed class ChatTests(AccessControlTests.Host host) : IClassFixture<Acce
         Assert.Equal(HttpStatusCode.NotFound, send.StatusCode);
     }
 
-    // 9: a real, same-tenant, active user the caller shares no team with, and who is not an
-    // administrator of groups either - direct chat is not open to just anyone in the tenant.
+    // 9: a real, same-tenant, active user the caller shares no team with. Direct chat is
+    // independent of team membership - it is open to any two active users of the same tenant.
     [Fact]
-    public async Task ASameTenantUser_WithNoSharedTeam_Answers404_NeverA500()
+    public async Task ASameTenantUser_WithNoSharedTeam_IsStillReachable_DirectChatIsIndependentOfTeams()
     {
         var a = await host.UserAsync(host.TenantA, []);
         var unrelated = await host.UserAsync(host.TenantA, []);
@@ -131,8 +131,8 @@ public sealed class ChatTests(AccessControlTests.Host host) : IClassFixture<Acce
         var get = await host.SendAsync(a, HttpMethod.Get, $"/api/chat/direct/{unrelated.Id}/messages");
         var send = await host.SendFormAsync(a, HttpMethod.Post, $"/api/chat/direct/{unrelated.Id}/messages", "hi");
 
-        Assert.Equal(HttpStatusCode.NotFound, get.StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, send.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, get.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, send.StatusCode);
     }
 
     [Fact]

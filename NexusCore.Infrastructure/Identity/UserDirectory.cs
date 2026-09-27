@@ -30,6 +30,22 @@ public sealed class UserDirectory(NexusCoreDbContext dbContext) : IUserDirectory
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<UserContact>> GetActiveUsersInTenantAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        await dbContext.Users
+            .AsNoTracking()
+            .Where(user => user.TenantId == tenantId && user.IsActive)
+            .Select(user => new UserContact(
+                user.Id,
+                user.TenantId,
+                user.DisplayName,
+                user.Email,
+                user.Username,
+                user.AvatarUrl,
+                user.PhoneNumber,
+                user.NotifySms,
+                user.IsActive))
+            .ToListAsync(cancellationToken);
+
     public async Task<IReadOnlyList<Guid>> GetGroupMemberIdsAsync(Guid groupId, CancellationToken cancellationToken) =>
         await dbContext.UserGroupMembers
             .AsNoTracking()

@@ -20,6 +20,9 @@ public interface IUserDirectory
 {
     Task<IReadOnlyList<UserContact>> GetUsersAsync(IReadOnlyCollection<Guid> userIds, CancellationToken cancellationToken);
 
+    /// <summary>Every active user of the tenant, for picking a chat partner - not an administrative listing.</summary>
+    Task<IReadOnlyList<UserContact>> GetActiveUsersInTenantAsync(Guid tenantId, CancellationToken cancellationToken);
+
     Task<IReadOnlyList<Guid>> GetGroupMemberIdsAsync(Guid groupId, CancellationToken cancellationToken);
 
     /// <summary>The active groups (and work teams) the user is a member or the owner of.</summary>

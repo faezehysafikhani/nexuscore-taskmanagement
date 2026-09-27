@@ -7,7 +7,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using NexusCore.Application.Files;
 using NexusCore.Application.Identity.Interfaces;
-using NexusCore.Application.Identity.Permissions;
 using NexusCore.SharedKernel.Interfaces;
 using NexusCore.SharedKernel.Results;
 
@@ -42,12 +41,6 @@ public sealed class DirectConversationService(
         var other = users.FirstOrDefault(user => user.Id == otherUserId);
 
         if (me is null || other is null || other.TenantId != tenantId || !other.IsActive)
-        {
-            return Result.Failure<(UserContact, UserContact)>(Error.NotFound("User was not found."));
-        }
-
-        if (!currentUser.HasPermission(UserGroupPermissions.GroupsManageMembers)
-            && !await ShareAnyWorkTeamAsync(meId, otherUserId, cancellationToken))
         {
             return Result.Failure<(UserContact, UserContact)>(Error.NotFound("User was not found."));
         }
@@ -105,17 +98,30 @@ public sealed class DirectConversationService(
             message.HasAttachment
                 ? new ChatAttachmentDto(message.AttachmentFileName!, message.AttachmentContentType ?? "application/octet-stream", message.AttachmentSizeBytes ?? 0)
                 : null);
+}
 
-    private async Task<bool> ShareAnyWorkTeamAsync(Guid meId, Guid otherUserId, CancellationToken cancellationToken)
+/// <summary>
+/// Lists who a user may start a direct chat with - every other active user of their tenant.
+/// Deliberately independent of the administrative user-management permissions: being listed
+/// here (or reachable through it) is not the same as being able to view or manage users.
+/// </summary>
+public sealed class GetChatDirectoryQueryHandler(
+    ICurrentUserContext currentUser,
+    IUserDirectory userDirectory)
+    : IRequestHandler<GetChatDirectoryQuery, Result<List<ChatContactDto>>>
+{
+    public async Task<Result<List<ChatContactDto>>> Handle(GetChatDirectoryQuery request, CancellationToken cancellationToken)
     {
-        var myGroups = await userDirectory.GetGroupIdsOfUserAsync(meId, cancellationToken);
-        if (myGroups.Count == 0)
+        if (currentUser.UserId is not { } meId || currentUser.TenantId is not { } tenantId)
         {
-            return false;
+            return Result.Failure<List<ChatContactDto>>(Error.Unauthorized());
         }
 
-        var otherGroups = await userDirectory.GetGroupIdsOfUserAsync(otherUserId, cancellationToken);
-        return myGroups.Intersect(otherGroups).Any();
+        var users = await userDirectory.GetActiveUsersInTenantAsync(tenantId, cancellationToken);
+        return Result.Success(users
+            .Where(user => user.Id != meId)
+            .Select(user => new ChatContactDto(user.Id, user.DisplayName, user.AvatarUrl))
+            .ToList());
     }
 }
 

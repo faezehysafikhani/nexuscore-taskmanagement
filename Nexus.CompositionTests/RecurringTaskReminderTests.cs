@@ -686,6 +686,9 @@ public sealed class RecurringTaskReminderTests : IDisposable
         public Task<IReadOnlyList<UserContact>> GetUsersAsync(IReadOnlyCollection<Guid> userIds, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<UserContact>>(userIds.Where(Users.ContainsKey).Select(id => Users[id]).ToList());
 
+        public Task<IReadOnlyList<UserContact>> GetActiveUsersInTenantAsync(Guid tenantId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<UserContact>>(Users.Values.Where(u => u.TenantId == tenantId && u.IsActive).ToList());
+
         public Task<IReadOnlyList<Guid>> GetGroupMemberIdsAsync(Guid groupId, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<Guid>>(Groups.TryGetValue(groupId, out var members) ? members : []);
 
