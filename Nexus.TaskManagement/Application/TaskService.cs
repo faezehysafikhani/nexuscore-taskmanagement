@@ -385,7 +385,12 @@ public sealed class TaskService(
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        await activity.RecordAsync(id, "Assignee changed", string.Join(",", task.ResponsibleUserIds), cancellationToken);
+        // Names, not ids: this is read back as a human-facing activity/notification entry.
+        var responsibleNames = await repository.GetUserSummariesAsync(task.ResponsibleUserIds, cancellationToken);
+        var responsibleNamesText = string.Join("، ", task.ResponsibleUserIds
+            .Select(userId => responsibleNames.TryGetValue(userId, out var user) ? user.DisplayName : null)
+            .Where(name => !string.IsNullOrWhiteSpace(name)));
+        await activity.RecordAsync(id, "Assignee changed", responsibleNamesText, cancellationToken);
 
         var updated = await repository.GetByIdAsync(tenantId, id, cancellationToken);
         return Result.Success(await ToDtoAsync(updated!, cancellationToken));
@@ -423,7 +428,15 @@ public sealed class TaskService(
             task.AssignedUserId, request.AssignedUserGroupId, task.AllowAssigneeStatusUpdate);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        await activity.RecordAsync(id, "Team changed", request.AssignedUserGroupId?.ToString(), cancellationToken);
+        // The team's name, not its id: this is read back as a human-facing activity/notification entry.
+        string? teamName = null;
+        if (request.AssignedUserGroupId is { } assignedGroupId)
+        {
+            var groups = await repository.GetUserGroupSummariesAsync([assignedGroupId], cancellationToken);
+            teamName = groups.TryGetValue(assignedGroupId, out var group) ? group.Name : null;
+        }
+
+        await activity.RecordAsync(id, "Team changed", teamName, cancellationToken);
 
         var updated = await repository.GetByIdAsync(tenantId, id, cancellationToken);
         return Result.Success(await ToDtoAsync(updated!, cancellationToken));
