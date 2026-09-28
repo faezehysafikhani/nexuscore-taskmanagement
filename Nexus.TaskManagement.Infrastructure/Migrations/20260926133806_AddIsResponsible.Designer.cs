@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Nexus.TaskManagement.Infrastructure;
 
@@ -11,9 +12,11 @@ using Nexus.TaskManagement.Infrastructure;
 namespace Nexus.TaskManagement.Infrastructure.Migrations
 {
     [DbContext(typeof(TaskManagementDbContext))]
-    partial class TaskManagementDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260926133806_AddIsResponsible")]
+    partial class AddIsResponsible
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -253,6 +256,9 @@ namespace Nexus.TaskManagement.Infrastructure.Migrations
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("IsResponsible")
+                        .HasColumnType("bit");
 
                     b.Property<Guid>("TaskId")
                         .HasColumnType("uniqueidentifier");
