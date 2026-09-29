@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using NexusCore.Application.Files;
 using Nexus.TaskManagement.Application;
 using Nexus.TaskManagement.Application.Dtos;
 using Nexus.TaskManagement.Domain;
@@ -418,9 +419,13 @@ public sealed class TaskManagementIntegrationTests(SqlServerFixture fixture)
     }
 
     [Fact]
-    public async Task FileOfExactlyTheLimitIsAccepted()
+    public async Task FileOfExactlyTheDefaultConfiguredLimitIsAccepted()
     {
         if (Skip) return;
+
+        // No Uploads.MaxFileSizeKb setting configured for this tenant: the enforced limit is the
+        // default (200 KB), well under TaskFileAsset's hard ceiling.
+        var defaultLimitBytes = UploadPolicySettings.DefaultMaxFileSizeKb * 1024;
 
         var task = await fixture.ScopedAsync(sp =>
             sp.GetRequiredService<ITaskService>().CreateAsync(PlainTask("Boundary ok"), default));
@@ -428,18 +433,20 @@ public sealed class TaskManagementIntegrationTests(SqlServerFixture fixture)
         var upload = await fixture.ScopedAsync(sp =>
             sp.GetRequiredService<ITaskFileService>().UploadToTaskAsync(
                 task.Value.Id,
-                new UploadFileRequest("big.bin", "application/octet-stream",
-                    new byte[TaskFileAsset.MaxFileSizeBytes]),
+                new UploadFileRequest("big.pdf", "application/pdf",
+                    new byte[defaultLimitBytes]),
                 default));
 
         Assert.True(upload.IsSuccess);
-        Assert.Equal(204_800, upload.Value.FileSizeBytes);
+        Assert.Equal(defaultLimitBytes, upload.Value.FileSizeBytes);
     }
 
     [Fact]
-    public async Task FileOneByteOverTheLimitIsRejected()
+    public async Task FileOneByteOverTheDefaultConfiguredLimitIsRejected()
     {
         if (Skip) return;
+
+        var defaultLimitBytes = UploadPolicySettings.DefaultMaxFileSizeKb * 1024;
 
         var task = await fixture.ScopedAsync(sp =>
             sp.GetRequiredService<ITaskService>().CreateAsync(PlainTask("Boundary fail"), default));
@@ -447,8 +454,25 @@ public sealed class TaskManagementIntegrationTests(SqlServerFixture fixture)
         var upload = await fixture.ScopedAsync(sp =>
             sp.GetRequiredService<ITaskFileService>().UploadToTaskAsync(
                 task.Value.Id,
-                new UploadFileRequest("toobig.bin", "application/octet-stream",
-                    new byte[TaskFileAsset.MaxFileSizeBytes + 1]),
+                new UploadFileRequest("toobig.pdf", "application/pdf",
+                    new byte[defaultLimitBytes + 1]),
+                default));
+
+        Assert.True(upload.IsFailure);
+    }
+
+    [Fact]
+    public async Task DisallowedFileTypeIsRejected()
+    {
+        if (Skip) return;
+
+        var task = await fixture.ScopedAsync(sp =>
+            sp.GetRequiredService<ITaskService>().CreateAsync(PlainTask("Type rejected"), default));
+
+        var upload = await fixture.ScopedAsync(sp =>
+            sp.GetRequiredService<ITaskFileService>().UploadToTaskAsync(
+                task.Value.Id,
+                new UploadFileRequest("script.exe", "application/octet-stream", new byte[32]),
                 default));
 
         Assert.True(upload.IsFailure);

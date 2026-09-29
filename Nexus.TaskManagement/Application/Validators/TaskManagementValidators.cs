@@ -268,11 +268,12 @@ public sealed class UploadFileRequestValidator : AbstractValidator<UploadFileReq
         RuleFor(x => x.FileName).NotEmpty().MaximumLength(260);
         RuleFor(x => x.ContentType).MaximumLength(150);
 
-        // Checked against the bytes actually received. The service repeats this check, so a
-        // caller that bypasses validation still cannot store an oversized file.
+        // The hard ceiling only (see TaskFileAsset.MaxFileSizeBytes remarks) - the service checks
+        // the admin-configured, day-to-day limit separately, since that value can change at
+        // runtime and this validator cannot depend on it.
         RuleFor(x => x.Content)
             .NotNull()
             .Must(content => content is { Length: > 0 and <= TaskFileAsset.MaxFileSizeBytes })
-            .WithMessage($"Files must be between 1 and {TaskFileAsset.MaxFileSizeBytes} bytes (200 KB).");
+            .WithMessage($"Files must be between 1 and {TaskFileAsset.MaxFileSizeBytes} bytes.");
     }
 }

@@ -1,4 +1,5 @@
 using NexusCore.Application.Common;
+using NexusCore.Application.Files;
 using NexusCore.Application.Identity.Dtos;
 using NexusCore.Application.Identity.Interfaces;
 using NexusCore.Application.Identity.Permissions;
@@ -203,6 +204,16 @@ public static class IdentityEndpoints
         platform.MapPut("/settings", async (UpsertSettingRequest request, IPlatformService platformService, CancellationToken cancellationToken) =>
                 (await platformService.UpsertSettingAsync(request, cancellationToken)).ToApiResult())
             .RequireAuthorization(IdentityPermissions.SettingsUpdate);
+
+        // The current upload rules (max file size + accepted types): every signed-in user who can
+        // upload a file needs to read this, not just admins, so it carries no extra permission -
+        // it is changed through the generic settings endpoint above (Uploads.MaxFileSizeKb /
+        // System), which settings.update already gates.
+        platform.MapGet("/upload-policy", async (ICurrentUserContext currentUser, IUploadPolicyReader policyReader, CancellationToken cancellationToken) =>
+        {
+            var maxKb = await policyReader.GetMaxFileSizeKbAsync(currentUser.TenantId, cancellationToken);
+            return Results.Ok(new UploadPolicyDto(maxKb, AllowedUploadTypes.Extensions));
+        });
 
         // The SMS panel (پنل پیامکی) of the caller's tenant: provider settings, texts and a test
         // message. The API key is write-only and stored encrypted.

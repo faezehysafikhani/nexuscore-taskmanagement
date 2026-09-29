@@ -8,14 +8,14 @@ namespace Nexus.TaskManagement.Tests;
 public sealed class TaskFileAssetTests
 {
     [Fact]
-    public void MaxFileSize_Is200Kilobytes() =>
-        Assert.Equal(204_800, TaskFileAsset.MaxFileSizeBytes);
+    public void MaxFileSize_Is20Megabytes() =>
+        Assert.Equal(20 * 1024 * 1024, TaskFileAsset.MaxFileSizeBytes);
 
     [Fact]
     public void AcceptsAFileOfExactlyTheLimit()
     {
         var asset = Create(TaskFileAsset.MaxFileSizeBytes);
-        Assert.Equal(204_800, asset.FileSizeBytes);
+        Assert.Equal(TaskFileAsset.MaxFileSizeBytes, asset.FileSizeBytes);
     }
 
     [Fact]

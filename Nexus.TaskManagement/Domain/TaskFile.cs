@@ -5,13 +5,16 @@ namespace Nexus.TaskManagement.Domain;
 
 /// <summary>
 /// An uploaded file. Never stored under the name the client supplied - the service generates
-/// <see cref="StoredFileName"/> - and never larger than <see cref="MaxFileSizeBytes"/>, which
-/// is enforced in the service against the real stream length and again by a CHECK constraint.
+/// <see cref="StoredFileName"/> - and never larger than <see cref="MaxFileSizeBytes"/>, a fixed
+/// hard ceiling enforced here and again by a CHECK constraint. The actual, day-to-day limit is
+/// the admin-configurable value from <c>IUploadPolicyReader</c> (200 KB by default), checked by
+/// the service before a file ever reaches this constructor; this ceiling only stops that setting
+/// from being raised past a sane maximum.
 /// </summary>
 public sealed class TaskFileAsset : AuditableEntity<Guid>
 {
-    /// <summary>200 KB.</summary>
-    public const int MaxFileSizeBytes = 204_800;
+    /// <summary>20 MB - the hard ceiling; see the type's remarks.</summary>
+    public const int MaxFileSizeBytes = 20 * 1024 * 1024;
 
     private TaskFileAsset() : base(Guid.Empty)
     {

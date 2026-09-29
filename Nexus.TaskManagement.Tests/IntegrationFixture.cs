@@ -10,6 +10,8 @@ using NexusCore.Domain.Identity;
 using NexusCore.Application.Files;
 using NexusCore.Infrastructure.Files;
 using NexusCore.Infrastructure.Persistence;
+using NexusCore.Infrastructure.Persistence.Repositories;
+using NexusCore.Application.Platform.Interfaces;
 using NexusCore.SharedKernel.Interfaces;
 
 namespace Nexus.TaskManagement.Tests;
@@ -84,6 +86,8 @@ public sealed class SqlServerFixture : IAsyncLifetime
             .AddInMemoryCollection(new Dictionary<string, string?> { ["FileStorage:RootPath"] = StorageRoot })
             .Build());
         services.AddScoped<IFileStorage, LocalDiskFileStorage>();
+        services.AddScoped<IPlatformRepository, PlatformRepository>();
+        services.AddScoped<IUploadPolicyReader, UploadPolicyReader>();
         services.AddSingleton<TestUserContext>();
         services.AddSingleton<ICurrentUserContext>(sp => sp.GetRequiredService<TestUserContext>());
         services.AddScoped<AuditingInterceptor>();
