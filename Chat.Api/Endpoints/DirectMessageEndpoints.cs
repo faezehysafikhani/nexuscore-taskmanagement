@@ -5,6 +5,7 @@ using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using NexusCore.Application.Common;
+using NexusCore.Application.Security.RateLimiting;
 
 namespace Chat.Api.Endpoints;
 
@@ -19,7 +20,8 @@ public static class DirectMessageEndpoints
     {
         var direct = app.MapGroup("/api/chat/direct")
             .WithTags("Chat - Direct messages")
-            .RequireAuthorization();
+            .RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi);
 
         direct.MapGet("/unread-counts", async (ISender sender, CancellationToken cancellationToken) =>
                 (await sender.Send(new GetUnreadCountsBySenderQuery(), cancellationToken)).ToApiResult())
@@ -66,6 +68,7 @@ public static class DirectMessageEndpoints
                 return result.ToApiResult();
             })
             .DisableAntiforgery()
+            .RequireRateLimiting(NexusRateLimitPolicies.ChatSend)
             .WithSummary("Send a message (text and/or one attachment) to the user");
 
         direct.MapPost("/{userId:guid}/read", async (Guid userId, ISender sender, CancellationToken cancellationToken) =>

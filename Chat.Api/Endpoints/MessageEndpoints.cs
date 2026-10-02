@@ -8,6 +8,7 @@ using Chat.Application.Direct;
 using MediatR;
 using Microsoft.AspNetCore.SignalR;
 using NexusCore.Application.Common;
+using NexusCore.Application.Security.RateLimiting;
 using NexusCore.SharedKernel.Interfaces;
 
 namespace Chat.Api.Endpoints;
@@ -21,7 +22,8 @@ public static class MessageEndpoints
     {
         var messages = app.MapGroup("/api/chat/messages")
             .WithTags("Chat - Messages")
-            .RequireAuthorization();
+            .RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi);
 
         messages.MapPost(
             "/",
@@ -54,7 +56,8 @@ public static class MessageEndpoints
                 }
 
                 return result.ToApiResult();
-            });
+            })
+            .RequireRateLimiting(NexusRateLimitPolicies.ChatSend);
 
         messages.MapPut("/{messageId:guid}", async (
                 Guid messageId,
@@ -62,6 +65,7 @@ public static class MessageEndpoints
                 ISender sender,
                 CancellationToken cancellationToken) =>
             (await sender.Send(new EditMessageCommand(messageId, request.Text), cancellationToken)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .WithSummary("Edit your own message");
 
         messages.MapDelete("/{messageId:guid}", async (
@@ -69,6 +73,7 @@ public static class MessageEndpoints
                 ISender sender,
                 CancellationToken cancellationToken) =>
             (await sender.Send(new DeleteMessageCommand(messageId), cancellationToken)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .WithSummary("Delete your own message");
 
         messages.MapPost("/{messageId:guid}/read", async (

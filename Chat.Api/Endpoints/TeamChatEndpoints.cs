@@ -6,6 +6,7 @@ using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using NexusCore.Application.Common;
+using NexusCore.Application.Security.RateLimiting;
 
 namespace Chat.Api.Endpoints;
 
@@ -20,7 +21,8 @@ public static class TeamChatEndpoints
     {
         var teams = app.MapGroup("/api/chat/teams")
             .WithTags("Chat - Team conversations")
-            .RequireAuthorization();
+            .RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi);
 
         teams.MapGet("/unread-counts", async (ISender sender, CancellationToken cancellationToken) =>
                 (await sender.Send(new GetTeamUnreadCountsQuery(), cancellationToken)).ToApiResult())
@@ -56,6 +58,7 @@ public static class TeamChatEndpoints
                 return result.ToApiResult();
             })
             .DisableAntiforgery()
+            .RequireRateLimiting(NexusRateLimitPolicies.ChatSend)
             .WithSummary("Send a message (text and/or one attachment) to the team");
 
         teams.MapPost("/{teamId:guid}/read", async (Guid teamId, ISender sender, CancellationToken cancellationToken) =>
