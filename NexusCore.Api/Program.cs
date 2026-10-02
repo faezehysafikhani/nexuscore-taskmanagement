@@ -14,6 +14,7 @@ using Microsoft.OpenApi.Models;
 using NexusCore.Application;
 using NexusCore.Application.Endpoints;
 using NexusCore.Application.Identity.Permissions;
+using NexusCore.Application.Security.RateLimiting;
 using NexusCore.Infrastructure;
 using NexusCore.Infrastructure.Identity;
 using NexusCore.Infrastructure.Persistence;
@@ -50,6 +51,7 @@ builder.Services.AddNotificationApplication();
 builder.Services.AddNotificationInfrastructure(builder.Configuration);
 
 builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddNexusCoreRateLimiting(builder.Configuration);
 
 builder.Services.AddSignalR();
 builder.Services.AddSwaggerGen(options =>
@@ -165,13 +167,16 @@ app.UseHttpsRedirection();
 app.UseCors("FrontendPolicy");
 app.UseSerilogRequestLogging();
 app.UseAuthentication();
+app.UseNexusCoreRateLimiting();
 app.UseAuthorization();
 app.MapChatEndpoints();
 app.MapTicketEndpoints();
 app.MapNotificationEndpoints();
 app.MapEventEndpoints();
-app.MapHub<ChatHub>("/hubs/chat");
-app.MapHub<NotificationHub>("/hubs/notifications");
+app.MapHub<ChatHub>("/hubs/chat")
+    .RequireRateLimiting(NexusRateLimitPolicies.Realtime);
+app.MapHub<NotificationHub>("/hubs/notifications")
+    .RequireRateLimiting(NexusRateLimitPolicies.Realtime);
 
 app.MapGet("/", () => Results.Redirect("/swagger")).ExcludeFromDescription();
 app.MapIdentityEndpoints();

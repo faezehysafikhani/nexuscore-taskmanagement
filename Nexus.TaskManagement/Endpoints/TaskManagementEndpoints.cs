@@ -7,6 +7,7 @@ using Nexus.TaskManagement.Domain;
 using Nexus.TaskManagement.Permissions;
 using Nexus.TaskManagement.Realtime;
 using NexusCore.Application.Common;
+using NexusCore.Application.Security.RateLimiting;
 using NexusCore.SharedKernel.Interfaces;
 
 namespace Nexus.TaskManagement.Endpoints;
@@ -25,7 +26,8 @@ public static class TaskManagementEndpoints
         app.MapTaskTagEndpoints();
         app.MapTaskFileEndpoints();
         app.MapNoteEndpoints();
-        app.MapHub<TaskManagementHub>(TaskManagementHub.Route);
+        app.MapHub<TaskManagementHub>(TaskManagementHub.Route)
+            .RequireRateLimiting(NexusRateLimitPolicies.Realtime);
         return app;
     }
 
@@ -34,6 +36,7 @@ public static class TaskManagementEndpoints
         var group = app.MapGroup("/api/task-management/tasks")
             .WithTags("Tasks")
             .RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi)
             .AddEndpointFilter<TaskAccessScopeFilter>()
             .AddEndpointFilter<RequestValidationFilter>()
             .AddEndpointFilter<TaskChangeBroadcastFilter>();
@@ -72,36 +75,43 @@ public static class TaskManagementEndpoints
         group.MapPost("/", async (CreateTaskRequest request, ITaskService service, CancellationToken cancellationToken) =>
                 (await service.CreateAsync(request, cancellationToken)).ToApiResult())
             .WithSummary("Create a task, a project with its subtasks, or a recurring task")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.Create);
 
         group.MapPut("/{id:guid}", async (Guid id, UpdateTaskRequest request, ITaskService service, CancellationToken cancellationToken) =>
                 (await service.UpdateAsync(id, request, cancellationToken)).ToApiResult())
             .WithSummary("Update a task")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.Edit);
 
         group.MapDelete("/{id:guid}", async (Guid id, ITaskService service, CancellationToken cancellationToken) =>
                 (await service.DeleteAsync(id, cancellationToken)).ToApiResult())
             .WithSummary("Delete a task and everything under it")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.Delete);
 
         group.MapPatch("/{id:guid}/status", async (Guid id, ChangeTaskStatusRequest request, ITaskService service, CancellationToken cancellationToken) =>
                 (await service.ChangeStatusAsync(id, request, cancellationToken)).ToApiResult())
             .WithSummary("Change a task's status")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.Edit);
 
         group.MapPatch("/{id:guid}/priority", async (Guid id, ChangeTaskPriorityRequest request, ITaskService service, CancellationToken cancellationToken) =>
                 (await service.ChangePriorityAsync(id, request, cancellationToken)).ToApiResult())
             .WithSummary("Change a task's priority")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.Edit);
 
         group.MapPatch("/{id:guid}/assigned-user", async (Guid id, AssignUserRequest request, ITaskService service, CancellationToken cancellationToken) =>
                 (await service.AssignUserAsync(id, request, cancellationToken)).ToApiResult())
             .WithSummary("Assign a task to a user and collaborators")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.Assign);
 
         group.MapPatch("/{id:guid}/assigned-user-group", async (Guid id, AssignUserGroupRequest request, ITaskService service, CancellationToken cancellationToken) =>
                 (await service.AssignUserGroupAsync(id, request, cancellationToken)).ToApiResult())
             .WithSummary("Assign a task to a team (UserGroup)")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.Assign);
 
         // --- Subtasks of a task ---
@@ -113,6 +123,7 @@ public static class TaskManagementEndpoints
         group.MapPost("/{id:guid}/subtasks", async (Guid id, CreateSubTaskRequest request, ITaskService service, CancellationToken cancellationToken) =>
                 (await service.CreateSubTaskAsync(id, request, cancellationToken)).ToApiResult())
             .WithSummary("Add a subtask")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.Edit);
 
         // --- Comments ---
@@ -124,6 +135,7 @@ public static class TaskManagementEndpoints
         group.MapPost("/{id:guid}/comments", async (Guid id, CreateTaskCommentRequest request, ITaskCommentService service, CancellationToken cancellationToken) =>
                 (await service.CreateAsync(id, request, cancellationToken)).ToApiResult())
             .WithSummary("Add a comment")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.Comment);
 
         // --- History, served from the shared AuditLog ---
@@ -135,6 +147,7 @@ public static class TaskManagementEndpoints
         group.MapPost("/{id:guid}/activity", async (Guid id, CreateTaskActivityRequest request, ITaskService service, CancellationToken cancellationToken) =>
                 (await service.AddActivityEntryAsync(id, request, cancellationToken)).ToApiResult())
             .WithSummary("Add an entry to the task history (recorded under the caller)")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.View);
 
         // --- Tags and files on a task ---
@@ -146,11 +159,13 @@ public static class TaskManagementEndpoints
         group.MapPost("/{id:guid}/tags", async (Guid id, AssignTagRequest request, ITagService service, CancellationToken cancellationToken) =>
                 (await service.AssignToTaskAsync(id, request, cancellationToken)).ToApiResult())
             .WithSummary("Attach a tag to a task")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.ManageTags);
 
         group.MapDelete("/{id:guid}/tags/{tagId:guid}", async (Guid id, Guid tagId, ITagService service, CancellationToken cancellationToken) =>
                 (await service.RemoveFromTaskAsync(id, tagId, cancellationToken)).ToApiResult())
             .WithSummary("Detach a tag from a task")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.ManageTags);
 
         return app;
@@ -161,6 +176,7 @@ public static class TaskManagementEndpoints
         var group = app.MapGroup("/api/task-management/subtasks")
             .WithTags("Subtasks")
             .RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi)
             .AddEndpointFilter<TaskAccessScopeFilter>()
             .AddEndpointFilter<RequestValidationFilter>()
             .AddEndpointFilter<TaskChangeBroadcastFilter>();
@@ -171,16 +187,19 @@ public static class TaskManagementEndpoints
 
         group.MapPut("/{id:guid}", async (Guid id, UpdateSubTaskRequest request, ITaskService service, CancellationToken cancellationToken) =>
                 (await service.UpdateSubTaskAsync(id, request, cancellationToken)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.Edit);
 
         group.MapPatch("/{id:guid}/status", async (Guid id, ChangeSubTaskStatusRequest request, ITaskService service, CancellationToken cancellationToken) =>
                 (await service.ChangeSubTaskStatusAsync(id, request, cancellationToken)).ToApiResult())
             .WithSummary("Complete or reopen a subtask")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.Edit);
 
         group.MapDelete("/{id:guid}", async (Guid id, ITaskService service, CancellationToken cancellationToken) =>
                 (await service.DeleteSubTaskAsync(id, cancellationToken)).ToApiResult())
             .WithSummary("Delete a subtask - refused for a project's last one")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.Edit);
 
         group.MapGet("/{id:guid}/files", async (Guid id, ITaskFileService service, CancellationToken cancellationToken) =>
@@ -189,10 +208,12 @@ public static class TaskManagementEndpoints
 
         group.MapPost("/{id:guid}/tags", async (Guid id, AssignTagRequest request, ITagService service, CancellationToken cancellationToken) =>
                 (await service.AssignToSubTaskAsync(id, request, cancellationToken)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.ManageTags);
 
         group.MapDelete("/{id:guid}/tags/{tagId:guid}", async (Guid id, Guid tagId, ITagService service, CancellationToken cancellationToken) =>
                 (await service.RemoveFromSubTaskAsync(id, tagId, cancellationToken)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.ManageTags);
 
         return app;
@@ -203,6 +224,7 @@ public static class TaskManagementEndpoints
         var group = app.MapGroup("/api/task-management/repetitive-tasks")
             .WithTags("Recurring tasks")
             .RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi)
             .AddEndpointFilter<TaskAccessScopeFilter>()
             .AddEndpointFilter<RequestValidationFilter>()
             .AddEndpointFilter<TaskChangeBroadcastFilter>();
@@ -230,23 +252,28 @@ public static class TaskManagementEndpoints
         group.MapPost("/", async (CreateRepetitiveTaskRequest request, IRepetitiveTaskService service, CancellationToken cancellationToken) =>
                 (await service.CreateAsync(request, cancellationToken)).ToApiResult())
             .WithSummary("Attach a recurrence schedule to an existing task")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.ManageRecurring);
 
         group.MapPut("/{id:guid}", async (Guid id, UpdateRepetitiveTaskRequest request, IRepetitiveTaskService service, CancellationToken cancellationToken) =>
                 (await service.UpdateAsync(id, request, cancellationToken)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.ManageRecurring);
 
         group.MapDelete("/{id:guid}", async (Guid id, IRepetitiveTaskService service, CancellationToken cancellationToken) =>
                 (await service.DeleteAsync(id, cancellationToken)).ToApiResult())
             .WithSummary("Remove a schedule; the task itself stays")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.ManageRecurring);
 
         group.MapPost("/{id:guid}/enable", async (Guid id, IRepetitiveTaskService service, CancellationToken cancellationToken) =>
                 (await service.SetActiveAsync(id, true, cancellationToken)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.ManageRecurring);
 
         group.MapPost("/{id:guid}/disable", async (Guid id, IRepetitiveTaskService service, CancellationToken cancellationToken) =>
                 (await service.SetActiveAsync(id, false, cancellationToken)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.ManageRecurring);
 
         return app;
@@ -257,6 +284,7 @@ public static class TaskManagementEndpoints
         var group = app.MapGroup("/api/task-management/tags")
             .WithTags("Task tags")
             .RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi)
             .AddEndpointFilter<TaskAccessScopeFilter>()
             .AddEndpointFilter<RequestValidationFilter>()
             .AddEndpointFilter<TaskChangeBroadcastFilter>();
@@ -267,14 +295,17 @@ public static class TaskManagementEndpoints
 
         group.MapPost("/", async (CreateTagRequest request, ITagService service, CancellationToken cancellationToken) =>
                 (await service.CreateAsync(request, cancellationToken)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.ManageTags);
 
         group.MapPut("/{id:guid}", async (Guid id, UpdateTagRequest request, ITagService service, CancellationToken cancellationToken) =>
                 (await service.UpdateAsync(id, request, cancellationToken)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.ManageTags);
 
         group.MapDelete("/{id:guid}", async (Guid id, ITagService service, CancellationToken cancellationToken) =>
                 (await service.DeleteAsync(id, cancellationToken)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.ManageTags);
 
         return app;
@@ -285,6 +316,7 @@ public static class TaskManagementEndpoints
         var group = app.MapGroup("/api/task-management/files")
             .WithTags("Task files")
             .RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi)
             .AddEndpointFilter<TaskAccessScopeFilter>()
             .AddEndpointFilter<RequestValidationFilter>()
             .AddEndpointFilter<TaskChangeBroadcastFilter>();
@@ -299,6 +331,7 @@ public static class TaskManagementEndpoints
             })
             .WithSummary("Upload an attachment to a task (max 200 KB)")
             .DisableAntiforgery()
+            .RequireRateLimiting(NexusRateLimitPolicies.Upload)
             .RequireAuthorization(TaskManagementPermissions.UploadFiles);
 
         group.MapPost("/subtasks/{subTaskId:guid}", async (
@@ -309,6 +342,7 @@ public static class TaskManagementEndpoints
             })
             .WithSummary("Upload an attachment to a subtask (max 200 KB)")
             .DisableAntiforgery()
+            .RequireRateLimiting(NexusRateLimitPolicies.Upload)
             .RequireAuthorization(TaskManagementPermissions.UploadFiles);
 
         group.MapPost("/comments/{commentId:guid}", async (
@@ -319,6 +353,7 @@ public static class TaskManagementEndpoints
             })
             .WithSummary("Attach a file to your own comment (max 200 KB)")
             .DisableAntiforgery()
+            .RequireRateLimiting(NexusRateLimitPolicies.Upload)
             .RequireAuthorization(TaskManagementPermissions.Comment);
 
         group.MapGet("/{fileId:guid}/content", async (
@@ -337,6 +372,7 @@ public static class TaskManagementEndpoints
 
         group.MapDelete("/{linkId:guid}", async (Guid linkId, ITaskFileService service, CancellationToken cancellationToken) =>
                 (await service.DeleteAsync(linkId, cancellationToken)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.UploadFiles);
 
         return app;
@@ -347,6 +383,7 @@ public static class TaskManagementEndpoints
         var group = app.MapGroup("/api/task-management/notes")
             .WithTags("Personal notes")
             .RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi)
             .AddEndpointFilter<TaskAccessScopeFilter>()
             .AddEndpointFilter<RequestValidationFilter>();
 
@@ -363,20 +400,24 @@ public static class TaskManagementEndpoints
 
         group.MapPost("/", async (CreateNoteRequest request, INoteService service, CancellationToken cancellationToken) =>
                 (await service.CreateAsync(request, cancellationToken)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.ManageNotes);
 
         group.MapPut("/{id:guid}", async (Guid id, UpdateNoteRequest request, INoteService service, CancellationToken cancellationToken) =>
                 (await service.UpdateAsync(id, request, cancellationToken)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.ManageNotes);
 
         group.MapDelete("/{id:guid}", async (Guid id, INoteService service, CancellationToken cancellationToken) =>
                 (await service.DeleteAsync(id, cancellationToken)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.ManageNotes);
 
         // Comments live here too - they are edited by id, not through their task.
         var comments = app.MapGroup("/api/task-management/comments")
             .WithTags("Task comments")
             .RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi)
             .AddEndpointFilter<TaskAccessScopeFilter>()
             .AddEndpointFilter<RequestValidationFilter>()
             .AddEndpointFilter<TaskChangeBroadcastFilter>();
@@ -384,11 +425,13 @@ public static class TaskManagementEndpoints
         comments.MapPut("/{id:guid}", async (Guid id, UpdateTaskCommentRequest request, ITaskCommentService service, CancellationToken cancellationToken) =>
                 (await service.UpdateAsync(id, request, cancellationToken)).ToApiResult())
             .WithSummary("Edit your own comment")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.Comment);
 
         comments.MapDelete("/{id:guid}", async (Guid id, ITaskCommentService service, CancellationToken cancellationToken) =>
                 (await service.DeleteAsync(id, cancellationToken)).ToApiResult())
             .WithSummary("Delete your own comment")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.Comment);
 
         return app;

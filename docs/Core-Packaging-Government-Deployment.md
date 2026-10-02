@@ -52,6 +52,51 @@ Before installing in a restricted organization:
 6. Keep `Database:SeedOnStartup` disabled in production after the initial controlled schema setup,
    unless the deployment procedure explicitly requires it.
 
+## Rate limiting
+
+NexusCore packages include reusable ASP.NET Core rate-limit policies for the shared platform,
+Identity, Task Management, Notifications and Chat modules. Product hosts must enable the shared
+middleware once, before authentication/authorization:
+
+```csharp
+builder.Services.AddNexusCoreRateLimiting(builder.Configuration);
+
+// ...
+
+app.UseCors("FrontendPolicy");
+app.UseAuthentication();
+app.UseNexusCoreRateLimiting();
+app.UseAuthorization();
+```
+
+Module endpoints carry policy metadata themselves, so product hosts do not need to repeat limits
+on every route. Keep the defaults unless the organization approves a different capacity model.
+Override them from the host's runtime configuration:
+
+```json
+{
+  "NexusCore": {
+    "RateLimiting": {
+      "Enabled": true,
+      "Global": { "PermitLimit": 600, "WindowMinutes": 1 },
+      "Auth": { "PermitLimit": 10, "WindowMinutes": 1 },
+      "PasswordRecovery": { "PermitLimit": 5, "WindowMinutes": 15 },
+      "PasswordResetVerification": { "PermitLimit": 10, "WindowMinutes": 15 },
+      "AuthenticatedApi": { "PermitLimit": 300, "WindowMinutes": 1 },
+      "Write": { "PermitLimit": 120, "WindowMinutes": 1 },
+      "Upload": { "PermitLimit": 20, "WindowMinutes": 5 },
+      "ChatSend": { "PermitLimit": 60, "WindowMinutes": 1 },
+      "Sms": { "PermitLimit": 5, "WindowMinutes": 5 },
+      "Realtime": { "PermitLimit": 120, "WindowMinutes": 1 }
+    }
+  }
+}
+```
+
+For bank deployments behind IIS or another reverse proxy, keep proxy-level request limits and
+WebSocket controls enabled too. The application limiter trusts `X-Forwarded-For` when a proxy
+sets it, so only allow trusted internal proxies to send or overwrite that header.
+
 ## Versioning
 
 Use immutable versions. Do not overwrite an already-published package version. For hotfixes, publish

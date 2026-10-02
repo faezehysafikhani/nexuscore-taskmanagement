@@ -2,6 +2,7 @@ using NexusCore.Application.Common;
 using NexusCore.Application.Identity.Dtos;
 using NexusCore.Application.Identity.Interfaces;
 using NexusCore.Application.Identity.Permissions;
+using NexusCore.Application.Security.RateLimiting;
 using NexusCore.SharedKernel.Interfaces;
 
 namespace NexusCore.Application.Endpoints;
@@ -15,7 +16,9 @@ public static class UserGroupEndpoints
 {
     public static IEndpointRouteBuilder MapUserGroupEndpoints(this IEndpointRouteBuilder app)
     {
-        var groups = app.MapGroup("/api/identity/groups").WithTags("Identity - Groups");
+        var groups = app.MapGroup("/api/identity/groups")
+            .WithTags("Identity - Groups")
+            .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi);
 
         // Without an explicit tenantId the list is the caller's own tenant - never every tenant.
         groups.MapGet("/", async (Guid? tenantId, ICurrentUserContext currentUser, IUserGroupService service, CancellationToken cancellationToken) =>
@@ -28,22 +31,27 @@ public static class UserGroupEndpoints
 
         groups.MapPost("/", async (CreateUserGroupRequest request, IUserGroupService service, CancellationToken cancellationToken) =>
                 (await service.CreateAsync(request, cancellationToken)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(UserGroupPermissions.GroupsCreate);
 
         groups.MapPut("/{groupId:guid}", async (Guid groupId, UpdateUserGroupRequest request, IUserGroupService service, CancellationToken cancellationToken) =>
                 (await service.UpdateAsync(groupId, request, cancellationToken)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(UserGroupPermissions.GroupsUpdate);
 
         groups.MapPut("/{groupId:guid}/permissions", async (Guid groupId, AssignGroupPermissionsRequest request, IUserGroupService service, CancellationToken cancellationToken) =>
                 (await service.AssignPermissionsAsync(groupId, request, cancellationToken)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(UserGroupPermissions.GroupsAssignPermissions);
 
         groups.MapPut("/{groupId:guid}/members", async (Guid groupId, AssignGroupMembersRequest request, IUserGroupService service, CancellationToken cancellationToken) =>
                 (await service.AssignMembersAsync(groupId, request, cancellationToken)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(UserGroupPermissions.GroupsManageMembers);
 
         groups.MapDelete("/{groupId:guid}", async (Guid groupId, IUserGroupService service, CancellationToken cancellationToken) =>
                 (await service.DeleteAsync(groupId, cancellationToken)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(UserGroupPermissions.GroupsDelete);
 
         // Personal work teams ("my teams" in the task UI). Every route acts on the caller's own
@@ -60,18 +68,22 @@ public static class UserGroupEndpoints
 
         mine.MapPost("/", async (CreateMyTeamRequest request, IUserGroupService service, CancellationToken cancellationToken) =>
                 (await service.CreateMyTeamAsync(request, cancellationToken)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(UserGroupPermissions.GroupsManageOwn);
 
         mine.MapPut("/{groupId:guid}", async (Guid groupId, UpdateMyTeamRequest request, IUserGroupService service, CancellationToken cancellationToken) =>
                 (await service.UpdateMyTeamAsync(groupId, request, cancellationToken)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(UserGroupPermissions.GroupsManageOwn);
 
         mine.MapPut("/{groupId:guid}/members", async (Guid groupId, SetMyTeamMembersRequest request, IUserGroupService service, CancellationToken cancellationToken) =>
                 (await service.SetMyTeamMembersAsync(groupId, request, cancellationToken)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(UserGroupPermissions.GroupsManageOwn);
 
         mine.MapDelete("/{groupId:guid}", async (Guid groupId, IUserGroupService service, CancellationToken cancellationToken) =>
                 (await service.DeleteMyTeamAsync(groupId, cancellationToken)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(UserGroupPermissions.GroupsManageOwn);
 
         return app;

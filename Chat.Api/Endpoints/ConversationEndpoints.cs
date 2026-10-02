@@ -5,6 +5,7 @@ using Chat.Application.Conversations.Queries.GetMyConversations;
 using Chat.Application.Conversations.Queries.GetUnreadCount;
 using MediatR;
 using NexusCore.Application.Common;
+using NexusCore.Application.Security.RateLimiting;
 
 namespace Chat.Api.Endpoints;
 
@@ -14,7 +15,8 @@ public static class ConversationEndpoints
     {
         var group = app.MapGroup("/api/chat/conversations")
             .WithTags("Chat - Conversations")
-            .RequireAuthorization();
+            .RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi);
 
         group.MapGet("/", async (
             ISender sender,
@@ -52,7 +54,8 @@ public static class ConversationEndpoints
             var result = await sender.Send(command, cancellationToken);
 
             return result.ToApiResult();
-        });
+        })
+            .RequireRateLimiting(NexusRateLimitPolicies.ChatSend);
 
         group.MapPost("/group", async (
             CreateGroupConversationCommand command,
@@ -62,7 +65,8 @@ public static class ConversationEndpoints
             var result = await sender.Send(command, cancellationToken);
 
             return result.ToApiResult();
-        });
+        })
+            .RequireRateLimiting(NexusRateLimitPolicies.ChatSend);
 
         group.MapGet("/unread-count", async (
             ISender sender,
