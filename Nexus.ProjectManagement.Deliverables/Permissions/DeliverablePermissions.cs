@@ -11,10 +11,10 @@ public static class DeliverablePermissions
 
     public static IReadOnlyList<PermissionDefinition> All { get; } =
     [
-        new(View, "Deliverables", "View deliverables"),
-        new(Create, "Deliverables", "Create deliverables"),
-        new(Edit, "Deliverables", "Edit deliverables and their status"),
-        new(Delete, "Deliverables", "Delete deliverables")
+        new(View, "Deliverables", "مشاهده تحویل‌دادنی‌ها"),
+        new(Create, "Deliverables", "ایجاد تحویل‌دادنی"),
+        new(Edit, "Deliverables", "ویرایش تحویل‌دادنی‌ها و وضعیت آن‌ها"),
+        new(Delete, "Deliverables", "حذف تحویل‌دادنی‌ها")
     ];
 }
 

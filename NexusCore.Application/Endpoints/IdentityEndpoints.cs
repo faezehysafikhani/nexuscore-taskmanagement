@@ -35,6 +35,14 @@ public static class IdentityEndpoints
             .AllowAnonymous()
             .WithName("RefreshToken");
 
+        // Anonymous like /refresh: the refresh token itself is the proof, and signing out must
+        // work after the access token has expired.
+        auth.MapPost("/logout", async (RefreshTokenRequest request, IIdentityService identityService, CancellationToken cancellationToken) =>
+                (await identityService.LogoutAsync(request, cancellationToken)).ToApiResult())
+            .AllowAnonymous()
+            .WithName("Logout")
+            .WithSummary("Sign out: the refresh token stops working at once");
+
         auth.MapGet("/me", async (ICurrentUserContext currentUser, IIdentityService identityService, CancellationToken cancellationToken) =>
             {
                 if (currentUser.UserId is null)
@@ -56,12 +64,19 @@ public static class IdentityEndpoints
                 (await accounts.ForgotPasswordAsync(request, cancellationToken)).ToApiResult())
             .AllowAnonymous()
             .WithName("ForgotPassword")
-            .WithSummary("Email a password-reset link. The answer never reveals whether the account exists.");
+            .WithSummary("Step 1: send a one-time code by SMS to the account's mobile number. The answer never reveals whether the account exists.");
+
+        auth.MapPost("/forgot-password/verify", async (VerifyResetCodeRequest request, IAccountService accounts, CancellationToken cancellationToken) =>
+                (await accounts.VerifyResetCodeAsync(request, cancellationToken)).ToApiResult())
+            .AllowAnonymous()
+            .WithName("VerifyPasswordResetCode")
+            .WithSummary("Step 2: check the SMS code; returns a short-lived token for setting the new password");
 
         auth.MapPost("/reset-password", async (ResetPasswordRequest request, IAccountService accounts, CancellationToken cancellationToken) =>
                 (await accounts.ResetPasswordAsync(request, cancellationToken)).ToApiResult())
             .AllowAnonymous()
-            .WithName("ResetPassword");
+            .WithName("ResetPassword")
+            .WithSummary("Step 3: set the new password with the token from step 2; every session of the user ends");
 
         auth.MapPut("/me/profile", async (UpdateMyProfileRequest request, IAccountService accounts, CancellationToken cancellationToken) =>
                 (await accounts.UpdateMyProfileAsync(request, cancellationToken)).ToApiResult())
@@ -130,6 +145,15 @@ public static class IdentityEndpoints
         users.MapPut("/{userId:guid}/roles", async (Guid userId, AssignUserRolesRequest request, IIdentityService identityService, CancellationToken cancellationToken) =>
                 (await identityService.AssignRolesAsync(userId, request, cancellationToken)).ToApiResult())
             .RequireAuthorization(IdentityPermissions.UsersAssignRoles);
+
+        // Online/offline of users of the caller's own organization (e.g. a chat partner), from their
+        // live connections. Any signed-in user; others' organizations and disabled accounts are
+        // never reported online.
+        app.MapGet("/api/identity/presence", async (Guid[]? userIds, IUserPresenceService presence, CancellationToken cancellationToken) =>
+                (await presence.GetAsync(userIds ?? [], cancellationToken)).ToApiResult())
+            .RequireAuthorization()
+            .WithTags("Users")
+            .WithSummary("Online or offline for users of your organization (?userIds=...&userIds=...)");
 
         var roles = app.MapGroup("/api/identity/roles").WithTags("Roles").RequireAuthorization();
 

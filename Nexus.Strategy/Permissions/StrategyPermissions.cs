@@ -11,10 +11,10 @@ public static class StrategyPermissions
 
     public static IReadOnlyList<PermissionDefinition> All { get; } =
     [
-        new(View, "Strategy", "View the strategy tree"),
-        new(Create, "Strategy", "Create strategies"),
-        new(Edit, "Strategy", "Edit strategies"),
-        new(Delete, "Strategy", "Delete strategies")
+        new(View, "Strategy", "مشاهده درخت راهبرد"),
+        new(Create, "Strategy", "ایجاد راهبرد"),
+        new(Edit, "Strategy", "ویرایش راهبردها"),
+        new(Delete, "Strategy", "حذف راهبردها")
     ];
 }
 

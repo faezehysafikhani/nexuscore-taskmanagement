@@ -76,8 +76,10 @@ public sealed class ResetPasswordRequestValidator : AbstractValidator<ResetPassw
 {
     public ResetPasswordRequestValidator()
     {
-        RuleFor(x => x.Token).NotEmpty().MaximumLength(200);
-        RuleFor(x => x.NewPassword).NotEmpty().MinimumLength(8).MaximumLength(128);
+        RuleFor(x => x.Token).NotEmpty().MaximumLength(200).WithMessage("مهلت تعیین رمز عبور جدید به پایان رسیده است. لطفاً دوباره کد بازیابی دریافت کنید.");
+        RuleFor(x => x.NewPassword).NotEmpty().WithMessage("رمز عبور جدید را وارد کنید.")
+            .MinimumLength(8).WithMessage("رمز عبور باید حداقل ۸ کاراکتر باشد.")
+            .MaximumLength(128).WithMessage("رمز عبور نباید بیشتر از ۱۲۸ کاراکتر باشد.");
     }
 }
 

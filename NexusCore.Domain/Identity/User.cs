@@ -70,7 +70,10 @@ public sealed class User : AuditableEntity<Guid>
     public IReadOnlyCollection<UserRole> Roles => _roles.AsReadOnly();
     public IReadOnlyCollection<RefreshToken> RefreshTokens => _refreshTokens.AsReadOnly();
 
-    /// <summary>Permissions granted directly to this user, on top of roles and groups.</summary>
+    /// <summary>
+    /// Permissions set on this user directly: grants on top of roles and groups, and explicit
+    /// denials (<see cref="UserPermission.IsDenied"/>) that override them.
+    /// </summary>
     public IReadOnlyCollection<UserPermission> Permissions => _permissions.AsReadOnly();
 
     public void SetName(string firstName, string lastName)
@@ -85,13 +88,38 @@ public sealed class User : AuditableEntity<Guid>
     /// <summary>Only the seeder marks the built-in administrator.</summary>
     public void MarkAsSystemAccount() => IsSystem = true;
 
-    public void SetDirectPermissions(IEnumerable<Guid> permissionIds)
+    /// <summary>
+    /// Replaces the user's direct grants and, when <paramref name="deniedPermissionIds"/> is given,
+    /// their explicit denials (null keeps the current denials). A permission is granted or denied,
+    /// never both: a grant lifts an existing denial of the same permission.
+    /// </summary>
+    public void SetDirectPermissions(IEnumerable<Guid> permissionIds, IEnumerable<Guid>? deniedPermissionIds = null)
     {
-        _permissions.Clear();
-        foreach (var permissionId in permissionIds.Distinct())
+        var granted = permissionIds.ToHashSet();
+        var denied = (deniedPermissionIds ?? _permissions.Where(entry => entry.IsDenied).Select(entry => entry.PermissionId))
+            .Where(permissionId => !granted.Contains(permissionId))
+            .ToHashSet();
+
+        // Existing rows are updated in place, so a permission switching between grant and denial
+        // stays one row (the key is user + permission).
+        foreach (var entry in _permissions.ToList())
         {
-            _permissions.Add(new UserPermission(Id, permissionId));
+            if (granted.Remove(entry.PermissionId))
+            {
+                entry.SetDenied(false);
+            }
+            else if (denied.Remove(entry.PermissionId))
+            {
+                entry.SetDenied(true);
+            }
+            else
+            {
+                _permissions.Remove(entry);
+            }
         }
+
+        _permissions.AddRange(granted.Select(permissionId => new UserPermission(Id, permissionId)));
+        _permissions.AddRange(denied.Select(permissionId => new UserPermission(Id, permissionId, isDenied: true)));
     }
 
     public void UpdateProfile(string displayName, bool isActive)

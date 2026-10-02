@@ -50,9 +50,13 @@ public static class UserGroupEndpoints
         // teams only; the owner comes from the token, never from the request.
         var mine = groups.MapGroup("/mine").WithTags("Identity - My teams");
 
+        // Seeing the teams you belong to (owner or plain member) is not an administrative act -
+        // it only ever returns your own membership (IUserGroupService.ListMyTeamsAsync scopes to
+        // the caller). Chat needs this to show a real member their Team Conversation, so it must
+        // not require GroupsManageOwn (creating/editing a team) or any other admin permission.
         mine.MapGet("/", async (IUserGroupService service, CancellationToken cancellationToken) =>
                 (await service.ListMyTeamsAsync(cancellationToken)).ToApiResult())
-            .RequireAuthorization(UserGroupPermissions.GroupsManageOwn);
+            .RequireAuthorization();
 
         mine.MapPost("/", async (CreateMyTeamRequest request, IUserGroupService service, CancellationToken cancellationToken) =>
                 (await service.CreateMyTeamAsync(request, cancellationToken)).ToApiResult())

@@ -21,6 +21,9 @@ public interface IIdentityRepository
     Task<Tenant?> GetTenantBySlugAsync(string slug, CancellationToken cancellationToken);
     Task AddPasswordResetTokenAsync(PasswordResetToken token, CancellationToken cancellationToken);
     Task<PasswordResetToken?> FindActivePasswordResetTokenAsync(string tokenHash, CancellationToken cancellationToken);
+
+    /// <summary>The user's newest reset token that is neither used nor withdrawn - expired or not.</summary>
+    Task<PasswordResetToken?> FindLatestOutstandingPasswordResetTokenAsync(Guid userId, CancellationToken cancellationToken);
     /// <summary>Revokes every active refresh token of the user: signs them out everywhere.</summary>
     Task RevokeRefreshTokensAsync(Guid userId, CancellationToken cancellationToken);
     Task InvalidatePasswordResetTokensAsync(Guid userId, DateTimeOffset nowUtc, CancellationToken cancellationToken);
@@ -43,6 +46,9 @@ public interface IIdentityRepository
     Task<bool> TenantSlugExistsAsync(string slug, CancellationToken cancellationToken);
     Task AddTenantAsync(Tenant tenant, CancellationToken cancellationToken);
     Task<IReadOnlyList<string>> GetUserPermissionNamesAsync(Guid userId, CancellationToken cancellationToken);
+
+    /// <summary>True when the user exists and is enabled. Checked on every authenticated request.</summary>
+    Task<bool> IsUserActiveAsync(Guid userId, CancellationToken cancellationToken);
     Task<IReadOnlyList<Permission>> GetPermissionsByIdsAsync(IReadOnlyCollection<Guid> permissionIds, CancellationToken cancellationToken);
     Task<RefreshToken?> FindActiveRefreshTokenAsync(string tokenHash, CancellationToken cancellationToken);
 }

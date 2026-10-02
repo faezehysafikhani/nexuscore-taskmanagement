@@ -7,5 +7,6 @@ public interface INotificationService
         string title,
         string message,
         string type,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        Guid? tenantId = null);
 }

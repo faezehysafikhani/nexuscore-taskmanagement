@@ -115,6 +115,9 @@ public sealed class SqlServerFixture : IAsyncLifetime
         services.AddScoped<ITaskFileService, TaskFileService>();
         services.AddScoped<INoteService, NoteService>();
         services.AddScoped<ITaskCommentService, TaskCommentService>();
+        // These tests exercise the services' own rules, not who may see which task (that is
+        // covered end to end in NexusCore.Tests' access tests), so every task is reachable here.
+        services.AddScoped<ITaskAccessScope, UnrestrictedTaskAccessScope>();
 
         _provider = services.BuildServiceProvider();
 
@@ -181,6 +184,15 @@ public sealed class SqlServerFixture : IAsyncLifetime
             // Leaving a scratch database behind is untidy but must not fail the run.
         }
     }
+}
+
+internal sealed class UnrestrictedTaskAccessScope : ITaskAccessScope
+{
+    public bool IsRestricted => false;
+    public Guid? UserId => null;
+    public IReadOnlyList<Guid> GroupIds => [];
+    public Task EnsureLoadedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    public bool CanManage(TaskItem task) => true;
 }
 
 /// <summary>

@@ -13,8 +13,8 @@ Every `/api/identity/groups` request failed with
 (and seeded, so they appeared in tokens) but never registered as authorization policies.
 
 * `AddUserGroupFeature` now registers a policy for every `UserGroupPermissions` entry, next to
-  the catalog - the same pattern every module uses. This covers all hosts (NexusCore.Api,
-  Rozet.Api, PostBank.Api, PostbankPM), because they all call `AddInfrastructure`.
+  the catalog - the same pattern every module uses. This covers NexusCore hosts and external
+  product hosts that compose the Core package, because they all call `AddInfrastructure`.
 * `PermissionPolicyProvider` (Core) backs every host: a policy name nobody registered resolves
   to the standard permission policy instead of `null`. A user without the permission gets 403;
   the missing registration is logged. Access is never widened.
@@ -95,8 +95,8 @@ Deleting a team that tasks are still assigned to answers 409.
   `PUT/DELETE /api/chat/messages/{id}` (own messages only),
   `GET /api/chat/messages/{id}/attachment` (participants only).
 * Times are returned as UTC.
-* Rozet.Api, NexusCore.Api and PostBank.Api now create the chat and notification schemas at
-  start-up (only PostbankPM did).
+* NexusCore.Api, PostBank.Api and external product hosts that compose Chat/Notifications now
+  create the chat and notification schemas at start-up.
 
 ### TaskManagement
 
@@ -115,14 +115,14 @@ Deleting a team that tasks are still assigned to answers 409.
 * Task creation sends SMS from the server (`Nexus.Integrations.TaskNotifications`), honouring
   each user's choice; the module's SMS and contact seams are now real.
 
-## Configuration (Rozet.Api)
+## Configuration (product host)
 
 ```jsonc
 "Identity": {
   "SelfRegistration": { "Enabled": true, "TenantSlug": "", "DefaultRoleName": "Member" },
   "SeedRoles": [ { "Name": "Member", "Permissions": [ "Tasks.View", "...", "groups.manage_own" ] } ]
 },
-"PasswordReset": { "TokenLifetimeMinutes": 30, "ResetUrlTemplate": "http://localhost:3030/reset-password" },
+"PasswordReset": { "CodeLength": 6, "CodeLifetimeMinutes": 5, "ResetTokenLifetimeMinutes": 10 },
 "Email": { "Smtp": { "Host": "", "Port": 587, "EnableSsl": true, "UserName": "", "Password": "", "FromAddress": "" } },
 "Chat": { "MaxAttachmentBytes": 5242880 }
 ```

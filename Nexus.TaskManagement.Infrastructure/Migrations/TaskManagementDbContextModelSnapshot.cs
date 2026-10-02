@@ -438,12 +438,18 @@ namespace Nexus.TaskManagement.Infrastructure.Migrations
                     b.Property<DateOnly?>("CharterEndDate")
                         .HasColumnType("date");
 
+                    b.Property<TimeOnly?>("CharterEndTime")
+                        .HasColumnType("time");
+
                     b.Property<string>("CharterProjectManager")
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
                     b.Property<DateOnly?>("CharterStartDate")
                         .HasColumnType("date");
+
+                    b.Property<TimeOnly?>("CharterStartTime")
+                        .HasColumnType("time");
 
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("datetimeoffset");

@@ -19,6 +19,13 @@ public sealed class RepetitiveTaskSchedulerOptions
 
     /// <summary>Ceiling on one pass, so a large backlog cannot monopolise a run.</summary>
     public int BatchSize { get; set; } = 100;
+
+    /// <summary>
+    /// Next runs stored by the old calculation (the time of day taken as UTC), checked once at
+    /// start-up: "Report" (default) only logs what would change, "Apply" corrects them, "Off"
+    /// skips the check. See RealignLegacyOccurrencesAsync.
+    /// </summary>
+    public string LegacyTimeRealignment { get; set; } = "Report";
 }
 
 /// <summary>
@@ -64,6 +71,16 @@ public sealed class RepetitiveTaskSchedulerService(
 
         var interval = TimeSpan.FromSeconds(Math.Max(10, _options.PollIntervalSeconds));
         logger.LogInformation("Recurring task scheduler started, polling every {Interval}.", interval);
+
+        try
+        {
+            await RealignLegacyOccurrencesAsync(_options.LegacyTimeRealignment, stoppingToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // A failed check must not keep reminders from running.
+            logger.LogError(ex, "Checking recurrence schedules for old next-run times failed.");
+        }
 
         try
         {
@@ -189,9 +206,96 @@ public sealed class RepetitiveTaskSchedulerService(
         // Dispatches RepetitiveTaskDue through DomainEventDispatchInterceptor.
         await db.SaveChangesAsync(cancellationToken);
 
-        logger.LogInformation(
+        logger.LogInformation(ReminderDeliveryEvents.OccurrenceClaimed,
             "Recurring task {TaskId} fired for {DueAt:u}; next run {NextRun:u}.",
             schedule.TaskId, claimedFor, next);
+    }
+
+    /// <summary>
+    /// Before the time-zone fix, a schedule's next run was the chosen time of day taken as UTC
+    /// (09:00 became 09:00 UTC, 12:30 in Tehran). Such a value is recognisable: its UTC time of
+    /// day is the schedule's own time while its local time of day is not - the correct value is
+    /// the other way round, and with the zone never at UTC+0 the two cannot coincide. Anything
+    /// matching neither is left as it is and reported.
+    ///
+    /// Only NextExecutionAtUtc changes, to the same date at the chosen time in the users' zone;
+    /// the schedule the user chose is untouched. The update is a direct, conditional UPDATE: no
+    /// domain event, so nothing is announced by the correction itself, and a row another
+    /// instance changed meanwhile is skipped. A corrected time already in the past is announced
+    /// by the next regular pass, once - the old value had not fired yet.
+    /// </summary>
+    internal async Task<int> RealignLegacyOccurrencesAsync(string? mode, CancellationToken cancellationToken)
+    {
+        var apply = string.Equals(mode, "Apply", StringComparison.OrdinalIgnoreCase);
+        if (!apply && !string.Equals(mode, "Report", StringComparison.OrdinalIgnoreCase))
+        {
+            return 0;
+        }
+
+        using var scope = serviceProvider.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<TaskManagementDbContext>();
+        var calculator = scope.ServiceProvider.GetRequiredService<IRecurrenceCalculator>();
+        if (!calculator.HasOffsetFromUtc)
+        {
+            return 0;
+        }
+
+        var schedules = await db.RepetitiveTasks
+            .AsNoTracking()
+            .Where(r => r.IsActive && r.NextExecutionAtUtc != null)
+            .Select(r => new { r.Id, r.NextExecutionAtUtc, r.StartTime })
+            .ToListAsync(cancellationToken);
+
+        var found = 0;
+        var unclear = 0;
+        foreach (var schedule in schedules)
+        {
+            var stored = schedule.NextExecutionAtUtc!.Value;
+            var timeOfDay = (schedule.StartTime ?? new TimeOnly(0, 0)).ToTimeSpan();
+
+            if (calculator.ToLocalTime(stored).TimeOfDay == timeOfDay)
+            {
+                continue; // Already correct.
+            }
+
+            if (stored.UtcDateTime.TimeOfDay != timeOfDay)
+            {
+                unclear++;
+                logger.LogWarning(ReminderDeliveryEvents.LegacyTimeFound,
+                    "Recurrence schedule {ScheduleId}: next run {NextRun:u} matches neither the old nor the current calculation; left unchanged.",
+                    schedule.Id, stored);
+                continue;
+            }
+
+            found++;
+            var corrected = calculator.FromLocal(DateOnly.FromDateTime(stored.UtcDateTime), TimeOnly.FromTimeSpan(timeOfDay));
+            if (!apply)
+            {
+                logger.LogInformation(ReminderDeliveryEvents.LegacyTimeFound,
+                    "Recurrence schedule {ScheduleId}: next run {NextRun:u} is from the old calculation; would become {Corrected:u}.",
+                    schedule.Id, stored, corrected);
+                continue;
+            }
+
+            var updated = await db.RepetitiveTasks
+                .Where(r => r.Id == schedule.Id && r.NextExecutionAtUtc == stored)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(r => r.NextExecutionAtUtc, corrected), cancellationToken);
+            if (updated == 1)
+            {
+                logger.LogInformation(ReminderDeliveryEvents.LegacyTimeRealigned,
+                    "Recurrence schedule {ScheduleId}: next run moved from {NextRun:u} to {Corrected:u}.",
+                    schedule.Id, stored, corrected);
+            }
+        }
+
+        if (found > 0 || unclear > 0)
+        {
+            logger.LogInformation(
+                "Old next-run times: {Found} found ({Mode}), {Unclear} unclear and left unchanged.",
+                found, apply ? "corrected" : "report only - set TaskManagement:Scheduler:LegacyTimeRealignment to Apply to correct them", unclear);
+        }
+
+        return found;
     }
 
     public override void Dispose()

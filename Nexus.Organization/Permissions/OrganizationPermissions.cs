@@ -11,10 +11,10 @@ public static class OrganizationPermissions
 
     public static IReadOnlyList<PermissionDefinition> All { get; } =
     [
-        new(View, "Organization", "View organization units"),
-        new(Create, "Organization", "Create organization units"),
-        new(Update, "Organization", "Update organization units"),
-        new(Delete, "Organization", "Deactivate organization units")
+        new(View, "Organization", "مشاهده واحدهای سازمانی"),
+        new(Create, "Organization", "ایجاد واحد سازمانی"),
+        new(Update, "Organization", "ویرایش واحدهای سازمانی"),
+        new(Delete, "Organization", "غیرفعال‌سازی واحدهای سازمانی")
     ];
 }
 

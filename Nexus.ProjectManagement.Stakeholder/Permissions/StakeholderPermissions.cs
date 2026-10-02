@@ -12,11 +12,11 @@ public static class StakeholderPermissions
 
     public static IReadOnlyList<PermissionDefinition> All { get; } =
     [
-        new(View, "StakeholderManagement", "View the stakeholder register"),
-        new(Create, "StakeholderManagement", "Create stakeholders"),
-        new(Edit, "StakeholderManagement", "Edit stakeholders"),
-        new(Delete, "StakeholderManagement", "Delete stakeholders"),
-        new(Submit, "StakeholderManagement", "Submit stakeholders for approval")
+        new(View, "StakeholderManagement", "مشاهده فهرست ذی‌نفعان"),
+        new(Create, "StakeholderManagement", "ایجاد ذی‌نفع"),
+        new(Edit, "StakeholderManagement", "ویرایش ذی‌نفعان"),
+        new(Delete, "StakeholderManagement", "حذف ذی‌نفعان"),
+        new(Submit, "StakeholderManagement", "ارسال ذی‌نفعان برای تأیید")
     ];
 }
 

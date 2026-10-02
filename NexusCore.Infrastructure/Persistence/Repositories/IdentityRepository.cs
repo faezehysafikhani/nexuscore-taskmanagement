@@ -92,6 +92,12 @@ public sealed class IdentityRepository(
                 cancellationToken);
     }
 
+    public Task<PasswordResetToken?> FindLatestOutstandingPasswordResetTokenAsync(Guid userId, CancellationToken cancellationToken) =>
+        dbContext.Set<PasswordResetToken>()
+            .Where(token => token.UserId == userId && token.UsedAtUtc == null && token.InvalidatedAtUtc == null)
+            .OrderByDescending(token => token.CreatedAtUtc)
+            .FirstOrDefaultAsync(cancellationToken);
+
     public async Task RevokeRefreshTokensAsync(Guid userId, CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
@@ -250,18 +256,28 @@ public sealed class IdentityRepository(
             .SelectMany(userRole => userRole.Role!.Permissions)
             .Select(rolePermission => rolePermission.Permission!.Name)
             .ToListAsync(cancellationToken);
-        var direct = await dbContext.Set<UserPermission>()
-            .Where(grant => grant.UserId == userId)
-            .Select(grant => grant.Permission!.Name)
+        var set = await dbContext.Set<UserPermission>()
+            .Where(entry => entry.UserId == userId)
+            .Select(entry => new { entry.Permission!.Name, entry.IsDenied })
             .ToListAsync(cancellationToken);
+        var direct = set.Where(entry => !entry.IsDenied).Select(entry => entry.Name);
+        var denied = set.Where(entry => entry.IsDenied).Select(entry => entry.Name).ToHashSet(StringComparer.Ordinal);
         var fromGroups = await groupPermissions.GetPermissionNamesAsync(userId, cancellationToken);
 
-        // Plus what those permissions need to be usable (e.g. users.create needs users.view).
-        return PermissionPrerequisites.Expand(fromRoles.Concat(direct).Concat(fromGroups));
+        // Plus what those permissions need to be usable (e.g. users.create needs users.view) -
+        // minus what was explicitly denied to this user, which wins over every source, implied
+        // prerequisites included. This is the one place effective permissions are computed: the
+        // token claims (refreshed on every request), /me and the escalation checks all use it.
+        return PermissionPrerequisites.Expand(fromRoles.Concat(direct).Concat(fromGroups))
+            .Where(permission => !denied.Contains(permission))
+            .ToList();
     }
 
     public async Task<IReadOnlyList<Permission>> GetPermissionsByIdsAsync(IReadOnlyCollection<Guid> permissionIds, CancellationToken cancellationToken) =>
         await dbContext.Permissions.Where(permission => permissionIds.Contains(permission.Id)).ToListAsync(cancellationToken);
+
+    public Task<bool> IsUserActiveAsync(Guid userId, CancellationToken cancellationToken) =>
+        dbContext.Users.AsNoTracking().AnyAsync(user => user.Id == userId && user.IsActive, cancellationToken);
 
     public Task<RefreshToken?> FindActiveRefreshTokenAsync(string tokenHash, CancellationToken cancellationToken) =>
         dbContext.RefreshTokens

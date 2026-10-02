@@ -10,9 +10,9 @@ public static class TeamPermissions
 
     public static IReadOnlyList<PermissionDefinition> All { get; } =
     [
-        new(View, "ProjectTeam", "View project team members and governance roles"),
-        new(ManageMembers, "ProjectTeam", "Add or remove project team members"),
-        new(ManageGovernance, "ProjectTeam", "Manage project governance roles")
+        new(View, "ProjectTeam", "مشاهده اعضای تیم پروژه و نقش‌های راهبری"),
+        new(ManageMembers, "ProjectTeam", "افزودن یا حذف اعضای تیم پروژه"),
+        new(ManageGovernance, "ProjectTeam", "مدیریت نقش‌های راهبری پروژه")
     ];
 }
 

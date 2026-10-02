@@ -50,6 +50,9 @@ namespace Chat.Infrastructure.Migrations
                     b.Property<Guid?>("ModifiedByUserId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid?>("TeamId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<Guid?>("TenantId")
                         .HasColumnType("uniqueidentifier");
 
@@ -64,6 +67,10 @@ namespace Chat.Infrastructure.Migrations
                     b.HasIndex("DirectKey")
                         .IsUnique()
                         .HasFilter("[DirectKey] IS NOT NULL");
+
+                    b.HasIndex("TeamId")
+                        .IsUnique()
+                        .HasFilter("[TeamId] IS NOT NULL");
 
                     b.ToTable("Conversations");
                 });

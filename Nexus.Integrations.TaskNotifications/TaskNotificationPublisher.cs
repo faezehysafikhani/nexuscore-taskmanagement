@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Nexus.TaskManagement.Application;
 using Notifications.Application.Abstractions;
 
@@ -16,20 +17,61 @@ namespace Nexus.Integrations.TaskNotifications;
 /// Leave it out of a deployment and TaskManagement still runs: its own no-op publisher takes
 /// over and nothing else changes.
 /// </summary>
-public sealed class TaskNotificationPublisher(INotificationService notifications) : ITaskNotificationPublisher
+public sealed class TaskNotificationPublisher(
+    IServiceScopeFactory scopeFactory,
+    ILogger<TaskNotificationPublisher> logger) : ITaskNotificationPublisher
 {
     public async Task PublishAsync(TaskDueNotification notification, CancellationToken cancellationToken)
     {
         var title = $"یادآوری وظیفه: {notification.Title}";
+        var when = notification.DueAtText ?? TaskCreatedChannelNotifier.ToPersianDate(notification.DueDate);
         var message = string.IsNullOrWhiteSpace(notification.Description)
-            ? $"موعد انجام وظیفه «{notification.Title}» فرا رسیده است. (تاریخ: {notification.DueDate:yyyy-MM-dd})"
-            : $"موعد انجام وظیفه «{notification.Title}» فرا رسیده است. (تاریخ: {notification.DueDate:yyyy-MM-dd}) - {notification.Description}";
+            ? $"موعد انجام وظیفه «{notification.Title}» فرا رسیده است. (موعد: {when})"
+            : $"موعد انجام وظیفه «{notification.Title}» فرا رسیده است. (موعد: {when}) - {notification.Description}";
 
-        // Only the people the task named. RecipientUserIds is already de-duplicated and
-        // limited to the assignee, the collaborators and the owner.
+        // Only the people the task names, already limited to active users of its organization.
+        // Each is stored on its own, so one failure does not cost the others theirs.
         foreach (var userId in notification.RecipientUserIds)
         {
-            await notifications.NotifyAsync(userId, title, message, "Warning", cancellationToken);
+            await StoreWithRetryAsync(notification, userId, title, message, cancellationToken);
+        }
+    }
+
+    /// <summary>Attempts per recipient, and the pause before each retry.</summary>
+    internal static readonly TimeSpan[] RetryDelays = [TimeSpan.FromMilliseconds(200), TimeSpan.FromSeconds(1)];
+
+    /// <summary>
+    /// Storing a notification is a database insert: a failed attempt left nothing behind, so
+    /// trying again cannot create a second copy. Each attempt uses a fresh scope - a failed
+    /// insert stays in its DbContext and would otherwise be saved along with the retry.
+    /// </summary>
+    private async Task StoreWithRetryAsync(
+        TaskDueNotification notification, Guid userId, string title, string message, CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                await using var scope = scopeFactory.CreateAsyncScope();
+                await scope.ServiceProvider.GetRequiredService<INotificationService>()
+                    .NotifyAsync(userId, title, message, "Warning", cancellationToken, notification.TenantId);
+                logger.LogInformation(ReminderDeliveryEvents.NotificationStored,
+                    "Reminder notification stored for user {UserId}, task {TaskId}.", userId, notification.TaskId);
+                return;
+            }
+            catch (Exception ex) when (attempt < RetryDelays.Length && !cancellationToken.IsCancellationRequested)
+            {
+                logger.LogWarning(ReminderDeliveryEvents.RetryPending, ex,
+                    "Reminder notification for user {UserId}, task {TaskId} failed (attempt {Attempt}); trying again.",
+                    userId, notification.TaskId, attempt + 1);
+                await Task.Delay(RetryDelays[attempt], cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ReminderDeliveryEvents.NotificationFailed, ex,
+                    "Reminder notification for user {UserId} about task {TaskId} was not stored.", userId, notification.TaskId);
+                return;
+            }
         }
     }
 }
@@ -48,6 +90,11 @@ public static class DependencyInjection
         services.AddScoped<ITaskSmsSender, PlatformTaskSmsSender>();
         services.AddScoped<IUserContactResolver, DirectoryUserContactResolver>();
         services.AddScoped<NexusCore.SharedKernel.Domain.IDomainEventHandler<Nexus.TaskManagement.Domain.TaskItemCreated>, TaskCreatedChannelNotifier>();
+        // A new responsible person, or a moved due date, is told by SMS too (the responsible person only).
+        services.AddScoped<NexusCore.SharedKernel.Domain.IDomainEventHandler<Nexus.TaskManagement.Domain.TaskItemAssigneeChanged>, TaskChangeSmsNotifier>();
+        services.AddScoped<NexusCore.SharedKernel.Domain.IDomainEventHandler<Nexus.TaskManagement.Domain.TaskItemDueChanged>, TaskChangeSmsNotifier>();
+        // The texts of those SMS, editable in the SMS panel.
+        services.AddSingleton<NexusCore.Application.Messaging.ISmsTemplateCatalog, TaskSmsTemplateCatalog>();
         return services;
     }
 }

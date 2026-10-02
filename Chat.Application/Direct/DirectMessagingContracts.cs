@@ -50,3 +50,9 @@ public sealed record MarkDirectConversationReadCommand(Guid OtherUserId) : IRequ
 public sealed record GetUnreadCountsBySenderQuery : IRequest<Result<List<UnreadBySenderDto>>>;
 
 public sealed record GetMessageAttachmentQuery(Guid MessageId) : IRequest<Result<ChatAttachmentDownload>>;
+
+/// <summary>A selectable chat partner - just enough to show and address them, not to administer them.</summary>
+public sealed record ChatContactDto(Guid Id, string DisplayName, string? AvatarUrl);
+
+/// <summary>Every other active user of your tenant you may start a direct chat with.</summary>
+public sealed record GetChatDirectoryQuery : IRequest<Result<List<ChatContactDto>>>;

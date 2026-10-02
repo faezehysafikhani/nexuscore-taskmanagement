@@ -16,7 +16,8 @@ namespace Nexus.Integrations.TaskNotifications;
 /// </summary>
 public sealed class PlatformTaskSmsSender(
     ISmsSender smsSender,
-    INotificationChannelSettingsReader settings) : ITaskSmsSender
+    INotificationChannelSettingsReader settings,
+    ISmsTemplateService templates) : ITaskSmsSender
 {
     public async Task<bool> IsEnabledAsync(Guid tenantId, CancellationToken cancellationToken) =>
         (await settings.ReadAsync(tenantId, cancellationToken)).Sms.Enabled;
@@ -26,6 +27,35 @@ public sealed class PlatformTaskSmsSender(
         var sent = await smsSender.SendAsync(tenantId, phoneNumber, message, cancellationToken);
         return sent.IsSuccess ? Result.Success() : Result.Failure(sent.Error);
     }
+
+    /// <summary>The tenant's wording of the template (SMS panel), filled in and sent.</summary>
+    public async Task<Result> SendTemplateAsync(
+        Guid tenantId, string phoneNumber, string templateKey, IReadOnlyDictionary<string, string?> values,
+        string fallbackText, CancellationToken cancellationToken)
+    {
+        var sent = await templates.SendAsync(tenantId, phoneNumber, templateKey, values, cancellationToken);
+        return sent.IsSuccess ? Result.Success() : Result.Failure(sent.Error);
+    }
+}
+
+/// <summary>TaskManagement's SMS templates, registered with the platform's SMS panel.</summary>
+public sealed class TaskSmsTemplateCatalog : ISmsTemplateCatalog
+{
+    public IReadOnlyList<SmsTemplateDefinition> GetTemplates() =>
+    [
+        new(TaskSmsTemplateKeys.TaskAssigned, "ارجاع فعالیت", ["TaskTitle", "DueDate", "CreatorName"],
+            "فعالیت جدیدی با عنوان «{TaskTitle}» به شما ارجاع شد.\nموعد انجام: {DueDate}",
+            "وقتی فعالیتی ثبت می‌شود یا مسئول اجرای آن عوض می‌شود، فقط برای مسئول اجرا ارسال می‌شود.",
+            ["TaskTitle"]),
+        new(TaskSmsTemplateKeys.RecurringTaskReminder, "یادآوری فعالیت تکرارشونده", ["TaskTitle", "ExecutionDateTime", "ExecutionDate", "ExecutionTime"],
+            "یادآوری فعالیت تکرارشونده:\n{TaskTitle}\nزمان انجام: {ExecutionDateTime}",
+            "در زمان هر نوبت فعالیت تکرارشونده، فقط برای مسئول اجرای آن ارسال می‌شود.",
+            ["TaskTitle"]),
+        new(TaskSmsTemplateKeys.TaskDueChanged, "تغییر موعد فعالیت", ["TaskTitle", "DueDate"],
+            "موعد فعالیت «{TaskTitle}» تغییر کرد.\nموعد جدید: {DueDate}",
+            "وقتی تاریخ یا ساعت موعد فعالیت واقعاً تغییر کند، برای مسئول اجرا ارسال می‌شود (نه وقتی خودش آن را تغییر داده باشد).",
+            ["TaskTitle"]),
+    ];
 }
 
 /// <summary>
@@ -45,9 +75,9 @@ public sealed class DirectoryUserContactResolver(IUserDirectory directory) : IUs
 }
 
 /// <summary>
-/// When a task is created, tells the people involved by SMS - the assignee, the collaborators,
-/// the members of the assigned team and the creator - each according to their own notification
-/// preference and the tenant's SMS gateway settings.
+/// When a task is created, tells each of its responsible people by SMS with the "task_assigned"
+/// template - only them: not the creator for creating it, nor people on its access list or team
+/// members. Each gets it once; a creator who is also responsible gets it once too.
 ///
 /// Runs after the task is saved and in the background, so a slow or unreachable gateway
 /// never delays or fails the request that created the task. Delivery is best-effort: a failed
@@ -57,95 +87,10 @@ public sealed class TaskCreatedChannelNotifier(IServiceScopeFactory scopeFactory
 {
     public Task HandleAsync(TaskItemCreated domainEvent, CancellationToken cancellationToken)
     {
-        _ = Task.Run(() => NotifyAsync(domainEvent));
+        _ = Task.Run(() => ResponsibleSms.SendAsync(
+            scopeFactory, domainEvent.TenantId, domainEvent.TaskId, TaskSmsTemplateKeys.TaskAssigned,
+            task => task.ResponsibleUserIds, skipUserId: null));
         return Task.CompletedTask;
-    }
-
-    private async Task NotifyAsync(TaskItemCreated created)
-    {
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var services = scope.ServiceProvider;
-        var logger = services.GetRequiredService<ILogger<TaskCreatedChannelNotifier>>();
-
-        try
-        {
-            var channels = await services.GetRequiredService<INotificationChannelSettingsReader>()
-                .ReadAsync(created.TenantId, CancellationToken.None);
-            if (!channels.Sms.Enabled)
-            {
-                return;
-            }
-
-            var tasks = services.GetRequiredService<ITaskRepository>();
-            var task = await tasks.GetByIdAsync(created.TenantId, created.TaskId, CancellationToken.None);
-            if (task is null)
-            {
-                return;
-            }
-
-            var directory = services.GetRequiredService<IUserDirectory>();
-            var recipientIds = new HashSet<Guid>();
-            if (task.AssignedUserId is { } assigned) recipientIds.Add(assigned);
-            foreach (var assignee in task.Assignees) recipientIds.Add(assignee.UserId);
-            if (task.AssignedUserGroupId is { } groupId)
-            {
-                foreach (var member in await directory.GetGroupMemberIdsAsync(groupId, CancellationToken.None)) recipientIds.Add(member);
-            }
-            if (task.OwnerUserId is { } owner) recipientIds.Add(owner);
-
-            if (recipientIds.Count == 0)
-            {
-                return;
-            }
-
-            var users = (await directory.GetUsersAsync(recipientIds, CancellationToken.None))
-                .Where(u => u.TenantId == created.TenantId && u.IsActive)
-                .ToList();
-            var byId = users.ToDictionary(u => u.Id);
-
-            string? groupName = null;
-            if (task.AssignedUserGroupId is { } gid)
-            {
-                var groups = await tasks.GetUserGroupSummariesAsync([gid], CancellationToken.None);
-                groupName = groups.TryGetValue(gid, out var g) ? g.Name : null;
-            }
-
-            var creator = task.OwnerUserId is { } o && byId.TryGetValue(o, out var ownerUser) ? ownerUser.DisplayName : "همکار";
-            var assigneeName = task.AssignedUserId is { } a && byId.TryGetValue(a, out var assignedUser)
-                ? assignedUser.DisplayName
-                : groupName ?? "شما / تیم شما";
-            var priority = task.Priority switch
-            {
-                TaskPriority.High => "بالا",
-                TaskPriority.Medium => "متوسط",
-                _ => "پایین"
-            };
-            var due = ToPersianDate(task.DueDate);
-            if (task.DueTime is { } dueTime)
-            {
-                due += " - " + ToPersianDigits(dueTime.ToString("HH:mm", CultureInfo.InvariantCulture));
-            }
-
-            var smsText = $"📋 فعالیت جدید \"{task.Title}\" به {assigneeName} واگذار شد.\nایجادکننده: {creator}\nاولویت: {priority} | مهلت: {due}";
-
-            var sms = services.GetRequiredService<ISmsSender>();
-
-            foreach (var user in users)
-            {
-                if (user.NotifySms && !string.IsNullOrWhiteSpace(user.PhoneNumber))
-                {
-                    var sent = await sms.SendAsync(created.TenantId, user.PhoneNumber!, smsText, CancellationToken.None);
-                    if (sent.IsFailure)
-                    {
-                        logger.LogWarning("Task {TaskId}: SMS to user {UserId} not sent: {Error}", task.Id, user.Id, sent.Error.Message);
-                    }
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Task-created notifications for task {TaskId} failed.", created.TaskId);
-        }
     }
 
     /// <summary>Solar Hijri date with Persian digits, as the UI shows it (e.g. ۱۴۰۴/۰۷/۰۱).</summary>
@@ -157,6 +102,119 @@ public sealed class TaskCreatedChannelNotifier(IServiceScopeFactory scopeFactory
         return ToPersianDigits(text);
     }
 
-    private static string ToPersianDigits(string text) =>
+    internal static string ToPersianDigits(string text) =>
         string.Concat(text.Select(c => char.IsDigit(c) ? (char)('۰' + (c - '0')) : c));
+}
+
+/// <summary>
+/// After an edit: each person newly responsible for a task gets "task_assigned"; those who stayed
+/// responsible while the due date moved get "task_due_changed". Nobody is texted about their own
+/// change, and a recurring task's date (its schedule start) is not announced - its occurrences are.
+/// </summary>
+public sealed class TaskChangeSmsNotifier(IServiceScopeFactory scopeFactory)
+    : IDomainEventHandler<TaskItemAssigneeChanged>, IDomainEventHandler<TaskItemDueChanged>
+{
+    public Task HandleAsync(TaskItemAssigneeChanged domainEvent, CancellationToken cancellationToken)
+    {
+        _ = Task.Run(() => ResponsibleSms.SendAsync(
+            scopeFactory, domainEvent.TenantId, domainEvent.TaskId, TaskSmsTemplateKeys.TaskAssigned,
+            _ => [domainEvent.AssignedUserId], domainEvent.ChangedByUserId));
+        return Task.CompletedTask;
+    }
+
+    public Task HandleAsync(TaskItemDueChanged domainEvent, CancellationToken cancellationToken)
+    {
+        _ = Task.Run(() => ResponsibleSms.SendAsync(
+            scopeFactory, domainEvent.TenantId, domainEvent.TaskId, TaskSmsTemplateKeys.TaskDueChanged,
+            task => domainEvent.ResponsibleUserIds ?? task.ResponsibleUserIds, domainEvent.ChangedByUserId));
+        return Task.CompletedTask;
+    }
+}
+
+/// <summary>
+/// One task SMS to each of the given people who is (still) responsible for the task, and to
+/// nobody else: an active user of the task's organization with a mobile number and SMS
+/// notifications on (IUserContactResolver). Each person - and each phone number - once.
+/// </summary>
+internal static class ResponsibleSms
+{
+    public static async Task SendAsync(
+        IServiceScopeFactory scopeFactory, Guid tenantId, Guid taskId, string templateKey,
+        Func<TaskItem, IEnumerable<Guid>> recipients, Guid? skipUserId)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var services = scope.ServiceProvider;
+        var logger = services.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(ResponsibleSms));
+
+        try
+        {
+            var sms = services.GetRequiredService<ITaskSmsSender>();
+            if (!await sms.IsEnabledAsync(tenantId, CancellationToken.None))
+            {
+                return;
+            }
+
+            var task = await services.GetRequiredService<ITaskRepository>().GetByIdAsync(tenantId, taskId, CancellationToken.None);
+            if (task is null)
+            {
+                return;
+            }
+
+            if (templateKey == TaskSmsTemplateKeys.TaskDueChanged && task.Recurrence is not null)
+            {
+                return;
+            }
+
+            var responsible = task.ResponsibleUserIds;
+            var userIds = recipients(task).Distinct().Where(id => id != skipUserId && responsible.Contains(id)).ToList();
+            if (userIds.Count == 0)
+            {
+                return;
+            }
+
+            var phones = await services.GetRequiredService<IUserContactResolver>()
+                .GetPhoneNumbersAsync(tenantId, userIds, CancellationToken.None);
+            foreach (var skipped in userIds.Where(id => !phones.ContainsKey(id)))
+            {
+                logger.LogInformation("Task {TaskId}: no SMS for user {UserId} - inactive, no mobile number, or SMS notifications off.", task.Id, skipped);
+            }
+
+            string? creator = null;
+            if (task.OwnerUserId is { } ownerId)
+            {
+                var owners = await services.GetRequiredService<IUserDirectory>().GetUsersAsync([ownerId], CancellationToken.None);
+                creator = owners.FirstOrDefault(u => u.TenantId == tenantId)?.DisplayName;
+            }
+
+            var due = TaskCreatedChannelNotifier.ToPersianDate(task.DueDate);
+            if (task.DueTime is { } dueTime)
+            {
+                due += " - " + TaskCreatedChannelNotifier.ToPersianDigits(dueTime.ToString("HH:mm", CultureInfo.InvariantCulture));
+            }
+
+            var values = new Dictionary<string, string?> { ["TaskTitle"] = task.Title, ["DueDate"] = due, ["CreatorName"] = creator };
+            var fallback = templateKey == TaskSmsTemplateKeys.TaskDueChanged
+                ? $"موعد فعالیت «{task.Title}» تغییر کرد.\nموعد جدید: {due}"
+                : $"فعالیت جدیدی با عنوان «{task.Title}» به شما ارجاع شد.\nموعد انجام: {due}";
+
+            var texted = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var (userId, phoneNumber) in userIds.Where(phones.ContainsKey).Select(id => (id, phones[id])))
+            {
+                if (!texted.Add(phoneNumber))
+                {
+                    continue;
+                }
+
+                var sent = await sms.SendTemplateAsync(tenantId, phoneNumber, templateKey, values, fallback, CancellationToken.None);
+                if (sent.IsFailure)
+                {
+                    logger.LogWarning("Task {TaskId}: SMS {Template} to user {UserId} not sent: {Error}", task.Id, templateKey, userId, sent.Error.Message);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Task SMS {Template} for task {TaskId} failed.", templateKey, taskId);
+        }
+    }
 }

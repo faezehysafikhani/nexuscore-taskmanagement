@@ -54,8 +54,8 @@ public sealed class TaskManagementIsolationTests
         {
             var name = Path.GetFileNameWithoutExtension(projectFile);
 
-            // The composition host is allowed to reference everything - that is its job.
-            if (name is "Rozet.Api" or "Nexus.CompositionTests") continue;
+            // The composition test project is allowed to reference everything - that is its job.
+            if (name is "Nexus.CompositionTests") continue;
 
             // The module itself, and its own tests.
             if (name.StartsWith("Nexus.TaskManagement", StringComparison.Ordinal)) continue;

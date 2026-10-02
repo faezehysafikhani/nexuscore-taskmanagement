@@ -1,3 +1,4 @@
+using NexusCore.Application.Common;
 using Chat.Api.Endpoints;
 using Chat.Api.Hubs;
 using Chat.Application;
@@ -90,6 +91,11 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>() ?? new JwtOptions();
+if (builder.Environment.IsProduction())
+{
+    jwtOptions.EnsureSafeForProduction();
+}
+
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -145,6 +151,9 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+// Unexpected exceptions: logged here, answered with a Persian message and no internals.
+app.UseSafeErrorResponses();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -179,9 +188,35 @@ if (builder.Configuration.GetValue("Database:SeedOnStartup", true))
 
     await services.GetRequiredService<DefaultDataSeeder>().SeedAsync(cancellationToken);
 
-    // Chat and in-app notifications. Chat uses its own connection string/database.
+    // In-app notifications' schema. Chat's own schema init/patch runs unconditionally below,
+    // regardless of this flag - see the comment there for why.
     await ModuleSchemaInitializer.EnsureCreatedAsync(services.GetRequiredService<NotificationDbContext>(), cancellationToken);
-    await ModuleSchemaInitializer.EnsureCreatedAsync(services.GetRequiredService<ChatDbContext>(), cancellationToken);
+}
+
+// Chat's schema must stay current even when Database:SeedOnStartup is disabled - the setting
+// docs/Core-Packaging-Government-Deployment.md tells production deployments to keep disabled
+// after their initial setup. EnsureCreatedAsync/EnsureColumnAsync only ever create a missing
+// table or add a missing column; they never seed or change data, so running them on every
+// restart is safe regardless of that flag. Without this, a deployment that disables seeding
+// (exactly as documented) would never receive a later additive Chat schema change - such as
+// team conversations' TeamId column - and chat would keep failing with a 500 no matter how many
+// times the fix for that change is deployed.
+{
+    using var chatSchemaScope = app.Services.CreateScope();
+    var chatDb = chatSchemaScope.ServiceProvider.GetRequiredService<ChatDbContext>();
+    var chatCancellationToken = CancellationToken.None;
+    await ModuleSchemaInitializer.EnsureCreatedAsync(chatDb, chatCancellationToken);
+
+    // Columns added to Chat's model after a deployment's Conversations table already existed
+    // (team conversations): EnsureCreatedAsync above cannot add these to an existing table on
+    // its own, so a live database that predates them would otherwise 500 on any query that
+    // touches Conversations. Safe to call on every restart.
+    await ModuleSchemaInitializer.EnsureColumnAsync(
+        chatDb, "dbo.Conversations", "TeamId",
+        "ALTER TABLE dbo.Conversations ADD TeamId uniqueidentifier NULL;",
+        "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Conversations_TeamId' AND object_id = OBJECT_ID(N'dbo.Conversations')) " +
+        "CREATE UNIQUE INDEX IX_Conversations_TeamId ON dbo.Conversations(TeamId) WHERE TeamId IS NOT NULL;",
+        chatCancellationToken);
 }
 
 app.Run();

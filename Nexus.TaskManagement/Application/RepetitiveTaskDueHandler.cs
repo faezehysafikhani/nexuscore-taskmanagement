@@ -1,4 +1,6 @@
+using System.Globalization;
 using Microsoft.Extensions.Logging;
+using NexusCore.Application.Identity.Interfaces;
 using Nexus.TaskManagement.Domain;
 using NexusCore.SharedKernel.Domain;
 
@@ -27,6 +29,8 @@ public sealed class RepetitiveTaskDueHandler(
     ITaskNotificationPublisher notificationPublisher,
     IUserContactResolver contactResolver,
     ITaskSmsSender smsSender,
+    IUserDirectory userDirectory,
+    IRecurrenceCalculator calculator,
     ILogger<RepetitiveTaskDueHandler> logger) : IDomainEventHandler<RepetitiveTaskDue>
 {
     public async Task HandleAsync(RepetitiveTaskDue domainEvent, CancellationToken cancellationToken)
@@ -43,7 +47,7 @@ public sealed class RepetitiveTaskDueHandler(
                 return;
             }
 
-            var recipients = ResolveRecipients(task);
+            var recipients = await ResolveRecipientsAsync(task, cancellationToken);
             if (recipients.Count == 0)
             {
                 logger.LogInformation(
@@ -51,8 +55,19 @@ public sealed class RepetitiveTaskDueHandler(
                 return;
             }
 
-            await PublishNotificationAsync(task, recipients, cancellationToken);
-            await SendSmsAsync(task, recipients, cancellationToken);
+            // The occurrence as the users entered it: their date and time, Solar Hijri.
+            var occurrence = calculator.ToLocalTime(domainEvent.DueAtUtc);
+            var when = FormatOccurrence(occurrence);
+
+            // Independent: a failed notification does not stop the SMS, and the reverse.
+            await PublishNotificationAsync(task, recipients, DateOnly.FromDateTime(occurrence.DateTime), when, cancellationToken);
+
+            // The SMS is only for the task's responsible people - each of them who is among the
+            // active users above, once. People on the access list and a creator who is not
+            // responsible get the notification only; a task without one gets no SMS at all.
+            var responsible = task.ResponsibleUserIds;
+            var smsRecipients = recipients.Where(responsible.Contains).ToList();
+            await SendSmsAsync(task, smsRecipients, when, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -62,36 +77,52 @@ public sealed class RepetitiveTaskDueHandler(
     }
 
     /// <summary>
-    /// Everyone actually connected to the task: its assignee, its collaborators and its owner.
-    /// Nobody else - a notification to an unrelated user is a bug, not a nicety.
+    /// The people the task is for: those responsible for it and those on its access list (the
+    /// task's team is only its context - its members are reminded when they are on that list) -
+    /// and of those only active users of the task's own organization, each once.
+    /// The creator is not reminded for having created it; only when nobody is assigned at all
+    /// is the task the creator's own, and then the creator is the one responsible. Nobody else:
+    /// a notification to an unrelated user is a bug, not a nicety.
     /// </summary>
-    private static List<Guid> ResolveRecipients(TaskItem task)
+    private async Task<IReadOnlyList<Guid>> ResolveRecipientsAsync(TaskItem task, CancellationToken cancellationToken)
     {
-        var recipients = new List<Guid>();
+        var candidates = new HashSet<Guid>();
 
-        if (task.AssignedUserId is { } assigned)
+        candidates.UnionWith(task.ResponsibleUserIds);
+        candidates.UnionWith(task.Assignees.Select(a => a.UserId));
+
+        if (candidates.Count == 0 && task.OwnerUserId is { } owner)
         {
-            recipients.Add(assigned);
+            candidates.Add(owner);
         }
 
-        recipients.AddRange(task.Assignees.Select(a => a.UserId));
-
-        if (task.OwnerUserId is { } owner)
+        if (candidates.Count == 0)
         {
-            recipients.Add(owner);
+            return [];
         }
 
-        return recipients.Distinct().ToList();
+        var users = await userDirectory.GetUsersAsync(candidates, cancellationToken);
+        var allowed = users.Where(u => u.TenantId == task.TenantId && u.IsActive).Select(u => u.Id).ToList();
+
+        var skipped = candidates.Count - allowed.Count;
+        if (skipped > 0)
+        {
+            logger.LogInformation(
+                "Recurring task {TaskId}: {Count} linked user(s) skipped (inactive, removed or of another organization).",
+                task.Id, skipped);
+        }
+
+        return allowed;
     }
 
     private async Task PublishNotificationAsync(
-        TaskItem task, IReadOnlyList<Guid> recipients, CancellationToken cancellationToken)
+        TaskItem task, IReadOnlyList<Guid> recipients, DateOnly occurrenceDate, string when, CancellationToken cancellationToken)
     {
         try
         {
             await notificationPublisher.PublishAsync(
                 new TaskDueNotification(
-                    task.TenantId, task.Id, task.Title, task.Description, task.DueDate, recipients),
+                    task.TenantId, task.Id, task.Title, task.Description, occurrenceDate, recipients, when),
                 cancellationToken);
         }
         catch (Exception ex)
@@ -101,35 +132,63 @@ public sealed class RepetitiveTaskDueHandler(
     }
 
     private async Task SendSmsAsync(
-        TaskItem task, IReadOnlyList<Guid> recipients, CancellationToken cancellationToken)
+        TaskItem task, IReadOnlyList<Guid> recipients, string when, CancellationToken cancellationToken)
     {
-        if (!await smsSender.IsEnabledAsync(task.TenantId, cancellationToken))
-        {
-            return;
-        }
-
         try
         {
-            var phoneNumbers = await contactResolver.GetPhoneNumbersAsync(
-                task.TenantId, recipients, cancellationToken);
-
-            if (phoneNumbers.Count == 0)
+            if (recipients.Count == 0)
             {
-                logger.LogInformation(
-                    "SMS is enabled but no phone number is available for any recipient of task {TaskId}.", task.Id);
+                logger.LogInformation(ReminderDeliveryEvents.SmsSkipped,
+                    "Recurring task {TaskId}: no active responsible person; no SMS sent.", task.Id);
                 return;
             }
 
-            var message = $"یادآوری وظیفه: {task.Title} - موعد: {task.DueDate:yyyy-MM-dd}";
+            if (!await smsSender.IsEnabledAsync(task.TenantId, cancellationToken))
+            {
+                logger.LogInformation(ReminderDeliveryEvents.SmsSkipped,
+                    "Recurring task {TaskId}: SMS is turned off in the SMS panel settings; no SMS sent.", task.Id);
+                return;
+            }
+
+            var phoneNumbers = await contactResolver.GetPhoneNumbersAsync(
+                task.TenantId, recipients, cancellationToken);
+
+            foreach (var userId in recipients.Where(id => !phoneNumbers.ContainsKey(id)))
+            {
+                logger.LogWarning(ReminderDeliveryEvents.SmsSkipped,
+                    "Recurring task {TaskId}: no SMS for user {UserId} - no mobile number, or SMS notifications turned off.",
+                    task.Id, userId);
+            }
+
+            // Title and time only: the description stays inside the application. The wording is the
+            // tenant's "recurring_task_reminder" template; this text is only for senders without one.
+            var message = $"یادآوری وظیفه: {task.Title}\nموعد: {when}";
+            var parts = when.Split(" - ", 2);
+            var values = new Dictionary<string, string?>
+            {
+                ["TaskTitle"] = task.Title,
+                ["ExecutionDateTime"] = when,
+                ["ExecutionDate"] = parts[0],
+                ["ExecutionTime"] = parts.Length > 1 ? parts[1] : null,
+            };
 
             foreach (var (userId, phoneNumber) in phoneNumbers)
             {
-                var result = await smsSender.SendAsync(task.TenantId, phoneNumber, message, cancellationToken);
+                var result = await smsSender.SendTemplateAsync(
+                    task.TenantId, phoneNumber, TaskSmsTemplateKeys.RecurringTaskReminder, values, message, cancellationToken);
                 if (result.IsFailure)
                 {
-                    logger.LogWarning(
+                    // The gateway's reason: SMS panel incomplete, provider refused, network...
+                    // Not re-sent: when the provider took the message but its answer was lost,
+                    // a retry would text the user twice.
+                    logger.LogWarning(ReminderDeliveryEvents.SmsFailed,
                         "SMS to user {UserId} for task {TaskId} was not sent: {Error}",
                         userId, task.Id, result.Error.Message);
+                }
+                else
+                {
+                    logger.LogInformation(ReminderDeliveryEvents.SmsAccepted,
+                        "Reminder SMS for user {UserId}, task {TaskId} accepted by the SMS gateway.", userId, task.Id);
                 }
             }
         }
@@ -137,5 +196,14 @@ public sealed class RepetitiveTaskDueHandler(
         {
             logger.LogError(ex, "SMS delivery failed for due task {TaskId}.", task.Id);
         }
+    }
+
+    /// <summary>e.g. ۱۴۰۴/۰۷/۰۱ - ۰۹:۰۰, the way the UI shows dates.</summary>
+    internal static string FormatOccurrence(DateTimeOffset local)
+    {
+        var calendar = new PersianCalendar();
+        var date = local.DateTime;
+        var text = $"{calendar.GetYear(date):0000}/{calendar.GetMonth(date):00}/{calendar.GetDayOfMonth(date):00} - {date:HH\\:mm}";
+        return string.Concat(text.Select(c => char.IsDigit(c) ? (char)('۰' + (c - '0')) : c));
     }
 }

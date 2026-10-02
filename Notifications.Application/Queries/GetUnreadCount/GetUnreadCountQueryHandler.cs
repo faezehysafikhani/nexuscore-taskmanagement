@@ -25,7 +25,7 @@ public sealed class GetUnreadCountQueryHandler
         CancellationToken cancellationToken)
     {
         var count = await _db.Notifications
-            .Where(n => n.UserId == _currentUser.UserId)
+            .Where(n => n.UserId == _currentUser.UserId && (n.TenantId == null || n.TenantId == _currentUser.TenantId))
             .Where(n => !n.IsRead)
             .CountAsync(cancellationToken);
 

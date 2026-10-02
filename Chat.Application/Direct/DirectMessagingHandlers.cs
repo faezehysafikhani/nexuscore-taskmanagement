@@ -23,7 +23,7 @@ public sealed class DirectConversationService(
 {
     public const int MaxTextLength = 4000;
 
-    /// <summary>The signed-in user and the partner, checked: both exist, are active and share a tenant.</summary>
+    /// <summary>The signed-in user and the partner, checked: both exist, are active, share a tenant and may talk.</summary>
     public async Task<Result<(UserContact Me, UserContact Other)>> ResolvePairAsync(Guid otherUserId, CancellationToken cancellationToken)
     {
         if (currentUser.UserId is not { } meId || currentUser.TenantId is not { } tenantId)
@@ -40,7 +40,6 @@ public sealed class DirectConversationService(
         var me = users.FirstOrDefault(user => user.Id == meId);
         var other = users.FirstOrDefault(user => user.Id == otherUserId);
 
-        // Someone in another tenant is reported exactly like someone who does not exist.
         if (me is null || other is null || other.TenantId != tenantId || !other.IsActive)
         {
             return Result.Failure<(UserContact, UserContact)>(Error.NotFound("User was not found."));
@@ -76,8 +75,6 @@ public sealed class DirectConversationService(
         }
         catch (DbUpdateException)
         {
-            // Both users opened the chat at the same moment: the unique DirectKey kept one
-            // conversation, so use that one.
             db.ChangeTracker.Clear();
             return await FindAsync(meId, otherUserId, cancellationToken)
                    ?? throw new InvalidOperationException("The direct conversation could not be created.");
@@ -101,6 +98,31 @@ public sealed class DirectConversationService(
             message.HasAttachment
                 ? new ChatAttachmentDto(message.AttachmentFileName!, message.AttachmentContentType ?? "application/octet-stream", message.AttachmentSizeBytes ?? 0)
                 : null);
+}
+
+/// <summary>
+/// Lists who a user may start a direct chat with - every other active user of their tenant.
+/// Deliberately independent of the administrative user-management permissions: being listed
+/// here (or reachable through it) is not the same as being able to view or manage users.
+/// </summary>
+public sealed class GetChatDirectoryQueryHandler(
+    ICurrentUserContext currentUser,
+    IUserDirectory userDirectory)
+    : IRequestHandler<GetChatDirectoryQuery, Result<List<ChatContactDto>>>
+{
+    public async Task<Result<List<ChatContactDto>>> Handle(GetChatDirectoryQuery request, CancellationToken cancellationToken)
+    {
+        if (currentUser.UserId is not { } meId || currentUser.TenantId is not { } tenantId)
+        {
+            return Result.Failure<List<ChatContactDto>>(Error.Unauthorized());
+        }
+
+        var users = await userDirectory.GetActiveUsersInTenantAsync(tenantId, cancellationToken);
+        return Result.Success(users
+            .Where(user => user.Id != meId)
+            .Select(user => new ChatContactDto(user.Id, user.DisplayName, user.AvatarUrl))
+            .ToList());
+    }
 }
 
 public sealed class GetDirectMessagesQueryHandler(
@@ -194,13 +216,10 @@ public sealed class SendDirectMessageCommandHandler(
 
         var (me, other) = pair.Value;
         var conversation = await conversations.FindOrCreateAsync(me.Id, other.Id, cancellationToken);
-
-        // The sender is always the signed-in user; nothing in the request can change that.
         var message = new Message(Guid.NewGuid(), conversation.Id, me.Id, text);
 
         if (request.Attachment is { } attachment)
         {
-            // Only the display name is kept from the client; the storage key is generated.
             var fileName = Path.GetFileName(attachment.FileName);
             if (string.IsNullOrWhiteSpace(fileName))
             {
@@ -257,7 +276,6 @@ public sealed class MarkDirectConversationReadCommandHandler(
         }
         catch (DbUpdateException)
         {
-            // The same messages were marked by a parallel request (the chat polls): already read.
             return Result.Success(0);
         }
 
@@ -294,7 +312,8 @@ public sealed class GetUnreadCountsBySenderQueryHandler(
 public sealed class GetMessageAttachmentQueryHandler(
     IChatDbContext db,
     ICurrentUserContext currentUser,
-    IFileStorage fileStorage)
+    IFileStorage fileStorage,
+    Chat.Application.Teams.TeamConversationService teams)
     : IRequestHandler<GetMessageAttachmentQuery, Result<ChatAttachmentDownload>>
 {
     public async Task<Result<ChatAttachmentDownload>> Handle(GetMessageAttachmentQuery request, CancellationToken cancellationToken)
@@ -304,14 +323,14 @@ public sealed class GetMessageAttachmentQueryHandler(
             return Result.Failure<ChatAttachmentDownload>(Error.Unauthorized());
         }
 
-        // Only participants can read an attachment; anyone else gets the same "not found".
         var message = await db.Messages
             .AsNoTracking()
             .Where(m => m.Id == request.MessageId && !m.IsDeleted)
             .Where(m => db.ConversationParticipants.Any(p => p.ConversationId == m.ConversationId && p.UserId == meId))
             .FirstOrDefaultAsync(cancellationToken);
 
-        if (message is null || !message.HasAttachment)
+        if (message is null || !message.HasAttachment
+            || !await teams.IsCurrentMemberAsync(message.ConversationId, meId, cancellationToken))
         {
             return Result.Failure<ChatAttachmentDownload>(Error.NotFound("Attachment was not found."));
         }

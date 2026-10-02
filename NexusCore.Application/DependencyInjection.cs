@@ -1,5 +1,6 @@
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using NexusCore.Application.Identity.Dtos;
 using NexusCore.Application.Identity.Interfaces;
 using NexusCore.Application.Identity.Permissions;
@@ -30,6 +31,9 @@ public static class DependencyInjection
         services.AddScoped<INotificationChannelSettingsReader, NotificationChannelSettingsReader>();
         services.AddScoped<INotificationChannelService, NotificationChannelService>();
         services.AddScoped<IPlatformService, PlatformService>();
+        // Live presence: one tracker for the process (replaceable by a shared one), fed by the hubs.
+        services.TryAddSingleton<IUserPresenceTracker, InMemoryUserPresenceTracker>();
+        services.AddScoped<IUserPresenceService, UserPresenceService>();
         services.AddSingleton<IPermissionCatalog, IdentityPermissionCatalog>();
         return services;
     }

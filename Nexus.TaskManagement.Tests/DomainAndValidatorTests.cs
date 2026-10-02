@@ -230,6 +230,19 @@ public sealed class ValidatorTests
     }
 
     [Fact]
+    public void SomeoneResponsibleIsRequired()
+    {
+        var validator = new CreateTaskRequestValidator();
+
+        validator.TestValidate(new CreateTaskRequest("Buy milk", new DateOnly(2026, 3, 1)))
+            .ShouldHaveValidationErrorFor(x => x.AssignedUserId);
+        validator.TestValidate(new CreateTaskRequest("Buy milk", new DateOnly(2026, 3, 1), AssignedUserId: Guid.Empty))
+            .ShouldHaveValidationErrorFor(x => x.AssignedUserId);
+        validator.TestValidate(new CreateTaskRequest("Buy milk", new DateOnly(2026, 3, 1), AssignedUserId: Guid.NewGuid()))
+            .ShouldNotHaveValidationErrorFor(x => x.AssignedUserId);
+    }
+
+    [Fact]
     public void ATitleIsRequired()
     {
         var result = new CreateTaskRequestValidator().TestValidate(new CreateTaskRequest(
@@ -340,5 +353,83 @@ public sealed class ValidatorTests
             new CreateNoteRequest("", "body"));
 
         result.ShouldHaveValidationErrorFor(x => x.Title);
+    }
+}
+
+public sealed class TaskResponsiblePeopleTests
+{
+    private static TaskItem NewTask() => new(Guid.NewGuid(), Guid.NewGuid(), "Work", new DateOnly(2030, 1, 1), TaskPriority.Medium, false, Guid.NewGuid());
+
+    [Fact]
+    public void SeveralResponsiblePeople_AreKept_EachOnce_TheFirstAsAssignedUserId()
+    {
+        var task = NewTask();
+        var (a, b) = (Guid.NewGuid(), Guid.NewGuid());
+
+        task.SetResponsibleUsers([a, b, a, Guid.Empty]);
+
+        Assert.Equal([a, b], task.ResponsibleUserIds);
+        Assert.Equal(a, task.AssignedUserId);
+        Assert.All(task.Assignees, row => Assert.True(row.IsResponsible));
+    }
+
+    [Fact]
+    public void TheAccessList_NeverRemovesAResponsiblePerson()
+    {
+        var task = NewTask();
+        var (doer, viewer, other) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        task.SetResponsibleUsers([doer]);
+
+        task.AssignUsers([viewer]);
+        task.AssignUsers([other]);
+
+        Assert.Equal([doer], task.ResponsibleUserIds);
+        Assert.Equal(new[] { doer, other }.Order(), task.Assignees.Select(a => a.UserId).Order());
+    }
+
+    [Fact]
+    public void SomeoneNoLongerResponsible_LosesTheAccessThatCameWithIt()
+    {
+        var task = NewTask();
+        var (a, b) = (Guid.NewGuid(), Guid.NewGuid());
+        task.SetResponsibleUsers([a, b]);
+
+        task.SetResponsibleUsers([b]);
+
+        Assert.Equal([b], task.ResponsibleUserIds);
+        Assert.DoesNotContain(task.Assignees, row => row.UserId == a);
+    }
+
+    [Fact]
+    public void TheOldSingleAssignee_KeepsTheOthersWhenOneOfThemIsNamed_AndReplacesThemOtherwise()
+    {
+        var task = NewTask();
+        var (a, b, c) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        task.SetResponsibleUsers([a, b]);
+
+        task.UpdateDetails("Work", null, task.DueDate, task.Priority, b, null, true);
+        Assert.Equal([b, a], task.ResponsibleUserIds);
+
+        task.UpdateDetails("Work", null, task.DueDate, task.Priority, c, null, true);
+        Assert.Equal([c], task.ResponsibleUserIds);
+    }
+
+    [Fact]
+    public void AnEdit_AnnouncesEachNewResponsiblePerson_AndTheMovedDateToThoseWhoStayed()
+    {
+        var task = NewTask();
+        var (a, b, actor) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        task.SetResponsibleUsers([a]);
+        task.ClearDomainEvents();
+        var previous = task.ResponsibleUserIds;
+
+        task.SetResponsibleUsers([a, b]);
+        task.UpdateDetails("Work", null, new DateOnly(2030, 2, 1), task.Priority, a, null, true);
+        task.RecordAssignmentAndDueChanges(previous, new DateOnly(2030, 1, 1), null, actor);
+
+        var assigned = Assert.Single(task.DomainEvents.OfType<TaskItemAssigneeChanged>());
+        Assert.Equal(b, assigned.AssignedUserId);
+        var moved = Assert.Single(task.DomainEvents.OfType<TaskItemDueChanged>());
+        Assert.Equal([a], moved.ResponsibleUserIds!);
     }
 }

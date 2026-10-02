@@ -8,6 +8,9 @@ namespace Nexus.TaskManagement.Infrastructure;
 
 public sealed class TaskRepository(TaskManagementDbContext db) : ITaskRepository
 {
+    // One query per collection: in a single query the collections multiply each other's rows
+    // (subtasks x their tags x files x task tags x files x assignees), and a recurring task with
+    // its occurrences came back as thousands of rows - slow enough to time out.
     public Task<TaskItem?> GetByIdAsync(Guid tenantId, Guid id, CancellationToken cancellationToken) =>
         db.Tasks
             .Include(t => t.SubTasks).ThenInclude(s => s.Tags).ThenInclude(tt => tt.Tag)
@@ -16,6 +19,7 @@ public sealed class TaskRepository(TaskManagementDbContext db) : ITaskRepository
             .Include(t => t.Files).ThenInclude(tf => tf.File)
             .Include(t => t.Assignees)
             .Include(t => t.Recurrence)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(t => t.TenantId == tenantId && t.Id == id, cancellationToken);
 
     public Task<TaskItem?> GetForUpdateAsync(Guid tenantId, Guid id, CancellationToken cancellationToken) =>
@@ -38,7 +42,9 @@ public sealed class TaskRepository(TaskManagementDbContext db) : ITaskRepository
         if (request.Status is { } status) query = query.Where(t => t.Status == status);
         if (request.Priority is { } priority) query = query.Where(t => t.Priority == priority);
         if (request.IsProject is { } isProject) query = query.Where(t => t.IsProject == isProject);
-        if (request.AssignedUserId is { } userId) query = query.Where(t => t.AssignedUserId == userId);
+        // Any of the task's responsible people, not only the first.
+        if (request.AssignedUserId is { } userId)
+            query = query.Where(t => t.AssignedUserId == userId || t.Assignees.Any(a => a.UserId == userId && a.IsResponsible));
         if (request.AssignedUserGroupId is { } groupId) query = query.Where(t => t.AssignedUserGroupId == groupId);
         if (request.DueFrom is { } from) query = query.Where(t => t.DueDate >= from);
         if (request.DueTo is { } to) query = query.Where(t => t.DueDate <= to);
@@ -171,6 +177,9 @@ public sealed class TaskRepository(TaskManagementDbContext db) : ITaskRepository
     public Task<bool> UserExistsAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken) =>
         db.Users.AnyAsync(u => u.Id == userId && u.TenantId == tenantId, cancellationToken);
 
+    public Task<bool> ActiveUserExistsAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken) =>
+        db.Users.AnyAsync(u => u.Id == userId && u.TenantId == tenantId && u.IsActive, cancellationToken);
+
     public Task<bool> UserGroupExistsAsync(Guid tenantId, Guid userGroupId, CancellationToken cancellationToken) =>
         db.UserGroups.AnyAsync(g => g.Id == userGroupId && g.TenantId == tenantId, cancellationToken);
 
@@ -290,6 +299,10 @@ public sealed class TaskFileRepository(TaskManagementDbContext db) : ITaskFileRe
 
     public Task<TaskFile?> GetLinkAsync(Guid linkId, CancellationToken cancellationToken) =>
         db.TaskFiles.FirstOrDefaultAsync(f => f.Id == linkId, cancellationToken);
+
+    // TaskFiles carries the access query filter, so only links to reachable owners count.
+    public Task<bool> IsReachableAsync(Guid fileId, CancellationToken cancellationToken) =>
+        db.TaskFiles.AnyAsync(f => f.FileId == fileId, cancellationToken);
 
     public async Task<IReadOnlyList<TaskFile>> ListForTaskAsync(
         Guid tenantId, Guid taskId, CancellationToken cancellationToken) =>

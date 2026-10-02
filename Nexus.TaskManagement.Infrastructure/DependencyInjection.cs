@@ -33,6 +33,7 @@ public static class DependencyInjection
         services.AddScoped<ITaskActivityService, TaskActivityService>();
 
         services.Configure<TaskSmsOptions>(configuration.GetSection(TaskSmsOptions.SectionName));
+        services.Configure<RecurrenceOptions>(configuration.GetSection(RecurrenceOptions.SectionName));
         services.Configure<RepetitiveTaskSchedulerOptions>(
             configuration.GetSection(RepetitiveTaskSchedulerOptions.SectionName));
 

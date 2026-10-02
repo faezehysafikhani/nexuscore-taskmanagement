@@ -11,10 +11,10 @@ public static class KnowledgePermissions
 
     public static IReadOnlyList<PermissionDefinition> All { get; } =
     [
-        new(View, "Knowledge", "Search and view knowledge documents"),
-        new(Upload, "Knowledge", "Upload knowledge documents"),
-        new(Edit, "Knowledge", "Edit knowledge document metadata"),
-        new(Delete, "Knowledge", "Delete knowledge documents")
+        new(View, "Knowledge", "جستجو و مشاهده مستندات دانشی"),
+        new(Upload, "Knowledge", "بارگذاری مستندات دانشی"),
+        new(Edit, "Knowledge", "ویرایش مشخصات مستندات دانشی"),
+        new(Delete, "Knowledge", "حذف مستندات دانشی")
     ];
 }
 

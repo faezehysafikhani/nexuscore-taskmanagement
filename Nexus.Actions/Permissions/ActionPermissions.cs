@@ -12,11 +12,11 @@ public static class ActionPermissions
 
     public static IReadOnlyList<PermissionDefinition> All { get; } =
     [
-        new(View, "Actions", "View actions"),
-        new(Create, "Actions", "Create actions"),
-        new(Edit, "Actions", "Edit actions"),
-        new(Delete, "Actions", "Cancel actions"),
-        new(Submit, "Actions", "Submit actions for approval")
+        new(View, "Actions", "مشاهده اقدامات"),
+        new(Create, "Actions", "ایجاد اقدام"),
+        new(Edit, "Actions", "ویرایش اقدامات"),
+        new(Delete, "Actions", "لغو اقدامات"),
+        new(Submit, "Actions", "ارسال اقدامات برای تأیید")
     ];
 }
 

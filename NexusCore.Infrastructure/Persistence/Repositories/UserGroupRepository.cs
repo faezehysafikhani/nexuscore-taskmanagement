@@ -37,6 +37,14 @@ public sealed class UserGroupRepository(NexusCoreDbContext dbContext) : IUserGro
             .OrderBy(group => group.Name)
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<UserGroup>> ListVisibleToUserAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken) =>
+        await IncludeGraph(dbContext.UserGroups.AsQueryable())
+            .Where(group => group.TenantId == tenantId
+                && (group.OwnerUserId == userId || group.Members.Any(member => member.UserId == userId)))
+            .OrderBy(group => group.OwnerUserId == userId ? 0 : 1)
+            .ThenBy(group => group.Name)
+            .ToListAsync(cancellationToken);
+
     public void Remove(UserGroup group) => dbContext.UserGroups.Remove(group);
 
     public async Task<IReadOnlyList<User>> ListUsersAsync(IReadOnlyList<Guid> userIds, CancellationToken cancellationToken) =>

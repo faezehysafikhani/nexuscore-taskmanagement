@@ -10,9 +10,9 @@ public static class KpiPermissions
 
     public static IReadOnlyList<PermissionDefinition> All { get; } =
     [
-        new(View, "Kpi", "View KPIs"),
-        new(Create, "Kpi", "Create KPIs"),
-        new(Edit, "Kpi", "Edit KPIs")
+        new(View, "Kpi", "مشاهده شاخص‌های کلیدی عملکرد"),
+        new(Create, "Kpi", "ایجاد شاخص کلیدی عملکرد"),
+        new(Edit, "Kpi", "ویرایش شاخص‌های کلیدی عملکرد")
     ];
 }
 

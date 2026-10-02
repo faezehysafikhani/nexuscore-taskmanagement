@@ -12,11 +12,11 @@ public static class WaterfallPermissions
 
     public static IReadOnlyList<PermissionDefinition> All { get; } =
     [
-        new(View, "WaterfallPlanning", "View WBS activities"),
-        new(Create, "WaterfallPlanning", "Create WBS activities"),
-        new(Edit, "WaterfallPlanning", "Edit WBS activities and progress"),
-        new(Delete, "WaterfallPlanning", "Delete WBS activities"),
-        new(Submit, "WaterfallPlanning", "Submit activities for approval")
+        new(View, "WaterfallPlanning", "مشاهده فعالیت‌های ساختار شکست کار"),
+        new(Create, "WaterfallPlanning", "ایجاد فعالیت ساختار شکست کار"),
+        new(Edit, "WaterfallPlanning", "ویرایش فعالیت‌ها و پیشرفت ساختار شکست کار"),
+        new(Delete, "WaterfallPlanning", "حذف فعالیت‌های ساختار شکست کار"),
+        new(Submit, "WaterfallPlanning", "ارسال فعالیت‌ها برای تأیید")
     ];
 }
 

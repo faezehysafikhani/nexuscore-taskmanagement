@@ -19,4 +19,9 @@
     <ProjectReference Include="..\NexusCore.Infrastructure\NexusCore.Infrastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Scheduler passes are driven directly by the composition tests. -->
+    <InternalsVisibleTo Include="Nexus.CompositionTests" />
+  </ItemGroup>
+
 </Project>

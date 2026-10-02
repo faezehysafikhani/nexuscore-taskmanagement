@@ -12,6 +12,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\NexusCore.Application\NexusCore.Application.csproj" />
     <ProjectReference Include="..\NexusCore.SharedKernel\NexusCore.SharedKernel.csproj" />
     <ProjectReference Include="..\Ticketing.Domain\Ticketing.Domain.csproj" />
   </ItemGroup>

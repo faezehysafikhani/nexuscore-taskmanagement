@@ -12,11 +12,11 @@ public static class RiskPermissions
 
     public static IReadOnlyList<PermissionDefinition> All { get; } =
     [
-        new(View, "RiskManagement", "View the risk register"),
-        new(Create, "RiskManagement", "Create risks"),
-        new(Edit, "RiskManagement", "Edit risks"),
-        new(Delete, "RiskManagement", "Delete risks"),
-        new(Submit, "RiskManagement", "Submit risks for approval")
+        new(View, "RiskManagement", "مشاهده فهرست ریسک‌ها"),
+        new(Create, "RiskManagement", "ایجاد ریسک"),
+        new(Edit, "RiskManagement", "ویرایش ریسک‌ها"),
+        new(Delete, "RiskManagement", "حذف ریسک‌ها"),
+        new(Submit, "RiskManagement", "ارسال ریسک‌ها برای تأیید")
     ];
 }
 

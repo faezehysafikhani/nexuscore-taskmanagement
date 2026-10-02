@@ -115,7 +115,10 @@ public sealed record TaskDto(
     RepetitiveTaskDto? Recurrence,
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset? ModifiedAtUtc,
-    TimeOnly? DueTime = null);
+    TimeOnly? DueTime = null,
+    TimeOnly? CharterStartTime = null,
+    TimeOnly? CharterEndTime = null,
+    IReadOnlyList<UserSummaryDto>? ResponsibleUsers = null);
 
 /// <summary>Trimmed shape for list and board views - no subtasks, files or charter.</summary>
 public sealed record TaskListItemDto(
@@ -192,7 +195,10 @@ public sealed record CreateTaskRequest(
     IReadOnlyList<SubTaskInput>? SubTasks = null,
     IReadOnlyList<string>? Tags = null,
     RecurrenceInput? Recurrence = null,
-    TimeOnly? DueTime = null);
+    TimeOnly? DueTime = null,
+    TimeOnly? CharterStartTime = null,
+    TimeOnly? CharterEndTime = null,
+    IReadOnlyList<Guid>? ResponsibleUserIds = null);
 
 /// <summary>
 /// Replaces the task's details. Like every other field here, DueTime is replaced as sent: null
@@ -212,13 +218,20 @@ public sealed record UpdateTaskRequest(
     string? CharterProjectManager = null,
     DateOnly? CharterStartDate = null,
     DateOnly? CharterEndDate = null,
-    TimeOnly? DueTime = null);
+    TimeOnly? DueTime = null,
+    TimeOnly? CharterStartTime = null,
+    TimeOnly? CharterEndTime = null,
+    IReadOnlyList<Guid>? ResponsibleUserIds = null);
 
 public sealed record ChangeTaskStatusRequest(TaskItemStatus Status);
 
 public sealed record ChangeTaskPriorityRequest(TaskPriority Priority);
 
-public sealed record AssignUserRequest(Guid? AssignedUserId, IReadOnlyList<Guid>? AssigneeUserIds = null);
+/// <summary>
+/// ResponsibleUserIds (one or more) replaces who is responsible; without it AssignedUserId is
+/// the single responsible person, as older clients send it. AssigneeUserIds is the access list.
+/// </summary>
+public sealed record AssignUserRequest(Guid? AssignedUserId, IReadOnlyList<Guid>? AssigneeUserIds = null, IReadOnlyList<Guid>? ResponsibleUserIds = null);
 
 public sealed record AssignUserGroupRequest(Guid? AssignedUserGroupId);
 

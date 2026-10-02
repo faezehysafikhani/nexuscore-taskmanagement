@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.AspNetCore.Hosting.Server;
 using NexusCore.Application.Common;
+using Ticketing.Application.Common.Security;
 using Ticketing.Application.Tickets.Commands.AddComment;
 using Ticketing.Application.Tickets.Commands.AssignTicket;
 using Ticketing.Application.Tickets.Commands.ChangePriority;
@@ -21,12 +22,12 @@ public static class TicketEndpoints
         group.MapGet("/my", async (ISender sender, CancellationToken ct) =>
         {
             return (await sender.Send(new GetMyTicketsQuery(), ct)).ToApiResult();
-        });
+        }).RequireAuthorization(TicketingPermissions.View);
 
         group.MapPost("/", async (CreateTicketCommand command, ISender sender, CancellationToken ct) =>
         {
             return (await sender.Send(command, ct)).ToApiResult();
-        });
+        }).RequireAuthorization(TicketingPermissions.Create);
 
         group.MapPost("/{ticketId:guid}/comments", async (
             Guid ticketId,
@@ -36,7 +37,7 @@ public static class TicketEndpoints
         {
             return (await sender.Send(
                 new AddCommentCommand(ticketId, request.Text), ct)).ToApiResult();
-        });
+        }).RequireAuthorization(TicketingPermissions.View);
 
         group.MapPut("/{ticketId:guid}/assign", async (
             Guid ticketId,
@@ -46,7 +47,7 @@ public static class TicketEndpoints
         {
             return (await sender.Send(
                 new AssignTicketCommand(ticketId, request.UserId), ct)).ToApiResult();
-        });
+        }).RequireAuthorization(TicketingPermissions.Manage);
         group.MapGet("/{ticketId:guid}", async (
     Guid ticketId,
     ISender sender,
@@ -54,7 +55,7 @@ public static class TicketEndpoints
         {
             return (await sender.Send(
                 new GetTicketDetailsQuery(ticketId), ct)).ToApiResult();
-        });
+        }).RequireAuthorization(TicketingPermissions.View);
 
         group.MapPut("/{ticketId:guid}/status", async (
             Guid ticketId,
@@ -64,7 +65,7 @@ public static class TicketEndpoints
         {
             return (await sender.Send(
                 new ChangeStatusCommand(ticketId, request.Status), ct)).ToApiResult();
-        });
+        }).RequireAuthorization(TicketingPermissions.View);
 
         group.MapPut("/{ticketId:guid}/priority", async (
             Guid ticketId,
@@ -74,7 +75,7 @@ public static class TicketEndpoints
         {
             return (await sender.Send(
                 new ChangePriorityCommand(ticketId, request.Priority), ct)).ToApiResult();
-        });
+        }).RequireAuthorization(TicketingPermissions.Manage);
 
         return app;
     }

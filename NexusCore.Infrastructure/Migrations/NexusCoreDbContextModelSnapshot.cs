@@ -462,6 +462,9 @@ namespace NexusCore.Infrastructure.Migrations
                     b.Property<Guid>("PermissionId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<bool>("IsDenied")
+                        .HasColumnType("bit");
+
                     b.HasKey("UserId", "PermissionId");
 
                     b.HasIndex("PermissionId");

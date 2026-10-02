@@ -1,7 +1,9 @@
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using NexusCore.Application.Approvals;
 using NexusCore.Application.Common;
 using NexusCore.Application.Files;
@@ -53,6 +55,8 @@ public static class DependencyInjection
         services.AddScoped<IPlatformRepository, PlatformRepository>();
         services.AddScoped<IPasswordHasher, BCryptPasswordHasher>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
+        // Access tokens of a disabled or deleted user stop working on the next request.
+        services.AddSingleton<IPostConfigureOptions<JwtBearerOptions>, ActiveUserTokenValidation>();
         services.AddScoped<DefaultDataSeeder>();
         services.AddUserGroupFeature(configuration);
 
@@ -70,8 +74,9 @@ public static class DependencyInjection
         services.AddScoped<ILoginProtection, LoginProtection>();
 
         services.Configure<IdentitySeedOptions>(configuration.GetSection(IdentitySeedOptions.SectionName));
-        services.Configure<PasswordResetOptions>(configuration.GetSection(PasswordResetOptions.SectionName));
-        services.AddScoped<IPasswordResetLinkSender, EmailPasswordResetLinkSender>();
+        services.Configure<ManagedPermissionOptions>(configuration.GetSection(ManagedPermissionOptions.SectionName));
+        // Password recovery sends its one-time code through ISmsSender (below); no email.
+        services.Configure<PasswordRecoveryOptions>(configuration.GetSection(PasswordRecoveryOptions.SectionName));
         services.Configure<SmtpEmailOptions>(configuration.GetSection(SmtpEmailOptions.SectionName));
 
         // Outgoing messages. Request logging is removed from this client: the SMS API key is part
@@ -81,6 +86,9 @@ public static class DependencyInjection
         services.AddScoped<ISmsProvider, KavenegarSmsProvider>();
         services.AddScoped<ISmsSender, GatewaySmsSender>();
         services.AddScoped<ISmsTemplateService, SmsTemplateService>();
+        // Each module adds its own SMS templates the same way (ISmsTemplateCatalog).
+        services.AddSingleton<ISmsTemplateCatalog, CoreSmsTemplateCatalog>();
+        services.Configure<SmsTemplateOptions>(configuration.GetSection(SmsTemplateOptions.SectionName));
 
         // LDAP / Active Directory connection settings and test.
         services.AddScoped<ILdapDirectoryClient, NexusCore.Infrastructure.Ldap.LdapDirectoryClient>();

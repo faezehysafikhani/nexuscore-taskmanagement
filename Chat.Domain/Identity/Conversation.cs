@@ -38,6 +38,19 @@ namespace Chat.Domain.Entities
         /// </summary>
         public string? DirectKey { get; private set; }
 
+        /// <summary>
+        /// For a team's conversation: the team (UserGroup) whose one shared thread this is
+        /// (unique index). Its participants follow the team's active members.
+        /// </summary>
+        public Guid? TeamId { get; private set; }
+
+        public static Conversation CreateForTeam(Guid id, Guid tenantId, Guid teamId, Guid? createdBy)
+        {
+            var conversation = new Conversation(id, tenantId, null, ChatType.Group, createdBy);
+            conversation.TeamId = teamId;
+            return conversation;
+        }
+
         public static Conversation CreateDirect(Guid id, Guid? tenantId, Guid firstUserId, Guid secondUserId)
         {
             var conversation = new Conversation(id, tenantId, null, ChatType.Direct, firstUserId);

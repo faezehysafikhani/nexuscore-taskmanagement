@@ -44,6 +44,9 @@ public interface ITaskRepository
 
     Task<bool> UserExistsAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken);
 
+    /// <summary>The user exists in the tenant and is not disabled.</summary>
+    Task<bool> ActiveUserExistsAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken);
+
     Task<bool> UserGroupExistsAsync(Guid tenantId, Guid userGroupId, CancellationToken cancellationToken);
 
     Task<IReadOnlyDictionary<Guid, UserSummaryDto>> GetUserSummariesAsync(
@@ -90,6 +93,9 @@ public interface ITaskFileRepository
     Task<TaskFileAsset?> GetAssetAsync(Guid tenantId, Guid fileId, CancellationToken cancellationToken);
 
     Task<TaskFile?> GetLinkAsync(Guid linkId, CancellationToken cancellationToken);
+
+    /// <summary>Whether the file hangs off a task, subtask or comment the caller may reach.</summary>
+    Task<bool> IsReachableAsync(Guid fileId, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<TaskFile>> ListForTaskAsync(Guid tenantId, Guid taskId, CancellationToken cancellationToken);
 
@@ -226,6 +232,27 @@ public interface ITaskActivityService
 public interface IRecurrenceCalculator
 {
     DateTimeOffset? CalculateNextExecution(RepetitiveTask schedule, DateTimeOffset afterUtc);
+
+    /// <summary>A UTC moment as the wall-clock time users entered the schedule in.</summary>
+    DateTimeOffset ToLocalTime(DateTimeOffset utc);
+
+    /// <summary>A wall-clock date and time of the users' zone, as a UTC moment.</summary>
+    DateTimeOffset FromLocal(DateOnly date, TimeOnly time);
+
+    /// <summary>False when the zone is UTC itself: then wall-clock and UTC times cannot be told apart.</summary>
+    bool HasOffsetFromUtc { get; }
+}
+
+/// <summary>
+/// TaskManagement:Recurrence. Schedules are entered in the users' wall-clock time (a date and a
+/// time of day in the UI); this is the time zone they mean.
+/// </summary>
+public sealed class RecurrenceOptions
+{
+    public const string SectionName = "TaskManagement:Recurrence";
+
+    /// <summary>IANA or Windows id. Iran has no daylight saving time since 2022.</summary>
+    public string TimeZone { get; set; } = "Asia/Tehran";
 }
 
 /// <summary>
@@ -240,4 +267,29 @@ public interface ITaskSmsSender
     Task<bool> IsEnabledAsync(Guid tenantId, CancellationToken cancellationToken);
 
     Task<Result> SendAsync(Guid tenantId, string phoneNumber, string message, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Sends one of the module's SMS templates (<see cref="TaskSmsTemplateKeys"/>) with these
+    /// placeholder values. A sender without templates sends <paramref name="fallbackText"/>.
+    /// </summary>
+    Task<Result> SendTemplateAsync(
+        Guid tenantId, string phoneNumber, string templateKey, IReadOnlyDictionary<string, string?> values,
+        string fallbackText, CancellationToken cancellationToken) =>
+        SendAsync(tenantId, phoneNumber, fallbackText, cancellationToken);
+}
+
+/// <summary>
+/// The SMS templates TaskManagement sends, by key. Their titles and default texts are registered
+/// with the platform's SMS templates by Nexus.Integrations.TaskNotifications.
+/// </summary>
+public static class TaskSmsTemplateKeys
+{
+    /// <summary>A task was given to someone as its responsible person (new task, or a new responsible). TaskTitle, DueDate, CreatorName.</summary>
+    public const string TaskAssigned = "task_assigned";
+
+    /// <summary>The due date or time of a task changed. TaskTitle, DueDate.</summary>
+    public const string TaskDueChanged = "task_due_changed";
+
+    /// <summary>An occurrence of a recurring task is due. TaskTitle, ExecutionDateTime, ExecutionDate, ExecutionTime.</summary>
+    public const string RecurringTaskReminder = "recurring_task_reminder";
 }

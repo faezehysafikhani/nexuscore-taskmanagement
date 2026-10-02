@@ -10,6 +10,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="8.0.12" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.24" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.24" />
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="8.0.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
@@ -18,17 +21,36 @@
   </ItemGroup>
 
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>
 
   <!-- This project intentionally reaches across module boundaries no other project is allowed
-       to - its whole job is to compose modules together and check the results, the same way a
-       Project Application like Rozet.Api does. See ArchitectureDependencyTests for the
-       complementary check that every *other* project's boundaries are respected. -->
+       to - its whole job is to compose modules together and check the results, the same way an
+       external product host does. See ArchitectureDependencyTests for the complementary check
+       that every *other* project's boundaries are respected. -->
   <ItemGroup>
     <ProjectReference Include="..\NexusCore.Application\NexusCore.Application.csproj" />
     <ProjectReference Include="..\NexusCore.Infrastructure\NexusCore.Infrastructure.csproj" />
     <ProjectReference Include="..\NexusCore.SharedKernel\NexusCore.SharedKernel.csproj" />
+    <!-- AccessControlTests: the modules the task manager uses, composed over HTTP. -->
+    <ProjectReference Include="..\Nexus.TaskManagement\Nexus.TaskManagement.csproj" />
+    <ProjectReference Include="..\Nexus.TaskManagement.Infrastructure\Nexus.TaskManagement.Infrastructure.csproj" />
+    <ProjectReference Include="..\Ticketing.Api\Ticketing.Api.csproj" />
+    <ProjectReference Include="..\Ticketing.Application\Ticketing.Application.csproj" />
+    <ProjectReference Include="..\Ticketing.Infrastructure\Ticketing.Infrastructure.csproj" />
+    <!-- RecurringTaskReminderTests: due recurring tasks through notifications and SMS. -->
+    <ProjectReference Include="..\Nexus.Integrations.TaskNotifications\Nexus.Integrations.TaskNotifications.csproj" />
+    <!-- NotificationInboxTests: the notification endpoints the bell reads. -->
+    <ProjectReference Include="..\Notifications.Api\Notifications.Api.csproj" />
+    <ProjectReference Include="..\Notifications.Infrastructure\Notifications.Infrastructure.csproj" />
+    <!-- ChatTests: direct and team conversations through the real endpoints. -->
+    <ProjectReference Include="..\Chat.Api\Chat.Api.csproj" />
+    <ProjectReference Include="..\Chat.Application\Chat.Application.csproj" />
+    <ProjectReference Include="..\Chat.Infrastructure\Chat.Infrastructure.csproj" />
 
     <ProjectReference Include="..\Nexus.Actions\Nexus.Actions.csproj" />
     <ProjectReference Include="..\Nexus.Actions.Infrastructure\Nexus.Actions.Infrastructure.csproj" />
@@ -44,5 +66,15 @@
     <ProjectReference Include="..\Nexus.ProjectManagement.Risk\Nexus.ProjectManagement.Risk.csproj" />
     <ProjectReference Include="..\Nexus.ProjectManagement.Risk.Infrastructure\Nexus.ProjectManagement.Risk.Infrastructure.csproj" />
   </ItemGroup>
+
+  <!-- Notifications.Api ships an appsettings.json that is not valid JSON; keep it out of this
+       project's output so the test hosts keep loading the one they loaded before. -->
+  <Target Name="SkipNotificationsApiSettings" AfterTargets="GetCopyToOutputDirectoryItems">
+    <ItemGroup>
+      <_NotificationsApiSettings Include="@(_SourceItemsToCopyToOutputDirectory);@(_SourceItemsToCopyToOutputDirectoryAlways)" Condition="$([System.String]::Copy('%(FullPath)').Contains('Notifications.Api')) And '%(Filename)' == 'appsettings'" />
+      <_SourceItemsToCopyToOutputDirectory Remove="@(_NotificationsApiSettings)" />
+      <_SourceItemsToCopyToOutputDirectoryAlways Remove="@(_NotificationsApiSettings)" />
+    </ItemGroup>
+  </Target>
 
 </Project>

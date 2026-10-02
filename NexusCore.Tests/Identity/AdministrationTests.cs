@@ -59,17 +59,18 @@ public sealed class AdministrationTests
     }
 
     [Fact]
-    public void SmsTemplates_CoverTheFourSystemMessages_AndUseOnlyDeclaredPlaceholders()
+    public void SmsTemplates_CoverCoresSystemMessages_AndUseOnlyDeclaredPlaceholders()
     {
-        var keys = SmsTemplateService.Definitions.Select(d => d.Key).ToArray();
+        var definitions = new CoreSmsTemplateCatalog().GetTemplates();
         Assert.Equal(
-            [SmsTemplateKeys.Letter, SmsTemplateKeys.Referral, SmsTemplateKeys.MeetingNotice, SmsTemplateKeys.ProposalRejected],
-            keys);
+            [SmsTemplateKeys.PasswordReset, SmsTemplateKeys.Letter, SmsTemplateKeys.Referral, SmsTemplateKeys.MeetingNotice, SmsTemplateKeys.ProposalRejected],
+            definitions.Select(d => d.Key).ToArray());
 
-        foreach (var definition in SmsTemplateService.Definitions)
+        foreach (var definition in definitions)
         {
-            var used = System.Text.RegularExpressions.Regex.Matches(definition.DefaultText, @"\{([a-z_]+)\}").Select(m => m.Groups[1].Value);
+            var used = System.Text.RegularExpressions.Regex.Matches(definition.DefaultText, @"\{([A-Za-z][A-Za-z0-9_]*)\}").Select(m => m.Groups[1].Value).ToList();
             Assert.All(used, placeholder => Assert.Contains(placeholder, definition.Placeholders));
+            Assert.All(definition.RequiredPlaceholders ?? [], required => Assert.Contains(required, used));
             Assert.True(definition.DefaultText.Length <= SmsTemplateService.MaxTextLength);
         }
     }

@@ -12,7 +12,7 @@ namespace NexusCore.Infrastructure.Persistence;
 /// created the shared DefaultConnection database, every other module's plain EnsureCreatedAsync()
 /// call sees an existing, non-empty database and silently does nothing - its own tables never
 /// get created. That matters here because every module owns its own DbContext, but a host that
-/// composes several of them (see Rozet.Api) points them all at the same DefaultConnection
+/// composes several of them points them all at the same DefaultConnection
 /// database, isolated by schema rather than by physical database (see each module's own
 /// ToTable(name, schema) configuration). With no EF Core Migrations tooling available in this
 /// environment to give each module a real, independent migration history, this instead talks to
@@ -39,6 +39,49 @@ public static class ModuleSchemaInitializer
         }
         catch (SqlException ex) when (ex.Number == 2714)
         {
+        }
+    }
+
+    /// <summary>
+    /// A column added to a module's model after CreateTablesAsync above had already created its
+    /// table elsewhere: that call only creates tables that do not exist yet, so a later column
+    /// (or its index) never reaches an existing deployment on its own. This applies one such
+    /// patch - safe to call on every restart, and a no-op once the column (or index) is there.
+    /// A production deployment with dotnet ef tooling available should apply the module's real
+    /// Migrations instead, the same gap <see cref="EnsureCreatedAsync"/> documents.
+    /// </summary>
+    public static async Task EnsureColumnAsync(
+        DbContext dbContext, string table, string column, string addColumnSql, string? addIndexSql, CancellationToken cancellationToken)
+    {
+        var connection = dbContext.Database.GetDbConnection();
+        var wasClosed = connection.State != System.Data.ConnectionState.Open;
+        if (wasClosed)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        try
+        {
+            await using (var command = connection.CreateCommand())
+            {
+                command.CommandText =
+                    $"IF COL_LENGTH(N'{table}', N'{column}') IS NULL " + addColumnSql;
+                await command.ExecuteNonQueryAsync(cancellationToken);
+            }
+
+            if (addIndexSql is not null)
+            {
+                await using var command = connection.CreateCommand();
+                command.CommandText = addIndexSql;
+                await command.ExecuteNonQueryAsync(cancellationToken);
+            }
+        }
+        finally
+        {
+            if (wasClosed)
+            {
+                await connection.CloseAsync();
+            }
         }
     }
 }

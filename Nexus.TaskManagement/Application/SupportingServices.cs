@@ -15,8 +15,13 @@ public sealed class RepetitiveTaskService(
     ITaskRepository taskRepository,
     IRecurrenceCalculator calculator,
     ITaskManagementUnitOfWork unitOfWork,
-    ICurrentUserContext currentUser) : IRepetitiveTaskService
+    ICurrentUserContext currentUser,
+    ITaskAccessScope access) : IRepetitiveTaskService
 {
+    /// <summary>A schedule is part of its task: only the task's owner (or Tasks.ManageAll) changes it.</summary>
+    private async Task<bool> CanManageTaskAsync(Guid tenantId, Guid taskId, CancellationToken cancellationToken) =>
+        await taskRepository.GetForUpdateAsync(tenantId, taskId, cancellationToken) is { } task && access.CanManage(task);
+
     public async Task<Result<PagedResult<RepetitiveTaskDto>>> ListAsync(
         ListRepetitiveTasksRequest request, CancellationToken cancellationToken)
     {
@@ -67,8 +72,11 @@ public sealed class RepetitiveTaskService(
             return Result.Failure<RepetitiveTaskDto>(Error.NotFound("Task not found."));
         }
 
-        // One schedule per task - the database enforces it too, but failing here gives a
-        // usable message instead of a unique-index violation.
+        if (!access.CanManage(task))
+        {
+            return Result.Failure<RepetitiveTaskDto>(TaskService.NotTaskOwner());
+        }
+
         var existing = await repository.GetByTaskIdAsync(tenantId, request.TaskId, cancellationToken);
         if (existing is not null)
         {
@@ -102,6 +110,11 @@ public sealed class RepetitiveTaskService(
             return Result.Failure<RepetitiveTaskDto>(Error.NotFound("Recurrence schedule not found."));
         }
 
+        if (!await CanManageTaskAsync(currentUser.TenantId.Value, schedule.TaskId, cancellationToken))
+        {
+            return Result.Failure<RepetitiveTaskDto>(TaskService.NotTaskOwner());
+        }
+
         TaskService.ApplyRecurrence(schedule, request.Recurrence);
         schedule.SetNextExecution(calculator.CalculateNextExecution(schedule, DateTimeOffset.UtcNow));
 
@@ -122,6 +135,11 @@ public sealed class RepetitiveTaskService(
             return Result.Failure(Error.NotFound("Recurrence schedule not found."));
         }
 
+        if (!await CanManageTaskAsync(currentUser.TenantId.Value, schedule.TaskId, cancellationToken))
+        {
+            return Result.Failure(TaskService.NotTaskOwner());
+        }
+
         repository.Remove(schedule);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success();
@@ -139,6 +157,11 @@ public sealed class RepetitiveTaskService(
         if (schedule is null)
         {
             return Result.Failure<RepetitiveTaskDto>(Error.NotFound("Recurrence schedule not found."));
+        }
+
+        if (!await CanManageTaskAsync(currentUser.TenantId.Value, schedule.TaskId, cancellationToken))
+        {
+            return Result.Failure<RepetitiveTaskDto>(TaskService.NotTaskOwner());
         }
 
         if (isActive)
@@ -164,7 +187,8 @@ public sealed class TagService(
     ITagRepository repository,
     ITaskRepository taskRepository,
     ITaskManagementUnitOfWork unitOfWork,
-    ICurrentUserContext currentUser) : ITagService
+    ICurrentUserContext currentUser,
+    ITaskAccessScope access) : ITagService
 {
     public async Task<Result<IReadOnlyList<TagDto>>> ListAsync(string? search, CancellationToken cancellationToken)
     {
@@ -237,7 +261,6 @@ public sealed class TagService(
             return Result.Failure(Error.NotFound("Tag not found."));
         }
 
-        // TaskTags cascades from Tags, so the links go with it.
         repository.Remove(tag);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success();
@@ -263,14 +286,10 @@ public sealed class TagService(
             return Result.Failure(Error.NotFound("Tag not found."));
         }
 
-        if (taskId is { } t && await taskRepository.GetForUpdateAsync(tenantId, t, cancellationToken) is null)
+        var authorization = await EnsureCanManageTargetAsync(tenantId, taskId, subTaskId, cancellationToken);
+        if (authorization.IsFailure)
         {
-            return Result.Failure(Error.NotFound("Task not found."));
-        }
-
-        if (subTaskId is { } s && await taskRepository.GetSubTaskAsync(tenantId, s, cancellationToken) is null)
-        {
-            return Result.Failure(Error.NotFound("Subtask not found."));
+            return authorization;
         }
 
         if (await repository.FindLinkAsync(tagId, taskId, subTaskId, cancellationToken) is not null)
@@ -301,15 +320,18 @@ public sealed class TagService(
             return Result.Failure(Error.Unauthorized());
         }
 
+        var authorization = await EnsureCanManageTargetAsync(currentUser.TenantId.Value, taskId, subTaskId, cancellationToken);
+        if (authorization.IsFailure)
+        {
+            return authorization;
+        }
+
         var link = await repository.FindLinkAsync(tagId, taskId, subTaskId, cancellationToken);
         if (link is null)
         {
             return Result.Success();
         }
 
-        // One row may carry both owners. Detach only the side being removed and keep the row
-        // alive while the other side still points at something - deleting outright would
-        // silently drop the surviving link.
         if (taskId is not null)
         {
             link.DetachTask();
@@ -327,6 +349,44 @@ public sealed class TagService(
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }
+
+    private async Task<Result> EnsureCanManageTargetAsync(
+        Guid tenantId, Guid? taskId, Guid? subTaskId, CancellationToken cancellationToken)
+    {
+        if (taskId is { } t)
+        {
+            var task = await taskRepository.GetForUpdateAsync(tenantId, t, cancellationToken);
+            if (task is null)
+            {
+                return Result.Failure(Error.NotFound("Task not found."));
+            }
+
+            return access.CanManage(task)
+                ? Result.Success()
+                : Result.Failure(TaskService.NotTaskOwner());
+        }
+
+        if (subTaskId is { } s)
+        {
+            var subTask = await taskRepository.GetSubTaskAsync(tenantId, s, cancellationToken);
+            if (subTask is null)
+            {
+                return Result.Failure(Error.NotFound("Subtask not found."));
+            }
+
+            var parent = await taskRepository.GetForUpdateAsync(tenantId, subTask.TaskId, cancellationToken);
+            if (parent is null)
+            {
+                return Result.Failure(Error.NotFound("Task not found."));
+            }
+
+            return access.CanManage(parent)
+                ? Result.Success()
+                : Result.Failure(TaskService.NotTaskOwner());
+        }
+
+        return Result.Failure(Error.Validation("A task or subtask id is required."));
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -339,7 +399,8 @@ public sealed class TaskFileService(
     ITaskCommentRepository commentRepository,
     ITaskManagementUnitOfWork unitOfWork,
     ICurrentUserContext currentUser,
-    IFileStorage fileStorage) : ITaskFileService
+    IFileStorage fileStorage,
+    ITaskAccessScope access) : ITaskFileService
 {
     public Task<Result<TaskFileDto>> UploadToTaskAsync(
         Guid taskId, UploadFileRequest request, CancellationToken cancellationToken) =>
@@ -368,41 +429,18 @@ public sealed class TaskFileService(
             return Result.Failure<TaskFileDto>(Error.Validation("The uploaded file is empty."));
         }
 
-        // Measured from the bytes actually received, never from a client-supplied length.
         if (request.Content.Length > TaskFileAsset.MaxFileSizeBytes)
         {
             return Result.Failure<TaskFileDto>(Error.Validation(
                 $"File is too large. The maximum size is {TaskFileAsset.MaxFileSizeBytes} bytes (200 KB)."));
         }
 
-        if (taskId is { } t && await taskRepository.GetForUpdateAsync(tenantId, t, cancellationToken) is null)
+        var authorization = await EnsureCanModifyTargetAsync(tenantId, taskId, subTaskId, commentId, cancellationToken);
+        if (authorization.IsFailure)
         {
-            return Result.Failure<TaskFileDto>(Error.NotFound("Task not found."));
+            return Result.Failure<TaskFileDto>(authorization.Error);
         }
 
-        if (subTaskId is { } s && await taskRepository.GetSubTaskAsync(tenantId, s, cancellationToken) is null)
-        {
-            return Result.Failure<TaskFileDto>(Error.NotFound("Subtask not found."));
-        }
-
-        if (commentId is { } c)
-        {
-            var comment = await commentRepository.GetByIdAsync(tenantId, c, cancellationToken);
-            if (comment is null)
-            {
-                return Result.Failure<TaskFileDto>(Error.NotFound("Comment not found."));
-            }
-
-            // Attachments are part of what the author wrote; nobody else can add to it.
-            if (comment.UserId != currentUser.UserId)
-            {
-                return Result.Failure<TaskFileDto>(Error.Forbidden("You can only attach files to your own comments."));
-            }
-        }
-
-        // The client's filename is display data only. The bytes go through the platform file
-        // storage, which generates its own key, so a crafted name cannot escape the storage
-        // folder or overwrite anything.
         var displayName = Path.GetFileName(request.FileName);
         if (string.IsNullOrWhiteSpace(displayName))
         {
@@ -440,7 +478,6 @@ public sealed class TaskFileService(
         }
         catch
         {
-            // The row was not written, so the stored bytes would be unreachable: remove them.
             await fileStorage.DeleteAsync(stored.StorageKey, cancellationToken);
             throw;
         }
@@ -458,7 +495,7 @@ public sealed class TaskFileService(
         }
 
         var asset = await repository.GetAssetAsync(currentUser.TenantId.Value, fileId, cancellationToken);
-        if (asset is null)
+        if (asset is null || !await repository.IsReachableAsync(fileId, cancellationToken))
         {
             return Result.Failure<FileDownload>(Error.NotFound("File not found."));
         }
@@ -494,14 +531,11 @@ public sealed class TaskFileService(
             return Result.Failure(Error.NotFound("File not found."));
         }
 
-        // A comment's attachment belongs to the comment's author.
-        if (link.CommentId is { } commentId)
+        var authorization = await EnsureCanModifyTargetAsync(
+            currentUser.TenantId.Value, link.TaskId, link.SubTaskId, link.CommentId, cancellationToken);
+        if (authorization.IsFailure)
         {
-            var comment = await commentRepository.GetByIdAsync(currentUser.TenantId.Value, commentId, cancellationToken);
-            if (comment is not null && comment.UserId != currentUser.UserId)
-            {
-                return Result.Failure(Error.Forbidden("You can only remove files from your own comments."));
-            }
+            return authorization;
         }
 
         var storageKey = asset.StoragePath;
@@ -531,6 +565,57 @@ public sealed class TaskFileService(
 
         var links = await repository.ListForSubTaskAsync(currentUser.TenantId.Value, subTaskId, cancellationToken);
         return Result.Success<IReadOnlyList<TaskFileDto>>(links.Select(TaskService.ToDto).ToList());
+    }
+
+    private async Task<Result> EnsureCanModifyTargetAsync(
+        Guid tenantId, Guid? taskId, Guid? subTaskId, Guid? commentId, CancellationToken cancellationToken)
+    {
+        if (taskId is { } t)
+        {
+            var task = await taskRepository.GetForUpdateAsync(tenantId, t, cancellationToken);
+            if (task is null)
+            {
+                return Result.Failure(Error.NotFound("Task not found."));
+            }
+
+            return access.CanManage(task)
+                ? Result.Success()
+                : Result.Failure(TaskService.NotTaskOwner());
+        }
+
+        if (subTaskId is { } s)
+        {
+            var subTask = await taskRepository.GetSubTaskAsync(tenantId, s, cancellationToken);
+            if (subTask is null)
+            {
+                return Result.Failure(Error.NotFound("Subtask not found."));
+            }
+
+            var parent = await taskRepository.GetForUpdateAsync(tenantId, subTask.TaskId, cancellationToken);
+            if (parent is null)
+            {
+                return Result.Failure(Error.NotFound("Task not found."));
+            }
+
+            return access.CanManage(parent)
+                ? Result.Success()
+                : Result.Failure(TaskService.NotTaskOwner());
+        }
+
+        if (commentId is { } c)
+        {
+            var comment = await commentRepository.GetByIdAsync(tenantId, c, cancellationToken);
+            if (comment is null)
+            {
+                return Result.Failure(Error.NotFound("Comment not found."));
+            }
+
+            return comment.UserId == currentUser.UserId
+                ? Result.Success()
+                : Result.Failure(Error.Forbidden("You can only modify files on your own comments."));
+        }
+
+        return Result.Failure(Error.Validation("A task, subtask or comment id is required."));
     }
 }
 
@@ -564,8 +649,6 @@ public sealed class NoteService(
 
         var note = await repository.GetByIdAsync(currentUser.TenantId.Value, id, cancellationToken);
 
-        // Notes are private. An someone else's id is reported as not-found rather than
-        // forbidden, so the endpoint cannot be used to probe which ids exist.
         return note is null || note.UserId != currentUser.UserId.Value
             ? Result.Failure<NoteDto>(Error.NotFound("Note not found."))
             : Result.Success(ToDto(note));
@@ -704,8 +787,6 @@ public sealed class TaskCommentService(
             return Result.Failure<TaskCommentDto>(Error.NotFound("Comment not found."));
         }
 
-        // Only the author may edit their own words. Forbidden (403), not Unauthorized (401): the
-        // caller is signed in, and a 401 would make a client drop its session.
         if (comment.UserId != currentUser.UserId.Value)
         {
             return Result.Failure<TaskCommentDto>(Error.Forbidden("You can only edit your own comments."));
@@ -736,8 +817,6 @@ public sealed class TaskCommentService(
             return Result.Failure(Error.Forbidden("You can only delete your own comments."));
         }
 
-        // The file links point at the comment with NoAction, so they go first; the stored
-        // contents are removed once the rows are gone.
         var storageKeys = await fileRepository.ClearForCommentAsync(comment.Id, cancellationToken);
         repository.Remove(comment);
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -759,4 +838,3 @@ public sealed class TaskCommentService(
         new(comment.Id, comment.TaskId, comment.UserId, displayName,
             comment.Text, comment.CreatedAtUtc, comment.ModifiedAtUtc, files);
 }
-

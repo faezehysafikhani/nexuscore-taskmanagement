@@ -8,7 +8,7 @@ public static class ProjectWorkflowPermissions
 
     public static IReadOnlyList<PermissionDefinition> All { get; } =
     [
-        new(Configure, "ProjectWorkflow", "Configure project-specific workflow overrides")
+        new(Configure, "ProjectWorkflow", "پیکربندی گردش‌کار اختصاصی پروژه")
     ];
 }
 
