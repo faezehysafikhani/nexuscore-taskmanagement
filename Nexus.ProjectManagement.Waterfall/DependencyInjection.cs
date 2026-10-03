@@ -24,6 +24,7 @@ public static class DependencyInjection
         services.AddScoped<IScheduleService, ScheduleService>();
         services.AddScoped<IScheduleBaselineService, ScheduleBaselineService>();
         services.AddScoped<IProgressCurveService, ProgressCurveService>();
+        services.AddScoped<IMsProjectService, MsProjectService>();
 
         // Defaults that an installed integration replaces: no calendars known (every day is a
         // working day), and the system clock.

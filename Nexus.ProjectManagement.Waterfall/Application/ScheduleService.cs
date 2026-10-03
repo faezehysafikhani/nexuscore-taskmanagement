@@ -80,7 +80,7 @@ public sealed class ScheduleService(
             .Where(a => a.UsedDefaultDuration)
             .Select(a => $"'{a.Name}' has no duration or dates; one day is assumed."));
 
-        return (Result.Success(new ScheduleCalculation(projectId, computed.Value, calendar is not null, warnings)),
+        return (Result.Success(new ScheduleCalculation(projectId, computed.Value, calendar is not null, warnings, calendar ?? AllDaysCalendar.Instance)),
             activities.ToDictionary(a => a.Id));
     }
 

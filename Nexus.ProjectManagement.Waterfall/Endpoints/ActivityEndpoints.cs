@@ -60,6 +60,7 @@ public static class ActivityEndpoints
         app.MapScheduleEndpoints();
         app.MapScheduleBaselineEndpoints();
         app.MapProgressCurveEndpoints();
+        app.MapMsProjectEndpoints();
 
         return app;
     }
