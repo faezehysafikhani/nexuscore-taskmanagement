@@ -21,6 +21,7 @@ public static class DependencyInjection
         services.AddScoped<IProjectDocumentService, ProjectDocumentService>();
         services.AddScoped<IValidator<UploadProjectDocumentRequest>, UploadProjectDocumentRequestValidator>();
         services.AddScoped<IValidator<UpdateProjectDocumentRequest>, UpdateProjectDocumentRequestValidator>();
+        services.AddScoped<IValidator<UploadProjectDocumentVersionRequest>, UploadProjectDocumentVersionRequestValidator>();
         services.AddSingleton<IPermissionCatalog, ProjectDocumentPermissionCatalog>();
 
         services.AddScoped<IDomainEventHandler<ApprovalGranted>, ProjectDocumentApprovalGrantedHandler>();

@@ -25,4 +25,21 @@ public sealed class ProjectDocumentRepository(ProjectDocumentsDbContext dbContex
         dbContext.ProjectDocuments.Remove(document);
         return Task.CompletedTask;
     }
+
+    public async Task<IReadOnlyList<ProjectDocumentVersion>> ListVersionsAsync(Guid documentId, CancellationToken cancellationToken) =>
+        await dbContext.ProjectDocumentVersions
+            .Where(version => version.DocumentId == documentId)
+            .OrderBy(version => version.VersionNumber)
+            .ToListAsync(cancellationToken);
+
+    public async Task AddVersionAsync(ProjectDocumentVersion version, CancellationToken cancellationToken)
+    {
+        await dbContext.ProjectDocumentVersions.AddAsync(version, cancellationToken);
+    }
+
+    public Task RemoveVersionsAsync(IReadOnlyCollection<ProjectDocumentVersion> versions, CancellationToken cancellationToken)
+    {
+        dbContext.ProjectDocumentVersions.RemoveRange(versions);
+        return Task.CompletedTask;
+    }
 }

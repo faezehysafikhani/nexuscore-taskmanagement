@@ -8,6 +8,7 @@ public sealed class ProjectDocumentsDbContext(DbContextOptions<ProjectDocumentsD
     : DbContext(options), IDocumentsUnitOfWork
 {
     public DbSet<ProjectDocument> ProjectDocuments => Set<ProjectDocument>();
+    public DbSet<ProjectDocumentVersion> ProjectDocumentVersions => Set<ProjectDocumentVersion>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

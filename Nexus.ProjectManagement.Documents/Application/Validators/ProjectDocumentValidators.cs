@@ -12,6 +12,15 @@ public sealed class UploadProjectDocumentRequestValidator : AbstractValidator<Up
     }
 }
 
+public sealed class UploadProjectDocumentVersionRequestValidator : AbstractValidator<UploadProjectDocumentVersionRequest>
+{
+    public UploadProjectDocumentVersionRequestValidator()
+    {
+        RuleFor(x => x.FileName).NotEmpty().MaximumLength(260);
+        RuleFor(x => x.Comment).MaximumLength(1000);
+    }
+}
+
 public sealed class UpdateProjectDocumentRequestValidator : AbstractValidator<UpdateProjectDocumentRequest>
 {
     public UpdateProjectDocumentRequestValidator()

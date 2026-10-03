@@ -1796,6 +1796,14 @@ Requires ProjectManagement.Core. Uses NexusCore's shared local-disk `IFileStorag
 namespace: `ProjectDocuments.*` (`View`, `Upload`, `Edit`, `Delete`, `Submit`). Base route:
 `/api/project-management/documents`.
 
+**Version history.** Every file uploaded for a document is kept. The document itself always describes
+its *current* (newest) file, so every endpoint below that does not mention versions behaves as before:
+`fileName`, `contentType`, `sizeBytes` and `/download` are the current version's. `currentVersion` says
+which version that is (1 for a document that has only ever had one file). Uploading a new version never
+overwrites or deletes an older file, and deleting the document deletes all of its files.
+**Existing databases need `docs/upgrade/2026-10-03-add-document-versions.sql` first** (a new table and a
+new column; it also records every existing document as version 1).
+
 ### Module: Project Documents
 Method: GET
 Route: /api/project-management/documents
@@ -1807,7 +1815,7 @@ Response:
   {
     "id": "guid", "tenantId": "guid", "projectId": "guid", "description": "string",
     "documentType": 0, "registerDate": "2026-01-01", "fileName": "string", "contentType": "string",
-    "sizeBytes": 12345, "approvalStatus": 0, "createdByUserId": "guid | null"
+    "sizeBytes": 12345, "approvalStatus": 0, "createdByUserId": "guid | null", "currentVersion": 1
   }
 ]
 ```
@@ -1857,6 +1865,60 @@ Status Codes: 200, 400, 401, 403, 404
 ---
 
 ### Module: Project Documents
+Method: GET
+Route: /api/project-management/documents/{id}/versions
+Description: A document's full file history, newest first. Exactly one entry has `isCurrent: true`.
+Path Parameters: id (Guid, required)
+Response:
+```json
+[
+  {
+    "id": "guid | null", "documentId": "guid", "versionNumber": 2, "fileName": "plan-v2.pdf",
+    "contentType": "application/pdf", "sizeBytes": 20480, "comment": "string | null",
+    "isCurrent": true, "createdByUserId": "guid | null", "createdAtUtc": "2026-10-03T10:00:00+00:00"
+  }
+]
+```
+`id` is `null` only for a document uploaded before version history existed and not yet given a second file:
+its one file is reported as version 1 without a stored row. Needs `ProjectDocuments.View`.
+
+Status Codes: 200, 401, 403, 404
+
+---
+
+### Module: Project Documents
+Method: POST
+Route: /api/project-management/documents/{id}/versions
+Description: Upload a new file as the document's next version. It becomes the current file; the previous files stay downloadable. Needs `ProjectDocuments.Upload`.
+Content-Type: **multipart/form-data**
+
+Path Parameters: id (Guid, required)
+Request Body (form fields / query):
+```
+file: <binary>
+comment: string (optional, max 1000 — what changed)
+```
+Response: the created version, shaped as in the list above, with `isCurrent: true`.
+
+Rules: a document that is `PendingApproval(1)` refuses a new version (409), because approvers are reviewing the
+current file. Any other document accepts one and goes back to `approvalStatus: 0` (NotSubmitted) — the new file has
+not been approved, so an earlier approval does not carry over.
+
+Status Codes: 200, 400, 401, 403, 404, 409
+
+---
+
+### Module: Project Documents
+Method: GET
+Route: /api/project-management/documents/{id}/versions/{versionNumber}/download
+Description: Download one specific version's file.
+Path Parameters: id (Guid, required), versionNumber (int, required)
+Response: **binary file stream** — not JSON.
+Status Codes: 200, 401, 403, 404
+
+---
+
+### Module: Project Documents
 Method: PUT
 Route: /api/project-management/documents/{id}
 Description: Update a document's description/type (not the file content).
@@ -1873,7 +1935,7 @@ Status Codes: 200, 400, 401, 403, 404
 ### Module: Project Documents
 Method: DELETE
 Route: /api/project-management/documents/{id}
-Description: Delete a document (metadata and stored file).
+Description: Delete a document: its metadata and the stored file of every version.
 Path Parameters: id (Guid, required)
 Response: empty body.
 Status Codes: 204, 401, 403, 404

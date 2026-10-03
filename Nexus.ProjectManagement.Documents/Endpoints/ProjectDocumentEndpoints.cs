@@ -53,6 +53,33 @@ public static class ProjectDocumentEndpoints
             })
             .RequireAuthorization(ProjectDocumentPermissions.Upload);
 
+        group.MapGet("/{id:guid}/versions", async (Guid id, IProjectDocumentService service, CancellationToken cancellationToken) =>
+                (await service.ListVersionsAsync(id, cancellationToken)).ToApiResult())
+            .RequireAuthorization(ProjectDocumentPermissions.View);
+
+        group.MapPost("/{id:guid}/versions", async (
+                Guid id, IFormFile file, string? comment, IProjectDocumentService service, CancellationToken cancellationToken) =>
+            {
+                var request = new UploadProjectDocumentVersionRequest(file.FileName, file.ContentType, comment);
+                await using var stream = file.OpenReadStream();
+                return (await service.UploadVersionAsync(id, request, stream, cancellationToken)).ToApiResult();
+            })
+            .RequireAuthorization(ProjectDocumentPermissions.Upload);
+
+        group.MapGet("/{id:guid}/versions/{versionNumber:int}/download", async (
+                Guid id, int versionNumber, IProjectDocumentService service, CancellationToken cancellationToken) =>
+            {
+                var result = await service.DownloadVersionAsync(id, versionNumber, cancellationToken);
+                if (result.IsFailure)
+                {
+                    return result.ToApiResult();
+                }
+
+                var (content, fileName, contentType) = result.Value;
+                return Results.File(content, contentType, fileName);
+            })
+            .RequireAuthorization(ProjectDocumentPermissions.View);
+
         group.MapPut("/{id:guid}", async (Guid id, UpdateProjectDocumentRequest request, IProjectDocumentService service, CancellationToken cancellationToken) =>
                 (await service.UpdateAsync(id, request, cancellationToken)).ToApiResult())
             .RequireAuthorization(ProjectDocumentPermissions.Edit);
