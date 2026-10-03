@@ -866,7 +866,19 @@ Status Codes: 200, 401, 403, 404
 ## 8. Waterfall Activities
 
 Requires ProjectManagement.Core. Permission namespace: `WaterfallActivities.*` (`View`, `Create`,
-`Edit`, `Delete`, `Submit`). Base route: `/api/project-management/waterfall/activities`.
+`Edit`, `Delete`, `Submit`) plus `WaterfallSchedule.Manage` for everything that shapes the plan rather
+than one activity (dependencies, applying a schedule, baselines, progress snapshots, MS Project import).
+Base route: `/api/project-management/waterfall/activities`; the scheduling features below live under
+`/api/project-management/waterfall/...` and are mapped by the same `MapWaterfallEndpoints()` call.
+
+**Existing databases need `docs/upgrade/2026-10-03-add-waterfall-scheduling.sql` first** (one new column
+and four new tables).
+
+Activity changes in this release: a `milestone` flag (`isMilestone`, in every response; optional on
+create and update — on update, omitted means unchanged). A milestone has `durationDays: 0`, its end date
+is its start date, and it is always a leaf. A parent must now exist in the same project, must not be a
+milestone, must not be the activity itself or one of its own descendants, and must not carry dependency
+links (checked only when the parent changes).
 
 ### Module: Waterfall Activities
 Method: GET
@@ -882,7 +894,7 @@ Response:
     "responsibleUserId": "guid | null", "approverUserId": "guid | null",
     "startDate": "2026-01-01 | null", "endDate": "2026-01-01 | null",
     "durationDays": 5, "manHours": 40.0, "weight": 1.0,
-    "plannedProgress": 0.0, "actualProgress": 0.0, "approvalStatus": 0
+    "plannedProgress": 0.0, "actualProgress": 0.0, "approvalStatus": 0, "isMilestone": false
   }
 ]
 ```
@@ -979,6 +991,281 @@ Response (when no generator is configured, i.e. always in this codebase's defaul
 RFC 7807 Problem Details, `status: 501`, `detail: "WBS generation is not configured for this deployment."`
 
 Status Codes: 200 (if a provider is plugged in), 401, 403, 501 (default — no provider registered)
+
+---
+
+### Module: Waterfall Dependencies
+Method: GET
+Route: /api/project-management/waterfall/dependencies
+Description: A project's dependency links.
+Query Parameters: projectId (Guid, required)
+Response:
+```json
+[ { "id": "guid", "tenantId": "guid", "projectId": "guid", "predecessorActivityId": "guid", "successorActivityId": "guid", "type": 0, "lagDays": 0 } ]
+```
+`type`: see [DependencyType](#dependencytype-waterfall). `lagDays` is in working days; negative means the
+successor may overlap the predecessor (a lead).
+
+Status Codes: 200, 401, 403
+
+---
+
+### Module: Waterfall Dependencies
+Method: POST
+Route: /api/project-management/waterfall/dependencies
+Description: Link two activities. Needs `WaterfallSchedule.Manage`.
+Request Body:
+```json
+{ "tenantId": "guid", "projectId": "guid", "predecessorActivityId": "guid", "successorActivityId": "guid", "type": 0, "lagDays": 0 }
+```
+`type` defaults to FinishToStart (0) and `lagDays` to 0; `lagDays` must be between -365 and 365.
+Rules: both activities must exist in the project (404) and must have no sub-activities (400 — a summary's
+dates are the span of its children); an activity cannot depend on itself (400); a pair of activities has at most
+one link (409) and a link may not close a loop (409).
+Response: the created link.
+Status Codes: 200, 400, 401, 403, 404, 409
+
+---
+
+### Module: Waterfall Dependencies
+Method: PUT
+Route: /api/project-management/waterfall/dependencies/{id}
+Description: Change a link's type and lag. Needs `WaterfallSchedule.Manage`.
+Request Body: `{ "type": 1, "lagDays": 2 }`
+Response: the updated link.
+Status Codes: 200, 400, 401, 403, 404
+
+---
+
+### Module: Waterfall Dependencies
+Method: DELETE
+Route: /api/project-management/waterfall/dependencies/{id}
+Description: Remove a link. Needs `WaterfallSchedule.Manage`. (Deleting an activity removes its links too.)
+Response: empty on success.
+Status Codes: 200, 401, 403, 404
+
+---
+
+### Module: Waterfall Schedule
+Method: GET
+Route: /api/project-management/waterfall/schedule
+Description: Calculate the project's critical-path schedule. Changes nothing.
+Query Parameters: projectId (Guid, required)
+Response:
+```json
+{
+  "projectId": "guid", "projectStart": "2026-03-02", "projectFinish": "2026-03-13", "projectDurationDays": 10,
+  "usesWorkCalendar": true, "plannedProgress": 40.0, "actualProgress": 25.0,
+  "criticalPath": ["guid", "guid"],
+  "activities": [
+    {
+      "id": "guid", "parentActivityId": "guid | null", "name": "string", "isSummary": false, "isMilestone": false,
+      "start": "2026-03-02", "finish": "2026-03-04", "durationDays": 3,
+      "lateStart": "2026-03-02", "lateFinish": "2026-03-04", "totalFloatDays": 0, "isCritical": true,
+      "plannedProgress": 40.0, "actualProgress": 25.0, "usedDefaultDuration": false
+    }
+  ],
+  "warnings": ["string"], "applied": false
+}
+```
+How it is calculated: durations, lags and float are in working days of the project's work calendar (every
+day counts when the project has none, or the Calendar integration is not installed — `usesWorkCalendar`
+says which). Each dependency type becomes a constraint on the successor (FS: starts after the predecessor
+finishes; SS: starts after it starts; FF: finishes after it finishes; SF: finishes after it starts), plus the lag.
+An activity with no predecessor starts on its own `startDate`, or on the project's start; an activity with
+predecessors is driven by them alone (its stored dates are ignored). `totalFloatDays` is how long an activity can
+slip without delaying the project; zero means critical, and `criticalPath` lists the critical leaf activities in
+start order. Milestones sit on the day the work before them finishes. A summary spans its children, and its
+float is its children's smallest. `plannedProgress`/`actualProgress` are the weighted roll-up of the stored
+per-activity progress: by `weight` when any sibling has one, else by duration, else equally. An activity with
+no duration and no dates is given one day (`usedDefaultDuration`, and a warning).
+
+Errors: 404 unknown project; 409 the stored links contain a cycle; 400 a calendar with no working days or a duration over 36500 days.
+
+Status Codes: 200, 400, 401, 403, 404, 409
+
+---
+
+### Module: Waterfall Schedule
+Method: POST
+Route: /api/project-management/waterfall/schedule/apply
+Description: Calculate the schedule and write each activity's start, end and duration back to it (summaries included). Idempotent: applying twice changes nothing the second time. Needs `WaterfallSchedule.Manage`.
+Query Parameters: projectId (Guid, required)
+Response: the same as the GET above, with `applied: true`.
+Status Codes: 200, 400, 401, 403, 404, 409
+
+---
+
+### Module: Waterfall Baselines
+Method: GET
+Route: /api/project-management/waterfall/baselines
+Description: A project's baselines, in number order.
+Query Parameters: projectId (Guid, required)
+Response:
+```json
+[ { "id": "guid", "tenantId": "guid", "projectId": "guid", "number": 1, "name": "Approved plan", "note": "string | null",
+    "projectStart": "2026-03-02", "projectFinish": "2026-06-30", "activityCount": 12, "createdAtUtc": "2026-03-01T09:00:00+00:00", "createdByUserId": "guid | null" } ]
+```
+A baseline is a frozen copy of the project's *calculated* schedule (dependencies and calendar applied, not just
+stored dates), numbered 1, 2, 3… per project, never edited. It keeps describing activities as they were even if they
+are later renamed, moved or deleted.
+
+Status Codes: 200, 401, 403
+
+---
+
+### Module: Waterfall Baselines
+Method: GET
+Route: /api/project-management/waterfall/baselines/{id}
+Description: One baseline with its per-activity rows.
+Path Parameters: id (Guid, required)
+Response: `{ "baseline": { …as above… }, "activities": [ { "activityId": "guid", "parentActivityId": "guid | null", "name": "string", "isSummary": false, "isMilestone": false, "startDate": "2026-03-02", "endDate": "2026-03-04", "durationDays": 3 } ] }`
+Status Codes: 200, 401, 403, 404
+
+---
+
+### Module: Waterfall Baselines
+Method: POST
+Route: /api/project-management/waterfall/baselines
+Description: Freeze the project's current calculated schedule as the next baseline. Needs `WaterfallSchedule.Manage`.
+Request Body: `{ "tenantId": "guid", "projectId": "guid", "name": "Approved plan", "note": "string | null" }`
+Response: the created baseline with its rows. A project holds at most 50 baselines (409); a project with no activities has nothing to baseline (400). A new baseline takes the highest existing number plus one.
+Status Codes: 200, 400, 401, 403, 404, 409
+
+---
+
+### Module: Waterfall Baselines
+Method: GET
+Route: /api/project-management/waterfall/baselines/{id}/variance
+Description: Compare the project's current calculated schedule with a baseline.
+Path Parameters: id (Guid, required)
+Response:
+```json
+{
+  "baselineId": "guid", "number": 1, "name": "Approved plan", "projectId": "guid",
+  "baselineProjectStart": "2026-03-02", "baselineProjectFinish": "2026-06-30",
+  "currentProjectStart": "2026-03-02", "currentProjectFinish": "2026-07-08",
+  "projectStartVarianceDays": 0, "projectFinishVarianceDays": 8,
+  "onTrackCount": 7, "lateCount": 4, "earlyCount": 1, "addedCount": 1, "removedCount": 0,
+  "activities": [
+    {
+      "activityId": "guid", "name": "string", "isSummary": false, "isMilestone": false, "status": 1,
+      "baselineStart": "2026-03-02", "baselineFinish": "2026-03-04", "baselineDurationDays": 3,
+      "currentStart": "2026-03-02", "currentFinish": "2026-03-06", "currentDurationDays": 5,
+      "startVarianceDays": 0, "finishVarianceDays": 2, "durationVarianceDays": 2
+    }
+  ]
+}
+```
+Variances are current minus baseline: positive means later/longer. Start and finish variances are in **calendar
+days**; the duration variance is in working days. `status` (see [VarianceStatus](#variancestatus-waterfall)) is judged
+by the finish. For an added or removed activity the missing side's fields are `null`.
+
+Status Codes: 200, 400, 401, 403, 404, 409
+
+---
+
+### Module: Waterfall Baselines
+Method: DELETE
+Route: /api/project-management/waterfall/baselines/{id}
+Description: Delete a baseline and its rows. Needs `WaterfallSchedule.Manage`.
+Path Parameters: id (Guid, required)
+Response: empty on success.
+Status Codes: 200, 401, 403, 404
+
+---
+
+### Module: Waterfall Progress Curve
+Method: GET
+Route: /api/project-management/waterfall/s-curve
+Description: The data behind a project's S-curve.
+Query Parameters: projectId (Guid, required), stepDays (int, optional, 1-90, default 7)
+Response:
+```json
+{
+  "projectId": "guid", "projectStart": "2026-03-02", "projectFinish": "2026-06-30", "stepDays": 7, "today": "2026-04-01",
+  "planned": [ { "date": "2026-03-02", "plannedProgress": 3.5 }, { "date": "2026-03-09", "plannedProgress": 11.0 } ],
+  "actual": [ { "date": "2026-03-16", "actualProgress": 9.0, "plannedProgress": 17.0 } ],
+  "currentPlannedProgress": 42.0, "currentActualProgress": 35.5, "progressVariance": -6.5, "schedulePerformanceIndex": 0.85
+}
+```
+`planned` is calculated from the schedule alone — each activity completes evenly over its working days (a milestone
+all at once), combined with the same weighting as the roll-up — sampled every `stepDays` days from start to finish; the
+finish date is always the last point, and a very long project is sampled more coarsely (about 1000 points at most;
+`stepDays` in the response is the step actually used). `actual` is the project's snapshots, oldest first: progress
+history is stored nowhere else, so take snapshots periodically. `schedulePerformanceIndex` is actual ÷ planned today
+(`null` while nothing is planned yet); below 1 is behind schedule.
+
+Status Codes: 200, 400, 401, 403, 404, 409
+
+---
+
+### Module: Waterfall Progress Curve
+Method: GET
+Route: /api/project-management/waterfall/progress-snapshots
+Description: A project's progress snapshots, oldest first.
+Query Parameters: projectId (Guid, required)
+Response: `[ { "id": "guid", "tenantId": "guid", "projectId": "guid", "snapshotDate": "2026-03-16", "plannedProgress": 17.0, "actualProgress": 9.0, "note": "string | null", "createdByUserId": "guid | null" } ]`
+Status Codes: 200, 401, 403
+
+---
+
+### Module: Waterfall Progress Curve
+Method: POST
+Route: /api/project-management/waterfall/progress-snapshots
+Description: Record the project's progress as of a date. Needs `WaterfallSchedule.Manage`.
+Request Body: `{ "tenantId": "guid", "projectId": "guid", "snapshotDate": "2026-03-16 | null (today)", "note": "string | null" }`
+Response: the snapshot. `plannedProgress` is what the schedule says should be done by the end of that date; `actualProgress` is the roll-up of the entered activity progress right now. A project has one snapshot per date; posting again for the same date refreshes it.
+Status Codes: 200, 400, 401, 403, 404, 409
+
+---
+
+### Module: Waterfall Progress Curve
+Method: DELETE
+Route: /api/project-management/waterfall/progress-snapshots/{id}
+Description: Delete a snapshot. Needs `WaterfallSchedule.Manage`.
+Path Parameters: id (Guid, required)
+Response: empty on success.
+Status Codes: 200, 401, 403, 404
+
+---
+
+### Module: Waterfall MS Project
+Method: POST
+Route: /api/project-management/waterfall/msproject/import
+Description: Build a project's WBS and dependencies from an MS Project XML (MSPDI) file. Needs `WaterfallSchedule.Manage`.
+Content-Type: **multipart/form-data**
+
+Request Body (form fields / query):
+```
+file: <binary, 1 byte - 20 MB>
+projectId: guid (query)
+replaceExisting: bool (query, optional, default false)
+```
+Response:
+```json
+{ "activitiesImported": 42, "dependenciesImported": 51, "activitiesReplaced": 0, "warnings": ["string"] }
+```
+Outline levels become the tree; milestones, durations (converted to working days using the file's minutes per day),
+percent complete and all four link types with their lags are kept. Resources, assignments, costs, constraints and
+calendars are not imported, and dates are then this system's own calculation (apply the schedule to refresh them).
+A project that already has activities is refused (409) unless `replaceExisting=true`, which deletes every existing
+activity and dependency of the project first; the file is fully validated before anything is deleted, so a bad file
+never costs the existing plan. Links that cannot be kept — to or from summary tasks, to tasks not in the file,
+duplicates, or ones that would form a cycle — are skipped and listed in `warnings`. At most 5000 tasks. DTDs are not
+processed.
+
+Status Codes: 200, 400, 401, 403, 404, 409
+
+---
+
+### Module: Waterfall MS Project
+Method: GET
+Route: /api/project-management/waterfall/msproject/export
+Description: The project's calculated schedule as an MS Project XML file.
+Query Parameters: projectId (Guid, required)
+Response: **an XML file** (`application/xml`, named from the project's code) — not JSON. It contains a project-summary row, the WBS in outline order with start, finish, duration (hours of an 8-hour day), milestone/summary flags, percent complete and predecessor links, and one calendar with the project's working week and holidays.
+Status Codes: 200, 401, 403, 404, 409
 
 ---
 
@@ -2032,6 +2319,19 @@ Status Codes: 200, 400, 401, 403, 404 (project must exist)
 
 ---
 
+## 17a. Project Calendar (integration)
+
+Waterfall × Calendar integration (`Nexus.Integrations.ProjectCalendar`): makes Waterfall's schedule honour each project's
+work calendar — the weekly working days and the holidays/extra working days of the `WorkCalendar` the project points
+at. Neither Waterfall nor Calendar references this project; it depends on both. It owns no data and exposes no
+endpoints. Register it with `AddProjectCalendarIntegration()` (before or after `AddWaterfallPlanning()`).
+
+Without it, Waterfall still works but every day counts as a working day (`usesWorkCalendar: false` on the schedule). A
+project whose calendar cannot be loaded — unknown id, or a calendar of another tenant — falls back the same way and
+the schedule carries a warning.
+
+---
+
 ## 18. Project-Strategy Alignment (integration)
 
 Project family × Strategy integration. Neither Project Core nor Strategy references this project.
@@ -2233,6 +2533,23 @@ Every enum below is serialized as its **raw integer** value in both requests and
 | 1 | KeepInformed | low-to-medium power, high interest |
 | 2 | KeepSatisfied | high power, low-to-medium interest |
 | 3 | ManageClosely | high power, high interest |
+
+### DependencyType (Waterfall)
+| Value | Name | Meaning |
+|---|---|---|
+| 0 | FinishToStart | the successor starts after the predecessor finishes |
+| 1 | StartToStart | the successor starts after the predecessor starts |
+| 2 | FinishToFinish | the successor finishes after the predecessor finishes |
+| 3 | StartToFinish | the successor finishes after the predecessor starts |
+
+### VarianceStatus (Waterfall)
+| Value | Name |
+|---|---|
+| 0 | OnTrack |
+| 1 | Late |
+| 2 | Early |
+| 3 | Added |
+| 4 | Removed |
 
 ### ApprovalStatus (shared across every capability that supports optional approval)
 | Value | Name |
