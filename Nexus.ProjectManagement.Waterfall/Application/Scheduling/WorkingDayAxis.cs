@@ -69,6 +69,11 @@ public sealed class WorkingDayAxis
         return low;
     }
 
+    /// <summary>How many working days have been completed once <paramref name="date"/> is over,
+    /// counting from the axis start: the working days up to and including that date.</summary>
+    public int WorkingDaysThrough(DateOnly date) =>
+        date < _days[0] ? 0 : IndexOf(date) + (_calendar.IsWorkingDay(date) ? 1 : 0);
+
     /// <summary>Working days from <paramref name="start"/> to <paramref name="end"/>, both included (0 when end is before start).</summary>
     public int WorkingDaysBetween(DateOnly start, DateOnly end)
     {
@@ -77,8 +82,7 @@ public sealed class WorkingDayAxis
             return 0;
         }
 
-        var throughEnd = IndexOf(end) + (_calendar.IsWorkingDay(end) ? 1 : 0);
-        return Math.Max(throughEnd - IndexOf(start), 0);
+        return Math.Max(WorkingDaysThrough(end) - IndexOf(start), 0);
     }
 
     private void EnsureCount(int count)

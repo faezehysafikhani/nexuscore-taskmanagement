@@ -499,5 +499,12 @@ public sealed class ScheduleCalculatorTests
         Assert.Equal(3, axis.WorkingDaysBetween(Day(7), Day(9)));
         Assert.Equal(2, axis.WorkingDaysBetween(Day(11), Day(14))); // Fri + Mon
         Assert.Equal(0, axis.WorkingDaysBetween(Day(9), Day(7)));
+
+        // Dates before the axis begins have no working days behind them.
+        Assert.Equal(0, axis.WorkingDaysThrough(Day(0)));
+        Assert.Equal(0, axis.WorkingDaysThrough(Day(6))); // the Sunday just before the first working day
+        Assert.Equal(1, axis.WorkingDaysThrough(Day(7)));
+        Assert.Equal(5, axis.WorkingDaysThrough(Day(12))); // Saturday after the first week: still 5
+        Assert.Equal(0, axis.WorkingDaysBetween(Day(0), Day(6)));
     }
 }

@@ -20,6 +20,7 @@ public static class DependencyInjection
         services.AddScoped<IActivityRepository, ActivityRepository>();
         services.AddScoped<IActivityDependencyRepository, ActivityDependencyRepository>();
         services.AddScoped<IScheduleBaselineRepository, ScheduleBaselineRepository>();
+        services.AddScoped<IProgressSnapshotRepository, ProgressSnapshotRepository>();
 
         return services;
     }

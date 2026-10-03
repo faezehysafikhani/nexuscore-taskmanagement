@@ -93,3 +93,15 @@ internal sealed class FakeBaselineRepository : IScheduleBaselineRepository
         return Task.CompletedTask;
     }
 }
+
+internal sealed class FakeSnapshotRepository : IProgressSnapshotRepository
+{
+    public List<ProgressSnapshot> Items { get; } = [];
+    public Task<ProgressSnapshot?> GetByIdAsync(Guid id, CancellationToken ct) => Task.FromResult(Items.SingleOrDefault(s => s.Id == id));
+    public Task<ProgressSnapshot?> GetByDateAsync(Guid projectId, DateOnly date, CancellationToken ct) =>
+        Task.FromResult(Items.SingleOrDefault(s => s.ProjectId == projectId && s.SnapshotDate == date));
+    public Task<IReadOnlyList<ProgressSnapshot>> ListByProjectAsync(Guid projectId, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<ProgressSnapshot>>(Items.Where(s => s.ProjectId == projectId).OrderBy(s => s.SnapshotDate).ToList());
+    public Task AddAsync(ProgressSnapshot snapshot, CancellationToken ct) { Items.Add(snapshot); return Task.CompletedTask; }
+    public Task RemoveAsync(ProgressSnapshot snapshot, CancellationToken ct) { Items.Remove(snapshot); return Task.CompletedTask; }
+}

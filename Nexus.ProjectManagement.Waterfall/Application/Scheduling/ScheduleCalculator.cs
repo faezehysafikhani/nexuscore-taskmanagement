@@ -186,7 +186,7 @@ public static class ScheduleCalculator
                 LateFinish: leaf.IsMilestone ? DateOfStart(Math.Max(lateStart[id], 1)) : DateOfFinish(lateFinish[id]),
                 floatDays, IsCritical: floatDays == 0,
                 leaf.PlannedProgress, leaf.ActualProgress,
-                start[id], finish[id], defaulted.Contains(id));
+                start[id], finish[id], defaulted.Contains(id), leaf.Weight);
         }
 
         // ---- summaries, deepest first so each one sees finished children; also the progress roll-up
@@ -207,7 +207,7 @@ public static class ScheduleCalculator
                 children.Min(c => c.LateStart), children.Max(c => c.LateFinish),
                 children.Min(c => c.TotalFloatDays), children.Any(c => c.IsCritical),
                 planned, actual,
-                children.Min(c => c.StartIndex), children.Max(c => c.FinishIndex), UsedDefaultDuration: false);
+                children.Min(c => c.StartIndex), children.Max(c => c.FinishIndex), UsedDefaultDuration: false, node.Weight);
         }
 
         var ordered = scheduled.Values.OrderBy(a => a.StartIndex).ThenBy(a => a.Name, StringComparer.Ordinal).ToList();

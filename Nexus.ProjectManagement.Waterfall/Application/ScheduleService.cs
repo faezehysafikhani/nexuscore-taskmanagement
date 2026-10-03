@@ -16,36 +16,42 @@ public sealed class ScheduleService(
 {
     public async Task<Result<ScheduleDto>> GetScheduleAsync(Guid projectId, CancellationToken cancellationToken)
     {
-        var (dto, _) = await CalculateAsync(projectId, applied: false, cancellationToken);
-        return dto;
+        var (calculation, _) = await LoadAndComputeAsync(projectId, cancellationToken);
+        return calculation.IsFailure ? Result.Failure<ScheduleDto>(calculation.Error) : Result.Success(ToDto(calculation.Value!, applied: false));
     }
 
     public async Task<Result<ScheduleDto>> ApplyScheduleAsync(Guid projectId, CancellationToken cancellationToken)
     {
-        var (dto, activities) = await CalculateAsync(projectId, applied: true, cancellationToken);
-        if (dto.IsFailure)
+        var (calculation, activities) = await LoadAndComputeAsync(projectId, cancellationToken);
+        if (calculation.IsFailure)
         {
-            return dto;
+            return Result.Failure<ScheduleDto>(calculation.Error);
         }
 
-        foreach (var scheduled in dto.Value!.Activities)
+        foreach (var scheduled in calculation.Value!.Result.Activities)
         {
             activities[scheduled.Id].ApplySchedule(scheduled.Start, scheduled.Finish, scheduled.DurationDays);
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        return dto;
+        return Result.Success(ToDto(calculation.Value, applied: true));
+    }
+
+    public async Task<Result<ScheduleCalculation>> CalculateAsync(Guid projectId, CancellationToken cancellationToken)
+    {
+        var (calculation, _) = await LoadAndComputeAsync(projectId, cancellationToken);
+        return calculation;
     }
 
     /// <summary>Loads the project's plan and runs the calculator; also returns the activity
     /// entities so Apply can write to them.</summary>
-    internal async Task<(Result<ScheduleDto> Schedule, Dictionary<Guid, Activity> Activities)> CalculateAsync(
-        Guid projectId, bool applied, CancellationToken cancellationToken)
+    private async Task<(Result<ScheduleCalculation> Calculation, Dictionary<Guid, Activity> Activities)> LoadAndComputeAsync(
+        Guid projectId, CancellationToken cancellationToken)
     {
         var project = await projectRepository.GetByIdAsync(projectId, cancellationToken);
         if (project is null)
         {
-            return (Result.Failure<ScheduleDto>(Error.NotFound("Project not found.")), []);
+            return (Result.Failure<ScheduleCalculation>(Error.NotFound("Project not found.")), []);
         }
 
         var activities = await activityRepository.ListByProjectAsync(projectId, cancellationToken);
@@ -67,21 +73,21 @@ public sealed class ScheduleService(
         var computed = ScheduleCalculator.Compute(inputs, links, calendar ?? AllDaysCalendar.Instance, project.StartDate, today);
         if (computed.IsFailure)
         {
-            return (Result.Failure<ScheduleDto>(computed.Error), []);
+            return (Result.Failure<ScheduleCalculation>(computed.Error), []);
         }
 
-        var result = computed.Value!;
-        warnings.AddRange(result.Activities
+        warnings.AddRange(computed.Value!.Activities
             .Where(a => a.UsedDefaultDuration)
             .Select(a => $"'{a.Name}' has no duration or dates; one day is assumed."));
 
-        var dto = new ScheduleDto(
-            projectId, result.ProjectStart, result.ProjectFinish, result.ProjectDurationDays,
-            UsesWorkCalendar: calendar is not null, result.PlannedProgress, result.ActualProgress,
-            result.CriticalPath, result.Activities.Select(ToDto).ToList(), warnings, applied);
-
-        return (Result.Success(dto), activities.ToDictionary(a => a.Id));
+        return (Result.Success(new ScheduleCalculation(projectId, computed.Value, calendar is not null, warnings)),
+            activities.ToDictionary(a => a.Id));
     }
+
+    private static ScheduleDto ToDto(ScheduleCalculation calculation, bool applied) => new(
+        calculation.ProjectId, calculation.Result.ProjectStart, calculation.Result.ProjectFinish, calculation.Result.ProjectDurationDays,
+        calculation.UsesWorkCalendar, calculation.Result.PlannedProgress, calculation.Result.ActualProgress,
+        calculation.Result.CriticalPath, calculation.Result.Activities.Select(ToDto).ToList(), calculation.Warnings, applied);
 
     private static ScheduledActivityDto ToDto(ScheduledActivity a) => new(
         a.Id, a.ParentId, a.Name, a.IsSummary, a.IsMilestone, a.Start, a.Finish, a.DurationDays,

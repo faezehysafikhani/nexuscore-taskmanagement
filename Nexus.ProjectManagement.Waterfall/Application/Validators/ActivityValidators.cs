@@ -49,6 +49,14 @@ public sealed class CreateScheduleBaselineRequestValidator : AbstractValidator<C
     }
 }
 
+public sealed class CreateProgressSnapshotRequestValidator : AbstractValidator<CreateProgressSnapshotRequest>
+{
+    public CreateProgressSnapshotRequestValidator()
+    {
+        RuleFor(x => x.Note).MaximumLength(1000);
+    }
+}
+
 public sealed class UpdateActivityDependencyRequestValidator : AbstractValidator<UpdateActivityDependencyRequest>
 {
     public UpdateActivityDependencyRequestValidator()

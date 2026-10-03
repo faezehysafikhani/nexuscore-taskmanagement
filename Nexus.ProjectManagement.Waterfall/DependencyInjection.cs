@@ -23,6 +23,7 @@ public static class DependencyInjection
         services.AddScoped<IActivityDependencyService, ActivityDependencyService>();
         services.AddScoped<IScheduleService, ScheduleService>();
         services.AddScoped<IScheduleBaselineService, ScheduleBaselineService>();
+        services.AddScoped<IProgressCurveService, ProgressCurveService>();
 
         // Defaults that an installed integration replaces: no calendars known (every day is a
         // working day), and the system clock.
@@ -34,6 +35,7 @@ public static class DependencyInjection
         services.AddScoped<IValidator<CreateActivityDependencyRequest>, CreateActivityDependencyRequestValidator>();
         services.AddScoped<IValidator<UpdateActivityDependencyRequest>, UpdateActivityDependencyRequestValidator>();
         services.AddScoped<IValidator<CreateScheduleBaselineRequest>, CreateScheduleBaselineRequestValidator>();
+        services.AddScoped<IValidator<CreateProgressSnapshotRequest>, CreateProgressSnapshotRequestValidator>();
         services.AddSingleton<IPermissionCatalog, WaterfallPermissionCatalog>();
 
         services.AddScoped<IDomainEventHandler<ApprovalGranted>, ActivityApprovalGrantedHandler>();
