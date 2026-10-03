@@ -57,6 +57,7 @@ public static class ActivityEndpoints
             .RequireAuthorization(WaterfallPermissions.Create);
 
         app.MapActivityDependencyEndpoints();
+        app.MapScheduleEndpoints();
 
         return app;
     }

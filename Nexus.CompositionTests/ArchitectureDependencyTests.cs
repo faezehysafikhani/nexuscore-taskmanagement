@@ -125,6 +125,30 @@ public sealed class ArchitectureDependencyTests
         Assert.Contains("Nexus.Strategy", references);
     }
 
+    [Fact]
+    public void Waterfall_DoesNotDependOnCalendar_TheCalendarIntegrationJoinsTheTwo()
+    {
+        foreach (var project in new[]
+                 {
+                     "Nexus.ProjectManagement.Waterfall/Nexus.ProjectManagement.Waterfall.csproj",
+                     "Nexus.ProjectManagement.Waterfall.Infrastructure/Nexus.ProjectManagement.Waterfall.Infrastructure.csproj"
+                 })
+        {
+            Assert.DoesNotContain("Nexus.Calendar", GetProjectReferences(project));
+            AssertNoReferenceStartingWith(project, "Nexus.Integrations.");
+        }
+
+        foreach (var project in new[] { "Nexus.Calendar/Nexus.Calendar.csproj", "Nexus.Calendar.Infrastructure/Nexus.Calendar.Infrastructure.csproj" })
+        {
+            AssertNoReferenceStartingWith(project, "Nexus.ProjectManagement.");
+            AssertNoReferenceStartingWith(project, "Nexus.Integrations.");
+        }
+
+        var integration = GetProjectReferences("Nexus.Integrations.ProjectCalendar/Nexus.Integrations.ProjectCalendar.csproj");
+        Assert.Contains("Nexus.Calendar", integration);
+        Assert.Contains("Nexus.ProjectManagement.Waterfall", integration);
+    }
+
     private static void AssertNoReferenceStartingWith(string relativeProjectPath, string forbiddenPrefix)
     {
         var references = GetProjectReferences(relativeProjectPath);

@@ -153,6 +153,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nexus.Integrations.TaskNoti
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nexus.TaskManagement.Tests", "Nexus.TaskManagement.Tests\Nexus.TaskManagement.Tests.csproj", "{15D8E056-8ABC-4BD1-B13C-6A15AD191519}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nexus.Integrations.ProjectCalendar", "Nexus.Integrations.ProjectCalendar\Nexus.Integrations.ProjectCalendar.csproj", "{65A7CEDE-F881-4D45-A909-530EF49B3C95}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -415,6 +417,10 @@ Global
 		{15D8E056-8ABC-4BD1-B13C-6A15AD191519}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{15D8E056-8ABC-4BD1-B13C-6A15AD191519}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{15D8E056-8ABC-4BD1-B13C-6A15AD191519}.Release|Any CPU.Build.0 = Release|Any CPU
+		{65A7CEDE-F881-4D45-A909-530EF49B3C95}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{65A7CEDE-F881-4D45-A909-530EF49B3C95}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{65A7CEDE-F881-4D45-A909-530EF49B3C95}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{65A7CEDE-F881-4D45-A909-530EF49B3C95}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

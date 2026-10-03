@@ -73,6 +73,8 @@
     <ProjectReference Include="..\Nexus.ProjectManagement.Kpi\Nexus.ProjectManagement.Kpi.csproj" />
     <ProjectReference Include="..\Nexus.ProjectManagement.Team\Nexus.ProjectManagement.Team.csproj" />
     <ProjectReference Include="..\Nexus.Portfolio\Nexus.Portfolio.csproj" />
+    <ProjectReference Include="..\Nexus.Calendar\Nexus.Calendar.csproj" />
+    <ProjectReference Include="..\Nexus.Integrations.ProjectCalendar\Nexus.Integrations.ProjectCalendar.csproj" />
   </ItemGroup>
 
   <!-- Notifications.Api ships an appsettings.json that is not valid JSON; keep it out of this

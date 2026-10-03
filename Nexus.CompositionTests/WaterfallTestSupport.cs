@@ -42,3 +42,31 @@ internal sealed class NotConfiguredApprovalRequester : IApprovalRequester
     public Task<ApprovalRequestOutcome> RequestApprovalAsync(ApprovalSubject subject, CancellationToken ct) =>
         Task.FromResult(ApprovalRequestOutcome.NotConfigured);
 }
+
+internal sealed class FakeProjectRepository(params Nexus.ProjectManagement.Core.Domain.Project[] projects) : Nexus.ProjectManagement.Core.Application.IProjectRepository
+{
+    public Task<Nexus.ProjectManagement.Core.Domain.Project?> GetByIdAsync(Guid id, CancellationToken ct) => Task.FromResult(projects.SingleOrDefault(p => p.Id == id));
+    public Task<NexusCore.SharedKernel.Results.PagedResult<Nexus.ProjectManagement.Core.Domain.Project>> ListAsync(Nexus.ProjectManagement.Core.Application.Dtos.ListProjectsRequest request, CancellationToken ct) =>
+        throw new NotSupportedException();
+    public Task<bool> CodeExistsAsync(Guid tenantId, string code, Guid? excludeId, CancellationToken ct) => throw new NotSupportedException();
+    public Task AddAsync(Nexus.ProjectManagement.Core.Domain.Project project, CancellationToken ct) => throw new NotSupportedException();
+}
+
+internal sealed class FakeCalendarProvider(Nexus.ProjectManagement.Waterfall.Application.Scheduling.IWorkingDayCalendar? calendar)
+    : Nexus.ProjectManagement.Waterfall.Application.Scheduling.IWorkingDayCalendarProvider
+{
+    public Guid? AskedForCalendar { get; private set; }
+    public Guid? AskedForTenant { get; private set; }
+
+    public Task<Nexus.ProjectManagement.Waterfall.Application.Scheduling.IWorkingDayCalendar?> GetAsync(Guid tenantId, Guid? calendarId, CancellationToken ct)
+    {
+        AskedForTenant = tenantId;
+        AskedForCalendar = calendarId;
+        return Task.FromResult(calendar);
+    }
+}
+
+internal sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
+{
+    public override DateTimeOffset GetUtcNow() => now;
+}
