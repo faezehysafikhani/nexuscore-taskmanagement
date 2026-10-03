@@ -57,6 +57,12 @@ public sealed class ActionItemService(
             action.ChangePriority(priority);
         }
 
+        var recurrenceError = ApplyRecurrence(action, request.Recurrence);
+        if (recurrenceError is not null)
+        {
+            return Result.Failure<ActionItemDto>(recurrenceError);
+        }
+
         await repository.AddAsync(action, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success(ToDto(action));
@@ -91,6 +97,14 @@ public sealed class ActionItemService(
             action.ChangePriority(priority);
         }
 
+        // Likewise, omitting the recurrence leaves the stored rule alone. Dates are validated against
+        // the details just applied, so a rule is never left on an action with no dates to move.
+        var recurrenceError = ApplyRecurrence(action, request.Recurrence);
+        if (recurrenceError is not null)
+        {
+            return Result.Failure<ActionItemDto>(recurrenceError);
+        }
+
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success(ToDto(action));
     }
@@ -103,7 +117,20 @@ public sealed class ActionItemService(
             return Result.Failure<ActionItemDto>(Error.NotFound("Action not found."));
         }
 
+        var wasCompleted = action.Status == ActionStatus.Completed;
         action.ChangeStatus(request.Status);
+
+        // Completing a repeating action creates the next occurrence in the same save. Re-completing one
+        // that was reopened creates nothing more (the action remembers its next occurrence).
+        if (request.Status == ActionStatus.Completed && !wasCompleted)
+        {
+            var next = action.CreateNextOccurrence(Guid.NewGuid());
+            if (next is not null)
+            {
+                await repository.AddAsync(next, cancellationToken);
+            }
+        }
+
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success(ToDto(action));
     }
@@ -133,6 +160,40 @@ public sealed class ActionItemService(
         return Result.Success(ToDto(action));
     }
 
+    /// <summary>Null recurrence = leave the action's rule as it is; a Unit of null removes it.</summary>
+    private static Error? ApplyRecurrence(ActionItem action, ActionRecurrenceRequest? recurrence)
+    {
+        if (recurrence is null)
+        {
+            return null;
+        }
+
+        if (recurrence.Unit is not { } unit)
+        {
+            action.ClearRecurrence();
+            return null;
+        }
+
+        if (!Enum.IsDefined(unit) || recurrence.Interval is < 1 or > 365)
+        {
+            return Error.Validation("The recurrence needs a known unit and an interval between 1 and 365.");
+        }
+
+        if (action.StartDate is null && action.EndDate is null)
+        {
+            return Error.Validation("A repeating action needs a start or end date to repeat from.");
+        }
+
+        var first = action.StartDate ?? action.EndDate;
+        if (recurrence.EndDate is { } last && last < first)
+        {
+            return Error.Validation("The recurrence end date cannot be before the action's own dates.");
+        }
+
+        action.SetRecurrence(unit, recurrence.Interval, recurrence.EndDate);
+        return null;
+    }
+
     private async Task<Error?> ValidateRequiredReferencesAsync(Guid organizationUnitId, Guid workCalendarId, CancellationToken cancellationToken)
     {
         if (await organizationUnitRepository.GetByIdAsync(organizationUnitId, cancellationToken) is null)
@@ -152,5 +213,7 @@ public sealed class ActionItemService(
         action.Id, action.TenantId, action.Title, action.Description,
         action.OwnerUserId, action.ResponsibleUserId, action.Status,
         action.OrganizationUnitId, action.WorkCalendarId, action.ProjectId,
-        action.StartDate, action.EndDate, action.ApprovalStatus, action.Priority);
+        action.StartDate, action.EndDate, action.ApprovalStatus, action.Priority,
+        action.RecurrenceUnit is { } unit ? new ActionRecurrenceDto(unit, action.RecurrenceInterval ?? 1, action.RecurrenceEndDate) : null,
+        action.RecurrenceSourceId, action.NextOccurrenceId);
 }

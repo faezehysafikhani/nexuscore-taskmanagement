@@ -509,6 +509,18 @@ Every action has a `priority` (see [ActionPriority](#actionpriority-actions): Lo
 every action. Create takes an optional `priority` (omitted = Normal); update takes an optional `priority`
 (omitted = leave unchanged). **Existing databases need `docs/upgrade/2026-10-03-add-action-priority.sql` first.**
 
+**Repeating actions.** An action can carry a repeat rule: `recurrence: { "unit": 0|1|2|3, "interval": 1, "endDate": "2026-12-31 | null" }`
+with `unit` = `ActionRecurrenceUnit` (Daily 0, Weekly 1, Monthly 2, Yearly 3; "every `interval` units", 1–365). When a repeating
+action is changed to `Completed`, the **next occurrence is created in the same save**: the same title, description, people, unit,
+calendar, project and priority, status `Open`, approval `NotSubmitted`, with `startDate`/`endDate` moved on by one interval (months and
+years keep the day of month, or the last day of a shorter month) and the same rule. Nothing is created when the next one would start
+after the rule's `endDate`, or when the action has no dates to move. `nextOccurrenceId` on the completed action points at the new one
+(and stops a reopen-then-complete from creating a duplicate); `recurrenceSourceId` on the new one points back. Only completing repeats —
+cancelling does not. The rule is set on create/update via the optional `recurrence` field (a repeating action needs a start or end date);
+**omitted = leave the stored rule unchanged**, and `{ "unit": null }` removes it. Every action response carries `recurrence`
+(null for a one-off), `recurrenceSourceId` and `nextOccurrenceId`. **Existing databases need `docs/upgrade/2026-10-04-add-action-recurrence.sql`
+first** (five nullable columns; existing actions are simply one-offs).
+
 ### Module: Actions
 Method: GET
 Route: /api/actions
@@ -2881,6 +2893,9 @@ Every enum below is serialized as its **raw integer** value in both requests and
 | 1 | InProgress |
 | 2 | Completed |
 | 3 | Cancelled |
+
+### ActionRecurrenceUnit (Actions)
+`0` Daily · `1` Weekly · `2` Monthly · `3` Yearly
 
 ### ActionPriority (Actions)
 | Value | Name |
