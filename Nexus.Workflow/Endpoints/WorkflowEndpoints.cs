@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Nexus.Workflow.Application;
 using Nexus.Workflow.Application.Dtos;
@@ -87,6 +89,51 @@ public static class WorkflowEndpoints
                 return (await service.RejectAsync(id, currentUser.UserId.Value, request, cancellationToken)).ToApiResult();
             })
             .RequireAuthorization(WorkflowPermissions.Reject);
+
+        // Delegation: handing approvals to a substitute for a period. Anyone who can approve may delegate their own;
+        // delegating someone else's, or revoking another person's, needs Workflow.Configure.
+        var delegations = app.MapGroup("/api/workflow/delegations").WithTags("Workflow - Delegation").RequireAuthorization();
+
+        delegations.MapGet("/", async (ICurrentUserContext currentUser, IWorkflowDelegationService service, CancellationToken cancellationToken) =>
+            {
+                if (currentUser.TenantId is null || currentUser.UserId is null)
+                {
+                    return Results.Unauthorized();
+                }
+
+                return (await service.ListMineAsync(currentUser.TenantId.Value, currentUser.UserId.Value, cancellationToken)).ToApiResult();
+            })
+            .RequireAuthorization(WorkflowPermissions.View);
+
+        delegations.MapPost("/", async (
+                CreateWorkflowDelegationRequest request, ICurrentUserContext currentUser,
+                IAuthorizationService authorization, HttpContext httpContext,
+                IWorkflowDelegationService service, CancellationToken cancellationToken) =>
+            {
+                if (currentUser.TenantId is null || currentUser.UserId is null)
+                {
+                    return Results.Unauthorized();
+                }
+
+                var canManageOthers = (await authorization.AuthorizeAsync(httpContext.User, WorkflowPermissions.Configure)).Succeeded;
+                return (await service.CreateAsync(currentUser.TenantId.Value, currentUser.UserId.Value, canManageOthers, request, cancellationToken)).ToApiResult();
+            })
+            .RequireAuthorization(WorkflowPermissions.Approve);
+
+        delegations.MapPost("/{id:guid}/revoke", async (
+                Guid id, ICurrentUserContext currentUser,
+                IAuthorizationService authorization, HttpContext httpContext,
+                IWorkflowDelegationService service, CancellationToken cancellationToken) =>
+            {
+                if (currentUser.TenantId is null || currentUser.UserId is null)
+                {
+                    return Results.Unauthorized();
+                }
+
+                var canManageOthers = (await authorization.AuthorizeAsync(httpContext.User, WorkflowPermissions.Configure)).Succeeded;
+                return (await service.RevokeAsync(currentUser.TenantId.Value, id, currentUser.UserId.Value, canManageOthers, cancellationToken)).ToApiResult();
+            })
+            .RequireAuthorization(WorkflowPermissions.Approve);
 
         return app;
     }

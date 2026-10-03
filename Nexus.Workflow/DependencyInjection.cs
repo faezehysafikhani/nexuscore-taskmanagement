@@ -16,6 +16,8 @@ public static class DependencyInjection
     {
         services.AddScoped<IWorkflowDefinitionService, WorkflowDefinitionService>();
         services.AddScoped<IWorkflowInstanceService, WorkflowInstanceService>();
+        services.AddScoped<IWorkflowDelegationService, WorkflowDelegationService>();
+        services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<IValidator<CreateWorkflowDefinitionRequest>, CreateWorkflowDefinitionRequestValidator>();
         services.AddScoped<IValidator<AddWorkflowStepRequest>, AddWorkflowStepRequestValidator>();
         services.AddSingleton<IPermissionCatalog, WorkflowPermissionCatalog>();

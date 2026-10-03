@@ -20,7 +20,8 @@ public sealed record AddWorkflowStepRequest(string Name, Guid? ApproverUserId, G
 
 public sealed record MoveWorkflowStepRequest(int NewOrder);
 
-public sealed record WorkflowDecisionDto(Guid Id, int StepOrder, Guid DecidedByUserId, bool Approved, string? Comment, DateTimeOffset DecidedAtUtc);
+public sealed record WorkflowDecisionDto(
+    Guid Id, int StepOrder, Guid DecidedByUserId, bool Approved, string? Comment, DateTimeOffset DecidedAtUtc, Guid? OnBehalfOfUserId = null);
 
 public sealed record WorkflowInstanceDto(
     Guid Id,
@@ -31,6 +32,17 @@ public sealed record WorkflowInstanceDto(
     int TotalSteps,
     int CurrentStepOrder,
     WorkflowInstanceStatus Status,
-    IReadOnlyList<WorkflowDecisionDto> Decisions);
+    IReadOnlyList<WorkflowDecisionDto> Decisions,
+    Guid? CurrentApproverUserId = null,
+    Guid? DelegatedFromUserId = null);
 
 public sealed record DecideWorkflowInstanceRequest(string? Comment);
+
+public sealed record WorkflowDelegationDto(
+    Guid Id, Guid TenantId, Guid DelegatorUserId, Guid DelegateUserId, DateOnly StartDate, DateOnly EndDate,
+    string? SubjectType, string? Reason, bool IsRevoked, bool IsActiveNow);
+
+/// <summary>DelegatorUserId omitted = the caller (anyone may delegate their own approvals); naming someone else needs Workflow.Configure.
+/// SubjectType omitted = every kind of approval.</summary>
+public sealed record CreateWorkflowDelegationRequest(
+    Guid DelegateUserId, DateOnly StartDate, DateOnly EndDate, string? SubjectType = null, string? Reason = null, Guid? DelegatorUserId = null);

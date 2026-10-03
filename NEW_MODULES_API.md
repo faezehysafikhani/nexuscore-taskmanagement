@@ -497,6 +497,48 @@ Request Body:
 Response: the updated instance.
 Status Codes: 200, 400, 401, 403, 404
 
+### Module: Workflow - Delegation (substitution)
+
+An approver can hand their approvals to a substitute for a period (a holiday, a mission). For the days from `startDate` to
+`endDate` inclusive, the substitute sees the approver's pending approvals in their own Approval Center, and a decision they make
+is recorded as made **on the approver's behalf**. Optional `subjectType` limits it to one kind of approval (`"Risk"`); omitted =
+all of them. It applies to a step designated to that approver (`approverUserId`), and only to the step currently waiting; it is
+not transitive (A→B and B→C does not give C A's work). Anyone with `Workflow.Approve` may delegate their **own** approvals;
+delegating someone else's, or revoking another person's delegation, needs `Workflow.Configure`. A delegation is never deleted —
+it is *revoked*, so the record of who could act stays. Decisions by a person who is not the designated approver and holds no
+delegation are still accepted exactly as before (existing behaviour is unchanged); they are simply not marked as on anyone's behalf.
+**Existing databases need `docs/upgrade/2026-10-04-add-workflow-delegation.sql` first** (a new table and one nullable column).
+
+What changes in existing responses (all additive): an instance now carries `currentApproverUserId` (the designated approver of its
+current step, or null) and `delegatedFromUserId` (set on a pending-list item that reached you through a delegation — whose work it
+is); each decision carries `onBehalfOfUserId` (null = decided in their own right).
+
+Method: GET
+Route: /api/workflow/delegations
+Description: The delegations you have given and received, newest first, with whether each is in force today. Needs `Workflow.View`.
+Response:
+```json
+[ { "id": "guid", "tenantId": "guid", "delegatorUserId": "guid", "delegateUserId": "guid",
+    "startDate": "2026-06-10", "endDate": "2026-06-20", "subjectType": "string | null", "reason": "string | null",
+    "isRevoked": false, "isActiveNow": true } ]
+```
+
+Method: POST
+Route: /api/workflow/delegations
+Description: Delegate approvals. Needs `Workflow.Approve`. `delegatorUserId` omitted = you.
+Request Body:
+```json
+{ "delegateUserId": "guid", "startDate": "2026-06-10", "endDate": "2026-06-20", "subjectType": "string | null", "reason": "string | null", "delegatorUserId": "guid | null" }
+```
+Response: the created delegation.
+Status Codes: 200, 400 (delegate is the delegator, end before start, already ended), 403 (delegating someone else's without `Workflow.Configure`), 409 (the same pair already has an overlapping delegation for the same subject type)
+
+Method: POST
+Route: /api/workflow/delegations/{id}/revoke
+Description: End a delegation now (repeatable). Only the delegator, or a holder of `Workflow.Configure`. Needs `Workflow.Approve`.
+Response: the delegation with `isRevoked: true`.
+Status Codes: 200, 401, 403, 404
+
 ---
 
 ## 4. Actions

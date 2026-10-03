@@ -15,7 +15,11 @@ public sealed class WorkflowInstanceRepository(WorkflowDbContext dbContext) : IW
             .Where(i => i.SubjectType == subjectType && i.SubjectId == subjectId && i.Status == WorkflowInstanceStatus.InProgress)
             .SingleOrDefaultAsync(cancellationToken);
 
-    public async Task<IReadOnlyList<WorkflowInstance>> ListPendingForApproverAsync(Guid tenantId, Guid approverUserId, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<WorkflowInstance>> ListPendingForApproverAsync(Guid tenantId, Guid approverUserId, CancellationToken cancellationToken) =>
+        ListPendingForApproverAsync(tenantId, approverUserId, [], cancellationToken);
+
+    public async Task<IReadOnlyList<WorkflowInstance>> ListPendingForApproverAsync(
+        Guid tenantId, Guid approverUserId, IReadOnlyCollection<ActingFor> actingFor, CancellationToken cancellationToken)
     {
         var pending = await dbContext.WorkflowInstances
             .Include(i => i.Decisions)
@@ -43,7 +47,18 @@ public sealed class WorkflowInstanceRepository(WorkflowDbContext dbContext) : IW
             }
 
             var currentStep = definition.Steps.SingleOrDefault(step => step.Order == instance.CurrentStepOrder);
-            return currentStep is not null && (currentStep.ApproverUserId is null || currentStep.ApproverUserId == approverUserId);
+            if (currentStep is null)
+            {
+                return false;
+            }
+
+            if (currentStep.ApproverUserId is null || currentStep.ApproverUserId == approverUserId)
+            {
+                return true;
+            }
+
+            // A step designated to someone the user is standing in for today.
+            return actingFor.Any(a => a.DelegatorUserId == currentStep.ApproverUserId && (a.SubjectType is null || a.SubjectType == instance.SubjectType));
         }).ToList();
     }
 

@@ -9,6 +9,7 @@ public sealed class WorkflowDbContext(DbContextOptions<WorkflowDbContext> option
 {
     public DbSet<WorkflowDefinition> WorkflowDefinitions => Set<WorkflowDefinition>();
     public DbSet<WorkflowInstance> WorkflowInstances => Set<WorkflowInstance>();
+    public DbSet<WorkflowDelegation> WorkflowDelegations => Set<WorkflowDelegation>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

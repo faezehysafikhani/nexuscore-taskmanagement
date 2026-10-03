@@ -47,14 +47,14 @@ public sealed class WorkflowInstance : AuditableEntity<Guid>
     public IReadOnlyCollection<WorkflowDecision> Decisions => _decisions.AsReadOnly();
 
     /// <summary>Returns the ApprovalGranted event only once the last step has approved.</summary>
-    public IDomainEvent? Decide(Guid decidedByUserId, bool approved, string? comment)
+    public IDomainEvent? Decide(Guid decidedByUserId, bool approved, string? comment, Guid? onBehalfOfUserId = null)
     {
         if (Status != WorkflowInstanceStatus.InProgress)
         {
             throw new InvalidOperationException("This workflow instance has already been decided.");
         }
 
-        _decisions.Add(new WorkflowDecision(Guid.NewGuid(), Id, CurrentStepOrder, decidedByUserId, approved, comment));
+        _decisions.Add(new WorkflowDecision(Guid.NewGuid(), Id, CurrentStepOrder, decidedByUserId, approved, comment, onBehalfOfUserId));
 
         if (!approved)
         {
