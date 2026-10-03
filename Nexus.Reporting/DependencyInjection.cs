@@ -1,5 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Nexus.Reporting.Application;
+using Nexus.Reporting.Application.Analytics;
 using Nexus.Reporting.Permissions;
 using NexusCore.Application.Identity.Permissions;
 
@@ -15,6 +17,12 @@ public static class DependencyInjection
     public static IServiceCollection AddProjectReporting(this IServiceCollection services)
     {
         services.AddScoped<IDashboardService, DashboardService>();
+
+        // The analytics reports (earned value, unit and project-manager performance, matrices). Their
+        // optional sources - Progress, Contracts, Organization, Strategy, Alignment - are nullable
+        // constructor parameters, so none of them has to be registered.
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddScoped<IAnalyticsService, AnalyticsService>();
         services.AddSingleton<IPermissionCatalog, ReportingPermissionCatalog>();
 
         services.AddAuthorization(options =>

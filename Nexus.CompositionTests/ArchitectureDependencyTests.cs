@@ -103,6 +103,24 @@ public sealed class ArchitectureDependencyTests
     }
 
     [Fact]
+    public void ReportingReadsTheModules_NoModuleReferencesReporting()
+    {
+        foreach (var project in new[]
+                 {
+                     "Nexus.ProjectManagement.Contracts/Nexus.ProjectManagement.Contracts.csproj",
+                     "Nexus.ProjectManagement.Progress/Nexus.ProjectManagement.Progress.csproj",
+                     "Nexus.ProjectManagement.Core/Nexus.ProjectManagement.Core.csproj",
+                     "Nexus.Organization/Nexus.Organization.csproj",
+                     "Nexus.Strategy/Nexus.Strategy.csproj",
+                     "Nexus.Integrations.ProjectStrategyAlignment/Nexus.Integrations.ProjectStrategyAlignment.csproj",
+                     "Nexus.Actions/Nexus.Actions.csproj"
+                 })
+        {
+            Assert.DoesNotContain("Nexus.Reporting", GetProjectReferences(project));
+        }
+    }
+
+    [Fact]
     public void PortfolioAndReporting_OwnNoDatabase()
     {
         Assert.False(Directory.Exists(Path.Combine(SolutionRoot, "Nexus.Portfolio.Infrastructure")));

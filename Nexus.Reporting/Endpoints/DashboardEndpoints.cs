@@ -59,6 +59,8 @@ public static class DashboardEndpoints
                 return (await service.GetProjectDashboardAsync(projectId, cancellationToken)).ToApiResult();
             });
 
+        app.MapAnalyticsEndpoints();
+
         return app;
     }
 }

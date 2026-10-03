@@ -2800,6 +2800,73 @@ progress updates yet. Note `status`/`performanceClassification` here are also st
 
 Status Codes: 200, 401, 403, 404
 
+### Module: Reporting — analytics reports
+
+Read-only reports over what the other modules already hold; nothing is stored and no new schema or permission is
+needed. Every one is **tenant-wide and needs `Reporting.ViewAll`** (checked in the endpoint, like `/summary`) and reads the
+caller's own tenant. Archived projects are left out of all of them. Their data sources are optional: Progress (progress
+and classification), Contracts (actual cost), Organization (units), Strategy + Project-Strategy Alignment — a report
+that needs a missing one returns `409`, and figures that only need a missing one are `null`, never a made-up zero.
+Projects are read up to the first 1,000 per tenant, like the summary.
+
+Method: GET
+Route: /api/reporting/projects/{projectId}/performance
+Description: Earned-value and schedule performance of one project (the same project dashboard plus the numbers a steering committee asks for). Query: `asOf` (date, optional — default today; uses the latest progress update on or before it).
+Response (all index/percent/money fields are `null` when they cannot be worked out):
+```json
+{
+  "projectId": "guid", "name": "string", "code": "string", "status": "Active", "organizationUnitId": "guid | null", "managerUserId": "guid | null",
+  "startDate": "2026-01-01", "endDate": "2026-12-31", "asOf": "2026-06-01",
+  "plannedProgress": 50.0, "actualProgress": 40.0, "progressDate": "2026-05-01",
+  "budgetAtCompletion": 1000, "plannedValue": 500, "earnedValue": 400, "scheduleVariance": -100, "spi": 0.8,
+  "actualCost": 500, "costVariance": -100, "cpi": 0.8,
+  "estimateAtCompletion": 1250, "estimateToComplete": 750, "varianceAtCompletion": -250,
+  "forecastEnd": "2026-05-06", "forecastDelayDays": 25, "isOverdue": true, "health": 3,
+  "contractedAmount": 900, "invoicedAmount": 500, "paidAmount": 200, "contractsAvailable": true, "progressAvailable": true
+}
+```
+Formulas: budget = the project's `cost`; PV = budget × planned %; EV = budget × actual %; SPI = actual % ÷ planned %; actual cost =
+the **approved invoices** of the project's contracts (null while it has none); CPI = EV ÷ AC; EAC = budget ÷ CPI;
+forecast end = start + planned days ÷ SPI. `health` is `HealthStatus`: the worse of SPI and CPI — ≥ 0.95 Green, ≥ 0.85 Amber, below Red.
+Status Codes: 200, 401, 403, 404
+
+Method: GET
+Route: /api/reporting/units/performance
+Description: Performance of the organisation chart at a level. Query: `level` (int, default **2**; 1 = top-level units), `asOf` (date, optional). A project assigned to a unit deeper than `level` is counted under that unit's ancestor at `level`; one assigned to a unit above it stays with its own unit (its `level` field says so); projects with no unit are in a row with `unitId: null`. Every unit at the level appears, even with no projects.
+Response: `{ "level", "maxLevel", "asOf", "units": [ { "unitId", "unitName", "unitCode", "level", "projectCount", "runningProjects", "completedProjects", "overdueProjects", "totalBudget", "projectsWithProgress", "averagePlannedProgress", "averageActualProgress", "averageDeviation", "onTrack", "atRisk", "behind" } ] }`. `running` = Active or OnHold; `overdue` = running, past its end date, not at 100 %; the on-track/at-risk/behind counts are the `PerformanceClassification` of each project's latest progress update.
+Status Codes: 200, 400 (level < 1), 401, 403, 409 (Organization not installed)
+
+Method: GET
+Route: /api/reporting/units/status-matrix
+Description: Units (at `level`, same roll-up as above) × project status. Query: `level` (default 2).
+Response: `{ "level", "statuses": ["Draft","Active","OnHold","Completed","Archived"], "rows": [ { "unitId", "unitName", "unitCode", "counts": [0,1,0,1,0], "total" } ], "columnTotals": [..], "total" }` — `counts` follow the order of `statuses` (a status nobody has is a zero column).
+Status Codes: 200, 400, 401, 403, 409
+
+Method: GET
+Route: /api/reporting/project-managers/evaluation
+Description: How each project manager's projects are doing. Query: `asOf` (optional). Managers with the most projects first; projects with no manager are grouped under `managerUserId: null`.
+Response: `{ "asOf", "managers": [ { "managerUserId", "projectCount", "runningProjects", "completedProjects", "overdueProjects", "totalBudget", "projectsWithProgress", "averagePlannedProgress", "averageActualProgress", "averageDeviation", "onTrack", "atRisk", "behind", "onTrackShare", "openActions" } ] }` — `onTrackShare` is the percentage of the manager's reported projects that are on track; `openActions` counts Open/InProgress actions the person is responsible for.
+Status Codes: 200, 401, 403
+
+Method: GET
+Route: /api/reporting/strategy-alignment-matrix
+Description: The complete Project × Strategy matrix. Every project is a row and every strategy a column whether or not a link exists (missing links are level `"None"`); `cells` follow the order of `strategies`.
+Response:
+```json
+{
+  "strategies": [ { "strategyId": "guid", "name": "string", "parentStrategyId": "guid | null", "depth": 1, "weight": 2.0,
+                    "directProjects": 1, "projectsIncludingChildren": 2, "highAlignedProjects": 1, "averagePercentage": 80.0 } ],
+  "projects": [ { "projectId": "guid", "name": "string", "code": "string", "cells": [ { "level": "High", "percentage": 80.0 } ],
+                  "alignedStrategies": 2, "averagePercentage": 50.0, "weightedPercentage": 50.0 } ],
+  "uncoveredStrategyIds": ["guid"], "unalignedProjectIds": ["guid"]
+}
+```
+A project counts as aligned to a strategy when the level is not `None`. Averages use only cells that carry a percentage (a level without one is never guessed at); `weightedPercentage` weights by the strategy's `weight`. `projectsIncludingChildren` counts each project once if it is aligned to the strategy or any strategy below it. `uncoveredStrategyIds` / `unalignedProjectIds` are the gaps.
+Status Codes: 200, 401, 403, 409 (Strategy or Alignment not installed)
+
+### HealthStatus (Reporting)
+`0` Unknown · `1` Green · `2` Amber · `3` Red
+
 ---
 
 ## Enums Reference

@@ -15,6 +15,13 @@
     <ProjectReference Include="..\Nexus.ProjectManagement.Core\Nexus.ProjectManagement.Core.csproj" />
     <ProjectReference Include="..\Nexus.Actions\Nexus.Actions.csproj" />
     <ProjectReference Include="..\Nexus.ProjectManagement.Progress\Nexus.ProjectManagement.Progress.csproj" />
+    <!-- Optional data sources of the analytics reports. Each is resolved as a nullable
+         constructor parameter, so none of them has to be installed: a report that needs a missing
+         one says so, and the project/unit figures that do not need it still work. -->
+    <ProjectReference Include="..\Nexus.Organization\Nexus.Organization.csproj" />
+    <ProjectReference Include="..\Nexus.Strategy\Nexus.Strategy.csproj" />
+    <ProjectReference Include="..\Nexus.Integrations.ProjectStrategyAlignment\Nexus.Integrations.ProjectStrategyAlignment.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Contracts\Nexus.ProjectManagement.Contracts.csproj" />
     <ProjectReference Include="..\NexusCore.Application\NexusCore.Application.csproj" />
     <ProjectReference Include="..\NexusCore.SharedKernel\NexusCore.SharedKernel.csproj" />
   </ItemGroup>
