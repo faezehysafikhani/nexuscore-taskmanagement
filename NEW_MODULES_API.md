@@ -504,6 +504,10 @@ Fully standalone action-item tracker — usable with or without Project Manageme
 (`projectId` is always optional). Permission namespace: `Actions.*` (`View`, `Create`, `Edit`, `Submit`).
 Base route: `/api/actions`.
 
+Every action has a `priority` (see [ActionPriority](#actionpriority-actions): Low 0, Normal 1, High 2, Urgent 3), returned on
+every action. Create takes an optional `priority` (omitted = Normal); update takes an optional `priority`
+(omitted = leave unchanged). **Existing databases need `docs/upgrade/2026-10-03-add-action-priority.sql` first.**
+
 ### Module: Actions
 Method: GET
 Route: /api/actions
@@ -1189,6 +1193,32 @@ Status Codes: 200, 400, 401, 403, 404
 
 ---
 
+### Module: Project Team
+Method: PUT
+Route: /api/project-management/team/members/{memberId}
+Description: Change a member's role title. Needs `ProjectTeam.ManageMembers`. A blank title clears it.
+
+Path Parameters: memberId (Guid, required)
+Request Body:
+```json
+{ "roleTitle": "string | null" }
+```
+Response: the updated member.
+Status Codes: 200, 401, 403, 404
+
+---
+
+### Module: Project Team
+Method: DELETE
+Route: /api/project-management/team/governance-roles/{id}
+Description: Delete a governance role. Needs `ProjectTeam.ManageGovernance`.
+
+Path Parameters: id (Guid, required)
+Response: empty on success.
+Status Codes: 200, 401, 403, 404
+
+---
+
 ## 11. Deliverables
 
 Requires ProjectManagement.Core. Permission namespace: `Deliverables.*` (`View`, `Create`, `Edit`).
@@ -1314,6 +1344,17 @@ Status Codes: 200, 400, 401, 403, 404
 
 ---
 
+### Module: KPI
+Method: DELETE
+Route: /api/project-management/kpis/{id}
+Description: Delete a KPI definition. Needs the `Kpi.Delete` permission.
+
+Path Parameters: id (Guid, required)
+Response: empty on success.
+Status Codes: 200, 401, 403, 404
+
+---
+
 ## 13. Risks
 
 Requires ProjectManagement.Core. RPN (Risk Priority Number) is computed server-side
@@ -1400,6 +1441,34 @@ Response (when configured):
 Response (default): RFC 7807 Problem Details, `status: 501`.
 
 Status Codes: 200 (if a provider is plugged in), 401, 403, 501 (default)
+
+---
+
+### Module: Risks
+Method: GET
+Route: /api/project-management/risks/matrix
+Description: Probability x impact grid for a project. Only occupied cells are returned; a client renders the full 5x5 grid and treats a missing cell as empty. Colouring is left to the client.
+
+Query Parameters: projectId (Guid, required)
+Response:
+```json
+{
+  "projectId": "guid", "totalRisks": 3,
+  "cells": [ { "probabilityScore": 2, "impactScore": 3, "count": 2, "riskIds": ["guid", "guid"] } ]
+}
+```
+Status Codes: 200, 401, 403
+
+---
+
+### Module: Risks
+Method: DELETE
+Route: /api/project-management/risks/{id}
+Description: Delete a risk. Needs `Risks.Delete`. Items that are `PendingApproval` cannot be deleted (409), so a workflow instance never points at a missing subject.
+
+Path Parameters: id (Guid, required)
+Response: empty on success.
+Status Codes: 200, 401, 403, 404, 409
 
 ---
 
@@ -1491,13 +1560,46 @@ Status Codes: 200 (if a provider is plugged in), 401, 403, 501 (default)
 
 ---
 
+### Module: Stakeholders
+Method: GET
+Route: /api/project-management/stakeholders/matrix
+Description: Power x interest grid for a project. Only occupied cells are returned. `quadrant` is the engagement strategy for the cell: `High` is the high side of each axis, `Medium`/`Low` the low side; a client that wants another split can ignore it.
+
+Query Parameters: projectId (Guid, required)
+Response:
+```json
+{
+  "projectId": "guid", "totalStakeholders": 3,
+  "cells": [
+    { "power": 2, "interest": 2, "quadrant": 3,
+      "stakeholders": [ { "id": "guid", "name": "string", "isInternal": true } ] }
+  ]
+}
+```
+`quadrant` values: see [StakeholderQuadrant](#stakeholderquadrant-stakeholders).
+
+Status Codes: 200, 401, 403
+
+---
+
+### Module: Stakeholders
+Method: DELETE
+Route: /api/project-management/stakeholders/{id}
+Description: Delete a stakeholder. Needs `Stakeholders.Delete`. Items that are `PendingApproval` cannot be deleted (409), so a workflow instance never points at a missing subject.
+
+Path Parameters: id (Guid, required)
+Response: empty on success.
+Status Codes: 200, 401, 403, 404, 409
+
+---
+
 ## 15. Progress
 
 Requires ProjectManagement.Core. Explicitly does **not** reference Waterfall — Deviation and
 PerformanceClassification are computed server-side from Planned/Actual progress and are never
 accepted as input. `ConfirmedProgress` is set only when the update is approved (via
 `SubmitForApproval` → Workflow, or the default auto-approve). Permission namespace:
-`Progress.*` (`View`, `Create`, `Edit`, `Submit`). Base route: `/api/project-management/progress-updates`.
+`Progress.*` (`View`, `Create`, `Edit`, `Delete`, `Submit`). Base route: `/api/project-management/progress-updates`.
 
 ### Module: Progress
 Method: GET
@@ -1585,6 +1687,106 @@ Response (when configured):
 Response (default): RFC 7807 Problem Details, `status: 501`.
 
 Status Codes: 200 (if a provider is plugged in), 401, 403, 501 (default)
+
+---
+
+### Module: Progress
+Method: DELETE
+Route: /api/project-management/progress-updates/{id}
+Description: Delete a progress update. Needs `ProjectProgress.Delete`. Items that are `PendingApproval` cannot be deleted (409), so a workflow instance never points at a missing subject.
+
+Path Parameters: id (Guid, required)
+Response: empty on success.
+Status Codes: 200, 401, 403, 404, 409
+
+---
+
+## 15a. Delay Reasons (Progress module)
+
+A structured register of why a project is behind: root cause, days and rials lost, and the
+corrective action. Lives in the Progress module, requires nothing beyond it, and has the same
+optional-approval flow as progress updates (`SubjectType` = `"DelayReason"`, also listed by
+`/api/integrations/project-workflow/subject-types`). The free-text `delayReasons` on a progress
+update is a separate, older field and is unchanged. Permission namespace: `DelayReasons.*`
+(`View`, `Create`, `Edit`, `Delete`, `Submit`). Base route: `/api/project-management/delay-reasons`.
+**Existing databases need `docs/upgrade/2026-10-03-add-delay-reasons.sql` first** (a new table).
+
+### Module: Delay Reasons
+Method: GET
+Route: /api/project-management/delay-reasons
+Description: List a project's delay reasons, newest first.
+Query Parameters: projectId (Guid, required)
+Response:
+```json
+[
+  {
+    "id": "guid", "tenantId": "guid", "projectId": "guid", "registerDate": "2026-01-01",
+    "rootCause": 1, "description": "string", "timeImpactDays": 14, "costImpact": 250000000,
+    "correctiveAction": "string | null", "approvalStatus": 0, "createdByUserId": "guid | null"
+  }
+]
+```
+`rootCause`: see [DelayRootCause](#delayrootcause-progress). `costImpact` is in rials.
+
+Status Codes: 200, 401, 403
+
+---
+
+### Module: Delay Reasons
+Method: GET
+Route: /api/project-management/delay-reasons/{id}
+Description: Get one delay reason.
+Path Parameters: id (Guid, required)
+Response: one item shaped as above.
+Status Codes: 200, 401, 403, 404
+
+---
+
+### Module: Delay Reasons
+Method: POST
+Route: /api/project-management/delay-reasons
+Description: Register a delay reason.
+Request Body:
+```json
+{ "tenantId": "guid", "projectId": "guid", "registerDate": "2026-01-01", "rootCause": 1, "description": "string (required, max 2000)", "timeImpactDays": 14, "costImpact": 250000000, "correctiveAction": "string | null" }
+```
+`timeImpactDays` and `costImpact` are optional and must not be negative.
+Response: the created record, `approvalStatus: 0`.
+Status Codes: 200, 400, 401, 403
+
+---
+
+### Module: Delay Reasons
+Method: PUT
+Route: /api/project-management/delay-reasons/{id}
+Description: Update a delay reason.
+Path Parameters: id (Guid, required)
+Request Body:
+```json
+{ "registerDate": "2026-01-01", "rootCause": 1, "description": "string", "timeImpactDays": 14, "costImpact": 250000000, "correctiveAction": "string | null" }
+```
+Response: the updated record.
+Status Codes: 200, 400, 401, 403, 404
+
+---
+
+### Module: Delay Reasons
+Method: DELETE
+Route: /api/project-management/delay-reasons/{id}
+Description: Delete a delay reason. Items that are `PendingApproval` cannot be deleted (409), so a workflow instance never points at a missing subject.
+Path Parameters: id (Guid, required)
+Response: empty on success.
+Status Codes: 200, 401, 403, 404, 409
+
+---
+
+### Module: Delay Reasons
+Method: POST
+Route: /api/project-management/delay-reasons/{id}/submit-for-approval
+Description: Send the delay reason for approval. With Workflow installed it becomes `PendingApproval(1)`; without it, it is approved directly (`Approved(2)`), like every other approvable record.
+Path Parameters: id (Guid, required)
+Response: the updated record.
+Status Codes: 200, 401, 403, 404
 
 ---
 
@@ -1735,7 +1937,7 @@ Description: List the fixed catalog of SubjectType strings the ProjectManagement
 Request Body: none
 Response:
 ```json
-["Project", "WaterfallActivity", "AgileTask", "Risk", "Stakeholder", "ProgressUpdate", "ProjectDocument", "Action"]
+["Project", "WaterfallActivity", "AgileTask", "Risk", "Stakeholder", "ProgressUpdate", "DelayReason", "ProjectDocument", "Action"]
 ```
 Status Codes: 200, 401, 403
 
@@ -1832,6 +2034,13 @@ Query Parameters:
 - tenantId (Guid, required)
 - organizationUnitId (Guid, optional)
 - status (string, optional — matches either a ProjectStatus or ActionStatus name, e.g. "Active")
+- search (string, optional — a project's name or code, or an action's title; case-insensitive)
+- involvedUserId (Guid, optional — a project's owner or manager, or an action's owner or responsible)
+- type (string, optional — "Waterfall" or "Agile" returns projects only; "Action" returns actions only)
+- approvalStatus (string, optional — an ApprovalStatus name, e.g. "PendingApproval")
+- priority (string, optional — "Low", "Normal", "High" or "Urgent"; actions only, so projects are left out)
+
+All filters are optional and only ever narrow the result: they are applied on top of the visibility rule, never instead of it.
 
 Request Body: none
 Response:
@@ -1841,11 +2050,11 @@ Response:
     {
       "id": "guid", "name": "string", "code": "string", "type": "Waterfall", "status": "Active",
       "organizationUnitId": "guid | null", "managerUserId": "guid | null", "ownerUserId": "guid | null",
-      "approvalStatus": "Approved"
+      "approvalStatus": "Approved", "startDate": "2026-01-01 | null", "endDate": "2026-12-31 | null"
     }
   ],
   "actions": [
-    { "id": "guid", "title": "string", "status": "Open", "organizationUnitId": "guid", "responsibleUserId": "guid | null", "ownerUserId": "guid | null", "approvalStatus": "NotSubmitted" }
+    { "id": "guid", "title": "string", "status": "Open", "organizationUnitId": "guid", "responsibleUserId": "guid | null", "ownerUserId": "guid | null", "approvalStatus": "NotSubmitted", "startDate": "2026-01-01 | null", "endDate": "2026-01-31 | null", "priority": "Normal" }
   ]
 }
 ```
@@ -1937,6 +2146,31 @@ Every enum below is serialized as its **raw integer** value in both requests and
 | 1 | InProgress |
 | 2 | Completed |
 | 3 | Cancelled |
+
+### ActionPriority (Actions)
+| Value | Name |
+|---|---|
+| 0 | Low |
+| 1 | Normal |
+| 2 | High |
+| 3 | Urgent |
+
+### DelayRootCause (Progress)
+| Value | Name |
+|---|---|
+| 0 | Funding |
+| 1 | Procurement |
+| 2 | Permits |
+| 3 | HumanResources |
+| 4 | Other |
+
+### StakeholderQuadrant (Stakeholders)
+| Value | Name | Meaning |
+|---|---|---|
+| 0 | Monitor | low-to-medium power, low-to-medium interest |
+| 1 | KeepInformed | low-to-medium power, high interest |
+| 2 | KeepSatisfied | high power, low-to-medium interest |
+| 3 | ManageClosely | high power, high interest |
 
 ### ApprovalStatus (shared across every capability that supports optional approval)
 | Value | Name |
