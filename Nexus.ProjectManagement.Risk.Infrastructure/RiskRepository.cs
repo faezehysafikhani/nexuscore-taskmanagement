@@ -19,4 +19,10 @@ public sealed class RiskRepository(RiskManagementDbContext dbContext) : IRiskRep
     {
         await dbContext.Risks.AddAsync(risk, cancellationToken);
     }
+
+    public Task RemoveAsync(Risk risk, CancellationToken cancellationToken)
+    {
+        dbContext.Risks.Remove(risk);
+        return Task.CompletedTask;
+    }
 }

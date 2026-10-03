@@ -13,4 +13,5 @@ public interface ITeamRepository
     Task<GovernanceRole?> GetGovernanceRoleByIdAsync(Guid id, CancellationToken cancellationToken);
     Task<IReadOnlyList<GovernanceRole>> ListGovernanceRolesAsync(Guid projectId, CancellationToken cancellationToken);
     Task AddGovernanceRoleAsync(GovernanceRole role, CancellationToken cancellationToken);
+    Task RemoveGovernanceRoleAsync(GovernanceRole role, CancellationToken cancellationToken);
 }

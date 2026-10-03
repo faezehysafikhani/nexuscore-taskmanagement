@@ -7,4 +7,5 @@ public interface IKpiRepository
     Task<KpiDefinition?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
     Task<IReadOnlyList<KpiDefinition>> ListByProjectAsync(Guid projectId, Guid? deliverableId, CancellationToken cancellationToken);
     Task AddAsync(KpiDefinition kpi, CancellationToken cancellationToken);
+    Task RemoveAsync(KpiDefinition kpi, CancellationToken cancellationToken);
 }

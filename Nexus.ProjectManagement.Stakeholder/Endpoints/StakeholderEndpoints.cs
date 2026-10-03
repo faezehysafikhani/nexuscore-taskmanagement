@@ -30,6 +30,10 @@ public static class StakeholderEndpoints
                 (await service.UpdateAsync(id, request, cancellationToken)).ToApiResult())
             .RequireAuthorization(StakeholderPermissions.Edit);
 
+        group.MapDelete("/{id:guid}", async (Guid id, IStakeholderService service, CancellationToken cancellationToken) =>
+                (await service.DeleteAsync(id, cancellationToken)).ToApiResult())
+            .RequireAuthorization(StakeholderPermissions.Delete);
+
         group.MapPost("/{id:guid}/submit-for-approval", async (Guid id, IStakeholderService service, CancellationToken cancellationToken) =>
                 (await service.SubmitForApprovalAsync(id, cancellationToken)).ToApiResult())
             .RequireAuthorization(StakeholderPermissions.Submit);

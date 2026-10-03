@@ -16,4 +16,10 @@ public sealed class StakeholderRepository(StakeholderManagementDbContext dbConte
     {
         await dbContext.Stakeholders.AddAsync(stakeholder, cancellationToken);
     }
+
+    public Task RemoveAsync(Stakeholder stakeholder, CancellationToken cancellationToken)
+    {
+        dbContext.Stakeholders.Remove(stakeholder);
+        return Task.CompletedTask;
+    }
 }

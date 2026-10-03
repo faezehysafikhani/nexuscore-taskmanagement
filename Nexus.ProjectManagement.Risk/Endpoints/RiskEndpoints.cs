@@ -30,6 +30,10 @@ public static class RiskEndpoints
                 (await service.UpdateAsync(id, request, cancellationToken)).ToApiResult())
             .RequireAuthorization(RiskPermissions.Edit);
 
+        group.MapDelete("/{id:guid}", async (Guid id, IRiskService service, CancellationToken cancellationToken) =>
+                (await service.DeleteAsync(id, cancellationToken)).ToApiResult())
+            .RequireAuthorization(RiskPermissions.Delete);
+
         group.MapPost("/{id:guid}/submit-for-approval", async (Guid id, IRiskService service, CancellationToken cancellationToken) =>
                 (await service.SubmitForApprovalAsync(id, cancellationToken)).ToApiResult())
             .RequireAuthorization(RiskPermissions.Submit);

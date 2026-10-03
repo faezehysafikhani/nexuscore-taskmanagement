@@ -36,4 +36,10 @@ public sealed class TeamRepository(TeamDbContext dbContext) : ITeamRepository
     {
         await dbContext.GovernanceRoles.AddAsync(role, cancellationToken);
     }
+
+    public Task RemoveGovernanceRoleAsync(GovernanceRole role, CancellationToken cancellationToken)
+    {
+        dbContext.GovernanceRoles.Remove(role);
+        return Task.CompletedTask;
+    }
 }

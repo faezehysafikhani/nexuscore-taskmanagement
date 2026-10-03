@@ -65,6 +65,26 @@ public sealed class RiskService(
         return Result.Success(ToDto(risk));
     }
 
+    public async Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var risk = await repository.GetByIdAsync(id, cancellationToken);
+        if (risk is null)
+        {
+            return Result.Failure(Error.NotFound("Risk not found."));
+        }
+
+        // An approval request is already open for this risk; deleting it now would leave the
+        // workflow instance pointing at a subject that no longer exists.
+        if (risk.ApprovalStatus == ApprovalStatus.PendingApproval)
+        {
+            return Result.Failure(Error.Conflict("A risk that is pending approval cannot be deleted."));
+        }
+
+        await repository.RemoveAsync(risk, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result.Success();
+    }
+
     public async Task<Result<RiskDto>> SubmitForApprovalAsync(Guid id, CancellationToken cancellationToken)
     {
         var risk = await repository.GetByIdAsync(id, cancellationToken);

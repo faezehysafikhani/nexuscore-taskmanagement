@@ -30,6 +30,10 @@ public static class ProgressEndpoints
                 (await service.UpdateAsync(id, request, cancellationToken)).ToApiResult())
             .RequireAuthorization(ProgressPermissions.Edit);
 
+        group.MapDelete("/{id:guid}", async (Guid id, IProgressService service, CancellationToken cancellationToken) =>
+                (await service.DeleteAsync(id, cancellationToken)).ToApiResult())
+            .RequireAuthorization(ProgressPermissions.Delete);
+
         group.MapPost("/{id:guid}/submit-for-approval", async (Guid id, IProgressService service, CancellationToken cancellationToken) =>
                 (await service.SubmitForApprovalAsync(id, cancellationToken)).ToApiResult())
             .RequireAuthorization(ProgressPermissions.Submit);

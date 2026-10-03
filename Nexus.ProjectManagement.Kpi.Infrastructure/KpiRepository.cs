@@ -25,4 +25,10 @@ public sealed class KpiRepository(KpiDbContext dbContext) : IKpiRepository
     {
         await dbContext.KpiDefinitions.AddAsync(kpi, cancellationToken);
     }
+
+    public Task RemoveAsync(KpiDefinition kpi, CancellationToken cancellationToken)
+    {
+        dbContext.KpiDefinitions.Remove(kpi);
+        return Task.CompletedTask;
+    }
 }

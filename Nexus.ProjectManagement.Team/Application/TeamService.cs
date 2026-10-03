@@ -30,6 +30,19 @@ public sealed class TeamService(
         return Result.Success(ToDto(member));
     }
 
+    public async Task<Result<ProjectMemberDto>> UpdateMemberAsync(Guid memberId, UpdateProjectMemberRequest request, CancellationToken cancellationToken)
+    {
+        var member = await repository.GetMemberByIdAsync(memberId, cancellationToken);
+        if (member is null)
+        {
+            return Result.Failure<ProjectMemberDto>(Error.NotFound("Project member not found."));
+        }
+
+        member.UpdateRoleTitle(string.IsNullOrWhiteSpace(request.RoleTitle) ? null : request.RoleTitle.Trim());
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result.Success(ToDto(member));
+    }
+
     public async Task<Result> RemoveMemberAsync(Guid memberId, CancellationToken cancellationToken)
     {
         var member = await repository.GetMemberByIdAsync(memberId, cancellationToken);
@@ -95,6 +108,19 @@ public sealed class TeamService(
         role.UpdateDetails(request.Title, request.UserId, request.PersonnelNumber, request.Phone, request.Email, request.ServiceLocation);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success(ToDto(role));
+    }
+
+    public async Task<Result> DeleteGovernanceRoleAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var role = await repository.GetGovernanceRoleByIdAsync(id, cancellationToken);
+        if (role is null)
+        {
+            return Result.Failure(Error.NotFound("Governance role not found."));
+        }
+
+        await repository.RemoveGovernanceRoleAsync(role, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result.Success();
     }
 
     private static ProjectMemberDto ToDto(ProjectMember member) =>

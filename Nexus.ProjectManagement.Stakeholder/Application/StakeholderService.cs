@@ -61,6 +61,26 @@ public sealed class StakeholderService(
         return Result.Success(ToDto(stakeholder));
     }
 
+    public async Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var stakeholder = await repository.GetByIdAsync(id, cancellationToken);
+        if (stakeholder is null)
+        {
+            return Result.Failure(Error.NotFound("Stakeholder not found."));
+        }
+
+        // An approval request is already open for this stakeholder; deleting it now would leave the
+        // workflow instance pointing at a subject that no longer exists.
+        if (stakeholder.ApprovalStatus == ApprovalStatus.PendingApproval)
+        {
+            return Result.Failure(Error.Conflict("A stakeholder that is pending approval cannot be deleted."));
+        }
+
+        await repository.RemoveAsync(stakeholder, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result.Success();
+    }
+
     public async Task<Result<StakeholderDto>> SubmitForApprovalAsync(Guid id, CancellationToken cancellationToken)
     {
         var stakeholder = await repository.GetByIdAsync(id, cancellationToken);

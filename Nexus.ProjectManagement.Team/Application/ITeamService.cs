@@ -8,6 +8,7 @@ public interface ITeamService
 {
     Task<Result<IReadOnlyList<ProjectMemberDto>>> ListMembersAsync(Guid projectId, CancellationToken cancellationToken);
     Task<Result<ProjectMemberDto>> AddMemberAsync(AddProjectMemberRequest request, CancellationToken cancellationToken);
+    Task<Result<ProjectMemberDto>> UpdateMemberAsync(Guid memberId, UpdateProjectMemberRequest request, CancellationToken cancellationToken);
     Task<Result> RemoveMemberAsync(Guid memberId, CancellationToken cancellationToken);
 
     /// <summary>Tenant users not already on the project's team - backed by NexusCore's own
@@ -17,4 +18,5 @@ public interface ITeamService
     Task<Result<IReadOnlyList<GovernanceRoleDto>>> ListGovernanceRolesAsync(Guid projectId, CancellationToken cancellationToken);
     Task<Result<GovernanceRoleDto>> CreateGovernanceRoleAsync(CreateGovernanceRoleRequest request, CancellationToken cancellationToken);
     Task<Result<GovernanceRoleDto>> UpdateGovernanceRoleAsync(Guid id, UpdateGovernanceRoleRequest request, CancellationToken cancellationToken);
+    Task<Result> DeleteGovernanceRoleAsync(Guid id, CancellationToken cancellationToken);
 }

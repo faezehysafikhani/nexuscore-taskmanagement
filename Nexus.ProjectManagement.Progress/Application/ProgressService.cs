@@ -49,6 +49,26 @@ public sealed class ProgressService(
         return Result.Success(ToDto(update));
     }
 
+    public async Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var progressUpdate = await repository.GetByIdAsync(id, cancellationToken);
+        if (progressUpdate is null)
+        {
+            return Result.Failure(Error.NotFound("Progress update not found."));
+        }
+
+        // An approval request is already open for this progress update; deleting it now would leave the
+        // workflow instance pointing at a subject that no longer exists.
+        if (progressUpdate.ApprovalStatus == ApprovalStatus.PendingApproval)
+        {
+            return Result.Failure(Error.Conflict("A progress update that is pending approval cannot be deleted."));
+        }
+
+        await repository.RemoveAsync(progressUpdate, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result.Success();
+    }
+
     public async Task<Result<ProgressUpdateDto>> SubmitForApprovalAsync(Guid id, CancellationToken cancellationToken)
     {
         var update = await repository.GetByIdAsync(id, cancellationToken);

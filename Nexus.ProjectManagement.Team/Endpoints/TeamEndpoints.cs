@@ -33,6 +33,10 @@ public static class TeamEndpoints
                 (await service.AddMemberAsync(request, cancellationToken)).ToApiResult())
             .RequireAuthorization(TeamPermissions.ManageMembers);
 
+        members.MapPut("/{memberId:guid}", async (Guid memberId, UpdateProjectMemberRequest request, ITeamService service, CancellationToken cancellationToken) =>
+                (await service.UpdateMemberAsync(memberId, request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(TeamPermissions.ManageMembers);
+
         members.MapDelete("/{memberId:guid}", async (Guid memberId, ITeamService service, CancellationToken cancellationToken) =>
                 (await service.RemoveMemberAsync(memberId, cancellationToken)).ToApiResult())
             .RequireAuthorization(TeamPermissions.ManageMembers);
@@ -49,6 +53,10 @@ public static class TeamEndpoints
 
         governance.MapPut("/{id:guid}", async (Guid id, UpdateGovernanceRoleRequest request, ITeamService service, CancellationToken cancellationToken) =>
                 (await service.UpdateGovernanceRoleAsync(id, request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(TeamPermissions.ManageGovernance);
+
+        governance.MapDelete("/{id:guid}", async (Guid id, ITeamService service, CancellationToken cancellationToken) =>
+                (await service.DeleteGovernanceRoleAsync(id, cancellationToken)).ToApiResult())
             .RequireAuthorization(TeamPermissions.ManageGovernance);
 
         return app;

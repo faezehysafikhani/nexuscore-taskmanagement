@@ -7,4 +7,5 @@ public interface IStakeholderRepository
     Task<Stakeholder?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
     Task<IReadOnlyList<Stakeholder>> ListByProjectAsync(Guid projectId, CancellationToken cancellationToken);
     Task AddAsync(Stakeholder stakeholder, CancellationToken cancellationToken);
+    Task RemoveAsync(Stakeholder stakeholder, CancellationToken cancellationToken);
 }

@@ -7,4 +7,5 @@ public interface IProgressRepository
     Task<ProgressUpdate?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
     Task<IReadOnlyList<ProgressUpdate>> ListByProjectAsync(Guid projectId, CancellationToken cancellationToken);
     Task AddAsync(ProgressUpdate progressUpdate, CancellationToken cancellationToken);
+    Task RemoveAsync(ProgressUpdate progressUpdate, CancellationToken cancellationToken);
 }

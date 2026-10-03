@@ -9,5 +9,6 @@ public interface IRiskService
     Task<Result<RiskDto>> GetAsync(Guid id, CancellationToken cancellationToken);
     Task<Result<RiskDto>> CreateAsync(CreateRiskRequest request, CancellationToken cancellationToken);
     Task<Result<RiskDto>> UpdateAsync(Guid id, UpdateRiskRequest request, CancellationToken cancellationToken);
+    Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken);
     Task<Result<RiskDto>> SubmitForApprovalAsync(Guid id, CancellationToken cancellationToken);
 }

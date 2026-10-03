@@ -9,5 +9,6 @@ public interface IStakeholderService
     Task<Result<StakeholderDto>> GetAsync(Guid id, CancellationToken cancellationToken);
     Task<Result<StakeholderDto>> CreateAsync(CreateStakeholderRequest request, CancellationToken cancellationToken);
     Task<Result<StakeholderDto>> UpdateAsync(Guid id, UpdateStakeholderRequest request, CancellationToken cancellationToken);
+    Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken);
     Task<Result<StakeholderDto>> SubmitForApprovalAsync(Guid id, CancellationToken cancellationToken);
 }

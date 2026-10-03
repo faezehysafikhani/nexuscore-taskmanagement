@@ -19,4 +19,10 @@ public sealed class ProgressRepository(ProgressDbContext dbContext) : IProgressR
     {
         await dbContext.ProgressUpdates.AddAsync(progressUpdate, cancellationToken);
     }
+
+    public Task RemoveAsync(ProgressUpdate progressUpdate, CancellationToken cancellationToken)
+    {
+        dbContext.ProgressUpdates.Remove(progressUpdate);
+        return Task.CompletedTask;
+    }
 }

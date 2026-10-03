@@ -9,4 +9,5 @@ public interface IKpiService
     Task<Result<KpiDefinitionDto>> GetAsync(Guid id, CancellationToken cancellationToken);
     Task<Result<KpiDefinitionDto>> CreateAsync(CreateKpiDefinitionRequest request, CancellationToken cancellationToken);
     Task<Result<KpiDefinitionDto>> UpdateAsync(Guid id, UpdateKpiDefinitionRequest request, CancellationToken cancellationToken);
+    Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken);
 }
