@@ -18,6 +18,10 @@ public static class RiskEndpoints
                 (await service.ListByProjectAsync(projectId, cancellationToken)).ToApiResult())
             .RequireAuthorization(RiskPermissions.View);
 
+        group.MapGet("/matrix", async (Guid projectId, IRiskService service, CancellationToken cancellationToken) =>
+                (await service.GetMatrixAsync(projectId, cancellationToken)).ToApiResult())
+            .RequireAuthorization(RiskPermissions.View);
+
         group.MapGet("/{id:guid}", async (Guid id, IRiskService service, CancellationToken cancellationToken) =>
                 (await service.GetAsync(id, cancellationToken)).ToApiResult())
             .RequireAuthorization(RiskPermissions.View);

@@ -18,6 +18,10 @@ public static class StakeholderEndpoints
                 (await service.ListByProjectAsync(projectId, cancellationToken)).ToApiResult())
             .RequireAuthorization(StakeholderPermissions.View);
 
+        group.MapGet("/matrix", async (Guid projectId, IStakeholderService service, CancellationToken cancellationToken) =>
+                (await service.GetMatrixAsync(projectId, cancellationToken)).ToApiResult())
+            .RequireAuthorization(StakeholderPermissions.View);
+
         group.MapGet("/{id:guid}", async (Guid id, IStakeholderService service, CancellationToken cancellationToken) =>
                 (await service.GetAsync(id, cancellationToken)).ToApiResult())
             .RequireAuthorization(StakeholderPermissions.View);

@@ -18,6 +18,31 @@ public sealed class StakeholderService(
         return Result.Success<IReadOnlyList<StakeholderDto>>(stakeholders.Select(ToDto).ToList());
     }
 
+    public async Task<Result<StakeholderMatrixDto>> GetMatrixAsync(Guid projectId, CancellationToken cancellationToken)
+    {
+        var stakeholders = await repository.ListByProjectAsync(projectId, cancellationToken);
+
+        var cells = stakeholders
+            .GroupBy(stakeholder => (stakeholder.Power, stakeholder.Interest))
+            .OrderBy(group => group.Key.Power)
+            .ThenBy(group => group.Key.Interest)
+            .Select(group => new StakeholderMatrixCellDto(
+                group.Key.Power, group.Key.Interest, ToQuadrant(group.Key.Power, group.Key.Interest),
+                group.Select(stakeholder => new StakeholderMatrixItemDto(stakeholder.Id, stakeholder.Name, stakeholder.IsInternal)).ToList()))
+            .ToList();
+
+        return Result.Success(new StakeholderMatrixDto(projectId, stakeholders.Count, cells));
+    }
+
+    private static StakeholderQuadrant ToQuadrant(PowerLevel power, InterestLevel interest) =>
+        (power == PowerLevel.High, interest == InterestLevel.High) switch
+        {
+            (true, true) => StakeholderQuadrant.ManageClosely,
+            (true, false) => StakeholderQuadrant.KeepSatisfied,
+            (false, true) => StakeholderQuadrant.KeepInformed,
+            _ => StakeholderQuadrant.Monitor
+        };
+
     public async Task<Result<StakeholderDto>> GetAsync(Guid id, CancellationToken cancellationToken)
     {
         var stakeholder = await repository.GetByIdAsync(id, cancellationToken);

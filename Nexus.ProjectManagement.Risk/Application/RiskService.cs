@@ -21,6 +21,21 @@ public sealed class RiskService(
         return Result.Success<IReadOnlyList<RiskDto>>(risks.Select(ToDto).ToList());
     }
 
+    public async Task<Result<RiskMatrixDto>> GetMatrixAsync(Guid projectId, CancellationToken cancellationToken)
+    {
+        var risks = await repository.ListByProjectAsync(projectId, cancellationToken);
+
+        var cells = risks
+            .GroupBy(risk => (risk.ProbabilityScore, risk.ImpactScore))
+            .OrderBy(group => group.Key.ProbabilityScore)
+            .ThenBy(group => group.Key.ImpactScore)
+            .Select(group => new RiskMatrixCellDto(
+                group.Key.ProbabilityScore, group.Key.ImpactScore, group.Count(), group.Select(risk => risk.Id).ToList()))
+            .ToList();
+
+        return Result.Success(new RiskMatrixDto(projectId, risks.Count, cells));
+    }
+
     public async Task<Result<RiskDto>> GetAsync(Guid id, CancellationToken cancellationToken)
     {
         var risk = await repository.GetByIdAsync(id, cancellationToken);

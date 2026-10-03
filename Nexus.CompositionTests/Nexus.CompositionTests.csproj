@@ -65,6 +65,10 @@
     <ProjectReference Include="..\Nexus.ProjectManagement.Waterfall.Infrastructure\Nexus.ProjectManagement.Waterfall.Infrastructure.csproj" />
     <ProjectReference Include="..\Nexus.ProjectManagement.Risk\Nexus.ProjectManagement.Risk.csproj" />
     <ProjectReference Include="..\Nexus.ProjectManagement.Risk.Infrastructure\Nexus.ProjectManagement.Risk.Infrastructure.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Stakeholder\Nexus.ProjectManagement.Stakeholder.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Progress\Nexus.ProjectManagement.Progress.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Kpi\Nexus.ProjectManagement.Kpi.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Team\Nexus.ProjectManagement.Team.csproj" />
   </ItemGroup>
 
   <!-- Notifications.Api ships an appsettings.json that is not valid JSON; keep it out of this
