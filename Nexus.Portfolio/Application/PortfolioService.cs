@@ -21,28 +21,42 @@ public sealed class PortfolioService(
     public async Task<Result<PortfolioResultDto>> GetPortfolioAsync(PortfolioQuery query, CancellationToken cancellationToken)
     {
         var projectsPage = await projectRepository.ListAsync(
-            new ListProjectsRequest(query.TenantId, PageNumber: 1, PageSize: 1000, OrganizationUnitId: query.OrganizationUnitId),
+            new ListProjectsRequest(query.TenantId, PageNumber: 1, PageSize: 1000, Search: query.Search, OrganizationUnitId: query.OrganizationUnitId),
             cancellationToken);
 
         var actions = await actionRepository.ListAsync(query.TenantId, projectId: null, cancellationToken);
 
-        var projects = projectsPage.Items
+        var includeProjects = !IsType(query.Type, "Action");
+        var includeActions = query.Type is null || IsType(query.Type, "Action");
+
+        var projects = !includeProjects ? [] : projectsPage.Items
+            .Where(project => query.Type is null || IsType(query.Type, project.Type.ToString()))
             .Where(project => query.Status is null || project.Status.ToString() == query.Status)
+            .Where(project => query.ApprovalStatus is null || project.ApprovalStatus.ToString() == query.ApprovalStatus)
+            .Where(project => query.InvolvedUserId is null || project.OwnerUserId == query.InvolvedUserId || project.ManagerUserId == query.InvolvedUserId)
             .Where(project => query.ViewAll || project.OwnerUserId == query.CurrentUserId || project.ManagerUserId == query.CurrentUserId)
             .Select(project => new PortfolioProjectItem(
                 project.Id, project.Name, project.Code, project.Type.ToString(), project.Status.ToString(),
-                project.OrganizationUnitId, project.ManagerUserId, project.OwnerUserId, project.ApprovalStatus.ToString()))
+                project.OrganizationUnitId, project.ManagerUserId, project.OwnerUserId, project.ApprovalStatus.ToString(),
+                project.StartDate, project.EndDate))
             .ToList();
 
-        var actionItems = actions
+        var actionItems = !includeActions ? [] : actions
+            .Where(action => string.IsNullOrWhiteSpace(query.Search) || action.Title.Contains(query.Search, StringComparison.OrdinalIgnoreCase))
+            .Where(action => query.ApprovalStatus is null || action.ApprovalStatus.ToString() == query.ApprovalStatus)
+            .Where(action => query.InvolvedUserId is null || action.OwnerUserId == query.InvolvedUserId || action.ResponsibleUserId == query.InvolvedUserId)
             .Where(action => query.OrganizationUnitId is null || action.OrganizationUnitId == query.OrganizationUnitId)
             .Where(action => query.Status is null || action.Status.ToString() == query.Status)
             .Where(action => query.ViewAll || action.OwnerUserId == query.CurrentUserId || action.ResponsibleUserId == query.CurrentUserId)
             .Select(action => new PortfolioActionItem(
                 action.Id, action.Title, action.Status.ToString(), action.OrganizationUnitId,
-                action.ResponsibleUserId, action.OwnerUserId, action.ApprovalStatus.ToString()))
+                action.ResponsibleUserId, action.OwnerUserId, action.ApprovalStatus.ToString(),
+                action.StartDate, action.EndDate))
             .ToList();
 
         return Result.Success(new PortfolioResultDto(projects, actionItems));
     }
+
+    private static bool IsType(string? requested, string actual) =>
+        string.Equals(requested, actual, StringComparison.OrdinalIgnoreCase);
 }
