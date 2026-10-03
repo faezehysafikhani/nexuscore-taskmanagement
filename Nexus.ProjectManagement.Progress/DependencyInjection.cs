@@ -22,12 +22,19 @@ public static class DependencyInjection
         services.AddScoped<IValidator<UpdateProgressUpdateRequest>, UpdateProgressUpdateRequestValidator>();
         services.AddSingleton<IPermissionCatalog, ProgressPermissionCatalog>();
 
+        services.AddScoped<IDelayReasonService, DelayReasonService>();
+        services.AddScoped<IValidator<CreateDelayReasonRequest>, CreateDelayReasonRequestValidator>();
+        services.AddScoped<IValidator<UpdateDelayReasonRequest>, UpdateDelayReasonRequestValidator>();
+        services.AddSingleton<IPermissionCatalog, DelayReasonPermissionCatalog>();
+        services.AddScoped<IDomainEventHandler<ApprovalGranted>, DelayReasonApprovalGrantedHandler>();
+        services.AddScoped<IDomainEventHandler<ApprovalRejected>, DelayReasonApprovalRejectedHandler>();
+
         services.AddScoped<IDomainEventHandler<ApprovalGranted>, ProgressApprovalGrantedHandler>();
         services.AddScoped<IDomainEventHandler<ApprovalRejected>, ProgressApprovalRejectedHandler>();
 
         services.AddAuthorization(options =>
         {
-            foreach (var permission in ProgressPermissions.All)
+            foreach (var permission in ProgressPermissions.All.Concat(DelayReasonPermissions.All))
             {
                 options.AddPolicy(permission.Name, policy =>
                     policy.RequireAuthenticatedUser().AddRequirements(new PermissionRequirement(permission.Name)));

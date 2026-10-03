@@ -50,6 +50,8 @@ public static class ProgressEndpoints
             })
             .RequireAuthorization(ProgressPermissions.View);
 
+        app.MapDelayReasonEndpoints();
+
         return app;
     }
 }

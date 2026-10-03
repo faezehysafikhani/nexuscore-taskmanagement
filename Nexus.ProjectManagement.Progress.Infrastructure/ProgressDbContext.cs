@@ -8,6 +8,7 @@ public sealed class ProgressDbContext(DbContextOptions<ProgressDbContext> option
     : DbContext(options), IProgressUnitOfWork
 {
     public DbSet<ProgressUpdate> ProgressUpdates => Set<ProgressUpdate>();
+    public DbSet<DelayReason> DelayReasons => Set<DelayReason>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
