@@ -70,6 +70,8 @@
     <ProjectReference Include="..\Nexus.ProjectManagement.Stakeholder.Infrastructure\Nexus.ProjectManagement.Stakeholder.Infrastructure.csproj" />
     <ProjectReference Include="..\Nexus.ProjectManagement.Progress\Nexus.ProjectManagement.Progress.csproj" />
     <ProjectReference Include="..\Nexus.ProjectManagement.Progress.Infrastructure\Nexus.ProjectManagement.Progress.Infrastructure.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Contracts\Nexus.ProjectManagement.Contracts.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Contracts.Infrastructure\Nexus.ProjectManagement.Contracts.Infrastructure.csproj" />
     <ProjectReference Include="..\Nexus.ProjectManagement.Documents\Nexus.ProjectManagement.Documents.csproj" />
     <ProjectReference Include="..\Nexus.ProjectManagement.Documents.Infrastructure\Nexus.ProjectManagement.Documents.Infrastructure.csproj" />
 

@@ -38,7 +38,7 @@ public sealed class ArchitectureDependencyTests
             "Nexus.ProjectManagement.Team", "Nexus.ProjectManagement.Deliverables",
             "Nexus.ProjectManagement.Kpi", "Nexus.ProjectManagement.Risk",
             "Nexus.ProjectManagement.Stakeholder", "Nexus.ProjectManagement.Progress",
-            "Nexus.ProjectManagement.Documents", "Nexus.Workflow"
+            "Nexus.ProjectManagement.Documents", "Nexus.ProjectManagement.Contracts", "Nexus.Workflow"
         };
 
         foreach (var project in new[]

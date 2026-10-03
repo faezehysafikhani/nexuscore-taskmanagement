@@ -56,6 +56,7 @@ at the end for every value's meaning.
 14. [Stakeholders](#14-stakeholders)
 15. [Progress](#15-progress)
 16. [Project Documents](#16-project-documents)
+    - [16a. Contracts](#16a-contracts-nexusprojectmanagementcontracts)
 17. [Project Workflow (integration)](#17-project-workflow-integration)
 18. [Project-Strategy Alignment (integration)](#18-project-strategy-alignment-integration)
 19. [Portfolio](#19-portfolio)
@@ -2490,6 +2491,93 @@ Status Codes: 200 (if a provider is plugged in), 401, 403, 501 (default)
 
 ---
 
+## 16a. Contracts (Nexus.ProjectManagement.Contracts)
+
+Contracts signed for a project, their addenda and their invoices — money in **rials**, every amount and date also
+returned the Persian way (`...Fa` dates in Jalali with Persian digits; `MoneyDto` with the amount in words, grouped
+digits and the toman equivalent). Requires ProjectManagement.Core; Workflow is optional (without it everything is
+approved on submit). Register with `AddContractManagement()` + `AddContractManagementInfrastructure(configuration)`,
+map with `MapContractEndpoints()`, and run `ModuleSchemaInitializer.EnsureCreatedAsync` for `ContractsDbContext`.
+Subject types: `"Contract"`, `"ContractAddendum"`, `"ContractInvoice"`. Permission namespace: `Contracts.*`
+(`View`, `Create`, `Edit`, `Delete`, `Submit`, `ManageAddenda`, `ManageInvoices`, `RecordPayments`). Base route:
+`/api/project-management/contracts`. The schema is new, so a host that runs EnsureCreated gets it automatically;
+`docs/upgrade/2026-10-03-add-contracts.sql` creates it by script.
+
+**The money rules.** `currentAmount` = original amount + approved addenda (0 until the contract is approved);
+`invoicedAmount` = approved invoices; invoices that are not rejected are *reserved*, and a new invoice must fit in
+`currentAmount − reserved`; `remainingCommitment` = current − invoiced; `outstandingPayable` = invoiced − paid;
+`currentEndDate` = end date + approved extension days. `isOverInvoiced` flags a contract billed above its value.
+
+### Module: Contracts
+Method: GET
+Route: /api/project-management/contracts
+Description: A project's contracts (sorted by number), each with its computed `summary`. Query: projectId (Guid, required). Needs `Contracts.View`.
+
+Method: GET
+Route: /api/project-management/contracts/summary
+Description: The project's contracts added up (counts approved money only): totals, percentages and `overInvoicedContracts`. Query: projectId (Guid, required).
+
+Method: GET
+Route: /api/project-management/contracts/{id}
+Description: One contract with its addenda (by number) and invoices (by date).
+
+Method: POST
+Route: /api/project-management/contracts
+Description: Create a contract (starts `Draft`, `NotSubmitted`). The number is stored with plain 0-9 digits (`"۱۴۰۵/۱۲"` = `"1405/12"`) and is unique per project (409).
+Request Body: `{ "tenantId", "projectId", "contractNumber", "title", "counterparty", "description", "signDate", "startDate", "endDate", "originalAmount" }`
+Status Codes: 200, 400, 409
+
+Method: PUT
+Route: /api/project-management/contracts/{id}
+Description: Edit. Refused while `PendingApproval` (409); once approved the original amount can no longer change — use an addendum. Needs `Contracts.Edit`.
+
+Method: PUT
+Route: /api/project-management/contracts/{id}/status
+Description: Request body `{ "status": 0|1|2|3 }` (Draft, Active, Completed, Terminated). Only an approved contract can leave Draft (409).
+
+Method: DELETE
+Route: /api/project-management/contracts/{id}
+Description: Refused (409) while pending approval, when it has any invoice, or any approved/pending addendum. Draft/rejected addenda are removed with it.
+
+Method: POST
+Route: /api/project-management/contracts/{id}/submit-for-approval
+Description: With Workflow it becomes `PendingApproval(1)`; without it, `Approved(2)` directly.
+
+### Module: Contract Addenda
+Method: GET / POST
+Route: /api/project-management/contracts/{contractId}/addenda
+Description: List / create. Body `{ "tenantId", "title", "description", "addendumDate", "amountChange", "extensionDays" }` — `amountChange` is negative for a reduction; at least one of amount/days must be non-zero. Numbered 1, 2, 3… per contract. The contract must be approved and not terminated (409). Needs `Contracts.ManageAddenda`.
+
+Method: PUT / DELETE
+Route: /api/project-management/contracts/{contractId}/addenda/{addendumId}
+Description: Edit / delete; refused (409) once pending approval or approved.
+
+Method: POST
+Route: /api/project-management/contracts/{contractId}/addenda/{addendumId}/submit-for-approval
+Description: A reduction that would take the contract below what is already invoiced/reserved is refused (409). Takes effect on the contract only when approved.
+
+### Module: Contract Invoices
+Method: GET / POST
+Route: /api/project-management/contracts/{contractId}/invoices
+Description: List / create. Body `{ "tenantId", "invoiceNumber", "invoiceDate", "amount", "description" }`. The number is digit-normalised and unique per contract (409); amount > 0 and must fit under the contract (409). Needs `Contracts.ManageInvoices`.
+
+Method: PUT / DELETE
+Route: /api/project-management/contracts/{contractId}/invoices/{invoiceId}
+Description: Edit / delete; refused (409) once pending approval or approved, and an invoice with payments cannot be deleted.
+
+Method: POST
+Route: /api/project-management/contracts/{contractId}/invoices/{invoiceId}/submit-for-approval
+Description: Re-checks that the invoice still fits the contract.
+
+Method: PUT
+Route: /api/project-management/contracts/{contractId}/invoices/{invoiceId}/payment
+Description: Body `{ "paidAmount", "paymentDate" }` — the **total paid so far**, not an increment (0 clears it). Only for an approved invoice; 0 ≤ paid ≤ amount; a date is required when paid > 0 and cannot precede the invoice date. Needs `Contracts.RecordPayments`.
+
+### ContractStatus
+`0` Draft · `1` Active · `2` Completed · `3` Terminated
+
+---
+
 ## 17. Project Workflow (integration)
 
 Family × Workflow integration: lets an admin create a Project-scoped override of a Workflow
@@ -2504,7 +2592,7 @@ Description: List the fixed catalog of SubjectType strings the ProjectManagement
 Request Body: none
 Response:
 ```json
-["Project", "WaterfallActivity", "AgileTask", "Risk", "Stakeholder", "ProgressUpdate", "DelayReason", "ProjectDocument", "Action"]
+["Project", "WaterfallActivity", "AgileTask", "Risk", "Stakeholder", "ProgressUpdate", "DelayReason", "ProjectDocument", "Action", "Contract", "ContractAddendum", "ContractInvoice"]
 ```
 Status Codes: 200, 401, 403
 
