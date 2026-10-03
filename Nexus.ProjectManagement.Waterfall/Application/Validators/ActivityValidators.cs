@@ -40,6 +40,15 @@ public sealed class CreateActivityDependencyRequestValidator : AbstractValidator
     }
 }
 
+public sealed class CreateScheduleBaselineRequestValidator : AbstractValidator<CreateScheduleBaselineRequest>
+{
+    public CreateScheduleBaselineRequestValidator()
+    {
+        RuleFor(x => x.Name).NotEmpty().MaximumLength(200);
+        RuleFor(x => x.Note).MaximumLength(2000);
+    }
+}
+
 public sealed class UpdateActivityDependencyRequestValidator : AbstractValidator<UpdateActivityDependencyRequest>
 {
     public UpdateActivityDependencyRequestValidator()

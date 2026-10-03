@@ -70,3 +70,26 @@ internal sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
 {
     public override DateTimeOffset GetUtcNow() => now;
 }
+
+internal sealed class FakeBaselineRepository : IScheduleBaselineRepository
+{
+    public List<ScheduleBaseline> Baselines { get; } = [];
+    public List<ScheduleBaselineActivity> Rows { get; } = [];
+    public Task<ScheduleBaseline?> GetByIdAsync(Guid id, CancellationToken ct) => Task.FromResult(Baselines.SingleOrDefault(b => b.Id == id));
+    public Task<IReadOnlyList<ScheduleBaseline>> ListByProjectAsync(Guid projectId, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<ScheduleBaseline>>(Baselines.Where(b => b.ProjectId == projectId).OrderBy(b => b.Number).ToList());
+    public Task<IReadOnlyList<ScheduleBaselineActivity>> ListActivitiesAsync(IReadOnlyCollection<Guid> baselineIds, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<ScheduleBaselineActivity>>(Rows.Where(r => baselineIds.Contains(r.BaselineId)).ToList());
+    public Task AddAsync(ScheduleBaseline baseline, IReadOnlyCollection<ScheduleBaselineActivity> activities, CancellationToken ct)
+    {
+        Baselines.Add(baseline);
+        Rows.AddRange(activities);
+        return Task.CompletedTask;
+    }
+    public Task RemoveAsync(ScheduleBaseline baseline, IReadOnlyCollection<ScheduleBaselineActivity> activities, CancellationToken ct)
+    {
+        Baselines.Remove(baseline);
+        foreach (var row in activities) { Rows.Remove(row); }
+        return Task.CompletedTask;
+    }
+}
