@@ -103,6 +103,20 @@ public sealed class ArchitectureDependencyTests
     }
 
     [Fact]
+    public void ProjectHistory_ListensThroughNexusCoreOnly_ReferencesNoModule()
+    {
+        foreach (var project in new[]
+                 {
+                     "Nexus.ProjectManagement.History/Nexus.ProjectManagement.History.csproj",
+                     "Nexus.ProjectManagement.History.Infrastructure/Nexus.ProjectManagement.History.Infrastructure.csproj"
+                 })
+        {
+            var references = GetProjectReferences(project);
+            Assert.DoesNotContain(references, r => r.StartsWith("Nexus.", StringComparison.Ordinal) && !r.StartsWith("Nexus.ProjectManagement.History", StringComparison.Ordinal));
+        }
+    }
+
+    [Fact]
     public void ReportingReadsTheModules_NoModuleReferencesReporting()
     {
         foreach (var project in new[]

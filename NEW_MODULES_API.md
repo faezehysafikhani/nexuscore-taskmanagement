@@ -2921,6 +2921,43 @@ Status Codes: 200, 401, 403, 409 (Strategy or Alignment not installed)
 ### HealthStatus (Reporting)
 `0` Unknown · `1` Green · `2` Amber · `3` Red
 
+## 20a. Project History (Nexus.ProjectManagement.History)
+
+A per-project change history: one row for every create, edit or delete of anything that belongs to a project — the project itself,
+and every record that carries a `ProjectId` (activities, risks, stakeholders, progress, documents, contracts, team members, ...) —
+with who did it, when, and the old and new value of each property that changed. Independent of every other module: it listens through
+NexusCore's `IEntityChangeObserver` (called by the `AuditingInterceptor` that every module's DbContext already uses, only after the
+save has succeeded; an observer that throws is logged and never fails the business operation), so it records whatever is installed.
+Register with `AddProjectHistory()` + `AddProjectHistoryInfrastructure(configuration)`, map with `MapProjectHistoryEndpoints()`, and run
+`ModuleSchemaInitializer.EnsureCreatedAsync` for `ProjectHistoryDbContext`. Permission: `ProjectHistory.View`. The schema is new, so a
+host that runs EnsureCreated gets it automatically; `docs/upgrade/2026-10-04-add-project-history.sql` creates it by script.
+
+What is recorded: audit stamps, ids and the tenant are not "changes"; values are cut at 500 characters; an edit that changed nothing is not
+recorded; the system's own bookkeeping rows (`SprintEvent`, `ScheduleBaselineActivity`) are left out. Children identified only by their parent
+(contract addenda and invoices, document versions, checklist items) have no `ProjectId` and are not recorded. History starts when the module is
+installed — earlier changes are not reconstructed.
+
+Method: GET
+Route: /api/project-management/history
+Description: A project's changes, newest first. Only the caller's own tenant's rows are ever returned.
+Query Parameters: projectId (Guid, required); entityName (string, optional — e.g. "Risk"); kind (0 Added, 1 Modified, 2 Deleted, optional); userId (Guid, optional — who made the change); from / to (date-time, optional); skip (int, default 0); take (int, default 50, at most 200)
+Response:
+```json
+{
+  "items": [
+    { "id": "guid", "projectId": "guid", "entityName": "Risk", "entityId": "guid", "kind": 1,
+      "changedByUserId": "guid | null", "changedAtUtc": "2026-06-10T09:30:00+00:00",
+      "changes": [ { "property": "Title", "oldValue": "old", "newValue": "new" } ] }
+  ],
+  "total": 42, "skip": 0, "take": 50
+}
+```
+For `kind` 0 every set property appears with `oldValue: null`; for 2 every property with `newValue: null`.
+Status Codes: 200, 400, 401, 403
+
+### ProjectChangeKind (History)
+`0` Added · `1` Modified · `2` Deleted
+
 ---
 
 ## Enums Reference

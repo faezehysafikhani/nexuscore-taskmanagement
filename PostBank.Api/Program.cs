@@ -42,6 +42,9 @@ using Nexus.ProjectManagement.Contracts;
 using Nexus.ProjectManagement.Contracts.Endpoints;
 using Nexus.ProjectManagement.Contracts.Infrastructure;
 using Nexus.ProjectManagement.Documents;
+using Nexus.ProjectManagement.History;
+using Nexus.ProjectManagement.History.Endpoints;
+using Nexus.ProjectManagement.History.Infrastructure;
 using Nexus.ProjectManagement.Documents.Endpoints;
 using Nexus.ProjectManagement.Documents.Infrastructure;
 using Nexus.ProjectManagement.Kpi;
@@ -120,6 +123,7 @@ builder.Services.AddStakeholderManagement();
 builder.Services.AddProgressManagement();
 builder.Services.AddProjectDocuments();
 builder.Services.AddContractManagement();
+builder.Services.AddProjectHistory();
 
 builder.Services.AddProjectWorkflowIntegration();
 builder.Services.AddProjectStrategyAlignment();
@@ -153,6 +157,7 @@ builder.Services.AddStakeholderManagementInfrastructure(builder.Configuration);
 builder.Services.AddProgressManagementInfrastructure(builder.Configuration);
 builder.Services.AddProjectDocumentsInfrastructure(builder.Configuration);
 builder.Services.AddContractManagementInfrastructure(builder.Configuration);
+builder.Services.AddProjectHistoryInfrastructure(builder.Configuration);
 
 builder.Services.AddProjectStrategyAlignmentInfrastructure(builder.Configuration);
 
@@ -288,6 +293,7 @@ app.MapStakeholderEndpoints();
 app.MapProgressEndpoints();
 app.MapProjectDocumentEndpoints();
 app.MapContractEndpoints();
+app.MapProjectHistoryEndpoints();
 
 app.MapProjectWorkflowEndpoints();
 app.MapProjectStrategyAlignmentEndpoints();
@@ -326,6 +332,7 @@ if (builder.Configuration.GetValue("Database:SeedOnStartup", true))
     await ModuleSchemaInitializer.EnsureCreatedAsync(services.GetRequiredService<ProgressDbContext>(), cancellationToken);
     await ModuleSchemaInitializer.EnsureCreatedAsync(services.GetRequiredService<ProjectDocumentsDbContext>(), cancellationToken);
     await ModuleSchemaInitializer.EnsureCreatedAsync(services.GetRequiredService<ContractsDbContext>(), cancellationToken);
+    await ModuleSchemaInitializer.EnsureCreatedAsync(services.GetRequiredService<ProjectHistoryDbContext>(), cancellationToken);
 
     await ModuleSchemaInitializer.EnsureCreatedAsync(services.GetRequiredService<StrategyAlignmentDbContext>(), cancellationToken);
 
