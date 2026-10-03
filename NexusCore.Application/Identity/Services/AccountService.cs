@@ -274,14 +274,15 @@ public sealed class AccountService(
             return Result.Failure<UserDto>(Error.Conflict("This mobile number cannot be used. Enter another one."));
         }
 
-        // The username (national code) is identity data: only an administrator changes it.
-        if (!string.IsNullOrWhiteSpace(request.FirstName) || !string.IsNullOrWhiteSpace(request.LastName))
+        // Identity fields are immutable through the self-service endpoint, even if a caller
+        // bypasses the UI and submits an older payload directly.
+        if (!string.Equals(request.DisplayName.Trim(), user.DisplayName, StringComparison.Ordinal)
+            || (!string.IsNullOrWhiteSpace(request.FirstName)
+                && !string.Equals(request.FirstName.Trim(), user.FirstName, StringComparison.Ordinal))
+            || (!string.IsNullOrWhiteSpace(request.LastName)
+                && !string.Equals(request.LastName.Trim(), user.LastName, StringComparison.Ordinal)))
         {
-            user.SetName(request.FirstName ?? string.Empty, request.LastName ?? string.Empty);
-        }
-        else
-        {
-            user.ChangeDisplayName(request.DisplayName);
+            return Result.Failure<UserDto>(Error.Forbidden("Identity details cannot be changed from the personal profile."));
         }
 
         user.UpdateContactDetails(user.Username, request.PhoneNumber, request.NotifySms);

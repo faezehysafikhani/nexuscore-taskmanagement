@@ -1,8 +1,8 @@
 namespace NexusCore.Application.Identity.Dtos;
 
 /// <summary>
-/// The signed-in user's own profile. The username (national code) is not part of it: only an
-/// administrator changes it. When FirstName/LastName are given they set DisplayName.
+/// The signed-in user's own profile. Identity fields are accepted only when unchanged for
+/// compatibility with older clients; this endpoint updates contact details and avatar only.
 /// </summary>
 public sealed record UpdateMyProfileRequest(
     string DisplayName,

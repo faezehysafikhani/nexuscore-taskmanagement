@@ -11,7 +11,7 @@ namespace Nexus.ProjectManagement.RiskManagement.Domain;
 
 /// <summary>
 /// Required: ProjectManagement.Core (ProjectId). Optional: Workflow (via IApprovalRequester)
-/// and AI (via IRiskAnalyzer) - this module is fully usable with neither installed: submitting
+/// and an optional analyzer (via IRiskAnalyzer) - this module is fully usable with neither installed: submitting
 /// a risk for approval falls back to the direct-approve business rule (see RiskService).
 /// </summary>
 public sealed class Risk : AuditableEntity<Guid>

@@ -5,7 +5,7 @@ using NexusCore.SharedKernel.Results;
 
 namespace Nexus.ProjectManagement.StakeholderManagement.Application;
 
-/// <summary>Fully usable with neither Workflow nor AI installed - same pattern as
+/// <summary>Fully usable with neither Workflow nor an optional analyzer installed - same pattern as
 /// Nexus.ProjectManagement.RiskManagement.Application.RiskService.</summary>
 public sealed class StakeholderService(
     IStakeholderRepository repository,

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using NexusCore.Application.Identity.Options;
 using NexusCore.Application.Identity.Permissions;
@@ -19,6 +20,7 @@ public sealed class DefaultDataSeeder(
     IPasswordHasher passwordHasher,
     IEnumerable<IPermissionCatalog> permissionCatalogs,
     IOptions<IdentitySeedOptions> seedOptions,
+    IHostEnvironment environment,
     ILogger<DefaultDataSeeder> logger)
 {
     public static readonly Guid DefaultTenantId = Guid.Parse("11111111-1111-1111-1111-111111111111");
@@ -64,7 +66,13 @@ public sealed class DefaultDataSeeder(
         var builtInAdmin = await dbContext.Users.SingleOrDefaultAsync(user => user.Id == AdminUserId, cancellationToken);
         if (builtInAdmin is null)
         {
-            var admin = new User(AdminUserId, DefaultTenantId, "admin@nexus.local", "System Administrator", passwordHasher.HashPassword("Admin@12345"), true);
+            var configuredPassword = seedOptions.Value.AdminPassword;
+            if (environment.IsProduction() && (string.IsNullOrWhiteSpace(configuredPassword) || configuredPassword.Length < 12 || configuredPassword == "Admin@12345"))
+            {
+                throw new InvalidOperationException("Identity:AdminPassword must be a unique password of at least 12 characters before creating the administrator in production.");
+            }
+            var initialPassword = string.IsNullOrWhiteSpace(configuredPassword) ? "Admin@12345" : configuredPassword;
+            var admin = new User(AdminUserId, DefaultTenantId, "admin@nexus.local", "System Administrator", passwordHasher.HashPassword(initialPassword), true);
             admin.UpdateContactDetails(adminUsernameUsable ? adminUsername : "admin", null, notifySms: true);
             admin.AssignRole(AdminRoleId);
             admin.MarkAsSystemAccount();

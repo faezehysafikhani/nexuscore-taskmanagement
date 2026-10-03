@@ -15,7 +15,7 @@ public static class DependencyInjection
 {
     /// <summary>Requires AddProjectManagementCore(). File storage comes from NexusCore's
     /// always-present IFileStorage - no separate registration needed. Optional:
-    /// AddWorkflowApplication(), IDocumentSummaryGenerator, IDocumentRelevanceAnalyzer (AI).</summary>
+    /// AddWorkflowApplication(), IDocumentSummaryGenerator, IDocumentRelevanceAnalyzer.</summary>
     public static IServiceCollection AddProjectDocuments(this IServiceCollection services)
     {
         services.AddScoped<IProjectDocumentService, ProjectDocumentService>();

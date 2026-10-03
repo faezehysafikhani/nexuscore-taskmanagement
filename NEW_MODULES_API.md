@@ -963,7 +963,7 @@ Status Codes: 200, 401, 403, 404
 ### Module: Waterfall Activities
 Method: POST
 Route: /api/project-management/waterfall/activities/generate-wbs
-Description: **Optional AI integration point.** Ask a configured WBS generator to suggest a breakdown for a project goal. Returns `501` if no `IWbsGenerator` implementation is registered (none is, by default — this is a pure extension point).
+Description: **Optional integration point.** Ask a configured WBS generator to suggest a breakdown for a project goal. Returns `501` if no `IWbsGenerator` implementation is registered (none is, by default — this is a pure extension point).
 
 Query Parameters: projectId (Guid, required), projectGoal (string, required)
 Request Body: none (both inputs are query parameters, not a JSON body)
@@ -972,7 +972,7 @@ Response (when a generator is configured):
 [ { "name": "string", "description": "string | null", "durationDays": 5, "weight": 1.0 } ]
 ```
 Response (when no generator is configured, i.e. always in this codebase's default installation):
-RFC 7807 Problem Details, `status: 501`, `detail: "AI WBS generation is not configured for this deployment."`
+RFC 7807 Problem Details, `status: 501`, `detail: "WBS generation is not configured for this deployment."`
 
 Status Codes: 200 (if a provider is plugged in), 401, 403, 501 (default — no provider registered)
 
@@ -1080,7 +1080,7 @@ Status Codes: 200, 401, 403, 404
 ### Module: Agile Tasks
 Method: POST
 Route: /api/project-management/agile/tasks/generate
-Description: **Optional AI integration point.** Suggest agile tasks for a project goal. Returns `501` by default (no provider registered).
+Description: **Optional integration point.** Suggest agile tasks for a project goal. Returns `501` by default (no provider registered).
 
 Query Parameters: projectId (Guid, required), projectGoal (string, required)
 Request Body: none
@@ -1389,7 +1389,7 @@ Status Codes: 200, 401, 403, 404
 ### Module: Risks
 Method: POST
 Route: /api/project-management/risks/analyze
-Description: **Optional AI integration point.** Ask a configured analyzer to suggest risks for a project context. Returns `501` by default (no provider registered).
+Description: **Optional integration point.** Ask a configured analyzer to suggest risks for a project context. Returns `501` by default (no provider registered).
 
 Query Parameters: projectId (Guid, required), projectContext (string, required)
 Request Body: none
@@ -1477,7 +1477,7 @@ Status Codes: 200, 401, 403, 404
 ### Module: Stakeholders
 Method: POST
 Route: /api/project-management/stakeholders/analyze
-Description: **Optional AI integration point.** Suggest stakeholders for a project context. Returns `501` by default (no provider registered).
+Description: **Optional integration point.** Suggest stakeholders for a project context. Returns `501` by default (no provider registered).
 
 Query Parameters: projectId (Guid, required), projectContext (string, required)
 Request Body: none
@@ -1574,7 +1574,7 @@ Status Codes: 200, 401, 403, 404
 ### Module: Progress
 Method: GET
 Route: /api/project-management/progress-updates/executive-summary
-Description: **Optional AI integration point.** Ask a configured generator for a natural-language executive summary of a project's progress. Returns `501` by default (no provider registered).
+Description: **Optional integration point.** Ask a configured generator for a natural-language executive summary of a project's progress. Returns `501` by default (no provider registered).
 
 Query Parameters: projectId (Guid, required)
 Request Body: none
@@ -1691,7 +1691,7 @@ Status Codes: 200, 401, 403, 404
 ### Module: Project Documents
 Method: GET
 Route: /api/project-management/documents/{id}/summary
-Description: **Optional AI integration point.** Ask a configured generator to summarize a document's content. Returns `501` by default.
+Description: **Optional integration point.** Ask a configured generator to summarize a document's content. Returns `501` by default.
 Path Parameters: id (Guid, required)
 Request Body: none
 Response (when configured):
@@ -1707,7 +1707,7 @@ Status Codes: 200 (if a provider is plugged in), 401, 403, 501 (default)
 ### Module: Project Documents
 Method: GET
 Route: /api/project-management/documents/{id}/relevance
-Description: **Optional AI integration point.** Ask a configured analyzer how relevant a document is to a given project. Returns `501` by default.
+Description: **Optional integration point.** Ask a configured analyzer how relevant a document is to a given project. Returns `501` by default.
 Path Parameters: id (Guid, required)
 Query Parameters: projectId (Guid, required)
 Request Body: none

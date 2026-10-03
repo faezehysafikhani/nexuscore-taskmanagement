@@ -20,9 +20,10 @@ public sealed class GatewaySmsSender(
             return Result.Failure<string>(Error.Validation("پنل پیامکی در تنظیمات غیرفعال است."));
         }
 
-        if (string.IsNullOrWhiteSpace(settings.ApiKey))
+        if (string.IsNullOrWhiteSpace(settings.ApiKey)
+            && (string.IsNullOrWhiteSpace(settings.Username) || string.IsNullOrWhiteSpace(settings.Password)))
         {
-            return Result.Failure<string>(Error.Validation("کلید API پنل پیامکی ثبت نشده است."));
+            return Result.Failure<string>(Error.Validation("اطلاعات ورود پنل پیامکی ثبت نشده است."));
         }
 
         var provider = providers.FirstOrDefault(p => string.Equals(p.Key, settings.Provider, StringComparison.OrdinalIgnoreCase));
@@ -33,7 +34,7 @@ public sealed class GatewaySmsSender(
 
         var receiver = NexusCore.Domain.Identity.PhoneNumber.Normalize(phoneNumber) ?? phoneNumber.Trim();
         return await provider.SendAsync(
-            new SmsProviderSettings(settings.ApiUrl ?? provider.DefaultBaseUrl, settings.ApiKey, settings.LineNumber),
+            new SmsProviderSettings(settings.ApiUrl ?? provider.DefaultBaseUrl, settings.ApiKey, settings.LineNumber, settings.Username, settings.Password),
             receiver, text, cancellationToken);
     }
 }

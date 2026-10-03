@@ -6,7 +6,7 @@ using NexusCore.SharedKernel.Results;
 namespace Nexus.ProjectManagement.RiskManagement.Application;
 
 /// <summary>
-/// Fully usable with neither Workflow nor AI installed: SubmitForApprovalAsync falls back to
+/// Fully usable with neither Workflow nor an optional analyzer installed: SubmitForApprovalAsync falls back to
 /// direct-approve when IApprovalRequester reports NotConfigured (the NullApprovalRequester
 /// default registered by NexusCore when Workflow isn't part of the composition).
 /// </summary>

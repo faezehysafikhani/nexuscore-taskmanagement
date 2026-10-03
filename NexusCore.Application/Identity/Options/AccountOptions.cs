@@ -16,6 +16,9 @@ public sealed class IdentitySeedOptions
     /// creates. Users sign in with a username or mobile number only, so that account needs one.
     /// </summary>
     public string AdminUsername { get; set; } = "admin";
+
+    /// <summary>Required for the first administrator account in production.</summary>
+    public string? AdminPassword { get; set; }
 }
 
 public sealed class SeedRoleOptions

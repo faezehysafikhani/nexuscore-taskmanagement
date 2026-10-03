@@ -55,8 +55,33 @@ public sealed class NotificationChannelSettingsReader(
             return Defaults;
         }
 
+        var configuredProviders = stored.Sms?.Providers?
+            .Select(provider => ToDto(provider, tenantId))
+            .ToList();
+        var activeProvider = configuredProviders?.FirstOrDefault(provider => provider.Enabled);
+
+        // Legacy settings are one provider. Keep reading them so existing tenants need no migration.
+        if (activeProvider is not null)
+        {
+            return new NotificationChannelSettingsDto(
+                new SmsChannelSettingsDto(
+                    activeProvider.Enabled,
+                    activeProvider.Provider,
+                    activeProvider.ApiUrl,
+                    activeProvider.ApiKey,
+                    activeProvider.LineNumber,
+                    activeProvider.ApiKeyConfigured,
+                    activeProvider.Username,
+                    activeProvider.Password,
+                    activeProvider.UsernameConfigured,
+                    activeProvider.PasswordConfigured,
+                    configuredProviders));
+        }
+
         // A key that can no longer be decrypted counts as not configured: it has to be entered again.
         var apiKey = Unprotect(stored.Sms?.ApiKey, tenantId);
+        var username = Unprotect(stored.Sms?.Username, tenantId);
+        var password = Unprotect(stored.Sms?.Password, tenantId);
         return new NotificationChannelSettingsDto(
             new SmsChannelSettingsDto(
                 stored.Sms?.Enabled ?? false,
@@ -64,7 +89,12 @@ public sealed class NotificationChannelSettingsReader(
                 stored.Sms?.ApiUrl,
                 apiKey,
                 stored.Sms?.LineNumber,
-                apiKey is not null));
+                apiKey is not null,
+                username,
+                password,
+                username is not null,
+                password is not null,
+                configuredProviders));
     }
 
     private string? Unprotect(string? protectedSecret, Guid tenantId)
@@ -87,7 +117,46 @@ public sealed class NotificationChannelSettingsReader(
         }
     }
 
-    internal sealed record StoredSms(bool Enabled, string Provider, string? ApiKey, string? LineNumber, string? ApiUrl);
+    private SmsProviderConfigurationDto ToDto(StoredSmsProvider provider, Guid tenantId)
+    {
+        var apiKey = Unprotect(provider.ApiKey, tenantId);
+        var username = Unprotect(provider.Username, tenantId);
+        var password = Unprotect(provider.Password, tenantId);
+        return new SmsProviderConfigurationDto(
+            provider.Id,
+            provider.Name,
+            provider.Provider,
+            provider.Enabled,
+            provider.ApiUrl,
+            apiKey,
+            provider.LineNumber,
+            username,
+            password,
+            apiKey is not null,
+            username is not null,
+            password is not null);
+    }
+
+    internal sealed record StoredSms(
+        bool Enabled,
+        string Provider,
+        string? ApiKey,
+        string? LineNumber,
+        string? ApiUrl,
+        string? Username = null,
+        string? Password = null,
+        List<StoredSmsProvider>? Providers = null);
+
+    internal sealed record StoredSmsProvider(
+        Guid Id,
+        string Name,
+        string Provider,
+        bool Enabled,
+        string? ApiUrl,
+        string? ApiKey,
+        string? LineNumber,
+        string? Username,
+        string? Password);
 
     internal sealed record StoredSettings(StoredSms? Sms);
 }

@@ -10,8 +10,8 @@ namespace NexusCore.Application.Messaging;
 /// <summary>
 /// The SMS panel settings, stored as one tenant-scoped platform setting (platform.Settings,
 /// key <see cref="NotificationChannelSettingsReader.SettingKey"/>) - the same table and repository every other platform
-/// setting uses. The API key is encrypted with ASP.NET Core Data Protection before it is written
-/// and is never sent back to a client.
+/// setting uses. Credentials are encrypted with ASP.NET Core Data Protection before they are
+/// written and are never sent back to a client.
 /// </summary>
 public sealed class NotificationChannelService(
     IPlatformRepository repository,
@@ -51,8 +51,11 @@ public sealed class NotificationChannelService(
         var current = await reader.ReadAsync(tenantId, cancellationToken);
         // An empty key means "keep the stored one" - the client never had it to send back.
         var apiKey = string.IsNullOrWhiteSpace(settings.Sms?.ApiKey) ? current.Sms.ApiKey : settings.Sms.ApiKey.Trim();
+        var username = string.IsNullOrWhiteSpace(settings.Sms?.Username) ? current.Sms.Username : settings.Sms.Username.Trim();
+        var password = string.IsNullOrWhiteSpace(settings.Sms?.Password) ? current.Sms.Password : settings.Sms.Password.Trim();
+        var configuredProviders = BuildStoredProviders(settings.Sms?.Providers, current.Sms);
 
-        var validation = Validate(settings, apiKey);
+        var validation = Validate(settings, apiKey, username, password);
         if (validation.IsFailure)
         {
             return Result.Failure<NotificationChannelSettingsDto>(validation.Error);
@@ -64,7 +67,10 @@ public sealed class NotificationChannelService(
                 settings.Sms.Provider.Trim().ToLowerInvariant(),
                 Protect(apiKey),
                 Clean(settings.Sms.LineNumber),
-                Clean(settings.Sms.ApiUrl)));
+                Clean(settings.Sms.ApiUrl),
+                Protect(username),
+                Protect(password),
+                configuredProviders));
 
         var value = JsonSerializer.Serialize(stored, NotificationChannelSettingsReader.Json);
         if (value.Length > MaxStoredLength)
@@ -119,7 +125,7 @@ public sealed class NotificationChannelService(
             : new ChannelTestResultDto(false, sent.Error.Message));
     }
 
-    private Result Validate(NotificationChannelSettingsDto settings, string? apiKey)
+    private Result Validate(NotificationChannelSettingsDto settings, string? apiKey, string? username, string? password)
     {
         if (settings.Sms is null)
         {
@@ -133,9 +139,14 @@ public sealed class NotificationChannelService(
                 $"Unknown SMS provider '{settings.Sms.Provider}'. Available: {string.Join(", ", providers.Select(p => p.Key))}."));
         }
 
-        if (settings.Sms.Enabled && string.IsNullOrWhiteSpace(apiKey))
+        if (!string.IsNullOrWhiteSpace(username) != !string.IsNullOrWhiteSpace(password))
         {
-            return Result.Failure(Error.Validation("An enabled SMS panel needs an API key."));
+            return Result.Failure(Error.Validation("SMS username and password must be entered together."));
+        }
+
+        if (settings.Sms.Enabled && string.IsNullOrWhiteSpace(apiKey) && string.IsNullOrWhiteSpace(username))
+        {
+            return Result.Failure(Error.Validation("An enabled SMS panel needs an API key or username and password."));
         }
 
         if (settings.Sms.LineNumber is { Length: > 0 } line && (line.Trim().Length > 20 || !line.Trim().All(char.IsAsciiDigit)))
@@ -153,12 +164,53 @@ public sealed class NotificationChannelService(
         return Result.Success();
     }
 
-    /// <summary>What a client may see: everything but the key itself.</summary>
+    /// <summary>What a client may see: configuration flags but no credential values.</summary>
     private static NotificationChannelSettingsDto Mask(NotificationChannelSettingsDto settings) =>
-        new(settings.Sms with { ApiKey = null });
+        new(settings.Sms with
+        {
+            ApiKey = null,
+            Username = null,
+            Password = null,
+            Providers = settings.Sms.Providers?.Select(provider => provider with
+            {
+                ApiKey = null,
+                Username = null,
+                Password = null
+            }).ToList()
+        });
 
     private string? Protect(string? secret) =>
         string.IsNullOrWhiteSpace(secret) ? null : _protector.Protect(secret.Trim());
+
+    private List<NotificationChannelSettingsReader.StoredSmsProvider>? BuildStoredProviders(
+        IReadOnlyList<SmsProviderConfigurationDto>? requested,
+        SmsChannelSettingsDto current)
+    {
+        if (requested is null)
+        {
+            return null;
+        }
+
+        return requested.Select(provider =>
+        {
+            var existing = current.Providers?.FirstOrDefault(item => item.Id == provider.Id);
+            var legacyProvider = current.Providers is null && provider.Id == Guid.Parse("00000000-0000-0000-0000-000000000001")
+                && provider.Provider.Equals(current.Provider, StringComparison.OrdinalIgnoreCase);
+            var apiKey = string.IsNullOrWhiteSpace(provider.ApiKey) ? existing?.ApiKey ?? (legacyProvider ? current.ApiKey : null) : provider.ApiKey;
+            var username = string.IsNullOrWhiteSpace(provider.Username) ? existing?.Username ?? (legacyProvider ? current.Username : null) : provider.Username;
+            var password = string.IsNullOrWhiteSpace(provider.Password) ? existing?.Password ?? (legacyProvider ? current.Password : null) : provider.Password;
+            return new NotificationChannelSettingsReader.StoredSmsProvider(
+                provider.Id == Guid.Empty ? Guid.NewGuid() : provider.Id,
+                Clean(provider.Name) ?? "سرویس‌دهنده پیامک",
+                Clean(provider.Provider)?.ToLowerInvariant() ?? NotificationChannelSettingsReader.KavenegarKey,
+                provider.Enabled,
+                Clean(provider.ApiUrl),
+                Protect(apiKey),
+                Clean(provider.LineNumber),
+                Protect(username),
+                Protect(password));
+        }).ToList();
+    }
 
     private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

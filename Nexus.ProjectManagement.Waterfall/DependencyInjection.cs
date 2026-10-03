@@ -14,7 +14,7 @@ namespace Nexus.ProjectManagement.Waterfall;
 public static class DependencyInjection
 {
     /// <summary>Requires AddProjectManagementCore() to already be registered. Optional:
-    /// AddWorkflowApplication() (works standalone without it) and any IWbsGenerator (AI).</summary>
+    /// AddWorkflowApplication() (works standalone without it) and any IWbsGenerator.</summary>
     public static IServiceCollection AddWaterfallPlanning(this IServiceCollection services)
     {
         services.AddScoped<IActivityService, ActivityService>();
