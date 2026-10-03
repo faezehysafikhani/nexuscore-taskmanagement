@@ -21,6 +21,9 @@ public sealed class AgileTaskRepository(AgileDbContext dbContext) : IAgileTaskRe
         return await query.ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<AgileTask>> ListByIdsAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken) =>
+        ids.Count == 0 ? [] : await dbContext.AgileTasks.Where(task => ids.Contains(task.Id)).ToListAsync(cancellationToken);
+
     public async Task AddAsync(AgileTask task, CancellationToken cancellationToken)
     {
         await dbContext.AgileTasks.AddAsync(task, cancellationToken);

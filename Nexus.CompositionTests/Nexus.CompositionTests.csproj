@@ -65,6 +65,8 @@
     <ProjectReference Include="..\Nexus.ProjectManagement.Waterfall.Infrastructure\Nexus.ProjectManagement.Waterfall.Infrastructure.csproj" />
     <ProjectReference Include="..\Nexus.ProjectManagement.Risk\Nexus.ProjectManagement.Risk.csproj" />
     <ProjectReference Include="..\Nexus.ProjectManagement.Risk.Infrastructure\Nexus.ProjectManagement.Risk.Infrastructure.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Agile\Nexus.ProjectManagement.Agile.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Agile.Infrastructure\Nexus.ProjectManagement.Agile.Infrastructure.csproj" />
     <ProjectReference Include="..\Nexus.ProjectManagement.Stakeholder\Nexus.ProjectManagement.Stakeholder.csproj" />
     <ProjectReference Include="..\Nexus.ProjectManagement.Progress\Nexus.ProjectManagement.Progress.csproj" />
     <ProjectReference Include="..\Nexus.ProjectManagement.Progress.Infrastructure\Nexus.ProjectManagement.Progress.Infrastructure.csproj" />

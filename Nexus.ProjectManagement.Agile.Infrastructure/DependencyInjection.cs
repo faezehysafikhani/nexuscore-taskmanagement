@@ -18,6 +18,9 @@ public static class DependencyInjection
 
         services.AddScoped<IAgileUnitOfWork>(provider => provider.GetRequiredService<AgileDbContext>());
         services.AddScoped<IAgileTaskRepository, AgileTaskRepository>();
+        services.AddScoped<ISprintRepository, SprintRepository>();
+        services.AddScoped<ISprintEventRepository, SprintEventRepository>();
+        services.AddScoped<IAgileChecklistRepository, AgileChecklistRepository>();
 
         return services;
     }

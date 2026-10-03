@@ -54,6 +54,8 @@ public static class AgileTaskEndpoints
             })
             .RequireAuthorization(AgilePermissions.Create);
 
+        app.MapAgileBoardEndpoints();
+
         return app;
     }
 }
