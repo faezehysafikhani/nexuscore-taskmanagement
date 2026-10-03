@@ -26,11 +26,11 @@ public sealed class PortfolioService(
 
         var actions = await actionRepository.ListAsync(query.TenantId, projectId: null, cancellationToken);
 
-        var includeProjects = !IsType(query.Type, "Action");
-        var includeActions = query.Type is null || IsType(query.Type, "Action");
+        var includeProjects = !EqualsIgnoreCase(query.Type, "Action") && query.Priority is null;
+        var includeActions = query.Type is null || EqualsIgnoreCase(query.Type, "Action");
 
         var projects = !includeProjects ? [] : projectsPage.Items
-            .Where(project => query.Type is null || IsType(query.Type, project.Type.ToString()))
+            .Where(project => query.Type is null || EqualsIgnoreCase(query.Type, project.Type.ToString()))
             .Where(project => query.Status is null || project.Status.ToString() == query.Status)
             .Where(project => query.ApprovalStatus is null || project.ApprovalStatus.ToString() == query.ApprovalStatus)
             .Where(project => query.InvolvedUserId is null || project.OwnerUserId == query.InvolvedUserId || project.ManagerUserId == query.InvolvedUserId)
@@ -44,6 +44,7 @@ public sealed class PortfolioService(
         var actionItems = !includeActions ? [] : actions
             .Where(action => string.IsNullOrWhiteSpace(query.Search) || action.Title.Contains(query.Search, StringComparison.OrdinalIgnoreCase))
             .Where(action => query.ApprovalStatus is null || action.ApprovalStatus.ToString() == query.ApprovalStatus)
+            .Where(action => query.Priority is null || EqualsIgnoreCase(query.Priority, action.Priority.ToString()))
             .Where(action => query.InvolvedUserId is null || action.OwnerUserId == query.InvolvedUserId || action.ResponsibleUserId == query.InvolvedUserId)
             .Where(action => query.OrganizationUnitId is null || action.OrganizationUnitId == query.OrganizationUnitId)
             .Where(action => query.Status is null || action.Status.ToString() == query.Status)
@@ -51,12 +52,12 @@ public sealed class PortfolioService(
             .Select(action => new PortfolioActionItem(
                 action.Id, action.Title, action.Status.ToString(), action.OrganizationUnitId,
                 action.ResponsibleUserId, action.OwnerUserId, action.ApprovalStatus.ToString(),
-                action.StartDate, action.EndDate))
+                action.StartDate, action.EndDate, action.Priority.ToString()))
             .ToList();
 
         return Result.Success(new PortfolioResultDto(projects, actionItems));
     }
 
-    private static bool IsType(string? requested, string actual) =>
+    private static bool EqualsIgnoreCase(string? requested, string actual) =>
         string.Equals(requested, actual, StringComparison.OrdinalIgnoreCase);
 }

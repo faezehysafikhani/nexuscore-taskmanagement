@@ -16,7 +16,7 @@ public static class PortfolioEndpoints
         var group = app.MapGroup("/api/portfolio").WithTags("Portfolio").RequireAuthorization(PortfolioPermissions.View);
 
         group.MapGet("/", async (
-                Guid? organizationUnitId, string? status, string? search, Guid? involvedUserId, string? type, string? approvalStatus,
+                Guid? organizationUnitId, string? status, string? search, Guid? involvedUserId, string? type, string? approvalStatus, string? priority,
                 ICurrentUserContext currentUser, IAuthorizationService authorizationService, HttpContext httpContext,
                 IPortfolioService service, CancellationToken cancellationToken) =>
             {
@@ -27,7 +27,7 @@ public static class PortfolioEndpoints
 
                 var viewAllAuthorization = await authorizationService.AuthorizeAsync(httpContext.User, PortfolioPermissions.ViewAll);
                 var query = new PortfolioQuery(currentUser.TenantId.Value, currentUser.UserId.Value, viewAllAuthorization.Succeeded, organizationUnitId, status,
-                    search, involvedUserId, type, approvalStatus);
+                    search, involvedUserId, type, approvalStatus, priority);
                 return (await service.GetPortfolioAsync(query, cancellationToken)).ToApiResult();
             });
 

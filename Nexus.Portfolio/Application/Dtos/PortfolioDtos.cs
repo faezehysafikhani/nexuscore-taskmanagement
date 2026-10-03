@@ -8,7 +8,7 @@ public sealed record PortfolioProjectItem(
 public sealed record PortfolioActionItem(
     Guid Id, string Title, string Status, Guid OrganizationUnitId,
     Guid? ResponsibleUserId, Guid? OwnerUserId, string ApprovalStatus,
-    DateOnly? StartDate = null, DateOnly? EndDate = null);
+    DateOnly? StartDate = null, DateOnly? EndDate = null, string? Priority = null);
 
 public sealed record PortfolioResultDto(IReadOnlyList<PortfolioProjectItem> Projects, IReadOnlyList<PortfolioActionItem> Actions);
 
@@ -23,7 +23,8 @@ public sealed record PortfolioResultDto(IReadOnlyList<PortfolioProjectItem> Proj
 /// InvolvedUserId matches a project's owner or manager and an action's owner or responsible.
 /// Type is "Waterfall" or "Agile" (projects only; actions are then left out) or "Action"
 /// (actions only; projects are then left out). Status and ApprovalStatus are matched against
-/// the enum names, like Status already was.
+/// the enum names, like Status already was. Priority is an action-only attribute
+/// ("Low", "Normal", "High" or "Urgent"), so setting it leaves projects out.
 /// </summary>
 public sealed record PortfolioQuery(
     Guid TenantId,
@@ -34,5 +35,6 @@ public sealed record PortfolioQuery(
     string? Search = null,
     Guid? InvolvedUserId = null,
     string? Type = null,
-    string? ApprovalStatus = null);
+    string? ApprovalStatus = null,
+    string? Priority = null);
 

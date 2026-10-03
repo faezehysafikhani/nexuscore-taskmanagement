@@ -8,6 +8,7 @@ public sealed class CreateActionItemRequestValidator : AbstractValidator<CreateA
     public CreateActionItemRequestValidator()
     {
         RuleFor(x => x.Title).NotEmpty().MaximumLength(200);
+        RuleFor(x => x.Priority).IsInEnum().When(x => x.Priority.HasValue);
     }
 }
 
@@ -16,5 +17,6 @@ public sealed class UpdateActionItemRequestValidator : AbstractValidator<UpdateA
     public UpdateActionItemRequestValidator()
     {
         RuleFor(x => x.Title).NotEmpty().MaximumLength(200);
+        RuleFor(x => x.Priority).IsInEnum().When(x => x.Priority.HasValue);
     }
 }

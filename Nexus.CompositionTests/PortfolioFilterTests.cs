@@ -56,10 +56,11 @@ public sealed class PortfolioFilterTests
         return project;
     }
 
-    private static ActionItem NewAction(string title, Guid? owner, Guid? responsible)
+    private static ActionItem NewAction(string title, Guid? owner, Guid? responsible, ActionPriority priority = ActionPriority.Normal)
     {
         var action = new ActionItem(Guid.NewGuid(), Tenant, title, Unit, Guid.NewGuid());
         action.UpdateDetails(title, null, owner, responsible, Unit, Guid.NewGuid(), null, new DateOnly(2026, 3, 1), new DateOnly(2026, 3, 31));
+        action.ChangePriority(priority);
         return action;
     }
 
@@ -76,15 +77,15 @@ public sealed class PortfolioFilterTests
         var dam = NewProject("Dam construction", "DAM-1", ProjectType.Waterfall, Alice);
         var hrm = NewProject("HR system", "HRM-1", ProjectType.Agile, Bob);
         var review = NewAction("Review drawings", owner: Alice, responsible: Bob);
-        var audit = NewAction("Safety audit", owner: Bob, responsible: Bob);
+        var audit = NewAction("Safety audit", owner: Bob, responsible: Bob, ActionPriority.Urgent);
         var projects = new FakeProjectRepository(dam, hrm);
         var service = new PortfolioService(projects, new FakeActionRepository(review, audit));
         return new Fixture(service, projects) { Dam = dam, Hrm = hrm, Review = review, Audit = audit };
     }
 
     private static PortfolioQuery Query(Guid user, bool viewAll = true, string? search = null, Guid? involved = null,
-        string? type = null, string? approval = null, string? status = null) =>
-        new(Tenant, user, viewAll, OrganizationUnitId: null, status, search, involved, type, approval);
+        string? type = null, string? approval = null, string? status = null, string? priority = null) =>
+        new(Tenant, user, viewAll, OrganizationUnitId: null, status, search, involved, type, approval, priority);
 
     private static async Task<PortfolioResultDto> RunAsync(Fixture fixture, PortfolioQuery query)
     {
@@ -148,6 +149,22 @@ public sealed class PortfolioFilterTests
 
         Assert.Equal([fixture.Dam.Id], result.Projects.Select(p => p.Id));
         Assert.Equal([fixture.Review.Id], result.Actions.Select(a => a.Id));
+    }
+
+    [Fact]
+    public async Task Priority_NarrowsActions_AndLeavesProjectsOut()
+    {
+        var fixture = Build();
+
+        var urgent = await RunAsync(fixture, Query(Admin, priority: "urgent"));
+
+        Assert.Empty(urgent.Projects);
+        Assert.Equal([fixture.Audit.Id], urgent.Actions.Select(a => a.Id));
+        Assert.Equal("Urgent", urgent.Actions.Single().Priority);
+
+        var low = await RunAsync(fixture, Query(Admin, priority: "Low"));
+        Assert.Empty(low.Projects);
+        Assert.Empty(low.Actions);
     }
 
     [Fact]

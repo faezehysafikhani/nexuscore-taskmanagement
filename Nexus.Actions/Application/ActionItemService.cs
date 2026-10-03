@@ -52,6 +52,10 @@ public sealed class ActionItemService(
         action.UpdateDetails(
             request.Title, request.Description, request.OwnerUserId, request.ResponsibleUserId,
             request.OrganizationUnitId, request.WorkCalendarId, request.ProjectId, request.StartDate, request.EndDate);
+        if (request.Priority is { } priority)
+        {
+            action.ChangePriority(priority);
+        }
 
         await repository.AddAsync(action, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -80,6 +84,12 @@ public sealed class ActionItemService(
         action.UpdateDetails(
             request.Title, request.Description, request.OwnerUserId, request.ResponsibleUserId,
             request.OrganizationUnitId, request.WorkCalendarId, request.ProjectId, request.StartDate, request.EndDate);
+        // Omitted (null) leaves the stored priority alone, so a client that predates this field
+        // can still edit an action without resetting it.
+        if (request.Priority is { } priority)
+        {
+            action.ChangePriority(priority);
+        }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success(ToDto(action));
@@ -142,5 +152,5 @@ public sealed class ActionItemService(
         action.Id, action.TenantId, action.Title, action.Description,
         action.OwnerUserId, action.ResponsibleUserId, action.Status,
         action.OrganizationUnitId, action.WorkCalendarId, action.ProjectId,
-        action.StartDate, action.EndDate, action.ApprovalStatus);
+        action.StartDate, action.EndDate, action.ApprovalStatus, action.Priority);
 }

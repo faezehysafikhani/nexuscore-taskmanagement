@@ -11,6 +11,15 @@ public enum ActionStatus
     Cancelled
 }
 
+/// <summary>Stored as its integer value; never reorder or renumber the members.</summary>
+public enum ActionPriority
+{
+    Low = 0,
+    Normal = 1,
+    High = 2,
+    Urgent = 3
+}
+
 /// <summary>
 /// Named ActionItem, not Action, to avoid colliding with System.Action. Required references:
 /// OrganizationUnitId and WorkCalendarId (validated to exist by ActionService against the
@@ -33,6 +42,7 @@ public sealed class ActionItem : AuditableEntity<Guid>
         WorkCalendarId = workCalendarId;
         ProjectId = projectId;
         Status = ActionStatus.Open;
+        Priority = ActionPriority.Normal;
         ApprovalStatus = ApprovalStatus.NotSubmitted;
 
         RaiseDomainEvent(new ActionCreated(Id, TenantId, Title, ProjectId));
@@ -44,6 +54,7 @@ public sealed class ActionItem : AuditableEntity<Guid>
     public Guid? OwnerUserId { get; private set; }
     public Guid? ResponsibleUserId { get; private set; }
     public ActionStatus Status { get; private set; }
+    public ActionPriority Priority { get; private set; }
     public Guid OrganizationUnitId { get; private set; }
     public Guid WorkCalendarId { get; private set; }
     public Guid? ProjectId { get; private set; }
@@ -68,6 +79,8 @@ public sealed class ActionItem : AuditableEntity<Guid>
     }
 
     public void ChangeStatus(ActionStatus status) => Status = status;
+
+    public void ChangePriority(ActionPriority priority) => Priority = priority;
 
     public void MarkPendingApproval() => ApprovalStatus = ApprovalStatus.PendingApproval;
 
