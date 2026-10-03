@@ -1273,7 +1273,21 @@ Status Codes: 200, 401, 403, 404, 409
 
 Requires ProjectManagement.Core. Explicitly independent of Waterfall (neither references the
 other) — a project can use one, the other, both, or neither. Permission namespace:
-`AgileTasks.*` (`View`, `Create`, `Edit`, `Delete`, `Submit`). Base route: `/api/project-management/agile/tasks`.
+`AgileTasks.*` (`View`, `Create`, `Edit`, `Delete`, `Submit`) plus `AgileSprints.Manage` for creating, editing,
+starting, completing and deleting sprints and putting tasks into them. Base route: `/api/project-management/agile/tasks`;
+the board, backlog, sprint, checklist and chart endpoints below live under `/api/project-management/agile/...` and are
+mapped by the same `MapAgileTaskEndpoints()` call.
+
+**Existing databases need `docs/upgrade/2026-10-03-add-agile-sprints.sql` first** (two new columns and three new tables;
+it also numbers existing tasks so boards come out in a stable order).
+
+Task changes in this release: every task response carries `storyPoints` (null = not estimated) and `rank` (its position
+within its status column, lowest first). `storyPoints` is optional on create and update; **on update, omitted leaves the
+estimate unchanged**, so a client that predates the field cannot wipe it — use `PUT .../{id}/estimate` to set it or to
+clear it with an explicit `null`. A new status `UnderReview` (value 3) sits between InProgress and Done on the board. A
+task joins a sprint through its `sprintNumber`, as before; a task in no sprint is in the **backlog**. A sprint number does
+not need a Sprint behind it (older data keeps working), but a *completed* sprint accepts no more tasks (409). Changing a
+task's status through `PUT .../{id}/status` puts the card at the bottom of its new column.
 
 ### Module: Agile Tasks
 Method: GET
@@ -1286,7 +1300,8 @@ Response:
   {
     "id": "guid", "tenantId": "guid", "projectId": "guid", "title": "string", "description": "string | null",
     "status": 0, "responsibleUserId": "guid | null", "approverUserId": "guid | null",
-    "dueDate": "2026-01-01 | null", "priority": 1, "sprintNumber": 3, "approvalStatus": 0
+    "dueDate": "2026-01-01 | null", "priority": 1, "sprintNumber": 3, "approvalStatus": 0,
+    "storyPoints": 5, "rank": 0
   }
 ]
 ```
@@ -1382,6 +1397,209 @@ Response (when configured):
 Response (default): RFC 7807 Problem Details, `status: 501`.
 
 Status Codes: 200 (if a provider is plugged in), 401, 403, 501 (default)
+
+---
+
+### Module: Agile Board
+Method: GET
+Route: /api/project-management/agile/board
+Description: The Kanban board: four columns, in order ToDo, InProgress, UnderReview, Done.
+Query Parameters: projectId (Guid, required), sprintNumber (int, optional — the sprint's board), responsibleUserId (Guid, optional), priority (AgileTaskPriority, optional)
+Response:
+```json
+{
+  "projectId": "guid", "sprintNumber": null,
+  "columns": [
+    {
+      "status": 0, "cardCount": 2, "points": 8,
+      "cards": [
+        { "id": "guid", "title": "string", "status": 0, "priority": 1, "responsibleUserId": "guid | null",
+          "dueDate": "2026-01-01 | null", "sprintNumber": 3, "storyPoints": 5, "rank": 0,
+          "checklistDone": 1, "checklistTotal": 3, "approvalStatus": 0 }
+      ]
+    }
+  ]
+}
+```
+Cards are in rank order within each column. `points` is the sum of the column's story points.
+
+Status Codes: 200, 401, 403
+
+---
+
+### Module: Agile Board
+Method: GET
+Route: /api/project-management/agile/backlog
+Description: The tasks in no sprint that are not done, in board order (status column, then rank).
+Query Parameters: projectId (Guid, required)
+Response: `{ "projectId": "guid", "cards": [ …cards as above… ], "totalPoints": 13, "unestimatedCount": 2 }`
+Status Codes: 200, 401, 403
+
+---
+
+### Module: Agile Board
+Method: POST
+Route: /api/project-management/agile/tasks/{id}/move
+Description: Drag and drop: put a task in a column at a position. Needs `AgileTasks.Edit`.
+Path Parameters: id (Guid, required)
+Request Body: `{ "status": 1, "beforeTaskId": "guid | null" }`
+The card is inserted in front of `beforeTaskId`, which must be a card of the destination column, or at the end when null.
+The ranks of the column it joins — and of the one it left — are renumbered 0, 1, 2… Dropping a card on itself changes
+nothing. Moving into or out of Done inside a sprint is recorded in that sprint's history.
+Response: the updated task.
+Status Codes: 200, 400, 401, 403, 404
+
+---
+
+### Module: Agile Board
+Method: PUT
+Route: /api/project-management/agile/tasks/{id}/estimate
+Description: Set a task's story points, or clear them with an explicit `null`. Needs `AgileTasks.Edit`. 0-1000.
+Request Body: `{ "storyPoints": 5 }` or `{ "storyPoints": null }`
+Response: the updated task.
+Status Codes: 200, 400, 401, 403, 404
+
+---
+
+### Module: Agile Board
+Method: GET / POST / PUT / DELETE
+Route: /api/project-management/agile/tasks/{id}/checklist  and  .../checklist/{itemId}
+Description: A task's checklist — the small steps shown on its card (the card's `checklistDone` / `checklistTotal`). Reading needs `AgileTasks.View`, changing needs `AgileTasks.Edit`.
+Request Body (POST): `{ "text": "string (1-500)" }` — added at the end; at most 100 items per task (409).
+Request Body (PUT .../{itemId}): `{ "text": "string", "isDone": true }`
+Response: `{ "id": "guid", "taskId": "guid", "text": "string", "isDone": false, "order": 0 }` (a list for GET; empty for DELETE)
+Status Codes: 200, 400, 401, 403, 404, 409
+
+---
+
+### Module: Agile Sprints
+Method: GET
+Route: /api/project-management/agile/sprints
+Description: A project's sprints, by number.
+Query Parameters: projectId (Guid, required)
+Response:
+```json
+[ { "id": "guid", "tenantId": "guid", "projectId": "guid", "number": 1, "name": "Sprint 1", "goal": "string | null",
+    "startDate": "2026-03-02 | null", "endDate": "2026-03-15 | null", "status": 0,
+    "taskCount": 6, "totalPoints": 21, "donePoints": 8 } ]
+```
+`status`: see [SprintStatus](#sprintstatus-agile-tasks). `taskCount`/`totalPoints`/`donePoints` describe the tasks in the sprint right now.
+
+Status Codes: 200, 401, 403
+
+---
+
+### Module: Agile Sprints
+Method: GET
+Route: /api/project-management/agile/sprints/{id}
+Description: One sprint.
+Path Parameters: id (Guid, required)
+Response: one item shaped as above.
+Status Codes: 200, 401, 403, 404
+
+---
+
+### Module: Agile Sprints
+Method: POST
+Route: /api/project-management/agile/sprints
+Description: Create a sprint. Needs `AgileSprints.Manage`.
+Request Body: `{ "tenantId": "guid", "projectId": "guid", "name": "string | null", "goal": "string | null", "startDate": "2026-03-02 | null", "endDate": "2026-03-15 | null" }`
+The number is the project's highest plus one; the name defaults to "Sprint N"; dates may wait until the sprint starts but the end may not precede the start.
+Response: the sprint, `status: 0` (Planned).
+Status Codes: 200, 400, 401, 403
+
+---
+
+### Module: Agile Sprints
+Method: PUT
+Route: /api/project-management/agile/sprints/{id}
+Description: Edit a sprint's name, goal and dates. A completed sprint can no longer be edited (409). Needs `AgileSprints.Manage`.
+Request Body: `{ "name": "string", "goal": "string | null", "startDate": "…|null", "endDate": "…|null" }`
+Status Codes: 200, 400, 401, 403, 404, 409
+
+---
+
+### Module: Agile Sprints
+Method: POST
+Route: /api/project-management/agile/sprints/{id}/start
+Description: Planned → Active. Needs `AgileSprints.Manage`.
+Request Body: `{ "startDate": "…|null", "endDate": "…|null" }` — dates given here replace the sprint's; both must be known by now (400). Only a planned sprint can start, and a project has at most one active sprint (409).
+Response: the sprint, `status: 1`.
+Status Codes: 200, 400, 401, 403, 404, 409
+
+---
+
+### Module: Agile Sprints
+Method: POST
+Route: /api/project-management/agile/sprints/{id}/complete
+Description: Active → Completed. Needs `AgileSprints.Manage`.
+Request Body: `{ "moveIncompleteToSprintId": "guid | null" }`
+Tasks that are Done stay in the sprint. Unfinished ones move to the given sprint (another sprint of the same project that is not completed) or back to the backlog when null; their status is kept. A completed sprint's history is frozen: carrying work over is recorded as "carried over", not as a change of scope.
+Response: `{ "sprint": { …, "status": 2 }, "completedTasks": 5, "carriedOverTasks": 2 }`
+Status Codes: 200, 400, 401, 403, 404, 409
+
+---
+
+### Module: Agile Sprints
+Method: DELETE
+Route: /api/project-management/agile/sprints/{id}
+Description: Delete a sprint. Only a planned sprint with no tasks can be deleted (409): an active or completed one is part of the project's history. Needs `AgileSprints.Manage`.
+Status Codes: 200, 401, 403, 404, 409
+
+---
+
+### Module: Agile Sprints
+Method: POST / DELETE
+Route: /api/project-management/agile/sprints/{id}/tasks  and  .../tasks/{taskId}
+Description: Put tasks into a sprint in bulk, or take one back to the backlog. A completed sprint accepts neither (409). Needs `AgileSprints.Manage`.
+Request Body (POST): `{ "taskIds": ["guid", "guid"] }` — every task must exist in the sprint's project, otherwise nothing is assigned (404).
+Response: the sprint.
+Status Codes: 200, 400, 401, 403, 404, 409
+
+---
+
+### Module: Agile Sprints
+Method: GET
+Route: /api/project-management/agile/sprints/{id}/burn
+Description: One series that serves both the burn-up and the burn-down chart.
+Query Parameters: metric (`Points` or `Count`, optional, default `Points`)
+Response:
+```json
+{
+  "sprintId": "guid", "sprintNumber": 1, "name": "Sprint 1", "status": 1, "metric": 0,
+  "startDate": "2026-03-02", "endDate": "2026-03-06",
+  "committedScope": 8, "currentScope": 10, "currentCompleted": 5, "currentRemaining": 5,
+  "points": [
+    { "date": "2026-03-02", "scope": 8, "completed": 0, "remaining": 8, "idealRemaining": 8.0 },
+    { "date": "2026-03-04", "scope": 10, "completed": 5, "remaining": 5, "idealRemaining": 4.0 },
+    { "date": "2026-03-06", "scope": null, "completed": null, "remaining": null, "idealRemaining": 0.0 }
+  ],
+  "warnings": ["string"]
+}
+```
+Burn-up plots `scope` and `completed`; burn-down plots `remaining` against `idealRemaining` (a straight line from the committed scope to zero on the last day). `scope` is what the sprint holds by the end of each day, so work added mid-sprint raises it and work that leaves lowers it; `completed` counts tasks that were Done, and a task that is reopened stops counting. `committedScope` is the scope at the end of the first day. The first three fields are `null` for days that have not happened yet. Days are UTC dates. The figures are replayed from a recorded history of scope and status changes, so they only cover changes made since the upgrade. A sprint with no story points on any task returns a warning — chart it with `metric=Count`.
+
+Status Codes: 200, 400, 401, 403, 404
+
+---
+
+### Module: Agile Sprints
+Method: GET
+Route: /api/project-management/agile/velocity
+Description: The velocity of a project's most recent completed sprints.
+Query Parameters: projectId (Guid, required), sprints (int, optional, 1-50, default 5), metric (`Points` or `Count`, optional)
+Response:
+```json
+{
+  "projectId": "guid", "metric": 0,
+  "sprints": [ { "sprintId": "guid", "number": 1, "name": "Sprint 1", "startDate": "2026-03-02", "endDate": "2026-03-15",
+                 "committed": 8, "finalScope": 13, "completed": 10, "carriedOver": 3, "completionPercent": 76.9 } ],
+  "averageVelocity": 9.0, "averageCommitted": 9.0
+}
+```
+Oldest first. `committed` is the scope at the end of the first day, `finalScope` the scope at the end, `completed` is the velocity, `carriedOver` the unfinished work that moved on. Averages are over the sprints listed.
+
+Status Codes: 200, 400, 401, 403
 
 ---
 
@@ -2611,6 +2829,14 @@ Every enum below is serialized as its **raw integer** value in both requests and
 | 0 | ToDo |
 | 1 | InProgress |
 | 2 | Done |
+| 3 | UnderReview (appended: on the board it sits between InProgress and Done) |
+
+### SprintStatus (Agile Tasks)
+| Value | Name |
+|---|---|
+| 0 | Planned |
+| 1 | Active |
+| 2 | Completed |
 
 ### AgileTaskPriority (Agile Tasks)
 | Value | Name |
