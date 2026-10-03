@@ -29,3 +29,22 @@ public sealed class UpdateActivityProgressRequestValidator : AbstractValidator<U
         RuleFor(x => x.ActualProgress).InclusiveBetween(0, 100);
     }
 }
+
+public sealed class CreateActivityDependencyRequestValidator : AbstractValidator<CreateActivityDependencyRequest>
+{
+    public CreateActivityDependencyRequestValidator()
+    {
+        RuleFor(x => x.Type).IsInEnum();
+        // A year of lag either way is already far beyond any real plan; this stops typos like 36500.
+        RuleFor(x => x.LagDays).InclusiveBetween(-365, 365);
+    }
+}
+
+public sealed class UpdateActivityDependencyRequestValidator : AbstractValidator<UpdateActivityDependencyRequest>
+{
+    public UpdateActivityDependencyRequestValidator()
+    {
+        RuleFor(x => x.Type).IsInEnum();
+        RuleFor(x => x.LagDays).InclusiveBetween(-365, 365);
+    }
+}

@@ -39,6 +39,10 @@ public sealed class Activity : AuditableEntity<Guid>
     public decimal? ManHours { get; private set; }
     public decimal Weight { get; private set; }
 
+    /// <summary>A milestone is a zero-duration marker (a decision, a hand-over): it takes no time
+    /// of its own, so DurationDays is 0 and its end date is its start date. It is always a leaf.</summary>
+    public bool IsMilestone { get; private set; }
+
     public decimal PlannedProgress { get; private set; }
     public decimal ActualProgress { get; private set; }
     public ApprovalStatus ApprovalStatus { get; private set; }
@@ -59,6 +63,31 @@ public sealed class Activity : AuditableEntity<Guid>
         DurationDays = durationDays;
         ManHours = manHours;
         Weight = weight;
+    }
+
+    /// <summary>Call after <see cref="UpdateDetails"/>: turning a milestone on zeroes its duration
+    /// and puts its end on its start, so the two can never disagree.</summary>
+    public void SetMilestone(bool isMilestone)
+    {
+        IsMilestone = isMilestone;
+        if (!isMilestone)
+        {
+            return;
+        }
+
+        DurationDays = 0;
+        var date = StartDate ?? EndDate;
+        StartDate = date;
+        EndDate = date;
+    }
+
+    /// <summary>Writes the dates a schedule calculation produced; the activity's own other
+    /// details are untouched.</summary>
+    public void ApplySchedule(DateOnly startDate, DateOnly endDate, int durationDays)
+    {
+        StartDate = startDate;
+        EndDate = endDate;
+        DurationDays = durationDays;
     }
 
     public void UpdateProgress(decimal plannedProgress, decimal actualProgress)

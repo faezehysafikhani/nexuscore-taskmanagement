@@ -18,9 +18,12 @@ public static class DependencyInjection
     public static IServiceCollection AddWaterfallPlanning(this IServiceCollection services)
     {
         services.AddScoped<IActivityService, ActivityService>();
+        services.AddScoped<IActivityDependencyService, ActivityDependencyService>();
         services.AddScoped<IValidator<CreateActivityRequest>, CreateActivityRequestValidator>();
         services.AddScoped<IValidator<UpdateActivityRequest>, UpdateActivityRequestValidator>();
         services.AddScoped<IValidator<UpdateActivityProgressRequest>, UpdateActivityProgressRequestValidator>();
+        services.AddScoped<IValidator<CreateActivityDependencyRequest>, CreateActivityDependencyRequestValidator>();
+        services.AddScoped<IValidator<UpdateActivityDependencyRequest>, UpdateActivityDependencyRequestValidator>();
         services.AddSingleton<IPermissionCatalog, WaterfallPermissionCatalog>();
 
         services.AddScoped<IDomainEventHandler<ApprovalGranted>, ActivityApprovalGrantedHandler>();

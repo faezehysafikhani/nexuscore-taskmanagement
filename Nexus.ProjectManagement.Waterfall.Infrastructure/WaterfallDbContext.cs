@@ -8,6 +8,7 @@ public sealed class WaterfallDbContext(DbContextOptions<WaterfallDbContext> opti
     : DbContext(options), IWaterfallUnitOfWork
 {
     public DbSet<Activity> Activities => Set<Activity>();
+    public DbSet<ActivityDependency> ActivityDependencies => Set<ActivityDependency>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
