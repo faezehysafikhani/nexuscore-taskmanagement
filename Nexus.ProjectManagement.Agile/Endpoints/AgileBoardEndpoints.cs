@@ -52,7 +52,15 @@ public static class AgileBoardEndpoints
                 (await service.DeleteAsync(id, itemId, cancellationToken)).ToApiResult())
             .RequireAuthorization(AgilePermissions.Edit);
 
+        root.MapGet("/velocity", async (Guid projectId, int? sprints, ChartMetric? metric, ISprintChartService service, CancellationToken cancellationToken) =>
+                (await service.GetVelocityAsync(projectId, sprints ?? SprintChartService.DefaultVelocitySprints, metric ?? ChartMetric.Points, cancellationToken)).ToApiResult())
+            .RequireAuthorization(AgilePermissions.View);
+
         var sprints = root.MapGroup("/sprints");
+
+        sprints.MapGet("/{id:guid}/burn", async (Guid id, ChartMetric? metric, ISprintChartService service, CancellationToken cancellationToken) =>
+                (await service.GetBurnAsync(id, metric ?? ChartMetric.Points, cancellationToken)).ToApiResult())
+            .RequireAuthorization(AgilePermissions.View);
 
         sprints.MapGet("/", async (Guid projectId, ISprintService service, CancellationToken cancellationToken) =>
                 (await service.ListByProjectAsync(projectId, cancellationToken)).ToApiResult())

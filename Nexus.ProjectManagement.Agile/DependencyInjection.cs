@@ -22,6 +22,7 @@ public static class DependencyInjection
         services.AddScoped<IAgileTaskService, AgileTaskService>();
         services.AddScoped<ISprintService, SprintService>();
         services.AddScoped<IAgileBoardService, AgileBoardService>();
+        services.AddScoped<ISprintChartService, SprintChartService>();
         services.AddScoped<IAgileChecklistService, AgileChecklistService>();
         services.AddScoped<SprintTracker>();
         services.TryAddSingleton(TimeProvider.System);
