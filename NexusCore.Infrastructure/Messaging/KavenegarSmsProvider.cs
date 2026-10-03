@@ -47,6 +47,11 @@ public sealed class KavenegarSmsProvider(IHttpClientFactory httpClientFactory, I
 
     public async Task<Result<string>> SendAsync(SmsProviderSettings settings, string phoneNumber, string text, CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(settings.ApiKey))
+        {
+            return Result.Failure<string>(Error.Validation("کاوه‌نگار برای ارسال پیامک به کلید API نیاز دارد."));
+        }
+
         var baseUrl = (string.IsNullOrWhiteSpace(settings.BaseUrl) ? DefaultBaseUrl : settings.BaseUrl).TrimEnd('/');
         var form = new Dictionary<string, string> { ["receptor"] = phoneNumber, ["message"] = text };
         if (!string.IsNullOrWhiteSpace(settings.SenderNumber))

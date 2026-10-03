@@ -14,7 +14,7 @@ namespace Nexus.ProjectManagement.Agile;
 public static class DependencyInjection
 {
     /// <summary>Requires AddProjectManagementCore(). Optional: AddWorkflowApplication() and
-    /// any IAgileTaskGenerator (AI). Agile Planning has no reference to Waterfall Planning and
+    /// any IAgileTaskGenerator. Agile Planning has no reference to Waterfall Planning and
     /// is never required to run it - the two are independent siblings under Core.</summary>
     public static IServiceCollection AddAgilePlanning(this IServiceCollection services)
     {

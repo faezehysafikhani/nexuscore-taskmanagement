@@ -14,7 +14,7 @@ namespace Nexus.ProjectManagement.StakeholderManagement;
 public static class DependencyInjection
 {
     /// <summary>Requires AddProjectManagementCore(). Optional: AddWorkflowApplication() and
-    /// any IStakeholderAnalyzer (AI) - fully usable with neither installed.</summary>
+    /// any IStakeholderAnalyzer - fully usable with neither installed.</summary>
     public static IServiceCollection AddStakeholderManagement(this IServiceCollection services)
     {
         services.AddScoped<IStakeholderService, StakeholderService>();

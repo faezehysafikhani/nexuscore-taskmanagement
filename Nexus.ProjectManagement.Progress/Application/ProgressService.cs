@@ -5,8 +5,8 @@ using NexusCore.SharedKernel.Results;
 
 namespace Nexus.ProjectManagement.Progress.Application;
 
-/// <summary>Fully usable without AI (rule: Progress Management باید بدون AI کاملاً قابل
-/// استفاده باشد) and without Workflow, same optional-approval pattern as Risk/Stakeholder.</summary>
+/// <summary>Fully usable without the optional summary integration and without Workflow, using the
+/// same optional-approval pattern as Risk/Stakeholder.</summary>
 public sealed class ProgressService(
     IProgressRepository repository,
     IProgressUnitOfWork unitOfWork,

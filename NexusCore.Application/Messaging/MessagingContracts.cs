@@ -22,8 +22,8 @@ public interface ISmsSender
     Task<Result<string>> SendAsync(Guid tenantId, string phoneNumber, string text, CancellationToken cancellationToken);
 }
 
-/// <summary>What a provider needs to send one message. The API key is already decrypted.</summary>
-public sealed record SmsProviderSettings(string BaseUrl, string ApiKey, string? SenderNumber);
+/// <summary>What a provider needs to send one message. Credentials are already decrypted.</summary>
+public sealed record SmsProviderSettings(string BaseUrl, string? ApiKey, string? SenderNumber, string? Username = null, string? Password = null);
 
 /// <summary>
 /// One SMS gateway (Kavenegar, ...). All provider-specific protocol and error handling lives in

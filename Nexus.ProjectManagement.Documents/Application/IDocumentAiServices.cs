@@ -1,7 +1,6 @@
 namespace Nexus.ProjectManagement.Documents.Application;
 
-/// <summary>Optional AI integration points (Document Summary, Document Relevance) - same
-/// pattern as every other capability's AI contract. Neither is required for Project Documents
+/// <summary>Optional integration points for document summary and relevance. Neither is required for Project Documents
 /// to function.</summary>
 public interface IDocumentSummaryGenerator
 {

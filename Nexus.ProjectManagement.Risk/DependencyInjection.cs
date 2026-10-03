@@ -14,7 +14,7 @@ namespace Nexus.ProjectManagement.RiskManagement;
 public static class DependencyInjection
 {
     /// <summary>Requires AddProjectManagementCore(). Optional: AddWorkflowApplication() and
-    /// any IRiskAnalyzer (AI) - Risk Management is fully usable with neither installed.</summary>
+    /// any IRiskAnalyzer - Risk Management is fully usable with neither installed.</summary>
     public static IServiceCollection AddRiskManagement(this IServiceCollection services)
     {
         services.AddScoped<IRiskService, RiskService>();

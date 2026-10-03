@@ -14,7 +14,7 @@ namespace Nexus.ProjectManagement.Progress;
 public static class DependencyInjection
 {
     /// <summary>Requires AddProjectManagementCore(). Optional: AddWorkflowApplication() and
-    /// any IExecutiveSummaryGenerator (AI) - fully usable with neither installed.</summary>
+    /// any IExecutiveSummaryGenerator - fully usable with neither installed.</summary>
     public static IServiceCollection AddProgressManagement(this IServiceCollection services)
     {
         services.AddScoped<IProgressService, ProgressService>();

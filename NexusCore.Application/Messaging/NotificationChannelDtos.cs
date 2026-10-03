@@ -1,8 +1,8 @@
 namespace NexusCore.Application.Messaging;
 
 /// <summary>
-/// SMS gateway settings. ApiKey is write-only: reads never return it (ApiKeyConfigured says
-/// whether one is stored), and a save with an empty ApiKey keeps the stored one.
+/// SMS gateway settings. Credentials are write-only: reads never return their values, and an
+/// empty value on save keeps the already stored value.
 /// </summary>
 public sealed record SmsChannelSettingsDto(
     bool Enabled,
@@ -10,7 +10,27 @@ public sealed record SmsChannelSettingsDto(
     string? ApiUrl,
     string? ApiKey,
     string? LineNumber,
-    bool ApiKeyConfigured = false);
+    bool ApiKeyConfigured = false,
+    string? Username = null,
+    string? Password = null,
+    bool UsernameConfigured = false,
+    bool PasswordConfigured = false,
+    IReadOnlyList<SmsProviderConfigurationDto>? Providers = null);
+
+/// <summary>One independently configured SMS provider. Credentials are write-only.</summary>
+public sealed record SmsProviderConfigurationDto(
+    Guid Id,
+    string Name,
+    string Provider,
+    bool Enabled,
+    string? ApiUrl,
+    string? ApiKey,
+    string? LineNumber,
+    string? Username = null,
+    string? Password = null,
+    bool ApiKeyConfigured = false,
+    bool UsernameConfigured = false,
+    bool PasswordConfigured = false);
 
 /// <summary>The SMS panel settings of the caller's tenant.</summary>
 public sealed record NotificationChannelSettingsDto(SmsChannelSettingsDto Sms);
