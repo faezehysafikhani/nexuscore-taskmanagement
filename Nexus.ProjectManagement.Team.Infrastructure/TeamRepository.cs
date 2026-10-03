@@ -15,6 +15,13 @@ public sealed class TeamRepository(TeamDbContext dbContext) : ITeamRepository
     public Task<bool> IsMemberAsync(Guid projectId, Guid userId, CancellationToken cancellationToken) =>
         dbContext.ProjectMembers.AnyAsync(member => member.ProjectId == projectId && member.UserId == userId, cancellationToken);
 
+    public async Task<IReadOnlyList<Guid>> ListProjectIdsForUserAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken) =>
+        await dbContext.ProjectMembers
+            .Where(member => member.TenantId == tenantId && member.UserId == userId)
+            .Select(member => member.ProjectId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
     public async Task AddMemberAsync(ProjectMember member, CancellationToken cancellationToken)
     {
         await dbContext.ProjectMembers.AddAsync(member, cancellationToken);

@@ -268,6 +268,8 @@ public sealed class ProjectManagementCompletenessTests
             Task.FromResult<IReadOnlyList<ProjectMember>>(Members.Where(m => m.ProjectId == projectId).ToList());
         public Task<bool> IsMemberAsync(Guid projectId, Guid userId, CancellationToken ct) =>
             Task.FromResult(Members.Any(m => m.ProjectId == projectId && m.UserId == userId));
+        public Task<IReadOnlyList<Guid>> ListProjectIdsForUserAsync(Guid tenantId, Guid userId, CancellationToken ct) =>
+            Task.FromResult<IReadOnlyList<Guid>>(Members.Where(m => m.TenantId == tenantId && m.UserId == userId).Select(m => m.ProjectId).Distinct().ToList());
         public Task AddMemberAsync(ProjectMember member, CancellationToken ct) { Members.Add(member); return Task.CompletedTask; }
         public Task RemoveMemberAsync(ProjectMember member, CancellationToken ct) { Members.Remove(member); return Task.CompletedTask; }
         public Task<GovernanceRole?> GetGovernanceRoleByIdAsync(Guid id, CancellationToken ct) => Task.FromResult(Roles.SingleOrDefault(r => r.Id == id));

@@ -163,6 +163,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nexus.ProjectManagement.His
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nexus.ProjectManagement.History.Infrastructure", "Nexus.ProjectManagement.History.Infrastructure\Nexus.ProjectManagement.History.Infrastructure.csproj", "{593C9369-F091-4937-913D-D70D42AA80C5}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nexus.Integrations.ProjectVisibility", "Nexus.Integrations.ProjectVisibility\Nexus.Integrations.ProjectVisibility.csproj", "{B7D3FDF8-AAE8-4787-861A-72867961F3B6}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -445,6 +447,10 @@ Global
 		{593C9369-F091-4937-913D-D70D42AA80C5}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{593C9369-F091-4937-913D-D70D42AA80C5}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{593C9369-F091-4937-913D-D70D42AA80C5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B7D3FDF8-AAE8-4787-861A-72867961F3B6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B7D3FDF8-AAE8-4787-861A-72867961F3B6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B7D3FDF8-AAE8-4787-861A-72867961F3B6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B7D3FDF8-AAE8-4787-861A-72867961F3B6}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

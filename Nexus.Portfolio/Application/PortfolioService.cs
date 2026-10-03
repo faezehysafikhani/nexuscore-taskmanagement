@@ -16,10 +16,26 @@ namespace Nexus.Portfolio.Application;
 /// </summary>
 public sealed class PortfolioService(
     IProjectRepository projectRepository,
-    IActionItemRepository actionRepository) : IPortfolioService
+    IActionItemRepository actionRepository,
+    IEnumerable<IVisibilityProvider>? visibilityProviders = null) : IPortfolioService
 {
     public async Task<Result<PortfolioResultDto>> GetPortfolioAsync(PortfolioQuery query, CancellationToken cancellationToken)
     {
+        // Besides what a user owns, manages or is responsible for, any installed visibility providers
+        // (team membership, organisation chart, pending approvals...) can show them more. Skipped for
+        // ViewAll, which already sees everything.
+        var grant = VisibilityGrant.None;
+        if (!query.ViewAll && visibilityProviders is not null)
+        {
+            var grants = new List<VisibilityGrant>();
+            foreach (var provider in visibilityProviders)
+            {
+                grants.Add(await provider.GetGrantAsync(query.TenantId, query.CurrentUserId, cancellationToken));
+            }
+
+            grant = VisibilityGrant.Union(grants);
+        }
+
         var projectsPage = await projectRepository.ListAsync(
             new ListProjectsRequest(query.TenantId, PageNumber: 1, PageSize: 1000, Search: query.Search, OrganizationUnitId: query.OrganizationUnitId),
             cancellationToken);
@@ -34,7 +50,9 @@ public sealed class PortfolioService(
             .Where(project => query.Status is null || project.Status.ToString() == query.Status)
             .Where(project => query.ApprovalStatus is null || project.ApprovalStatus.ToString() == query.ApprovalStatus)
             .Where(project => query.InvolvedUserId is null || project.OwnerUserId == query.InvolvedUserId || project.ManagerUserId == query.InvolvedUserId)
-            .Where(project => query.ViewAll || project.OwnerUserId == query.CurrentUserId || project.ManagerUserId == query.CurrentUserId)
+            .Where(project => query.ViewAll || project.OwnerUserId == query.CurrentUserId || project.ManagerUserId == query.CurrentUserId
+                || grant.ProjectIds.Contains(project.Id)
+                || (project.OrganizationUnitId is { } unit && grant.OrganizationUnitIds.Contains(unit)))
             .Select(project => new PortfolioProjectItem(
                 project.Id, project.Name, project.Code, project.Type.ToString(), project.Status.ToString(),
                 project.OrganizationUnitId, project.ManagerUserId, project.OwnerUserId, project.ApprovalStatus.ToString(),
@@ -48,7 +66,10 @@ public sealed class PortfolioService(
             .Where(action => query.InvolvedUserId is null || action.OwnerUserId == query.InvolvedUserId || action.ResponsibleUserId == query.InvolvedUserId)
             .Where(action => query.OrganizationUnitId is null || action.OrganizationUnitId == query.OrganizationUnitId)
             .Where(action => query.Status is null || action.Status.ToString() == query.Status)
-            .Where(action => query.ViewAll || action.OwnerUserId == query.CurrentUserId || action.ResponsibleUserId == query.CurrentUserId)
+            .Where(action => query.ViewAll || action.OwnerUserId == query.CurrentUserId || action.ResponsibleUserId == query.CurrentUserId
+                || grant.ActionIds.Contains(action.Id)
+                || grant.OrganizationUnitIds.Contains(action.OrganizationUnitId)
+                || (action.ProjectId is { } projectId && grant.ProjectIds.Contains(projectId)))
             .Select(action => new PortfolioActionItem(
                 action.Id, action.Title, action.Status.ToString(), action.OrganizationUnitId,
                 action.ResponsibleUserId, action.OwnerUserId, action.ApprovalStatus.ToString(),

@@ -16,6 +16,7 @@ using Nexus.Actions.Infrastructure;
 using Nexus.Calendar;
 using Nexus.Calendar.Endpoints;
 using Nexus.Calendar.Infrastructure;
+using Nexus.Integrations.ProjectVisibility;
 using Nexus.Integrations.ProjectWorkflow;
 using Nexus.Integrations.ProjectWorkflow.Endpoints;
 using Nexus.Integrations.StrategyAlignment;
@@ -126,6 +127,7 @@ builder.Services.AddContractManagement();
 builder.Services.AddProjectHistory();
 
 builder.Services.AddProjectWorkflowIntegration();
+builder.Services.AddProjectVisibilityIntegration();
 builder.Services.AddProjectStrategyAlignment();
 
 builder.Services.AddPortfolio();

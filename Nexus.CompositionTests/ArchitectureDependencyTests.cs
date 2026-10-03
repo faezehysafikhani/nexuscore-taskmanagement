@@ -147,6 +147,9 @@ public sealed class ArchitectureDependencyTests
         AssertNoReferenceStartingWith("Nexus.ProjectManagement.Core/Nexus.ProjectManagement.Core.csproj", "Nexus.Integrations.");
         AssertNoReferenceStartingWith("Nexus.Workflow/Nexus.Workflow.csproj", "Nexus.Integrations.");
         AssertNoReferenceStartingWith("Nexus.Strategy/Nexus.Strategy.csproj", "Nexus.Integrations.");
+        AssertNoReferenceStartingWith("Nexus.Portfolio/Nexus.Portfolio.csproj", "Nexus.Integrations.");
+        AssertNoReferenceStartingWith("Nexus.ProjectManagement.Team/Nexus.ProjectManagement.Team.csproj", "Nexus.Integrations.");
+        AssertNoReferenceStartingWith("Nexus.Organization/Nexus.Organization.csproj", "Nexus.Integrations.");
     }
 
     [Fact]

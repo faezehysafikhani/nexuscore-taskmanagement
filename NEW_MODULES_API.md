@@ -2764,6 +2764,17 @@ Query Parameters:
 
 All filters are optional and only ever narrow the result: they are applied on top of the visibility rule, never instead of it.
 
+**Wider visibility (optional integration).** By default a user without `Portfolio.ViewAll` sees only the projects they own or manage and the
+actions they own or are responsible for. Installing `Nexus.Integrations.ProjectVisibility` (`AddProjectVisibilityIntegration()`; no endpoints,
+no data, no schema) adds, for such users, everything the installed sources grant — **the union**, never less than before:
+- **Team membership** (needs Team): the projects they are a team member of, and the actions of those projects.
+- **Organisation unit manager** (needs Organization): the projects and actions of every unit they manage **and of all units below it** — so the
+  manager of a top-level unit sees the whole branch of the chart.
+- **Pending approvals** (needs Workflow): the projects and actions currently waiting for their approval, including ones they hold as a
+  substitute through a delegation. Other subject types (a risk, a document) are not mapped to a project and add nothing.
+A source whose module is not installed grants nothing. `ViewAll` skips all of this. Filters still narrow what a grant shows. Extension point:
+implement `IVisibilityProvider` (in Project Management Core) and register it to add your own rule.
+
 Request Body: none
 Response:
 ```json
