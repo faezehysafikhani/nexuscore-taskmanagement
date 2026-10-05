@@ -63,9 +63,9 @@ public static class AllowedUploadTypes
 
 public interface IUploadPolicyReader
 {
-    /// <summary>The caller's own (or, for a system-wide value, the given) tenant's current
-    /// max-upload-size, in KB - the admin's configured value, clamped to the hard ceiling, or the
-    /// default when nothing was configured yet.</summary>
+    /// <summary>The current max-upload-size, in KB: the given tenant's own value if one was set,
+    /// otherwise the system-wide value (TenantId null - what the admin settings page saves),
+    /// otherwise the default; clamped to the hard ceiling.</summary>
     Task<int> GetMaxFileSizeKbAsync(Guid? tenantId, CancellationToken cancellationToken);
 }
 
@@ -73,7 +73,12 @@ public sealed class UploadPolicyReader(IPlatformRepository repository) : IUpload
 {
     public async Task<int> GetMaxFileSizeKbAsync(Guid? tenantId, CancellationToken cancellationToken)
     {
-        var setting = await repository.FindSettingAsync(tenantId, UploadPolicySettings.SettingKey, UploadPolicySettings.SettingScope, cancellationToken);
+        // FindSettingAsync matches TenantId exactly, so a tenant lookup never sees the system-wide row.
+        var setting = tenantId is null
+            ? null
+            : await repository.FindSettingAsync(tenantId, UploadPolicySettings.SettingKey, UploadPolicySettings.SettingScope, cancellationToken);
+        setting ??= await repository.FindSettingAsync(null, UploadPolicySettings.SettingKey, UploadPolicySettings.SettingScope, cancellationToken);
+
         if (setting is null || !int.TryParse(setting.Value, out var configuredKb) || configuredKb <= 0)
         {
             return UploadPolicySettings.DefaultMaxFileSizeKb;
