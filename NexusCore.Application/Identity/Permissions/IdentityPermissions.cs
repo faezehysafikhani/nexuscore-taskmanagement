@@ -31,6 +31,7 @@ public static class IdentityPermissions
     public const string LdapSettingsView = "ldap_settings.view";
     public const string LdapSettingsUpdate = "ldap_settings.update";
     public const string LdapSettingsTest = "ldap_settings.test";
+    public const string SsoSettingsView = "sso_settings.view";
 
     public static IReadOnlyList<PermissionDefinition> All { get; } =
     [
@@ -57,7 +58,8 @@ public static class IdentityPermissions
         new(SmsSettingsTest, "Platform", "ارسال پیامک آزمایشی"),
         new(LdapSettingsView, "Platform", "مشاهده تنظیمات LDAP"),
         new(LdapSettingsUpdate, "Platform", "ویرایش تنظیمات LDAP"),
-        new(LdapSettingsTest, "Platform", "آزمایش اتصال LDAP")
+        new(LdapSettingsTest, "Platform", "آزمایش اتصال LDAP"),
+        new(SsoSettingsView, "Platform", "مشاهده تنظیمات ورود با SSO")
     ];
 }
 
