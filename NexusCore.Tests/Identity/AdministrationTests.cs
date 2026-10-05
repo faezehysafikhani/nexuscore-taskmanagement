@@ -52,6 +52,7 @@ public sealed class AdministrationTests
                      "users.change_status", "users.assign_permissions",
                      "sms_settings.view", "sms_settings.update", "sms_settings.test",
                      "ldap_settings.view", "ldap_settings.update", "ldap_settings.test",
+                     "sso_settings.view",
                  })
         {
             Assert.Contains(name, names);
