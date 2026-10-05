@@ -178,7 +178,9 @@ public sealed class SendDirectMessageCommandHandler(
     IChatDbContext db,
     DirectConversationService conversations,
     IFileStorage fileStorage,
-    IOptions<ChatOptions> options)
+    IOptions<ChatOptions> options,
+    ICurrentUserContext currentUser,
+    IUploadPolicyReader uploadPolicy)
     : IRequestHandler<SendDirectMessageCommand, Result<DirectMessageDto>>
 {
     public async Task<Result<DirectMessageDto>> Handle(SendDirectMessageCommand request, CancellationToken cancellationToken)
@@ -205,6 +207,19 @@ public sealed class SendDirectMessageCommandHandler(
             {
                 return Result.Failure<DirectMessageDto>(Error.Validation(
                     $"The attached file is too large. The limit is {options.Value.MaxAttachmentBytes / (1024 * 1024)} MB."));
+            }
+
+            if (!AllowedUploadTypes.IsAllowed(upload.FileName, upload.ContentType))
+            {
+                return Result.Failure<DirectMessageDto>(Error.Validation(
+                    "This file type is not allowed. Only Excel, Word, PDF and image files can be uploaded."));
+            }
+
+            var maxConfiguredBytes = await uploadPolicy.GetMaxFileSizeKbAsync(currentUser.TenantId, cancellationToken) * 1024L;
+            if (upload.Length > maxConfiguredBytes)
+            {
+                return Result.Failure<DirectMessageDto>(Error.Validation(
+                    $"The attached file is too large. The limit is {maxConfiguredBytes} bytes."));
             }
         }
 

@@ -6,6 +6,7 @@ using NexusCore.Application.Identity.Interfaces;
 using NexusCore.Application.Identity.Permissions;
 using NexusCore.Application.Identity.Services;
 using NexusCore.Application.Identity.Validators;
+using NexusCore.Application.Files;
 using NexusCore.Application.Messaging;
 using NexusCore.Application.Platform.Interfaces;
 using NexusCore.Application.Platform.Services;
@@ -31,6 +32,7 @@ public static class DependencyInjection
         services.AddScoped<INotificationChannelSettingsReader, NotificationChannelSettingsReader>();
         services.AddScoped<INotificationChannelService, NotificationChannelService>();
         services.AddScoped<IPlatformService, PlatformService>();
+        services.AddScoped<IUploadPolicyReader, UploadPolicyReader>();
         // Live presence: one tracker for the process (replaceable by a shared one), fed by the hubs.
         services.TryAddSingleton<IUserPresenceTracker, InMemoryUserPresenceTracker>();
         services.AddScoped<IUserPresenceService, UserPresenceService>();

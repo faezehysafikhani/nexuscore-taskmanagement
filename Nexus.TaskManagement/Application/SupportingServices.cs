@@ -400,7 +400,8 @@ public sealed class TaskFileService(
     ITaskManagementUnitOfWork unitOfWork,
     ICurrentUserContext currentUser,
     IFileStorage fileStorage,
-    ITaskAccessScope access) : ITaskFileService
+    ITaskAccessScope access,
+    IUploadPolicyReader uploadPolicy) : ITaskFileService
 {
     public Task<Result<TaskFileDto>> UploadToTaskAsync(
         Guid taskId, UploadFileRequest request, CancellationToken cancellationToken) =>
@@ -432,7 +433,20 @@ public sealed class TaskFileService(
         if (request.Content.Length > TaskFileAsset.MaxFileSizeBytes)
         {
             return Result.Failure<TaskFileDto>(Error.Validation(
-                $"File is too large. The maximum size is {TaskFileAsset.MaxFileSizeBytes} bytes (200 KB)."));
+                $"File is too large. The maximum size is {TaskFileAsset.MaxFileSizeBytes} bytes."));
+        }
+
+        if (!AllowedUploadTypes.IsAllowed(request.FileName, request.ContentType))
+        {
+            return Result.Failure<TaskFileDto>(Error.Validation(
+                "This file type is not allowed. Only Excel, Word, PDF and image files can be uploaded."));
+        }
+
+        var maxConfiguredBytes = await uploadPolicy.GetMaxFileSizeKbAsync(tenantId, cancellationToken) * 1024L;
+        if (request.Content.Length > maxConfiguredBytes)
+        {
+            return Result.Failure<TaskFileDto>(Error.Validation(
+                $"File is too large. The maximum size is {maxConfiguredBytes} bytes."));
         }
 
         var authorization = await EnsureCanModifyTargetAsync(tenantId, taskId, subTaskId, commentId, cancellationToken);

@@ -223,7 +223,9 @@ public sealed class SendTeamMessageCommandHandler(
     IChatDbContext db,
     TeamConversationService teams,
     IFileStorage fileStorage,
-    IOptions<ChatOptions> options)
+    IOptions<ChatOptions> options,
+    ICurrentUserContext currentUser,
+    IUploadPolicyReader uploadPolicy)
     : IRequestHandler<SendTeamMessageCommand, Result<TeamMessageDto>>
 {
     public async Task<Result<TeamMessageDto>> Handle(SendTeamMessageCommand request, CancellationToken cancellationToken)
@@ -244,6 +246,22 @@ public sealed class SendTeamMessageCommandHandler(
             return Result.Failure<TeamMessageDto>(Error.Validation(upload.Length <= 0
                 ? "The attached file is empty."
                 : $"The attached file is too large. The limit is {options.Value.MaxAttachmentBytes / (1024 * 1024)} MB."));
+        }
+
+        if (request.Attachment is { } typeCheck && !AllowedUploadTypes.IsAllowed(typeCheck.FileName, typeCheck.ContentType))
+        {
+            return Result.Failure<TeamMessageDto>(Error.Validation(
+                "This file type is not allowed. Only Excel, Word, PDF and image files can be uploaded."));
+        }
+
+        if (request.Attachment is { } sizeCheck)
+        {
+            var maxConfiguredBytes = await uploadPolicy.GetMaxFileSizeKbAsync(currentUser.TenantId, cancellationToken) * 1024L;
+            if (sizeCheck.Length > maxConfiguredBytes)
+            {
+                return Result.Failure<TeamMessageDto>(Error.Validation(
+                    $"The attached file is too large. The limit is {maxConfiguredBytes} bytes."));
+            }
         }
 
         var team = await teams.ResolveAsync(request.TeamId, cancellationToken);
