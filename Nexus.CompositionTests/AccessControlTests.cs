@@ -313,7 +313,7 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
         var taskId = await host.CreatedTaskIdAsync(owner, "With attachment");
 
         using var form = new MultipartFormDataContent();
-        form.Add(new ByteArrayContent(Encoding.UTF8.GetBytes("secret")) { Headers = { ContentType = new MediaTypeHeaderValue("text/plain") } }, "file", "secret.txt");
+        form.Add(new ByteArrayContent(Encoding.UTF8.GetBytes("secret")) { Headers = { ContentType = new MediaTypeHeaderValue("application/pdf") } }, "file", "secret.pdf");
         var upload = await host.SendAsync(owner, HttpMethod.Post, $"/api/task-management/files/tasks/{taskId}", form);
         Assert.Equal(HttpStatusCode.OK, upload.StatusCode);
         var file = await Json(upload);

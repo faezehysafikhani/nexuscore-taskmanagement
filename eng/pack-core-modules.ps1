@@ -15,6 +15,58 @@ $solutionPath = Join-Path $repoRoot "NexusCore.sln"
 New-Item -ItemType Directory -Force -Path $outputPath |
     Out-Null
 
+# ============================================================
+# Generate package version
+# Format: 0.1.0.1405071301
+#
+# 0.1.0      = Product version
+# 14050713   = Persian date (yyyyMMdd)
+# 01         = Build number for that day
+# ============================================================
+
+$persianCalendar = [System.Globalization.PersianCalendar]::new()
+$now = Get-Date
+
+$year = $persianCalendar.GetYear($now)
+$month = $persianCalendar.GetMonth($now)
+$day = $persianCalendar.GetDayOfMonth($now)
+
+$persianDate = "{0:D4}{1:D2}{2:D2}" -f $year, $month, $day
+
+$escapedVersion = [regex]::Escape($Version)
+$escapedDate = [regex]::Escape($persianDate)
+
+$existingBuildNumbers = @(
+    Get-ChildItem -Path $outputPath -Filter "*.nupkg" -File -ErrorAction SilentlyContinue |
+    ForEach-Object {
+        if ($_.Name -match "\.$escapedVersion\.$escapedDate(\d{2})\.nupkg$") {
+            [int]$Matches[1]
+        }
+    }
+)
+
+if ($existingBuildNumbers.Count -eq 0) {
+    $buildNumber = 1
+}
+else {
+    $buildNumber = ($existingBuildNumbers | Measure-Object -Maximum).Maximum + 1
+}
+
+if ($buildNumber -gt 99) {
+    throw "Maximum daily build count (99) reached for $persianDate."
+}
+
+$buildNumberText = "{0:D2}" -f $buildNumber
+
+$PackageVersion = "$Version.$persianDate$buildNumberText"
+
+Write-Host ""
+Write-Host "Base Version:    $Version"
+Write-Host "Persian Date:    $persianDate"
+Write-Host "Daily Build:     $buildNumberText"
+Write-Host "Package Version: $PackageVersion"
+Write-Host ""
+
 
 # ============================================================
 # 1. Shared Core
@@ -528,7 +580,7 @@ Write-Host "NexusCore NuGet Package Generation"
 Write-Host "=========================================="
 Write-Host ""
 
-Write-Host "Version: $Version"
+Write-Host "Version: $PackageVersion"
 
 Write-Host "Configuration: $Configuration"
 
@@ -559,7 +611,7 @@ foreach ($project in $projects) {
 
     dotnet pack $projectPath `
         --configuration $Configuration `
-        -p:PackageVersion=$Version `
+        -p:PackageVersion=$PackageVersion `
         -p:IsPackable=true `
         -p:ContinuousIntegrationBuild=true `
         -p:IncludeSymbols=false `
@@ -573,7 +625,7 @@ foreach ($project in $projects) {
     }
 
 
-    $expectedPackage = Join-Path $outputPath "$packageId.$Version.nupkg"
+    $expectedPackage = Join-Path $outputPath "$packageId.$PackageVersion.nupkg"
 
 
     if (-not (Test-Path $expectedPackage)) {

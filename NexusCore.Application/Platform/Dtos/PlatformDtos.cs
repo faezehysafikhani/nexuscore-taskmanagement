@@ -19,3 +19,7 @@ public sealed record AuditLogQuery(
     bool SortDescending = true);
 public sealed record SettingDto(Guid Id, Guid? TenantId, string Key, string Value, string Scope);
 public sealed record UpsertSettingRequest(Guid? TenantId, string Key, string Value, string Scope = "System");
+
+/// <summary>What every upload screen in the app enforces: the current admin-configured max file
+/// size and the fixed list of accepted file extensions.</summary>
+public sealed record UploadPolicyDto(int MaxFileSizeKb, IReadOnlyList<string> AllowedExtensions);
