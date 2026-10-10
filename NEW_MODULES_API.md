@@ -97,7 +97,7 @@ Response:
 
 Status Codes: 200, 401, 403
 
-**Placing people in the chart, paths, loops, branches** *(added for the PMPB UI)*. `code` is optional on create (omitted = the next free `U0001`-style code). `DELETE` deactivates the unit **and its whole branch**, and is refused (409) while anyone is placed in that branch. Every unit now carries `path` (its full path from the top, `"Organization > Engineering > Civil"`).
+**Placing people in the chart, paths, loops, branches** *(added for the PMPB UI)*. `code` is optional on create (omitted = the next free `U0001`-style code). `DELETE` deactivates the unit as it always did; **`DELETE …?includeBranch=true`** deactivates its whole branch too. Either is refused (409) while anyone is placed in what would be deactivated. Every unit now carries `path` (its full path from the top, `"Organization > Engineering > Civil"`).
 `GET /api/organization/units?activeOnly=true` hides deactivated units. A unit cannot be moved under itself or one of its own descendants (400), nor under a
 missing parent. A person belongs to at most one unit: `GET /api/organization/members?unitId=` lists `{ userId, unitId, unitName, unitPath }`;
 `PUT /api/organization/users/{userId}/unit` with `{ "unitId": "guid | null" }` places them (null removes them; an inactive or other-tenant unit is refused). Needs
@@ -222,7 +222,7 @@ Response:
 Status Codes: 200, 401, 403
 
 **Working hours, official holidays, day-by-day view** *(added for the PMPB UI)*. A calendar now has `workHoursPerDay` (1-24, default 8) and
-`applyOfficialHolidays`. Create takes both optionally (omitted = 8 hours, follow official holidays); update leaves omitted values unchanged. Official holidays come
+`applyOfficialHolidays`. Create takes both optionally (omitted = 8 hours, **not** following official holidays — a caller that never heard of the setting gets exactly what it always got); update leaves omitted values unchanged. Official holidays come
 from an optional `IOfficialHolidayProvider`: the host registers one (`AddIranianOfficialHolidays()` from `Nexus.Calendar.IranianHolidays` ships Iran's — solar
 holidays every year, religious ones from a per-year table that currently covers Jalali years 1402-1407 and must be extended yearly). Without a provider nothing changes.
 The rule everywhere (including Waterfall scheduling through the calendar integration): a date-specific exception of the calendar wins; otherwise the weekly pattern;
@@ -230,7 +230,7 @@ a working weekday is still closed when the calendar follows official holidays an
 `GET /api/calendar/work-calendars/{id}/days?from=&to=` returns each day as `{ date, isWorkingDay, source (0 weekly, 1 exception, 2 official holiday), reason }` (at most
 1,000 days); `GET /api/calendar/work-calendars/official-holidays?from=&to=` lists `{ date, reason }` (empty when no provider). **Saving a whole calendar, one default, delete.** Create/update also accept `exceptions` (`[{ date, isWorkingDay, description }]`): when given they **replace**
 the calendar's date-specific exceptions (a screen can save the whole calendar in one call; exceptions that stay keep their id; omitted = unchanged, `[]` = clear).
-A tenant has one default calendar: making a calendar the default un-defaults the others. `DELETE /api/calendar/work-calendars/{id}` (new permission
+**Opt-in:** `AddCalendarApplication(o => o.SingleDefaultPerTenant = true)` makes a tenant have one default calendar (making a calendar the default un-defaults the others); without it the `isDefault` flags are left as they were set, as before. `DELETE /api/calendar/work-calendars/{id}` (new permission
 `work_calendars.delete`) is refused (409) for the default calendar and while anything still uses the calendar — each module that points at a calendar reports it through an
 `ICalendarUsageChecker` (Actions and, via the project-calendar integration, projects), so the Calendar module itself knows none of them.
 **Existing databases need
@@ -952,9 +952,9 @@ and four new tables).
 
 Activity changes in this release: a `milestone` flag (`isMilestone`, in every response; optional on
 create and update — on update, omitted means unchanged). A milestone has `durationDays: 0`, its end date
-is its start date, and it is always a leaf. A parent must now exist in the same project, must not be a
-milestone, must not be the activity itself or one of its own descendants, and must not carry dependency
-links (checked only when the parent changes).
+is its start date, and it is always a leaf. **Opt-in:** `AddWaterfallPlanning(o => o.ValidateActivityHierarchy = true)` makes a parent have to exist in the same project, not be a
+milestone, not be the activity itself or one of its own descendants, and not carry dependency
+links (checked only when the parent changes); without it any parent id is accepted, as before.
 
 ### Module: Waterfall Activities
 Method: GET
@@ -2887,6 +2887,8 @@ progress updates yet. Note `status`/`performanceClassification` here are also st
 Status Codes: 200, 401, 403, 404
 
 ### Module: Reporting — analytics reports
+
+**Separate, optional project `Nexus.Reporting.Analytics`.** `Nexus.Reporting` itself is unchanged (it still references only Core, Actions and Progress). A host that wants these reports references `Nexus.Reporting.Analytics`, calls `services.AddReportingAnalytics()` and `app.MapReportingAnalyticsEndpoints()` (routes stay under `/api/reporting`); a host that does not never loads Contracts, Organization, Strategy or the alignment integration because of Reporting.
 
 Read-only reports over what the other modules already hold; nothing is stored and no new schema or permission is
 needed. Every one is **tenant-wide and needs `Reporting.ViewAll`** (checked in the endpoint, like `/summary`) and reads the

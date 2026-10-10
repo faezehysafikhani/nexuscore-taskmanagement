@@ -9,7 +9,8 @@ public sealed class WorkCalendarService(
     IWorkCalendarRepository repository,
     ICalendarUnitOfWork unitOfWork,
     IOfficialHolidayProvider? officialHolidays = null,
-    IEnumerable<ICalendarUsageChecker>? usageCheckers = null) : IWorkCalendarService
+    IEnumerable<ICalendarUsageChecker>? usageCheckers = null,
+    CalendarOptions? options = null) : IWorkCalendarService
 {
     public const int MaxDaysPerQuery = 1000;
 
@@ -46,13 +47,13 @@ public sealed class WorkCalendarService(
             calendar.Update(request.Name, request.Description, request.WorkingDays, request.IsDefault);
         }
 
-        calendar.SetPolicy(request.WorkHoursPerDay ?? 8, request.ApplyOfficialHolidays ?? true);
+        calendar.SetPolicy(request.WorkHoursPerDay ?? 8, request.ApplyOfficialHolidays ?? false);
         if (request.Exceptions is not null)
         {
             calendar.ReplaceExceptions(request.Exceptions.Select(e => (e.Date, e.IsWorkingDay, e.Description)));
         }
 
-        if (request.IsDefault)
+        if (request.IsDefault && options?.SingleDefaultPerTenant == true)
         {
             await ClearOtherDefaultsAsync(request.TenantId, calendar.Id, cancellationToken);
         }
@@ -88,7 +89,7 @@ public sealed class WorkCalendarService(
             calendar.ReplaceExceptions(request.Exceptions.Select(e => (e.Date, e.IsWorkingDay, e.Description)));
         }
 
-        if (request.IsDefault)
+        if (request.IsDefault && options?.SingleDefaultPerTenant == true)
         {
             await ClearOtherDefaultsAsync(calendar.TenantId, calendar.Id, cancellationToken);
         }
@@ -198,7 +199,7 @@ public sealed class WorkCalendarService(
         return Task.FromResult(Result.Success(holidays));
     }
 
-    /// <summary>There is one default calendar per tenant: making a calendar the default makes every other one not.</summary>
+    /// <summary>Only when <see cref="CalendarOptions.SingleDefaultPerTenant"/> is on: making a calendar the default makes every other one not.</summary>
     private async Task ClearOtherDefaultsAsync(Guid tenantId, Guid keepId, CancellationToken cancellationToken)
     {
         foreach (var other in (await repository.ListAsync(tenantId, cancellationToken)).Where(c => c.IsDefault && c.Id != keepId))

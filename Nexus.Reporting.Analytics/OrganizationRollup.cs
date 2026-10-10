@@ -1,6 +1,6 @@
 using Nexus.Organization.Domain;
 
-namespace Nexus.Reporting.Application.Analytics;
+namespace Nexus.Reporting.Analytics;
 
 /// <summary>
 /// Reads the organisation chart as levels: roots are level 1, their children level 2, and so on. A

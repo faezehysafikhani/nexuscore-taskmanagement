@@ -27,9 +27,14 @@ public sealed class CalendarPolicyTests
         public WorkCalendarService Service { get; }
 
         public Fixture(IOfficialHolidayProvider? holidays, params ICalendarUsageChecker[] checkers)
+            : this(holidays, null, checkers)
+        {
+        }
+
+        public Fixture(IOfficialHolidayProvider? holidays, CalendarOptions? options, params ICalendarUsageChecker[] checkers)
         {
             Db = new CalendarDbContext(new DbContextOptionsBuilder<CalendarDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
-            Service = new WorkCalendarService(new WorkCalendarRepository(Db), Db, holidays, checkers);
+            Service = new WorkCalendarService(new WorkCalendarRepository(Db), Db, holidays, checkers, options);
         }
     }
 
@@ -38,14 +43,17 @@ public sealed class CalendarPolicyTests
     private static readonly DateOnly Monday = new(2026, 6, 1);
 
     [Fact]
-    public async Task ANewCalendar_DefaultsToEightHours_AndFollowingOfficialHolidays()
+    public async Task ANewCalendar_DefaultsToEightHours_AndNotFollowingOfficialHolidaysUnlessAsked()
     {
         var f = new Fixture(null);
 
-        var dto = (await f.Service.CreateAsync(new CreateWorkCalendarRequest(Tenant, "Main", OfficeWeek, true), default)).Value!;
+        var plain = (await f.Service.CreateAsync(new CreateWorkCalendarRequest(Tenant, "Main", OfficeWeek, true), default)).Value!;
+        var following = (await f.Service.CreateAsync(
+            new CreateWorkCalendarRequest(Tenant, "Follows", OfficeWeek, false, ApplyOfficialHolidays: true), default)).Value!;
 
-        Assert.Equal(8, dto.WorkHoursPerDay);
-        Assert.True(dto.ApplyOfficialHolidays);
+        Assert.Equal(8, plain.WorkHoursPerDay);
+        Assert.False(plain.ApplyOfficialHolidays); // a caller that never heard of the setting keeps today's behaviour
+        Assert.True(following.ApplyOfficialHolidays);
     }
 
     [Fact]
@@ -132,9 +140,19 @@ public sealed class CalendarPolicyTests
     }
 
     [Fact]
-    public async Task ThereIsOneDefaultCalendarPerTenant()
+    public async Task WithoutTheOption_DefaultFlagsAreLeftAsTheyWereSet()
     {
         var f = new Fixture(null);
+        await f.Service.CreateAsync(new CreateWorkCalendarRequest(Tenant, "First", OfficeWeek, true), default);
+        await f.Service.CreateAsync(new CreateWorkCalendarRequest(Tenant, "Second", OfficeWeek, true), default);
+
+        Assert.Equal(2, (await f.Service.ListAsync(Tenant, default)).Value!.Count(c => c.IsDefault));
+    }
+
+    [Fact]
+    public async Task WithTheOption_ThereIsOneDefaultCalendarPerTenant()
+    {
+        var f = new Fixture(null, new CalendarOptions { SingleDefaultPerTenant = true });
         var first = (await f.Service.CreateAsync(new CreateWorkCalendarRequest(Tenant, "First", OfficeWeek, true), default)).Value!;
         var second = (await f.Service.CreateAsync(new CreateWorkCalendarRequest(Tenant, "Second", OfficeWeek, true), default)).Value!;
         var other = (await f.Service.CreateAsync(new CreateWorkCalendarRequest(Guid.NewGuid(), "Other tenant", OfficeWeek, true), default)).Value!;
@@ -170,7 +188,7 @@ public sealed class CalendarPolicyTests
     [Fact]
     public async Task TheDefaultCalendar_CannotBeDeleted()
     {
-        var f = new Fixture(null);
+        var f = new Fixture(null, new CalendarOptions { SingleDefaultPerTenant = true });
         var main = (await f.Service.CreateAsync(new CreateWorkCalendarRequest(Tenant, "Main", OfficeWeek, true), default)).Value!;
 
         Assert.Equal("conflict", (await f.Service.DeleteAsync(main.Id, default)).Error.Code);
@@ -266,7 +284,7 @@ public sealed class CalendarPolicyTests
     public async Task TheDaysEndpoint_SaysWhyEachDayIsWhatItIs()
     {
         var f = new Fixture(new FakeHolidays((Monday, "Holiday")));
-        var id = (await f.Service.CreateAsync(new CreateWorkCalendarRequest(Tenant, "A", OfficeWeek, false), default)).Value!.Id;
+        var id = (await f.Service.CreateAsync(new CreateWorkCalendarRequest(Tenant, "A", OfficeWeek, false, ApplyOfficialHolidays: true), default)).Value!.Id;
         var tuesday = Monday.AddDays(1);
         var friday = Monday.AddDays(4);
         await f.Service.AddExceptionAsync(id, new AddWorkCalendarExceptionRequest(tuesday, false, "Day off"), default);

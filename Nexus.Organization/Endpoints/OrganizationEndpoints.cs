@@ -37,8 +37,8 @@ public static class OrganizationEndpoints
                 (await service.UpdateAsync(id, request, cancellationToken)).ToApiResult())
             .RequireAuthorization(OrganizationPermissions.Update);
 
-        group.MapDelete("/{id:guid}", async (Guid id, IOrganizationService service, CancellationToken cancellationToken) =>
-                (await service.DeactivateAsync(id, cancellationToken)).ToApiResult())
+        group.MapDelete("/{id:guid}", async (Guid id, bool? includeBranch, IOrganizationService service, CancellationToken cancellationToken) =>
+                (await service.DeactivateAsync(id, cancellationToken, includeBranch ?? false)).ToApiResult())
             .RequireAuthorization(OrganizationPermissions.Delete);
 
         // Who is in which unit (a person belongs to at most one).

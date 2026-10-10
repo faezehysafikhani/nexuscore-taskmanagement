@@ -1,4 +1,4 @@
-namespace Nexus.Reporting.Application.Analytics;
+namespace Nexus.Reporting.Analytics;
 
 /// <summary>One project's schedule/cost performance. Money is in the project's own unit (the
 /// budget is Project.Cost; actual cost is the approved invoices of its contracts, in rials).

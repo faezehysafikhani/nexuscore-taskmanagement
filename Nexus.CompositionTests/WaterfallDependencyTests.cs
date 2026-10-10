@@ -1,3 +1,4 @@
+using Nexus.ProjectManagement.Waterfall;
 using Nexus.ProjectManagement.Waterfall.Application;
 using Nexus.ProjectManagement.Waterfall.Application.Dtos;
 using Nexus.ProjectManagement.Waterfall.Application.Scheduling;
@@ -14,13 +15,13 @@ public sealed class WaterfallDependencyTests
         ActivityService Activities, ActivityDependencyService Dependencies,
         FakeActivityRepository ActivityRepository, FakeDependencyRepository DependencyRepository);
 
-    private static Fixture Build()
+    private static Fixture Build(bool validateHierarchy = true)
     {
         var activityRepository = new FakeActivityRepository();
         var dependencyRepository = new FakeDependencyRepository();
         var unitOfWork = new FakeWaterfallUnitOfWork();
         // Create/Update/Delete never reach the platform (audit) service, which only SubmitForApproval uses.
-        var activities = new ActivityService(activityRepository, dependencyRepository, unitOfWork, new NotConfiguredApprovalRequester(), platformService: null!);
+        var activities = new ActivityService(activityRepository, dependencyRepository, unitOfWork, new NotConfiguredApprovalRequester(), platformService: null!, options: new WaterfallOptions { ValidateActivityHierarchy = validateHierarchy });
         var dependencies = new ActivityDependencyService(dependencyRepository, activityRepository, unitOfWork);
         return new Fixture(activities, dependencies, activityRepository, dependencyRepository);
     }
@@ -236,6 +237,16 @@ public sealed class WaterfallDependencyTests
     }
 
     // -------------------------------------------------------------- parents
+
+    [Fact]
+    public async Task WithoutTheOption_AnyParentIdIsAccepted_AsItAlwaysWas()
+    {
+        var fixture = Build(validateHierarchy: false);
+
+        var created = await fixture.Activities.CreateAsync(NewActivity("Child", parent: Guid.NewGuid()), default);
+
+        Assert.True(created.IsSuccess);
+    }
 
     [Fact]
     public async Task AParent_MustExistInTheSameProject()

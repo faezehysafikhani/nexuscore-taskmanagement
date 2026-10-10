@@ -100,7 +100,7 @@ public sealed class OrganizationService(
         return Result.Success(ToDto(unit, updatedPaths[unit.Id].Path));
     }
 
-    public async Task<Result> DeactivateAsync(Guid id, CancellationToken cancellationToken)
+    public async Task<Result> DeactivateAsync(Guid id, CancellationToken cancellationToken, bool includeBranch = false)
     {
         var unit = await repository.GetByIdAsync(id, cancellationToken);
         if (unit is null)
@@ -108,10 +108,11 @@ public sealed class OrganizationService(
             return Result.Failure(Error.NotFound("Organization unit not found."));
         }
 
-        // Deactivating a unit takes its whole branch with it (a sub-unit of an inactive unit makes no sense), and is
-        // refused while anyone is still placed in the branch: they would be left in a unit that no longer exists.
+        // By default only the unit itself is deactivated, as it always was. With includeBranch its whole branch goes
+        // with it (a sub-unit of an inactive unit makes no sense). Either way it is refused while anyone is still
+        // placed in what is being deactivated: they would be left in a unit that no longer exists.
         var chart = await repository.ListAsync(unit.TenantId, cancellationToken);
-        var branch = OrganizationPaths.Descendants(chart, id);
+        var branch = includeBranch ? OrganizationPaths.Descendants(chart, id) : new HashSet<Guid>();
         branch.Add(id);
         if (members is not null)
         {

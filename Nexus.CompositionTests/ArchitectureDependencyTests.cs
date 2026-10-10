@@ -184,6 +184,22 @@ public sealed class ArchitectureDependencyTests
         Assert.Contains("Nexus.ProjectManagement.Waterfall", integration);
     }
 
+    /// <summary>Other projects already use these modules. What was added to them since must stay optional:
+    /// a module may not start requiring another one. If one of these lists has to grow, put the new dependency in
+    /// an integration (or an opt-in add-on project such as Nexus.Reporting.Analytics) instead.</summary>
+    [Theory]
+    [InlineData("Nexus.Reporting", new[] { "Nexus.ProjectManagement.Core", "Nexus.Actions", "Nexus.ProjectManagement.Progress" })]
+    [InlineData("Nexus.Calendar", new string[0])]
+    [InlineData("Nexus.Organization", new string[0])]
+    [InlineData("Nexus.Workflow", new string[0])]
+    [InlineData("Nexus.Portfolio", new[] { "Nexus.ProjectManagement.Core", "Nexus.Actions" })]
+    [InlineData("Nexus.Actions", new[] { "Nexus.Organization", "Nexus.Calendar" })]
+    public void SharedModules_KeepTheirOriginalDependencies(string project, string[] allowed)
+    {
+        var modules = GetProjectReferences($"{project}/{project}.csproj").Where(r => r.StartsWith("Nexus.", StringComparison.Ordinal));
+        Assert.Empty(modules.Except(allowed));
+    }
+
     private static void AssertNoReferenceStartingWith(string relativeProjectPath, string forbiddenPrefix)
     {
         var references = GetProjectReferences(relativeProjectPath);

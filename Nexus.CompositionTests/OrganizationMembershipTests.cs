@@ -99,7 +99,7 @@ public sealed class OrganizationMembershipTests
         var civil = await f.UnitAsync("Civil", eng.Id);
         var fin = await f.UnitAsync("Finance", org.Id);
 
-        Assert.True((await f.Units.DeactivateAsync(eng.Id, default)).IsSuccess);
+        Assert.True((await f.Units.DeactivateAsync(eng.Id, default, includeBranch: true)).IsSuccess);
 
         var active = (await f.Units.ListAsync(Tenant, default, activeOnly: true)).Value!.Select(u => u.Name);
         Assert.Equal(["Finance", "Organization"], active.Order());
@@ -116,12 +116,12 @@ public sealed class OrganizationMembershipTests
         var civil = await f.UnitAsync("Civil", eng.Id);
         await f.Members.SetUserUnitAsync(Tenant, Alice, civil.Id, default);
 
-        var refused = await f.Units.DeactivateAsync(eng.Id, default);
+        var refused = await f.Units.DeactivateAsync(eng.Id, default, includeBranch: true);
         Assert.Equal("conflict", refused.Error.Code);
         Assert.True((await f.Units.GetAsync(civil.Id, default)).Value!.IsActive);
 
         await f.Members.SetUserUnitAsync(Tenant, Alice, org.Id, default);
-        Assert.True((await f.Units.DeactivateAsync(eng.Id, default)).IsSuccess);
+        Assert.True((await f.Units.DeactivateAsync(eng.Id, default, includeBranch: true)).IsSuccess);
     }
 
     [Fact]
@@ -178,6 +178,20 @@ public sealed class OrganizationMembershipTests
 
         var live = await f.UnitAsync("Live");
         Assert.Equal("validation.error", (await f.Members.SetUserUnitAsync(Guid.NewGuid(), Alice, live.Id, default)).Error.Code); // another tenant's unit
+    }
+
+    [Fact]
+    public async Task Deactivating_WithoutTheBranchOption_StillDeactivatesOnlyThatUnit_AsItAlwaysDid()
+    {
+        var f = new Fixture();
+        var org = await f.UnitAsync("Organization");
+        var eng = await f.UnitAsync("Engineering", org.Id);
+        var civil = await f.UnitAsync("Civil", eng.Id);
+
+        Assert.True((await f.Units.DeactivateAsync(eng.Id, default)).IsSuccess);
+
+        Assert.False((await f.Units.GetAsync(eng.Id, default)).Value!.IsActive);
+        Assert.True((await f.Units.GetAsync(civil.Id, default)).Value!.IsActive);
     }
 
     private static OrganizationDbContext NewSqlServerContext() => new(

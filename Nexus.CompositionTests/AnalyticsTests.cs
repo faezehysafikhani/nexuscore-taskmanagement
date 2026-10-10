@@ -12,7 +12,7 @@ using Nexus.ProjectManagement.Core.Domain;
 using Nexus.ProjectManagement.Progress.Application;
 using Nexus.ProjectManagement.Progress.Application.Dtos;
 using Nexus.ProjectManagement.Progress.Domain;
-using Nexus.Reporting.Application.Analytics;
+using Nexus.Reporting.Analytics;
 using Nexus.StrategyManagement.Application;
 using Nexus.StrategyManagement.Domain;
 using NexusCore.Application.Approvals;

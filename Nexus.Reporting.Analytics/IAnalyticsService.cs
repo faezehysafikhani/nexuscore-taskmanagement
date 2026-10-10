@@ -1,6 +1,6 @@
 using NexusCore.SharedKernel.Results;
 
-namespace Nexus.Reporting.Application.Analytics;
+namespace Nexus.Reporting.Analytics;
 
 public interface IAnalyticsService
 {

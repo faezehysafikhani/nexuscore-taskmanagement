@@ -167,6 +167,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nexus.Integrations.ProjectV
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nexus.Calendar.IranianHolidays", "Nexus.Calendar.IranianHolidays\Nexus.Calendar.IranianHolidays.csproj", "{969BCAC7-0A68-43B3-8989-654BB473A188}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nexus.Reporting.Analytics", "Nexus.Reporting.Analytics\Nexus.Reporting.Analytics.csproj", "{D89136B8-4F81-48AC-9262-A320E12CEE40}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -457,6 +459,10 @@ Global
 		{969BCAC7-0A68-43B3-8989-654BB473A188}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{969BCAC7-0A68-43B3-8989-654BB473A188}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{969BCAC7-0A68-43B3-8989-654BB473A188}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D89136B8-4F81-48AC-9262-A320E12CEE40}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D89136B8-4F81-48AC-9262-A320E12CEE40}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D89136B8-4F81-48AC-9262-A320E12CEE40}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D89136B8-4F81-48AC-9262-A320E12CEE40}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -17,8 +17,11 @@ public static class DependencyInjection
 {
     /// <summary>Requires AddProjectManagementCore() to already be registered. Optional:
     /// AddWorkflowApplication() (works standalone without it) and any IWbsGenerator.</summary>
-    public static IServiceCollection AddWaterfallPlanning(this IServiceCollection services)
+    public static IServiceCollection AddWaterfallPlanning(this IServiceCollection services, Action<WaterfallOptions>? configure = null)
     {
+        var options = new WaterfallOptions();
+        configure?.Invoke(options);
+        services.AddSingleton(options);
         services.AddScoped<IActivityService, ActivityService>();
         services.AddScoped<IActivityDependencyService, ActivityDependencyService>();
         services.AddScoped<IScheduleService, ScheduleService>();

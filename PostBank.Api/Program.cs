@@ -69,6 +69,7 @@ using Nexus.ProjectManagement.Waterfall;
 using Nexus.ProjectManagement.Waterfall.Endpoints;
 using Nexus.ProjectManagement.Waterfall.Infrastructure;
 using Nexus.Reporting;
+using Nexus.Reporting.Analytics;
 using Nexus.Reporting.Endpoints;
 using Nexus.StrategyManagement;
 using Nexus.StrategyManagement.Endpoints;
@@ -109,7 +110,7 @@ builder.Services.AddTicketingApplication();
 builder.Services.AddNotificationApplication();
 
 builder.Services.AddOrganizationApplication();
-builder.Services.AddCalendarApplication();
+builder.Services.AddCalendarApplication(options => options.SingleDefaultPerTenant = true);
 builder.Services.AddIranianOfficialHolidays();
 builder.Services.AddWorkflowApplication();
 builder.Services.AddActionManagement();
@@ -117,7 +118,7 @@ builder.Services.AddKnowledgeManagement();
 builder.Services.AddStrategyManagement();
 
 builder.Services.AddProjectManagementCore();
-builder.Services.AddWaterfallPlanning();
+builder.Services.AddWaterfallPlanning(options => options.ValidateActivityHierarchy = true);
 builder.Services.AddAgilePlanning();
 builder.Services.AddProjectTeam();
 builder.Services.AddProjectDeliverables();
@@ -136,6 +137,7 @@ builder.Services.AddProjectStrategyAlignment();
 
 builder.Services.AddPortfolio();
 builder.Services.AddProjectReporting();
+builder.Services.AddReportingAnalytics();
 
 // --- Infrastructure tier: one DbContext per module, all pointed at the same DefaultConnection
 // database (isolated by schema - see each module's own ToTable(name, schema) configuration). ---
@@ -306,6 +308,7 @@ app.MapProjectStrategyAlignmentEndpoints();
 
 app.MapPortfolioEndpoints();
 app.MapDashboardEndpoints();
+app.MapReportingAnalyticsEndpoints();
 
 if (builder.Configuration.GetValue("Database:SeedOnStartup", true))
 {

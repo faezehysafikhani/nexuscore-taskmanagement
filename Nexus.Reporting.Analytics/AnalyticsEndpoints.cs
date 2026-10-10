@@ -2,19 +2,18 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Nexus.Reporting.Application.Analytics;
 using Nexus.Reporting.Permissions;
 using NexusCore.Application.Common;
 using NexusCore.SharedKernel.Interfaces;
 
-namespace Nexus.Reporting.Endpoints;
+namespace Nexus.Reporting.Analytics;
 
 public static class AnalyticsEndpoints
 {
-    /// <summary>Mapped by <see cref="DashboardEndpoints.MapDashboardEndpoints"/>, so a host that already maps
-    /// the dashboards picks these up without a new call. Every report is tenant-wide, so each one needs
+    /// <summary>Opt-in (see AddReportingAnalytics). Maps next to the dashboards under the same
+    /// /api/reporting prefix. Every report is tenant-wide, so each one needs
     /// <c>Reporting.ViewAll</c> (checked here, like the summary) and reads the caller's own tenant.</summary>
-    public static IEndpointRouteBuilder MapAnalyticsEndpoints(this IEndpointRouteBuilder app)
+    public static IEndpointRouteBuilder MapReportingAnalyticsEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/reporting").WithTags("Reporting Analytics").RequireAuthorization(ReportingPermissions.View);
 

@@ -1,4 +1,4 @@
-namespace Nexus.Reporting.Application.Analytics;
+namespace Nexus.Reporting.Analytics;
 
 public enum HealthStatus
 {

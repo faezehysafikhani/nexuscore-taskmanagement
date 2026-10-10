@@ -7,8 +7,11 @@ namespace Nexus.Calendar;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddCalendarApplication(this IServiceCollection services)
+    public static IServiceCollection AddCalendarApplication(this IServiceCollection services, Action<CalendarOptions>? configure = null)
     {
+        var options = new CalendarOptions();
+        configure?.Invoke(options);
+        services.AddSingleton(options);
         services.AddScoped<IWorkCalendarService, WorkCalendarService>();
         services.AddSingleton<IPermissionCatalog, CalendarPermissionCatalog>();
 

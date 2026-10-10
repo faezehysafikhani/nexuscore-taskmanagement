@@ -13,7 +13,7 @@ using Nexus.ProjectManagement.Progress.Domain;
 using Nexus.StrategyManagement.Application;
 using NexusCore.SharedKernel.Results;
 
-namespace Nexus.Reporting.Application.Analytics;
+namespace Nexus.Reporting.Analytics;
 
 /// <summary>
 /// Read-only analytics over what the other modules already hold; it stores nothing and repeats none

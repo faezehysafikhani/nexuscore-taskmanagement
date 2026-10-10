@@ -49,16 +49,26 @@ Each phase: (a) gap analysis for the screens in it, (b) backend additions + test
 
 (Filled in as each phase is built — this is the list to report at the end.)
 
+### Compatibility rule (applies to every phase)
+
+Other projects already use these modules. So: new fields/endpoints/tables are additive; nothing a module did before changes unless the
+caller asks for it (a trailing optional parameter) or the host switches it on (an options object, off by default, switched on only in
+`PostBank.Api`); a module never gains a required dependency on another (extension-point interfaces, integrations, or a separate opt-in
+project). Guarded by `ArchitectureDependencyTests.SharedModules_KeepTheirOriginalDependencies` and by tests of the default (off) behaviour.
+
+Switched on in the host: `CalendarOptions.SingleDefaultPerTenant`, `WaterfallOptions.ValidateActivityHierarchy`. Analytics lives in the
+separate `Nexus.Reporting.Analytics` project.
+
 ### Phase 1 — added to the backend
 
 | Where | What | Why (UI need) |
 |---|---|---|
 | Calendar | `workHoursPerDay`, `applyOfficialHolidays` on work calendars; `GET .../{id}/days`; `GET .../official-holidays`; optional `IOfficialHolidayProvider`; new plug-in `Nexus.Calendar.IranianHolidays`; Waterfall calendar integration honours it | The UI's calendar screen has work hours and an official-holidays switch, and computed holidays in the browser (`getOfficialHolidayReason`) — that logic now lives in the backend |
 | Organization | `path` on units; `activeOnly`; cycle guard when moving a unit; unit membership (`GET /api/organization/members`, `PUT /api/organization/users/{id}/unit`) | The UI keeps each user's `owningUnit` as a path string and builds the tree itself; the backend now owns membership and paths |
-| Calendar | create/update accept `exceptions` (replace-all); one default calendar per tenant; `DELETE` calendar (permission `work_calendars.delete`) refused while in use via `ICalendarUsageChecker` (Actions, projects) | The UI saves a whole calendar at once, keeps one default, and blocks deleting an assigned calendar — rules that lived in the browser |
+| Calendar | create/update accept `exceptions` (replace-all); one default calendar per tenant (**opt-in**: `CalendarOptions.SingleDefaultPerTenant`, on only in the host); `DELETE` calendar (permission `work_calendars.delete`) refused while in use via `ICalendarUsageChecker` (Actions, projects) | The UI saves a whole calendar at once, keeps one default, and blocks deleting an assigned calendar — rules that lived in the browser |
 | Projects | `ListProjectsRequest.WorkCalendarId` filter (internal) | lets the project-calendar integration answer "is this calendar used?" |
 | Calendar | the default calendar cannot be deleted (409) | the UI hid the delete button for it - now the backend's rule |
-| Organization | `code` optional on create (auto `U0001`...); `DELETE` deactivates the whole branch and refuses while people are in it | the UI generated codes and walked the subtree itself when deleting |
+| Organization | `code` optional on create (auto `U0001`...); `DELETE` refuses while people are in the unit; deactivating the whole branch is opt-in (`?includeBranch=true`) | the UI generated codes and walked the subtree itself when deleting |
 | Identity (host config) | `PostBank.Api/appsettings.json` seeds roles **Project Manager** and **Project Team** with permission sets (created once, never overwritten) | the UI's three roles are backend roles; the "role" dropdown assigns them |
 | Host | `PostBank.Api` registers the Iranian holidays and the project-calendar integration | So calendars actually affect scheduling |
 | SQL | `2026-10-10-add-calendar-policy.sql`, `2026-10-10-add-organization-members.sql` | schema |

@@ -11,7 +11,8 @@ public sealed class ActivityService(
     IActivityDependencyRepository dependencyRepository,
     IWaterfallUnitOfWork unitOfWork,
     IApprovalRequester approvalRequester,
-    IPlatformService platformService) : IActivityService
+    IPlatformService platformService,
+    WaterfallOptions? options = null) : IActivityService
 {
     public async Task<Result<IReadOnlyList<ActivityDto>>> ListByProjectAsync(Guid projectId, CancellationToken cancellationToken)
     {
@@ -34,10 +35,13 @@ public sealed class ActivityService(
             return Result.Failure<ActivityDto>(Error.Validation("Name is required."));
         }
 
-        var parentError = await ValidateParentAsync(request.ProjectId, activityId: null, request.ParentActivityId, cancellationToken);
-        if (parentError is not null)
+        if (options?.ValidateActivityHierarchy == true)
         {
-            return Result.Failure<ActivityDto>(parentError);
+            var parentError = await ValidateParentAsync(request.ProjectId, activityId: null, request.ParentActivityId, cancellationToken);
+            if (parentError is not null)
+            {
+                return Result.Failure<ActivityDto>(parentError);
+            }
         }
 
         var activity = new Activity(Guid.NewGuid(), request.TenantId, request.ProjectId, request.Name, request.ParentActivityId);
@@ -75,7 +79,7 @@ public sealed class ActivityService(
 
         // Only a changed parent needs checking; editing other fields must keep working on
         // activities that were placed before these rules existed.
-        if (request.ParentActivityId != activity.ParentActivityId)
+        if (options?.ValidateActivityHierarchy == true && request.ParentActivityId != activity.ParentActivityId)
         {
             var parentError = await ValidateParentAsync(activity.ProjectId, id, request.ParentActivityId, cancellationToken);
             if (parentError is not null)
