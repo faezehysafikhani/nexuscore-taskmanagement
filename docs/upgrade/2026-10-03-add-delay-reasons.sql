@@ -23,6 +23,16 @@ SET NOCOUNT ON;
 SET XACT_ABORT ON;
 GO
 
+-- Skipped, without an error, on a database that does not have this module's tables yet: the module creates
+-- its whole schema (this change included) the first time the host starts against such a database, and a
+-- partial schema made here would stop it from doing so.
+IF OBJECT_ID(N'[progress].[ProgressUpdates]', N'U') IS NULL
+BEGIN
+    PRINT N'Skipped: Progress is not installed in this database ([progress].[ProgressUpdates] does not exist). Nothing to upgrade.';
+    SET NOEXEC ON;
+END
+GO
+
 BEGIN TRANSACTION;
 
 IF SCHEMA_ID(N'progress') IS NULL EXEC(N'CREATE SCHEMA [progress];');
@@ -50,4 +60,7 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_DelayReasons_ProjectI
     CREATE INDEX [IX_DelayReasons_ProjectId] ON [progress].[DelayReasons] ([ProjectId]);
 
 COMMIT TRANSACTION;
+GO
+
+SET NOEXEC OFF;
 GO

@@ -27,6 +27,16 @@ SET NOCOUNT ON;
 SET XACT_ABORT ON;
 GO
 
+-- Skipped, without an error, on a database that does not have this module's tables yet: the module creates
+-- its whole schema (this change included) the first time the host starts against such a database, and a
+-- partial schema made here would stop it from doing so.
+IF OBJECT_ID(N'[project_documents].[ProjectDocuments]', N'U') IS NULL
+BEGIN
+    PRINT N'Skipped: Project documents is not installed in this database ([project_documents].[ProjectDocuments] does not exist). Nothing to upgrade.';
+    SET NOEXEC ON;
+END
+GO
+
 BEGIN TRANSACTION;
 GO
 
@@ -68,4 +78,7 @@ WHERE NOT EXISTS (SELECT 1 FROM [project_documents].[ProjectDocumentVersions] AS
 GO
 
 COMMIT TRANSACTION;
+GO
+
+SET NOEXEC OFF;
 GO

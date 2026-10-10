@@ -25,6 +25,16 @@ SET NOCOUNT ON;
 SET XACT_ABORT ON;
 GO
 
+-- Skipped, without an error, on a database that does not have this module's tables yet: the module creates
+-- its whole schema (this change included) the first time the host starts against such a database, and a
+-- partial schema made here would stop it from doing so.
+IF OBJECT_ID(N'[workflow].[WorkflowInstances]', N'U') IS NULL
+BEGIN
+    PRINT N'Skipped: Workflow is not installed in this database ([workflow].[WorkflowInstances] does not exist). Nothing to upgrade.';
+    SET NOEXEC ON;
+END
+GO
+
 BEGIN TRANSACTION;
 GO
 
@@ -60,4 +70,7 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_WorkflowDelegations_T
 GO
 
 COMMIT TRANSACTION;
+GO
+
+SET NOEXEC OFF;
 GO

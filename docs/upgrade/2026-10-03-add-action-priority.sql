@@ -19,10 +19,23 @@ SET NOCOUNT ON;
 SET XACT_ABORT ON;
 GO
 
+-- Skipped, without an error, on a database that does not have this module's tables yet: the module creates
+-- its whole schema (this change included) the first time the host starts against such a database, and a
+-- partial schema made here would stop it from doing so.
+IF OBJECT_ID(N'[actions].[Actions]', N'U') IS NULL
+BEGIN
+    PRINT N'Skipped: Actions is not installed in this database ([actions].[Actions] does not exist). Nothing to upgrade.';
+    SET NOEXEC ON;
+END
+GO
+
 BEGIN TRANSACTION;
 
 IF COL_LENGTH(N'actions.Actions', N'Priority') IS NULL
     ALTER TABLE [actions].[Actions] ADD [Priority] int NOT NULL CONSTRAINT [DF_Actions_Priority] DEFAULT 1;
 
 COMMIT TRANSACTION;
+GO
+
+SET NOEXEC OFF;
 GO
