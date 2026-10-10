@@ -42,6 +42,7 @@
     <ProjectReference Include="..\Nexus.Organization.Infrastructure\Nexus.Organization.Infrastructure.csproj" />
     <ProjectReference Include="..\Nexus.Calendar\Nexus.Calendar.csproj" />
     <ProjectReference Include="..\Nexus.Calendar.Infrastructure\Nexus.Calendar.Infrastructure.csproj" />
+    <ProjectReference Include="..\Nexus.Calendar.IranianHolidays\Nexus.Calendar.IranianHolidays.csproj" />
     <ProjectReference Include="..\Nexus.Workflow\Nexus.Workflow.csproj" />
     <ProjectReference Include="..\Nexus.Workflow.Infrastructure\Nexus.Workflow.Infrastructure.csproj" />
     <ProjectReference Include="..\Nexus.Actions\Nexus.Actions.csproj" />
@@ -78,6 +79,7 @@
     <ProjectReference Include="..\Nexus.ProjectManagement.Documents.Infrastructure\Nexus.ProjectManagement.Documents.Infrastructure.csproj" />
 
     <!-- Integrations (Project family x Workflow / Strategy) -->
+    <ProjectReference Include="..\Nexus.Integrations.ProjectCalendar\Nexus.Integrations.ProjectCalendar.csproj" />
     <ProjectReference Include="..\Nexus.Integrations.ProjectVisibility\Nexus.Integrations.ProjectVisibility.csproj" />
     <ProjectReference Include="..\Nexus.Integrations.ProjectWorkflow\Nexus.Integrations.ProjectWorkflow.csproj" />
     <ProjectReference Include="..\Nexus.Integrations.ProjectStrategyAlignment\Nexus.Integrations.ProjectStrategyAlignment.csproj" />

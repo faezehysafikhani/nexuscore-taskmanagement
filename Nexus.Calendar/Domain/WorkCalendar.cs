@@ -30,6 +30,14 @@ public sealed class WorkCalendar : AuditableEntity<Guid>
     public string? Description { get; private set; }
     public DayOfWeekMask WorkingDays { get; private set; }
     public bool IsDefault { get; private set; }
+
+    /// <summary>Length of a working day in hours (1-24); 8 unless set.</summary>
+    public int WorkHoursPerDay { get; private set; } = 8;
+
+    /// <summary>Whether the country's official holidays (an installed <c>IOfficialHolidayProvider</c>) also count
+    /// as non-working days. A calendar that predates this setting has it off, so nothing already scheduled moves.</summary>
+    public bool ApplyOfficialHolidays { get; private set; }
+
     public IReadOnlyCollection<WorkCalendarException> Exceptions => _exceptions.AsReadOnly();
 
     public void Update(string name, string? description, DayOfWeekMask workingDays, bool isDefault)
@@ -38,6 +46,12 @@ public sealed class WorkCalendar : AuditableEntity<Guid>
         Description = description;
         WorkingDays = workingDays;
         IsDefault = isDefault;
+    }
+
+    public void SetPolicy(int workHoursPerDay, bool applyOfficialHolidays)
+    {
+        WorkHoursPerDay = workHoursPerDay;
+        ApplyOfficialHolidays = applyOfficialHolidays;
     }
 
     public void AddException(Guid exceptionId, DateOnly date, bool isWorkingDay, string? description)

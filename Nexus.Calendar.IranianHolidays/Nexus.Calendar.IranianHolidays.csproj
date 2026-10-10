@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- An optional plug-in for the Calendar module: it supplies Iran's official holidays and nothing else. -->
+    <ProjectReference Include="..\Nexus.Calendar\Nexus.Calendar.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -8,6 +8,7 @@ public sealed class OrganizationDbContext(DbContextOptions<OrganizationDbContext
     : DbContext(options), IOrganizationUnitOfWork
 {
     public DbSet<OrganizationUnit> OrganizationUnits => Set<OrganizationUnit>();
+    public DbSet<OrganizationUnitMember> OrganizationUnitMembers => Set<OrganizationUnitMember>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

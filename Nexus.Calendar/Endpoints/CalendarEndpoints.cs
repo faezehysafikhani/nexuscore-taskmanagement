@@ -33,6 +33,14 @@ public static class CalendarEndpoints
                 (await service.IsWorkingDayAsync(id, date, cancellationToken)).ToApiResult())
             .RequireAuthorization(CalendarPermissions.View);
 
+        group.MapGet("/{id:guid}/days", async (Guid id, DateOnly from, DateOnly to, IWorkCalendarService service, CancellationToken cancellationToken) =>
+                (await service.GetDaysAsync(id, from, to, cancellationToken)).ToApiResult())
+            .RequireAuthorization(CalendarPermissions.View);
+
+        group.MapGet("/official-holidays", async (DateOnly from, DateOnly to, IWorkCalendarService service, CancellationToken cancellationToken) =>
+                (await service.ListOfficialHolidaysAsync(from, to, cancellationToken)).ToApiResult())
+            .RequireAuthorization(CalendarPermissions.View);
+
         group.MapPost("/", async (CreateWorkCalendarRequest request, IWorkCalendarService service, CancellationToken cancellationToken) =>
                 (await service.CreateAsync(request, cancellationToken)).ToApiResult())
             .RequireAuthorization(CalendarPermissions.Create);

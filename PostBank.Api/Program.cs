@@ -16,6 +16,8 @@ using Nexus.Actions.Infrastructure;
 using Nexus.Calendar;
 using Nexus.Calendar.Endpoints;
 using Nexus.Calendar.Infrastructure;
+using Nexus.Calendar.IranianHolidays;
+using Nexus.Integrations.ProjectCalendar;
 using Nexus.Integrations.ProjectVisibility;
 using Nexus.Integrations.ProjectWorkflow;
 using Nexus.Integrations.ProjectWorkflow.Endpoints;
@@ -108,6 +110,7 @@ builder.Services.AddNotificationApplication();
 
 builder.Services.AddOrganizationApplication();
 builder.Services.AddCalendarApplication();
+builder.Services.AddIranianOfficialHolidays();
 builder.Services.AddWorkflowApplication();
 builder.Services.AddActionManagement();
 builder.Services.AddKnowledgeManagement();
@@ -128,6 +131,7 @@ builder.Services.AddProjectHistory();
 
 builder.Services.AddProjectWorkflowIntegration();
 builder.Services.AddProjectVisibilityIntegration();
+builder.Services.AddProjectCalendarIntegration();
 builder.Services.AddProjectStrategyAlignment();
 
 builder.Services.AddPortfolio();

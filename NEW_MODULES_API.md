@@ -97,6 +97,12 @@ Response:
 
 Status Codes: 200, 401, 403
 
+**Placing people in the chart, paths, loops** *(added for the PMPB UI)*. Every unit now carries `path` (its full path from the top, `"Organization > Engineering > Civil"`).
+`GET /api/organization/units?activeOnly=true` hides deactivated units. A unit cannot be moved under itself or one of its own descendants (400), nor under a
+missing parent. A person belongs to at most one unit: `GET /api/organization/members?unitId=` lists `{ userId, unitId, unitName, unitPath }`;
+`PUT /api/organization/users/{userId}/unit` with `{ "unitId": "guid | null" }` places them (null removes them; an inactive or other-tenant unit is refused). Needs
+`organization_units.view` / `organization_units.update`. **Existing databases need `docs/upgrade/2026-10-10-add-organization-members.sql` first** (a new table).
+
 ---
 
 ### Module: Organization
@@ -214,6 +220,16 @@ Response:
 ```
 
 Status Codes: 200, 401, 403
+
+**Working hours, official holidays, day-by-day view** *(added for the PMPB UI)*. A calendar now has `workHoursPerDay` (1-24, default 8) and
+`applyOfficialHolidays`. Create takes both optionally (omitted = 8 hours, follow official holidays); update leaves omitted values unchanged. Official holidays come
+from an optional `IOfficialHolidayProvider`: the host registers one (`AddIranianOfficialHolidays()` from `Nexus.Calendar.IranianHolidays` ships Iran's — solar
+holidays every year, religious ones from a per-year table that currently covers Jalali years 1402-1407 and must be extended yearly). Without a provider nothing changes.
+The rule everywhere (including Waterfall scheduling through the calendar integration): a date-specific exception of the calendar wins; otherwise the weekly pattern;
+a working weekday is still closed when the calendar follows official holidays and one falls on it.
+`GET /api/calendar/work-calendars/{id}/days?from=&to=` returns each day as `{ date, isWorkingDay, source (0 weekly, 1 exception, 2 official holiday), reason }` (at most
+1,000 days); `GET /api/calendar/work-calendars/official-holidays?from=&to=` lists `{ date, reason }` (empty when no provider). **Existing databases need
+`docs/upgrade/2026-10-10-add-calendar-policy.sql` first** (two columns; existing calendars do not start following official holidays, so nothing already scheduled moves).
 
 ---
 

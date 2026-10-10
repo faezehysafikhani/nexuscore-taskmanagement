@@ -10,6 +10,7 @@ public static class DependencyInjection
     public static IServiceCollection AddOrganizationApplication(this IServiceCollection services)
     {
         services.AddScoped<IOrganizationService, OrganizationService>();
+        services.AddScoped<IOrganizationMembershipService, OrganizationMembershipService>();
         services.AddSingleton<IPermissionCatalog, OrganizationPermissionCatalog>();
 
         services.AddAuthorization(options =>

@@ -1,3 +1,4 @@
+using Nexus.Calendar.Application;
 using Nexus.Calendar.Domain;
 using Nexus.ProjectManagement.Waterfall.Application.Scheduling;
 
@@ -12,9 +13,12 @@ public sealed class WorkCalendarAdapter : IWorkingDayCalendar
 {
     private readonly DayOfWeekMask _workingDays;
     private readonly Dictionary<DateOnly, bool> _exceptions;
+    private readonly IOfficialHolidayProvider? _officialHolidays;
 
-    public WorkCalendarAdapter(WorkCalendar calendar)
+    /// <param name="officialHolidays">Used only when the calendar itself follows official holidays.</param>
+    public WorkCalendarAdapter(WorkCalendar calendar, IOfficialHolidayProvider? officialHolidays = null)
     {
+        _officialHolidays = calendar.ApplyOfficialHolidays ? officialHolidays : null;
         _workingDays = calendar.WorkingDays;
         _exceptions = calendar.Exceptions
             .GroupBy(exception => exception.Date)
@@ -24,5 +28,5 @@ public sealed class WorkCalendarAdapter : IWorkingDayCalendar
     public bool IsWorkingDay(DateOnly date) =>
         _exceptions.TryGetValue(date, out var isWorkingDay)
             ? isWorkingDay
-            : _workingDays.HasFlag((DayOfWeekMask)(1 << (int)date.DayOfWeek));
+            : _workingDays.HasFlag((DayOfWeekMask)(1 << (int)date.DayOfWeek)) && _officialHolidays?.GetReason(date) is null;
 }

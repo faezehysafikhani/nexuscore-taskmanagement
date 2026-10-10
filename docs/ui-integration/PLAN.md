@@ -48,3 +48,12 @@ Each phase: (a) gap analysis for the screens in it, (b) backend additions + test
 ## Backend additions log
 
 (Filled in as each phase is built — this is the list to report at the end.)
+
+### Phase 1 — added to the backend
+
+| Where | What | Why (UI need) |
+|---|---|---|
+| Calendar | `workHoursPerDay`, `applyOfficialHolidays` on work calendars; `GET .../{id}/days`; `GET .../official-holidays`; optional `IOfficialHolidayProvider`; new plug-in `Nexus.Calendar.IranianHolidays`; Waterfall calendar integration honours it | The UI's calendar screen has work hours and an official-holidays switch, and computed holidays in the browser (`getOfficialHolidayReason`) — that logic now lives in the backend |
+| Organization | `path` on units; `activeOnly`; cycle guard when moving a unit; unit membership (`GET /api/organization/members`, `PUT /api/organization/users/{id}/unit`) | The UI keeps each user's `owningUnit` as a path string and builds the tree itself; the backend now owns membership and paths |
+| Host | `PostBank.Api` registers the Iranian holidays and the project-calendar integration | So calendars actually affect scheduling |
+| SQL | `2026-10-10-add-calendar-policy.sql`, `2026-10-10-add-organization-members.sql` | schema |

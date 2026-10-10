@@ -18,6 +18,7 @@ public static class DependencyInjection
 
         services.AddScoped<IOrganizationUnitOfWork>(provider => provider.GetRequiredService<OrganizationDbContext>());
         services.AddScoped<IOrganizationUnitRepository, OrganizationUnitRepository>();
+        services.AddScoped<IOrganizationMemberRepository, OrganizationMemberRepository>();
 
         return services;
     }

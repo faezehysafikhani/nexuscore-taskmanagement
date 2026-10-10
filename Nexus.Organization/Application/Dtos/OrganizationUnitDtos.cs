@@ -7,8 +7,15 @@ public sealed record OrganizationUnitDto(
     string Code,
     Guid? ParentId,
     Guid? ManagerUserId,
-    bool IsActive);
+    bool IsActive,
+    string? Path = null);
 
 public sealed record CreateOrganizationUnitRequest(Guid TenantId, string Name, string Code, Guid? ParentId);
 
 public sealed record UpdateOrganizationUnitRequest(string Name, string Code, Guid? ParentId, Guid? ManagerUserId, bool IsActive);
+
+/// <summary>A person's unit: its name and its full path from the top of the chart.</summary>
+public sealed record OrganizationMemberDto(Guid UserId, Guid UnitId, string UnitName, string UnitPath);
+
+/// <summary>UnitId null takes the user out of the chart.</summary>
+public sealed record SetUserUnitRequest(Guid? UnitId);

@@ -14,14 +14,14 @@ public static class OrganizationEndpoints
     {
         var group = app.MapGroup("/api/organization/units").WithTags("Organization").RequireAuthorization();
 
-        group.MapGet("/", async (ICurrentUserContext currentUser, IOrganizationService service, CancellationToken cancellationToken) =>
+        group.MapGet("/", async (bool? activeOnly, ICurrentUserContext currentUser, IOrganizationService service, CancellationToken cancellationToken) =>
             {
                 if (currentUser.TenantId is null)
                 {
                     return Results.Unauthorized();
                 }
 
-                return (await service.ListAsync(currentUser.TenantId.Value, cancellationToken)).ToApiResult();
+                return (await service.ListAsync(currentUser.TenantId.Value, cancellationToken, activeOnly ?? false)).ToApiResult();
             })
             .RequireAuthorization(OrganizationPermissions.View);
 
@@ -40,6 +40,31 @@ public static class OrganizationEndpoints
         group.MapDelete("/{id:guid}", async (Guid id, IOrganizationService service, CancellationToken cancellationToken) =>
                 (await service.DeactivateAsync(id, cancellationToken)).ToApiResult())
             .RequireAuthorization(OrganizationPermissions.Delete);
+
+        // Who is in which unit (a person belongs to at most one).
+        var membership = app.MapGroup("/api/organization").WithTags("Organization").RequireAuthorization();
+
+        membership.MapGet("/members", async (Guid? unitId, ICurrentUserContext currentUser, IOrganizationMembershipService service, CancellationToken cancellationToken) =>
+            {
+                if (currentUser.TenantId is null)
+                {
+                    return Results.Unauthorized();
+                }
+
+                return (await service.ListAsync(currentUser.TenantId.Value, unitId, cancellationToken)).ToApiResult();
+            })
+            .RequireAuthorization(OrganizationPermissions.View);
+
+        membership.MapPut("/users/{userId:guid}/unit", async (Guid userId, SetUserUnitRequest request, ICurrentUserContext currentUser, IOrganizationMembershipService service, CancellationToken cancellationToken) =>
+            {
+                if (currentUser.TenantId is null)
+                {
+                    return Results.Unauthorized();
+                }
+
+                return (await service.SetUserUnitAsync(currentUser.TenantId.Value, userId, request.UnitId, cancellationToken)).ToApiResult();
+            })
+            .RequireAuthorization(OrganizationPermissions.Update);
 
         return app;
     }
