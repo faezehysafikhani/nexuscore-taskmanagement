@@ -8,7 +8,8 @@ namespace Nexus.Calendar.Application;
 public sealed class WorkCalendarService(
     IWorkCalendarRepository repository,
     ICalendarUnitOfWork unitOfWork,
-    IOfficialHolidayProvider? officialHolidays = null) : IWorkCalendarService
+    IOfficialHolidayProvider? officialHolidays = null,
+    IEnumerable<ICalendarUsageChecker>? usageCheckers = null) : IWorkCalendarService
 {
     public const int MaxDaysPerQuery = 1000;
 
@@ -46,6 +47,16 @@ public sealed class WorkCalendarService(
         }
 
         calendar.SetPolicy(request.WorkHoursPerDay ?? 8, request.ApplyOfficialHolidays ?? true);
+        if (request.Exceptions is not null)
+        {
+            calendar.ReplaceExceptions(request.Exceptions.Select(e => (e.Date, e.IsWorkingDay, e.Description)));
+        }
+
+        if (request.IsDefault)
+        {
+            await ClearOtherDefaultsAsync(request.TenantId, calendar.Id, cancellationToken);
+        }
+
         await repository.AddAsync(calendar, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success(ToDto(calendar));
@@ -72,8 +83,40 @@ public sealed class WorkCalendarService(
 
         calendar.Update(request.Name, request.Description, request.WorkingDays, request.IsDefault);
         calendar.SetPolicy(request.WorkHoursPerDay ?? calendar.WorkHoursPerDay, request.ApplyOfficialHolidays ?? calendar.ApplyOfficialHolidays);
+        if (request.Exceptions is not null)
+        {
+            calendar.ReplaceExceptions(request.Exceptions.Select(e => (e.Date, e.IsWorkingDay, e.Description)));
+        }
+
+        if (request.IsDefault)
+        {
+            await ClearOtherDefaultsAsync(calendar.TenantId, calendar.Id, cancellationToken);
+        }
+
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success(ToDto(calendar));
+    }
+
+    public async Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var calendar = await repository.GetByIdAsync(id, cancellationToken);
+        if (calendar is null)
+        {
+            return Result.Failure(Error.NotFound("Work calendar not found."));
+        }
+
+        // Whatever uses the calendar (actions, projects...) says so through its own checker; the calendar knows none of them.
+        foreach (var checker in usageCheckers ?? [])
+        {
+            if (await checker.GetUsageAsync(calendar.TenantId, id, cancellationToken) is { } usage)
+            {
+                return Result.Failure(Error.Conflict($"The calendar is in use ({usage}) and cannot be deleted."));
+            }
+        }
+
+        await repository.RemoveAsync(calendar, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result.Success();
     }
 
     public async Task<Result<WorkCalendarDto>> AddExceptionAsync(Guid id, AddWorkCalendarExceptionRequest request, CancellationToken cancellationToken)
@@ -148,6 +191,15 @@ public sealed class WorkCalendarService(
                 .Select(x => new OfficialHolidayDto(x.Date, x.Reason!))
                 .ToList();
         return Task.FromResult(Result.Success(holidays));
+    }
+
+    /// <summary>There is one default calendar per tenant: making a calendar the default makes every other one not.</summary>
+    private async Task ClearOtherDefaultsAsync(Guid tenantId, Guid keepId, CancellationToken cancellationToken)
+    {
+        foreach (var other in (await repository.ListAsync(tenantId, cancellationToken)).Where(c => c.IsDefault && c.Id != keepId))
+        {
+            other.Update(other.Name, other.Description, other.WorkingDays, isDefault: false);
+        }
     }
 
     private static Error? ValidateHours(int? hours) =>

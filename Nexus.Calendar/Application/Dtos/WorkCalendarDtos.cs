@@ -18,12 +18,15 @@ public sealed record WorkCalendarDto(
 /// <summary>WorkHoursPerDay omitted = 8; ApplyOfficialHolidays omitted = on (a new calendar follows the official holidays when a provider is installed).</summary>
 public sealed record CreateWorkCalendarRequest(
     Guid TenantId, string Name, DayOfWeekMask WorkingDays, bool IsDefault,
-    int? WorkHoursPerDay = null, bool? ApplyOfficialHolidays = null, string? Description = null);
+    int? WorkHoursPerDay = null, bool? ApplyOfficialHolidays = null, string? Description = null,
+    IReadOnlyList<AddWorkCalendarExceptionRequest>? Exceptions = null);
 
-/// <summary>Omitted (null) WorkHoursPerDay / ApplyOfficialHolidays leave the stored value alone.</summary>
+/// <summary>Omitted (null) WorkHoursPerDay / ApplyOfficialHolidays leave the stored value alone. Exceptions, when given, REPLACE the
+/// calendar's date-specific exceptions (so a screen can save the whole calendar in one call); omitted leaves them alone.</summary>
 public sealed record UpdateWorkCalendarRequest(
     string Name, string? Description, DayOfWeekMask WorkingDays, bool IsDefault,
-    int? WorkHoursPerDay = null, bool? ApplyOfficialHolidays = null);
+    int? WorkHoursPerDay = null, bool? ApplyOfficialHolidays = null,
+    IReadOnlyList<AddWorkCalendarExceptionRequest>? Exceptions = null);
 
 public sealed record AddWorkCalendarExceptionRequest(DateOnly Date, bool IsWorkingDay, string? Description);
 

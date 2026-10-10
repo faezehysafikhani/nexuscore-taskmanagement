@@ -266,5 +266,6 @@ public sealed class ScheduleServiceTests
         public Task<WorkCalendar?> GetByIdAsync(Guid id, CancellationToken ct) => Task.FromResult(calendars.SingleOrDefault(c => c.Id == id));
         public Task<IReadOnlyList<WorkCalendar>> ListAsync(Guid tenantId, CancellationToken ct) => throw new NotSupportedException();
         public Task AddAsync(WorkCalendar calendar, CancellationToken ct) => throw new NotSupportedException();
+        public Task RemoveAsync(WorkCalendar calendar, CancellationToken ct) => throw new NotSupportedException();
     }
 }

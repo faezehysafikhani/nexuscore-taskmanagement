@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Nexus.Calendar.Application;
 using Nexus.Integrations.ProjectCalendar.Application;
 using Nexus.ProjectManagement.Waterfall.Application.Scheduling;
 
@@ -14,6 +15,7 @@ public static class DependencyInjection
     public static IServiceCollection AddProjectCalendarIntegration(this IServiceCollection services)
     {
         services.Replace(ServiceDescriptor.Scoped<IWorkingDayCalendarProvider, WorkCalendarProvider>());
+        services.AddScoped<ICalendarUsageChecker, ProjectCalendarUsageChecker>();
         return services;
     }
 }

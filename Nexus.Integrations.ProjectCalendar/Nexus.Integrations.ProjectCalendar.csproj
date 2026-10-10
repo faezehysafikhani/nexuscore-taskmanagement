@@ -11,6 +11,7 @@
     <!-- Owns no data of its own (no Infrastructure project): it only lets Waterfall's schedule
          calculation read Calendar's work calendars. Depends on both; neither depends on it. -->
     <ProjectReference Include="..\Nexus.Calendar\Nexus.Calendar.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Core\Nexus.ProjectManagement.Core.csproj" />
     <ProjectReference Include="..\Nexus.ProjectManagement.Waterfall\Nexus.ProjectManagement.Waterfall.csproj" />
     <ProjectReference Include="..\NexusCore.Application\NexusCore.Application.csproj" />
     <ProjectReference Include="..\NexusCore.SharedKernel\NexusCore.SharedKernel.csproj" />

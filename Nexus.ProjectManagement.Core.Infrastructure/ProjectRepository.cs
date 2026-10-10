@@ -21,6 +21,11 @@ public sealed class ProjectRepository(ProjectManagementCoreDbContext dbContext) 
                 project.Name.Contains(request.Search) || project.Code.Contains(request.Search));
         }
 
+        if (request.WorkCalendarId is { } calendarId)
+        {
+            query = query.Where(project => project.WorkCalendarId == calendarId);
+        }
+
         if (request.Type is { } type)
         {
             query = query.Where(project => project.Type == type);

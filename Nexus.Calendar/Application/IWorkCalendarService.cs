@@ -9,6 +9,8 @@ public interface IWorkCalendarService
     Task<Result<WorkCalendarDto>> GetAsync(Guid id, CancellationToken cancellationToken);
     Task<Result<WorkCalendarDto>> CreateAsync(CreateWorkCalendarRequest request, CancellationToken cancellationToken);
     Task<Result<WorkCalendarDto>> UpdateAsync(Guid id, UpdateWorkCalendarRequest request, CancellationToken cancellationToken);
+    /// <summary>Refused (409) while anything - an action, a project - still uses the calendar.</summary>
+    Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken);
     Task<Result<WorkCalendarDto>> AddExceptionAsync(Guid id, AddWorkCalendarExceptionRequest request, CancellationToken cancellationToken);
     Task<Result<WorkCalendarDto>> RemoveExceptionAsync(Guid id, Guid exceptionId, CancellationToken cancellationToken);
     Task<Result<bool>> IsWorkingDayAsync(Guid id, DateOnly date, CancellationToken cancellationToken);

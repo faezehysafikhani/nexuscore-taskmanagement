@@ -72,7 +72,8 @@ public sealed record ListProjectsRequest(
     Guid? OrganizationUnitId = null,
     Guid? ManagerUserId = null,
     ProjectSortBy SortBy = ProjectSortBy.CreatedAtUtc,
-    bool SortDescending = true);
+    bool SortDescending = true,
+    Guid? WorkCalendarId = null);
 
 public enum ProjectSortBy
 {

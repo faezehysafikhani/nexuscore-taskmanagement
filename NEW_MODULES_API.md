@@ -228,7 +228,12 @@ holidays every year, religious ones from a per-year table that currently covers 
 The rule everywhere (including Waterfall scheduling through the calendar integration): a date-specific exception of the calendar wins; otherwise the weekly pattern;
 a working weekday is still closed when the calendar follows official holidays and one falls on it.
 `GET /api/calendar/work-calendars/{id}/days?from=&to=` returns each day as `{ date, isWorkingDay, source (0 weekly, 1 exception, 2 official holiday), reason }` (at most
-1,000 days); `GET /api/calendar/work-calendars/official-holidays?from=&to=` lists `{ date, reason }` (empty when no provider). **Existing databases need
+1,000 days); `GET /api/calendar/work-calendars/official-holidays?from=&to=` lists `{ date, reason }` (empty when no provider). **Saving a whole calendar, one default, delete.** Create/update also accept `exceptions` (`[{ date, isWorkingDay, description }]`): when given they **replace**
+the calendar's date-specific exceptions (a screen can save the whole calendar in one call; exceptions that stay keep their id; omitted = unchanged, `[]` = clear).
+A tenant has one default calendar: making a calendar the default un-defaults the others. `DELETE /api/calendar/work-calendars/{id}` (new permission
+`work_calendars.delete`) is refused (409) while anything still uses the calendar — each module that points at a calendar reports it through an
+`ICalendarUsageChecker` (Actions and, via the project-calendar integration, projects), so the Calendar module itself knows none of them.
+**Existing databases need
 `docs/upgrade/2026-10-10-add-calendar-policy.sql` first** (two columns; existing calendars do not start following official holidays, so nothing already scheduled moves).
 
 ---

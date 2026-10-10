@@ -5,6 +5,7 @@ using Nexus.Actions.Application.Dtos;
 using Nexus.Actions.Application.EventHandlers;
 using Nexus.Actions.Application.Validators;
 using Nexus.Actions.Permissions;
+using Nexus.Calendar.Application;
 using NexusCore.Application.Approvals;
 using NexusCore.Application.Identity.Permissions;
 using NexusCore.SharedKernel.Domain;
@@ -19,6 +20,7 @@ public static class DependencyInjection
     public static IServiceCollection AddActionManagement(this IServiceCollection services)
     {
         services.AddScoped<IActionItemService, ActionItemService>();
+        services.AddScoped<ICalendarUsageChecker, ActionCalendarUsageChecker>();
         services.AddScoped<IValidator<CreateActionItemRequest>, CreateActionItemRequestValidator>();
         services.AddScoped<IValidator<UpdateActionItemRequest>, UpdateActionItemRequestValidator>();
         services.AddSingleton<IPermissionCatalog, ActionPermissionCatalog>();

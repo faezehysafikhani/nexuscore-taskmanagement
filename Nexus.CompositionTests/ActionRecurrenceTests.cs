@@ -43,6 +43,7 @@ public sealed class ActionRecurrenceTests
         public Task<WorkCalendar?> GetByIdAsync(Guid id, CancellationToken ct) => Task.FromResult<WorkCalendar?>(new WorkCalendar(id, Tenant, "Main", default));
         public Task<IReadOnlyList<WorkCalendar>> ListAsync(Guid tenantId, CancellationToken ct) => throw new NotSupportedException();
         public Task AddAsync(WorkCalendar calendar, CancellationToken ct) => throw new NotSupportedException();
+        public Task RemoveAsync(WorkCalendar calendar, CancellationToken ct) => throw new NotSupportedException();
     }
 
     private sealed class CountingUnitOfWork : IActionsUnitOfWork

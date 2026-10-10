@@ -64,6 +64,26 @@ public sealed class WorkCalendar : AuditableEntity<Guid>
         _exceptions.Add(new WorkCalendarException(exceptionId, Id, date, isWorkingDay, description));
     }
 
+    /// <summary>Makes the calendar's date-specific exceptions exactly these (one per date; the last given for a date wins).
+    /// Exceptions that stay keep their identity.</summary>
+    public void ReplaceExceptions(IEnumerable<(DateOnly Date, bool IsWorkingDay, string? Description)> exceptions)
+    {
+        var wanted = exceptions.GroupBy(e => e.Date).ToDictionary(g => g.Key, g => g.Last());
+        _exceptions.RemoveAll(existing => !wanted.ContainsKey(existing.Date));
+        foreach (var (date, entry) in wanted)
+        {
+            var existing = _exceptions.FirstOrDefault(e => e.Date == date);
+            if (existing is null)
+            {
+                _exceptions.Add(new WorkCalendarException(Guid.NewGuid(), Id, date, entry.IsWorkingDay, entry.Description));
+            }
+            else
+            {
+                existing.Change(entry.IsWorkingDay, entry.Description);
+            }
+        }
+    }
+
     public void RemoveException(Guid exceptionId) =>
         _exceptions.RemoveAll(exception => exception.Id == exceptionId);
 

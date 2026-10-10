@@ -1,10 +1,14 @@
 using Microsoft.EntityFrameworkCore;
+using Nexus.Actions.Application;
+using Nexus.Actions.Domain;
 using Nexus.Calendar.Application;
 using Nexus.Calendar.Application.Dtos;
 using Nexus.Calendar.Domain;
 using Nexus.Calendar.Infrastructure;
 using Nexus.Calendar.IranianHolidays;
 using Nexus.Integrations.ProjectCalendar.Application;
+using Nexus.ProjectManagement.Core.Domain;
+using Nexus.ProjectManagement.Core.Infrastructure;
 
 namespace Nexus.CompositionTests;
 
@@ -22,10 +26,10 @@ public sealed class CalendarPolicyTests
         public CalendarDbContext Db { get; }
         public WorkCalendarService Service { get; }
 
-        public Fixture(IOfficialHolidayProvider? holidays)
+        public Fixture(IOfficialHolidayProvider? holidays, params ICalendarUsageChecker[] checkers)
         {
             Db = new CalendarDbContext(new DbContextOptionsBuilder<CalendarDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
-            Service = new WorkCalendarService(new WorkCalendarRepository(Db), Db, holidays);
+            Service = new WorkCalendarService(new WorkCalendarRepository(Db), Db, holidays, checkers);
         }
     }
 
@@ -82,6 +86,130 @@ public sealed class CalendarPolicyTests
         var changed = (await f.Service.UpdateAsync(id, new UpdateWorkCalendarRequest("Renamed", null, OfficeWeek, false, 9, true), default)).Value!;
         Assert.Equal(9, changed.WorkHoursPerDay);
         Assert.True(changed.ApplyOfficialHolidays);
+    }
+
+    // ------------------------------------------------- whole-calendar saves, default, delete
+
+    private sealed class UsedBy(string? usage) : ICalendarUsageChecker
+    {
+        public Task<string?> GetUsageAsync(Guid tenantId, Guid calendarId, CancellationToken cancellationToken) => Task.FromResult(usage);
+    }
+
+    [Fact]
+    public async Task Create_WithExceptions_StoresThem_AndUpdateReplacesThemWholesale()
+    {
+        var f = new Fixture(null);
+        var d1 = new DateOnly(2026, 6, 10);
+        var d2 = new DateOnly(2026, 6, 11);
+        var d3 = new DateOnly(2026, 6, 12);
+        var created = (await f.Service.CreateAsync(new CreateWorkCalendarRequest(Tenant, "A", OfficeWeek, false, Exceptions:
+            [new AddWorkCalendarExceptionRequest(d1, false, "one"), new AddWorkCalendarExceptionRequest(d2, false, "two")]), default)).Value!;
+        Assert.Equal([d1, d2], created.Exceptions.Select(e => e.Date).Order());
+        var keptId = created.Exceptions.Single(e => e.Date == d1).Id;
+
+        var updated = (await f.Service.UpdateAsync(created.Id, new UpdateWorkCalendarRequest("A", null, OfficeWeek, false, Exceptions:
+            [new AddWorkCalendarExceptionRequest(d1, false, "renamed"), new AddWorkCalendarExceptionRequest(d3, true, "extra")]), default)).Value!;
+
+        Assert.Equal([d1, d3], updated.Exceptions.Select(e => e.Date).Order());
+        var kept = updated.Exceptions.Single(e => e.Date == d1);
+        Assert.Equal(keptId, kept.Id);            // an exception that stays keeps its identity
+        Assert.Equal("renamed", kept.Description);
+        Assert.True(updated.Exceptions.Single(e => e.Date == d3).IsWorkingDay);
+    }
+
+    [Fact]
+    public async Task Update_WithoutExceptions_LeavesThemAlone_AndAnEmptyListClearsThem()
+    {
+        var f = new Fixture(null);
+        var created = (await f.Service.CreateAsync(new CreateWorkCalendarRequest(Tenant, "A", OfficeWeek, false, Exceptions:
+            [new AddWorkCalendarExceptionRequest(Monday, false, "x")]), default)).Value!;
+
+        var untouched = (await f.Service.UpdateAsync(created.Id, new UpdateWorkCalendarRequest("A", null, OfficeWeek, false), default)).Value!;
+        Assert.Single(untouched.Exceptions);
+
+        var cleared = (await f.Service.UpdateAsync(created.Id, new UpdateWorkCalendarRequest("A", null, OfficeWeek, false, Exceptions: []), default)).Value!;
+        Assert.Empty(cleared.Exceptions);
+    }
+
+    [Fact]
+    public async Task ThereIsOneDefaultCalendarPerTenant()
+    {
+        var f = new Fixture(null);
+        var first = (await f.Service.CreateAsync(new CreateWorkCalendarRequest(Tenant, "First", OfficeWeek, true), default)).Value!;
+        var second = (await f.Service.CreateAsync(new CreateWorkCalendarRequest(Tenant, "Second", OfficeWeek, true), default)).Value!;
+        var other = (await f.Service.CreateAsync(new CreateWorkCalendarRequest(Guid.NewGuid(), "Other tenant", OfficeWeek, true), default)).Value!;
+
+        var calendars = (await f.Service.ListAsync(Tenant, default)).Value!;
+        Assert.False(calendars.Single(c => c.Id == first.Id).IsDefault);
+        Assert.True(calendars.Single(c => c.Id == second.Id).IsDefault);
+        Assert.True((await f.Service.GetAsync(other.Id, default)).Value!.IsDefault); // another tenant's default is untouched
+
+        await f.Service.UpdateAsync(first.Id, new UpdateWorkCalendarRequest("First", null, OfficeWeek, true), default);
+        calendars = (await f.Service.ListAsync(Tenant, default)).Value!;
+        Assert.Equal(["First"], calendars.Where(c => c.IsDefault).Select(c => c.Name));
+    }
+
+    [Fact]
+    public async Task Delete_RemovesAnUnusedCalendar_AndRefusesOneThatIsInUse()
+    {
+        var f = new Fixture(null, new UsedBy(null), new UsedBy("2 actions"));
+        var used = (await f.Service.CreateAsync(new CreateWorkCalendarRequest(Tenant, "Used", OfficeWeek, false), default)).Value!;
+
+        var refused = await f.Service.DeleteAsync(used.Id, default);
+        Assert.Equal("conflict", refused.Error.Code);
+        Assert.Contains("2 actions", refused.Error.Message);
+        Assert.True((await f.Service.GetAsync(used.Id, default)).IsSuccess);
+
+        var free = new Fixture(null, new UsedBy(null));
+        var calendar = (await free.Service.CreateAsync(new CreateWorkCalendarRequest(Tenant, "Free", OfficeWeek, false), default)).Value!;
+        Assert.True((await free.Service.DeleteAsync(calendar.Id, default)).IsSuccess);
+        Assert.Equal("not_found", (await free.Service.GetAsync(calendar.Id, default)).Error.Code);
+        Assert.Equal("not_found", (await free.Service.DeleteAsync(calendar.Id, default)).Error.Code);
+    }
+
+    [Fact]
+    public async Task Delete_WithNoCheckersInstalled_JustDeletes()
+    {
+        var f = new Fixture(null);
+        var calendar = (await f.Service.CreateAsync(new CreateWorkCalendarRequest(Tenant, "A", OfficeWeek, false), default)).Value!;
+
+        Assert.True((await f.Service.DeleteAsync(calendar.Id, default)).IsSuccess);
+    }
+
+    private sealed class FakeActions(params ActionItem[] actions) : IActionItemRepository
+    {
+        public Task<ActionItem?> GetByIdAsync(Guid id, CancellationToken ct) => Task.FromResult(actions.SingleOrDefault(a => a.Id == id));
+        public Task<IReadOnlyList<ActionItem>> ListAsync(Guid tenantId, Guid? projectId, CancellationToken ct) => Task.FromResult<IReadOnlyList<ActionItem>>(actions);
+        public Task AddAsync(ActionItem action, CancellationToken ct) => Task.CompletedTask;
+    }
+
+    [Fact]
+    public async Task ActionsReportTheCalendarsTheyUse()
+    {
+        var calendarId = Guid.NewGuid();
+        var uses = new ActionItem(Guid.NewGuid(), Tenant, "A", Guid.NewGuid(), calendarId);
+        var other = new ActionItem(Guid.NewGuid(), Tenant, "B", Guid.NewGuid(), Guid.NewGuid());
+        var checker = new ActionCalendarUsageChecker(new FakeActions(uses, other));
+
+        Assert.Equal("1 action(s)", await checker.GetUsageAsync(Tenant, calendarId, default));
+        Assert.Null(await checker.GetUsageAsync(Tenant, Guid.NewGuid(), default));
+    }
+
+    [Fact]
+    public async Task ProjectsReportTheCalendarsTheyUse_ThroughTheRealRepositoryFilter()
+    {
+        var db = new ProjectManagementCoreDbContext(new DbContextOptionsBuilder<ProjectManagementCoreDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
+        var calendarId = Guid.NewGuid();
+        var project = new Project(Guid.NewGuid(), Tenant, "P", "P1", ProjectType.Waterfall, null, null);
+        project.UpdateDetails("P", "P1", null, null, null, calendarId, null, null, null, null, null, null, null, null, null);
+        var other = new Project(Guid.NewGuid(), Tenant, "Q", "Q1", ProjectType.Waterfall, null, null);
+        db.Projects.AddRange(project, other);
+        await db.SaveChangesAsync();
+        var checker = new ProjectCalendarUsageChecker(new ProjectRepository(db));
+
+        Assert.Equal("1 project(s)", await checker.GetUsageAsync(Tenant, calendarId, default));
+        Assert.Null(await checker.GetUsageAsync(Tenant, Guid.NewGuid(), default));
+        Assert.Null(await checker.GetUsageAsync(Guid.NewGuid(), calendarId, default)); // another tenant
     }
 
     // ------------------------------------------------------------------ the rule

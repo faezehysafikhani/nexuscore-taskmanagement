@@ -49,6 +49,10 @@ public static class CalendarEndpoints
                 (await service.UpdateAsync(id, request, cancellationToken)).ToApiResult())
             .RequireAuthorization(CalendarPermissions.Update);
 
+        group.MapDelete("/{id:guid}", async (Guid id, IWorkCalendarService service, CancellationToken cancellationToken) =>
+                (await service.DeleteAsync(id, cancellationToken)).ToApiResult())
+            .RequireAuthorization(CalendarPermissions.Delete);
+
         group.MapPost("/{id:guid}/exceptions", async (Guid id, AddWorkCalendarExceptionRequest request, IWorkCalendarService service, CancellationToken cancellationToken) =>
                 (await service.AddExceptionAsync(id, request, cancellationToken)).ToApiResult())
             .RequireAuthorization(CalendarPermissions.Update);
