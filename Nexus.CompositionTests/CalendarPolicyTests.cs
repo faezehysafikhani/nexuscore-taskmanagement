@@ -168,6 +168,19 @@ public sealed class CalendarPolicyTests
     }
 
     [Fact]
+    public async Task TheDefaultCalendar_CannotBeDeleted()
+    {
+        var f = new Fixture(null);
+        var main = (await f.Service.CreateAsync(new CreateWorkCalendarRequest(Tenant, "Main", OfficeWeek, true), default)).Value!;
+
+        Assert.Equal("conflict", (await f.Service.DeleteAsync(main.Id, default)).Error.Code);
+
+        var other = (await f.Service.CreateAsync(new CreateWorkCalendarRequest(Tenant, "Other", OfficeWeek, true), default)).Value!; // now the default
+        Assert.True((await f.Service.DeleteAsync(main.Id, default)).IsSuccess);
+        Assert.Equal("conflict", (await f.Service.DeleteAsync(other.Id, default)).Error.Code);
+    }
+
+    [Fact]
     public async Task Delete_WithNoCheckersInstalled_JustDeletes()
     {
         var f = new Fixture(null);

@@ -97,7 +97,7 @@ Response:
 
 Status Codes: 200, 401, 403
 
-**Placing people in the chart, paths, loops** *(added for the PMPB UI)*. Every unit now carries `path` (its full path from the top, `"Organization > Engineering > Civil"`).
+**Placing people in the chart, paths, loops, branches** *(added for the PMPB UI)*. `code` is optional on create (omitted = the next free `U0001`-style code). `DELETE` deactivates the unit **and its whole branch**, and is refused (409) while anyone is placed in that branch. Every unit now carries `path` (its full path from the top, `"Organization > Engineering > Civil"`).
 `GET /api/organization/units?activeOnly=true` hides deactivated units. A unit cannot be moved under itself or one of its own descendants (400), nor under a
 missing parent. A person belongs to at most one unit: `GET /api/organization/members?unitId=` lists `{ userId, unitId, unitName, unitPath }`;
 `PUT /api/organization/users/{userId}/unit` with `{ "unitId": "guid | null" }` places them (null removes them; an inactive or other-tenant unit is refused). Needs
@@ -231,7 +231,7 @@ a working weekday is still closed when the calendar follows official holidays an
 1,000 days); `GET /api/calendar/work-calendars/official-holidays?from=&to=` lists `{ date, reason }` (empty when no provider). **Saving a whole calendar, one default, delete.** Create/update also accept `exceptions` (`[{ date, isWorkingDay, description }]`): when given they **replace**
 the calendar's date-specific exceptions (a screen can save the whole calendar in one call; exceptions that stay keep their id; omitted = unchanged, `[]` = clear).
 A tenant has one default calendar: making a calendar the default un-defaults the others. `DELETE /api/calendar/work-calendars/{id}` (new permission
-`work_calendars.delete`) is refused (409) while anything still uses the calendar — each module that points at a calendar reports it through an
+`work_calendars.delete`) is refused (409) for the default calendar and while anything still uses the calendar — each module that points at a calendar reports it through an
 `ICalendarUsageChecker` (Actions and, via the project-calendar integration, projects), so the Calendar module itself knows none of them.
 **Existing databases need
 `docs/upgrade/2026-10-10-add-calendar-policy.sql` first** (two columns; existing calendars do not start following official holidays, so nothing already scheduled moves).

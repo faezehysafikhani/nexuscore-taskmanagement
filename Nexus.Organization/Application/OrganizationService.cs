@@ -7,7 +7,8 @@ namespace Nexus.Organization.Application;
 
 public sealed class OrganizationService(
     IOrganizationUnitRepository repository,
-    IOrganizationUnitOfWork unitOfWork) : IOrganizationService
+    IOrganizationUnitOfWork unitOfWork,
+    IOrganizationMemberRepository? members = null) : IOrganizationService
 {
     public async Task<Result<IReadOnlyList<OrganizationUnitDto>>> ListAsync(Guid tenantId, CancellationToken cancellationToken, bool activeOnly = false)
     {
@@ -31,12 +32,17 @@ public sealed class OrganizationService(
 
     public async Task<Result<OrganizationUnitDto>> CreateAsync(CreateOrganizationUnitRequest request, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(request.Code))
+        if (string.IsNullOrWhiteSpace(request.Name))
         {
-            return Result.Failure<OrganizationUnitDto>(Error.Validation("Name and code are required."));
+            return Result.Failure<OrganizationUnitDto>(Error.Validation("Name is required."));
         }
 
-        if (await repository.CodeExistsAsync(request.TenantId, request.Code, null, cancellationToken))
+        var code = request.Code;
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            code = await NextCodeAsync(request.TenantId, cancellationToken);
+        }
+        else if (await repository.CodeExistsAsync(request.TenantId, code, null, cancellationToken))
         {
             return Result.Failure<OrganizationUnitDto>(Error.Conflict("An organization unit with this code already exists."));
         }
@@ -46,7 +52,7 @@ public sealed class OrganizationService(
             return Result.Failure<OrganizationUnitDto>(Error.Validation("Parent organization unit was not found."));
         }
 
-        var unit = new OrganizationUnit(Guid.NewGuid(), request.TenantId, request.Name, request.Code, request.ParentId);
+        var unit = new OrganizationUnit(Guid.NewGuid(), request.TenantId, request.Name, code, request.ParentId);
         await repository.AddAsync(unit, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         var createdPaths = OrganizationPaths.For(await repository.ListAsync(unit.TenantId, cancellationToken));
@@ -102,9 +108,38 @@ public sealed class OrganizationService(
             return Result.Failure(Error.NotFound("Organization unit not found."));
         }
 
-        unit.Update(unit.Name, unit.Code, unit.ParentId, unit.ManagerUserId, isActive: false);
+        // Deactivating a unit takes its whole branch with it (a sub-unit of an inactive unit makes no sense), and is
+        // refused while anyone is still placed in the branch: they would be left in a unit that no longer exists.
+        var chart = await repository.ListAsync(unit.TenantId, cancellationToken);
+        var branch = OrganizationPaths.Descendants(chart, id);
+        branch.Add(id);
+        if (members is not null)
+        {
+            var placed = (await members.ListAsync(unit.TenantId, null, cancellationToken)).Count(m => branch.Contains(m.UnitId));
+            if (placed > 0)
+            {
+                return Result.Failure(Error.Conflict($"{placed} people are placed in this unit or its sub-units; move them first."));
+            }
+        }
+
+        foreach (var inBranch in chart.Where(u => branch.Contains(u.Id)))
+        {
+            inBranch.Update(inBranch.Name, inBranch.Code, inBranch.ParentId, inBranch.ManagerUserId, isActive: false);
+        }
+
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success();
+    }
+
+    private async Task<string> NextCodeAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        var next = (await repository.ListAsync(tenantId, cancellationToken)).Count + 1;
+        while (await repository.CodeExistsAsync(tenantId, $"U{next:D4}", null, cancellationToken))
+        {
+            next++;
+        }
+
+        return $"U{next:D4}";
     }
 
     private static OrganizationUnitDto ToDto(OrganizationUnit unit, string? path) =>

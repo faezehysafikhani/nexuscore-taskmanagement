@@ -105,6 +105,11 @@ public sealed class WorkCalendarService(
             return Result.Failure(Error.NotFound("Work calendar not found."));
         }
 
+        if (calendar.IsDefault)
+        {
+            return Result.Failure(Error.Conflict("The default calendar cannot be deleted; make another calendar the default first."));
+        }
+
         // Whatever uses the calendar (actions, projects...) says so through its own checker; the calendar knows none of them.
         foreach (var checker in usageCheckers ?? [])
         {

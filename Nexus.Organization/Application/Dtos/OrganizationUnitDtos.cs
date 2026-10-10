@@ -10,7 +10,8 @@ public sealed record OrganizationUnitDto(
     bool IsActive,
     string? Path = null);
 
-public sealed record CreateOrganizationUnitRequest(Guid TenantId, string Name, string Code, Guid? ParentId);
+/// <summary>Code omitted = the next free code ("U0001", "U0002"...) is assigned.</summary>
+public sealed record CreateOrganizationUnitRequest(Guid TenantId, string Name, string? Code = null, Guid? ParentId = null);
 
 public sealed record UpdateOrganizationUnitRequest(string Name, string Code, Guid? ParentId, Guid? ManagerUserId, bool IsActive);
 

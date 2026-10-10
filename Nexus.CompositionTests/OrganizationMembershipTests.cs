@@ -22,8 +22,9 @@ public sealed class OrganizationMembershipTests
         {
             Db = new OrganizationDbContext(new DbContextOptionsBuilder<OrganizationDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
             var units = new OrganizationUnitRepository(Db);
-            Units = new OrganizationService(units, Db);
-            Members = new OrganizationMembershipService(new OrganizationMemberRepository(Db), units, Db);
+            var members = new OrganizationMemberRepository(Db);
+            Units = new OrganizationService(units, Db, members);
+            Members = new OrganizationMembershipService(members, units, Db);
         }
 
         public async Task<OrganizationUnitDto> UnitAsync(string name, Guid? parent = null) =>
@@ -72,6 +73,55 @@ public sealed class OrganizationMembershipTests
 
         var moved = (await f.Units.UpdateAsync(civil.Id, Move(civil, org.Id), default)).Value!;
         Assert.Equal("Organization > Civil", moved.Path);
+    }
+
+    [Fact]
+    public async Task ACodeIsAssignedWhenNoneIsGiven_AndNeverCollides()
+    {
+        var f = new Fixture();
+        await f.Units.CreateAsync(new CreateOrganizationUnitRequest(Tenant, "Taken", "U0002"), default); // occupies the code the second unit would get
+
+        var first = (await f.Units.CreateAsync(new CreateOrganizationUnitRequest(Tenant, "A"), default)).Value!;
+        var second = (await f.Units.CreateAsync(new CreateOrganizationUnitRequest(Tenant, "B"), default)).Value!;
+
+        Assert.NotEqual(first.Code, second.Code);
+        Assert.All(new[] { first.Code, second.Code }, code => Assert.Matches(@"^U\d{4}$", code));
+        Assert.Equal("validation.error", (await f.Units.CreateAsync(new CreateOrganizationUnitRequest(Tenant, " "), default)).Error.Code);
+        Assert.Equal("conflict", (await f.Units.CreateAsync(new CreateOrganizationUnitRequest(Tenant, "C", "U0002"), default)).Error.Code);
+    }
+
+    [Fact]
+    public async Task DeactivatingAUnit_TakesItsWholeBranch_ButNotItsSiblings()
+    {
+        var f = new Fixture();
+        var org = await f.UnitAsync("Organization");
+        var eng = await f.UnitAsync("Engineering", org.Id);
+        var civil = await f.UnitAsync("Civil", eng.Id);
+        var fin = await f.UnitAsync("Finance", org.Id);
+
+        Assert.True((await f.Units.DeactivateAsync(eng.Id, default)).IsSuccess);
+
+        var active = (await f.Units.ListAsync(Tenant, default, activeOnly: true)).Value!.Select(u => u.Name);
+        Assert.Equal(["Finance", "Organization"], active.Order());
+        Assert.False((await f.Units.GetAsync(civil.Id, default)).Value!.IsActive);
+        Assert.True((await f.Units.GetAsync(fin.Id, default)).Value!.IsActive);
+    }
+
+    [Fact]
+    public async Task ABranchWithPeopleInIt_CannotBeDeactivated_UntilTheyAreMoved()
+    {
+        var f = new Fixture();
+        var org = await f.UnitAsync("Organization");
+        var eng = await f.UnitAsync("Engineering", org.Id);
+        var civil = await f.UnitAsync("Civil", eng.Id);
+        await f.Members.SetUserUnitAsync(Tenant, Alice, civil.Id, default);
+
+        var refused = await f.Units.DeactivateAsync(eng.Id, default);
+        Assert.Equal("conflict", refused.Error.Code);
+        Assert.True((await f.Units.GetAsync(civil.Id, default)).Value!.IsActive);
+
+        await f.Members.SetUserUnitAsync(Tenant, Alice, org.Id, default);
+        Assert.True((await f.Units.DeactivateAsync(eng.Id, default)).IsSuccess);
     }
 
     [Fact]

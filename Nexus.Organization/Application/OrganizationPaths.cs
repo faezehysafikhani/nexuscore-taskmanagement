@@ -28,6 +28,26 @@ public static class OrganizationPaths
         return result;
     }
 
+    /// <summary>Every unit below <paramref name="unitId"/> (children, their children...), not the unit itself.</summary>
+    public static HashSet<Guid> Descendants(IReadOnlyCollection<OrganizationUnit> units, Guid unitId)
+    {
+        var childrenOf = units.Where(u => u.ParentId is not null).ToLookup(u => u.ParentId!.Value, u => u.Id);
+        var result = new HashSet<Guid>();
+        var stack = new Stack<Guid>([unitId]);
+        while (stack.Count > 0)
+        {
+            foreach (var child in childrenOf[stack.Pop()])
+            {
+                if (child != unitId && result.Add(child))
+                {
+                    stack.Push(child);
+                }
+            }
+        }
+
+        return result;
+    }
+
     /// <summary>Whether <paramref name="candidateParentId"/> is the unit itself or one of its descendants - i.e. making it the parent would loop the chart.</summary>
     public static bool WouldLoop(IReadOnlyCollection<OrganizationUnit> units, Guid unitId, Guid? candidateParentId)
     {
