@@ -15,3 +15,6 @@ public sealed record CreateDelayReasonRequest(
 public sealed record UpdateDelayReasonRequest(
     DateOnly RegisterDate, DelayRootCause RootCause, string Description,
     int? TimeImpactDays, decimal? CostImpact, string? CorrectiveAction);
+
+/// <summary>Several projects at once (the screens that show every project's items need them in one call).</summary>
+public sealed record ListDelayReasonsForProjectsRequest(IReadOnlyList<Guid> ProjectIds);

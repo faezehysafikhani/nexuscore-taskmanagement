@@ -9,6 +9,9 @@ using NexusCore.SharedKernel.Domain;
 // to match the target tree; only the C# namespace differs.
 namespace Nexus.ProjectManagement.RiskManagement.Domain;
 
+/// <summary>Where the work of answering a risk stands (the response plan being carried out).</summary>
+public enum RiskResponseStatus { Planning = 0, InProgress = 1, OnHold = 2, Completed = 3 }
+
 /// <summary>
 /// Required: ProjectManagement.Core (ProjectId). Optional: Workflow (via IApprovalRequester)
 /// and an optional analyzer (via IRiskAnalyzer) - this module is fully usable with neither installed: submitting
@@ -42,6 +45,11 @@ public sealed class Risk : AuditableEntity<Guid>
     public string? ResponsePlan { get; private set; }
     public Guid? RiskOwnerUserId { get; private set; }
     public ApprovalStatus ApprovalStatus { get; private set; }
+
+    /// <summary>How far carrying out the response plan has got. A new risk starts at Planning.</summary>
+    public RiskResponseStatus ResponseStatus { get; private set; }
+
+    public void ChangeResponseStatus(RiskResponseStatus status) => ResponseStatus = status;
 
     public void UpdateDetails(string description, int probabilityScore, int severityScore, int impactScore, string? responsePlan, Guid? riskOwnerUserId)
     {

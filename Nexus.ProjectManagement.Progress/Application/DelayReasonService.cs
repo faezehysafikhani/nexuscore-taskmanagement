@@ -15,6 +15,18 @@ public sealed class DelayReasonService(
 {
     public const string SubjectType = "DelayReason";
 
+    public async Task<Result<IReadOnlyList<DelayReasonDto>>> ListForProjectsAsync(ListDelayReasonsForProjectsRequest request, CancellationToken cancellationToken)
+    {
+        var ids = request.ProjectIds.Distinct().ToList();
+        if (ids.Count == 0)
+        {
+            return Result.Success<IReadOnlyList<DelayReasonDto>>([]);
+        }
+
+        var items = await repository.ListByProjectsAsync(ids, cancellationToken);
+        return Result.Success<IReadOnlyList<DelayReasonDto>>(items.Select(ToDto).ToList());
+    }
+
     public async Task<Result<IReadOnlyList<DelayReasonDto>>> ListByProjectAsync(Guid projectId, CancellationToken cancellationToken)
     {
         var reasons = await repository.ListByProjectAsync(projectId, cancellationToken);

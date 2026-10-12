@@ -15,3 +15,6 @@ public sealed record CreateProgressUpdateRequest(
 
 public sealed record UpdateProgressUpdateRequest(
     string? StatusDescription, decimal PlannedProgress, decimal ActualProgress, string? DelayReasons);
+
+/// <summary>Several projects at once (the screens that show every project's items need them in one call).</summary>
+public sealed record ListProgressUpdatesForProjectsRequest(IReadOnlyList<Guid> ProjectIds);

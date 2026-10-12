@@ -19,3 +19,6 @@ public sealed record ProjectDocumentVersionDto(
     string? Comment, bool IsCurrent, Guid? CreatedByUserId, DateTimeOffset? CreatedAtUtc);
 
 public sealed record UploadProjectDocumentVersionRequest(string FileName, string ContentType, string? Comment);
+
+/// <summary>Several projects at once (the screens that show every project's items need them in one call).</summary>
+public sealed record ListProjectDocumentsForProjectsRequest(IReadOnlyList<Guid> ProjectIds);

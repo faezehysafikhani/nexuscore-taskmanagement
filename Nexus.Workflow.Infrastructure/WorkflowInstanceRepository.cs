@@ -15,6 +15,14 @@ public sealed class WorkflowInstanceRepository(WorkflowDbContext dbContext) : IW
             .Where(i => i.SubjectType == subjectType && i.SubjectId == subjectId && i.Status == WorkflowInstanceStatus.InProgress)
             .SingleOrDefaultAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<WorkflowInstance>> ListForSubjectsAsync(
+        Guid tenantId, string subjectType, IReadOnlyCollection<Guid> subjectIds, CancellationToken cancellationToken) =>
+        await dbContext.WorkflowInstances
+            .Include(i => i.Decisions)
+            .Where(i => i.TenantId == tenantId && i.SubjectType == subjectType && subjectIds.Contains(i.SubjectId))
+            .OrderByDescending(i => i.CreatedAtUtc)
+            .ToListAsync(cancellationToken);
+
     public Task<IReadOnlyList<WorkflowInstance>> ListPendingForApproverAsync(Guid tenantId, Guid approverUserId, CancellationToken cancellationToken) =>
         ListPendingForApproverAsync(tenantId, approverUserId, [], cancellationToken);
 

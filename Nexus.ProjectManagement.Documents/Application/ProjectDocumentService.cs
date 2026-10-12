@@ -12,6 +12,18 @@ public sealed class ProjectDocumentService(
     IDocumentsUnitOfWork unitOfWork,
     IApprovalRequester approvalRequester) : IProjectDocumentService
 {
+    public async Task<Result<IReadOnlyList<ProjectDocumentDto>>> ListForProjectsAsync(ListProjectDocumentsForProjectsRequest request, CancellationToken cancellationToken)
+    {
+        var ids = request.ProjectIds.Distinct().ToList();
+        if (ids.Count == 0)
+        {
+            return Result.Success<IReadOnlyList<ProjectDocumentDto>>([]);
+        }
+
+        var items = await repository.ListByProjectsAsync(ids, cancellationToken);
+        return Result.Success<IReadOnlyList<ProjectDocumentDto>>(items.Select(ToDto).ToList());
+    }
+
     public async Task<Result<IReadOnlyList<ProjectDocumentDto>>> ListByProjectAsync(Guid projectId, CancellationToken cancellationToken)
     {
         var documents = await repository.ListByProjectAsync(projectId, cancellationToken);

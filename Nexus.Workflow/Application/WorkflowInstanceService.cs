@@ -51,6 +51,21 @@ public sealed class WorkflowInstanceService(
         return Result.Success(ToDto(instance, approvers.GetValueOrDefault(instance.Id), null));
     }
 
+    public async Task<Result<IReadOnlyList<WorkflowInstanceDto>>> ListForSubjectsAsync(
+        Guid tenantId, ListInstancesForSubjectsRequest request, CancellationToken cancellationToken)
+    {
+        var ids = request.SubjectIds.Distinct().ToList();
+        if (string.IsNullOrWhiteSpace(request.SubjectType) || ids.Count == 0)
+        {
+            return Result.Success<IReadOnlyList<WorkflowInstanceDto>>([]);
+        }
+
+        var instances = await repository.ListForSubjectsAsync(tenantId, request.SubjectType.Trim(), ids, cancellationToken);
+        var approvers = await CurrentApproversAsync(instances.Where(i => i.Status == WorkflowInstanceStatus.InProgress).ToList(), cancellationToken);
+        return Result.Success<IReadOnlyList<WorkflowInstanceDto>>(
+            instances.Select(instance => ToDto(instance, approvers.GetValueOrDefault(instance.Id), null)).ToList());
+    }
+
     public Task<Result<WorkflowInstanceDto>> ApproveAsync(Guid id, Guid decidedByUserId, DecideWorkflowInstanceRequest request, CancellationToken cancellationToken) =>
         DecideAsync(id, decidedByUserId, approved: true, request, cancellationToken);
 

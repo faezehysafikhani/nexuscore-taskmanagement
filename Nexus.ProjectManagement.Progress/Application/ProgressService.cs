@@ -12,6 +12,18 @@ public sealed class ProgressService(
     IProgressUnitOfWork unitOfWork,
     IApprovalRequester approvalRequester) : IProgressService
 {
+    public async Task<Result<IReadOnlyList<ProgressUpdateDto>>> ListForProjectsAsync(ListProgressUpdatesForProjectsRequest request, CancellationToken cancellationToken)
+    {
+        var ids = request.ProjectIds.Distinct().ToList();
+        if (ids.Count == 0)
+        {
+            return Result.Success<IReadOnlyList<ProgressUpdateDto>>([]);
+        }
+
+        var items = await repository.ListByProjectsAsync(ids, cancellationToken);
+        return Result.Success<IReadOnlyList<ProgressUpdateDto>>(items.Select(ToDto).ToList());
+    }
+
     public async Task<Result<IReadOnlyList<ProgressUpdateDto>>> ListByProjectAsync(Guid projectId, CancellationToken cancellationToken)
     {
         var updates = await repository.ListByProjectAsync(projectId, cancellationToken);

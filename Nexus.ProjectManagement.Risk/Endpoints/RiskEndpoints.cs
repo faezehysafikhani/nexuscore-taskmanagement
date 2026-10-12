@@ -18,6 +18,26 @@ public static class RiskEndpoints
                 (await service.ListByProjectAsync(projectId, cancellationToken)).ToApiResult())
             .RequireAuthorization(RiskPermissions.View);
 
+        group.MapPost("/for-projects", async (ListRisksForProjectsRequest request, IRiskService service, CancellationToken cancellationToken) =>
+                (await service.ListForProjectsAsync(request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(RiskPermissions.View);
+
+        group.MapGet("/settings", async (Guid projectId, IRiskService service, CancellationToken cancellationToken) =>
+                (await service.GetSettingsAsync(projectId, cancellationToken)).ToApiResult())
+            .RequireAuthorization(RiskPermissions.View);
+
+        group.MapPost("/settings/for-projects", async (RiskSettingsForProjectsRequest request, IRiskService service, CancellationToken cancellationToken) =>
+                (await service.GetSettingsForProjectsAsync(request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(RiskPermissions.View);
+
+        group.MapPut("/settings", async (SaveRiskSettingsRequest request, IRiskService service, CancellationToken cancellationToken) =>
+                (await service.SaveSettingsAsync(request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(RiskPermissions.Edit);
+
+        group.MapPut("/{id:guid}/response-status", async (Guid id, ChangeRiskResponseStatusRequest request, IRiskService service, CancellationToken cancellationToken) =>
+                (await service.ChangeResponseStatusAsync(id, request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(RiskPermissions.Edit);
+
         group.MapGet("/matrix", async (Guid projectId, IRiskService service, CancellationToken cancellationToken) =>
                 (await service.GetMatrixAsync(projectId, cancellationToken)).ToApiResult())
             .RequireAuthorization(RiskPermissions.View);

@@ -18,6 +18,10 @@ public static class ProgressEndpoints
                 (await service.ListByProjectAsync(projectId, cancellationToken)).ToApiResult())
             .RequireAuthorization(ProgressPermissions.View);
 
+        group.MapPost("/for-projects", async (ListProgressUpdatesForProjectsRequest request, IProgressService service, CancellationToken cancellationToken) =>
+                (await service.ListForProjectsAsync(request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(ProgressPermissions.View);
+
         group.MapGet("/{id:guid}", async (Guid id, IProgressService service, CancellationToken cancellationToken) =>
                 (await service.GetAsync(id, cancellationToken)).ToApiResult())
             .RequireAuthorization(ProgressPermissions.View);

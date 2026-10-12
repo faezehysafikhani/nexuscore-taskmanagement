@@ -46,3 +46,6 @@ public sealed record WorkflowDelegationDto(
 /// SubjectType omitted = every kind of approval.</summary>
 public sealed record CreateWorkflowDelegationRequest(
     Guid DelegateUserId, DateOnly StartDate, DateOnly EndDate, string? SubjectType = null, string? Reason = null, Guid? DelegatorUserId = null);
+
+/// <summary>The approvals started for these subjects of one kind (for example the risks of a project): each subject's history in one call.</summary>
+public sealed record ListInstancesForSubjectsRequest(string SubjectType, IReadOnlyList<Guid> SubjectIds);

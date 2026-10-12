@@ -6,6 +6,10 @@ namespace Nexus.ProjectManagement.Documents.Application;
 public interface IProjectDocumentService
 {
     Task<Result<IReadOnlyList<ProjectDocumentDto>>> ListByProjectAsync(Guid projectId, CancellationToken cancellationToken);
+
+    /// <summary>The items of several projects in one call.</summary>
+    Task<Result<IReadOnlyList<ProjectDocumentDto>>> ListForProjectsAsync(ListProjectDocumentsForProjectsRequest request, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
     Task<Result<ProjectDocumentDto>> GetAsync(Guid id, CancellationToken cancellationToken);
     Task<Result<ProjectDocumentDto>> UploadAsync(UploadProjectDocumentRequest request, Stream content, CancellationToken cancellationToken);
     Task<Result<ProjectDocumentDto>> UpdateAsync(Guid id, UpdateProjectDocumentRequest request, CancellationToken cancellationToken);

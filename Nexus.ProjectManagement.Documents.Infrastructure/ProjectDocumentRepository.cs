@@ -9,6 +9,12 @@ public sealed class ProjectDocumentRepository(ProjectDocumentsDbContext dbContex
     public Task<ProjectDocument?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
         dbContext.ProjectDocuments.SingleOrDefaultAsync(document => document.Id == id, cancellationToken);
 
+    public async Task<IReadOnlyList<ProjectDocument>> ListByProjectsAsync(IReadOnlyCollection<Guid> projectIds, CancellationToken cancellationToken) =>
+        await dbContext.ProjectDocuments
+            .Where(document => projectIds.Contains(document.ProjectId))
+            .OrderByDescending(document => document.RegisterDate)
+            .ToListAsync(cancellationToken);
+
     public async Task<IReadOnlyList<ProjectDocument>> ListByProjectAsync(Guid projectId, CancellationToken cancellationToken) =>
         await dbContext.ProjectDocuments
             .Where(document => document.ProjectId == projectId)

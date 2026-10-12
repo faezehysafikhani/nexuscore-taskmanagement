@@ -9,6 +9,12 @@ public sealed class ProgressRepository(ProgressDbContext dbContext) : IProgressR
     public Task<ProgressUpdate?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
         dbContext.ProgressUpdates.SingleOrDefaultAsync(update => update.Id == id, cancellationToken);
 
+    public async Task<IReadOnlyList<ProgressUpdate>> ListByProjectsAsync(IReadOnlyCollection<Guid> projectIds, CancellationToken cancellationToken) =>
+        await dbContext.ProgressUpdates
+            .Where(update => projectIds.Contains(update.ProjectId))
+            .OrderByDescending(update => update.RegisterDate)
+            .ToListAsync(cancellationToken);
+
     public async Task<IReadOnlyList<ProgressUpdate>> ListByProjectAsync(Guid projectId, CancellationToken cancellationToken) =>
         await dbContext.ProgressUpdates
             .Where(update => update.ProjectId == projectId)

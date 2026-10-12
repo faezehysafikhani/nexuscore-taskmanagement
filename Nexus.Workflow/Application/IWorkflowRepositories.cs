@@ -24,6 +24,12 @@ public interface IWorkflowInstanceRepository
     /// designated to a user in <paramref name="actingFor"/> also matches (limited to the delegation's subject type when it has one).</summary>
     Task<IReadOnlyList<WorkflowInstance>> ListPendingForApproverAsync(
         Guid tenantId, Guid approverUserId, IReadOnlyCollection<ActingFor> actingFor, CancellationToken cancellationToken);
+
+    /// <summary>Every approval started for these subjects of one kind, newest first (the history of each subject's approvals).
+    /// A repository written before this existed reports it as unsupported.</summary>
+    Task<IReadOnlyList<WorkflowInstance>> ListForSubjectsAsync(Guid tenantId, string subjectType, IReadOnlyCollection<Guid> subjectIds, CancellationToken cancellationToken) =>
+        throw new NotSupportedException("This workflow repository cannot list approvals by subject.");
+
     Task AddAsync(WorkflowInstance instance, CancellationToken cancellationToken);
 }
 

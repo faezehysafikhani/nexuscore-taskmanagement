@@ -3064,6 +3064,70 @@ Status Codes: 200, 400, 401, 403
 
 ---
 
+## 20b. Registers: several projects at once, risk levels and per-project settings
+
+Added for the project screens that show every project's items (and for the UI's risk / stakeholder
+settings). All additions are optional: a client that does not call them sees no change, except that
+Risk and Stakeholder responses carry extra trailing fields.
+
+### Several projects in one call
+
+Method: POST — body `{ "projectIds": ["guid", ...] }` (duplicates ignored, empty list → `[]`). Response: the same
+items the per-project `GET` returns, for all the given projects. Same view permission as the per-project list.
+
+| Route | Returns |
+|---|---|
+| `/api/project-management/risks/for-projects` | risks |
+| `/api/project-management/stakeholders/for-projects` | stakeholders |
+| `/api/project-management/progress-updates/for-projects` | status updates |
+| `/api/project-management/delay-reasons/for-projects` | delay reasons |
+| `/api/project-management/documents/for-projects` | documents |
+
+### Workflow: approvals of a set of subjects
+
+Method: POST
+Route: /api/workflow/approval-center/for-subjects
+Description: The approval instances (with their decisions and current approver) started for the given subjects of one kind; what a register screen shows next to each item. Needs `Workflow.View`; scoped to the caller's tenant.
+Request Body: `{ "subjectType": "Risk", "subjectIds": ["guid", ...] }`
+Response: list of workflow instances (same shape as the approval-center list).
+Status Codes: 200, 401, 403
+
+### Risks
+
+Responses gain trailing fields `probabilityLevel` / `impactLevel` ("low" | "medium" | "high"), `level`
+("green" | "yellow" | "red", from the project's matrix defaults) and `responseStatus` (`RiskResponseStatus`).
+Create / update accept optional `probabilityLevel` / `impactLevel` instead of the 1–5 scores (low=1, medium=3,
+high=5; a level wins over the matching score; severity follows impact). `rpn` is still computed server-side.
+
+Method: PUT
+Route: /api/project-management/risks/{id}/response-status
+Description: Execution state of the risk's response plan. Needs `Risks.Edit`.
+Request Body: `{ "status": 0 }` (`RiskResponseStatus`)
+Status Codes: 200, 400, 401, 403, 404
+
+Method: GET / PUT
+Route: /api/project-management/risks/settings?projectId=...  (GET, `Risks.View`) · /api/project-management/risks/settings (PUT, `Risks.Edit`)
+Description: What a project says about its risks: wording of the six low/medium/high bands for probability and impact, and the colour of each of the nine matrix cells. `isDefault` = nothing set (defaults shown). PUT body: `{ "tenantId", "projectId", "definitions": [{axis,level,range,description}] | null, "matrixColors": [{probability,impact,color}] | null }`; a part left out is unchanged, an empty list resets it to the default, otherwise it must name all six bands / all nine cells once.
+
+Method: POST
+Route: /api/project-management/risks/settings/for-projects
+Description: The settings of several projects (`{ "projectIds": [...] }`).
+
+### Stakeholders
+
+Responses gain `quadrant` (`StakeholderQuadrant`, from power × interest) and `strategy` (the stakeholder's own
+strategy text if written, otherwise the project's wording for the quadrant, otherwise the default wording).
+
+Method: GET / PUT / POST
+Route: /api/project-management/stakeholders/settings (GET `?projectId=`, PUT) · /settings/for-projects (POST)
+Description: How a project words the strategy for each quadrant (`manageClosely`, `keepSatisfied`, `keepInformed`, `monitor`, `isDefault`). PUT body `{ tenantId, projectId, manageClosely, keepSatisfied, keepInformed, monitor }`; a null/blank text puts that quadrant back on the default.
+
+Schema: tables `risk_management.RiskProjectSettings`, `stakeholder_management.StakeholderProjectSettings` and column
+`risk_management.Risks.ResponseStatus` — apply `docs/upgrade/2026-10-12-add-risk-response-and-settings.sql` and
+`docs/upgrade/2026-10-12-add-stakeholder-settings.sql` (or call `RiskSchemaUpgrade` / `StakeholderSchemaUpgrade`).
+
+---
+
 ## Enums Reference
 
 Every enum below is serialized as its **raw integer** value in both requests and responses
@@ -3087,6 +3151,9 @@ Every enum below is serialized as its **raw integer** value in both requests and
 | 1 | Normal |
 | 2 | High |
 | 3 | Urgent |
+
+### RiskResponseStatus (Risks)
+`0 Planning`, `1 InProgress`, `2 OnHold`, `3 Completed`.
 
 ### DelayRootCause (Progress)
 | Value | Name |

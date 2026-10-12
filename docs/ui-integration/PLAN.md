@@ -89,3 +89,17 @@ separate `Nexus.Reporting.Analytics` project.
 | Host | `AddProjectDeletionIntegration()`, `ValidateCharter = true`, `RequireUniqueName = true`; seeded roles Project Manager / Project Team also get `users.view` (the project forms list people) | |
 
 Not added (deliberately, a later phase): the per-tenant on/off switches for the visibility sources (UI `visibilitySettings`) - phase 7.
+
+### Phase 3 — added to the backend (registers)
+
+| Where | What | Why (UI need) |
+|---|---|---|
+| Risk | `ResponseStatus` (Planning/InProgress/OnHold/Completed) on a risk + `PUT /risks/{id}/response-status` | The UI tracks execution of a risk's response plan; the backend only had the plan text |
+| Risk | low/medium/high `probabilityLevel`/`impactLevel`, `level` colour band in responses; levels accepted on create/update (stored as the 1/3/5 scores) | The UI speaks in three bands; the 1–5 scores/RPN stay the stored truth, the mapping lives in the backend |
+| Risk | per-project settings (`GET/PUT /risks/settings`, `POST /settings/for-projects`): band definitions + matrix cell colours; table `RiskProjectSettings` | The UI lets a project manager reword the bands and recolour the matrix |
+| Stakeholder | `quadrant` and resolved `strategy` in responses; per-project strategy wording per quadrant (`/stakeholders/settings`); table `StakeholderProjectSettings` | The UI showed a strategy text per quadrant (computed in the browser) and let a project edit it |
+| Risk / Stakeholder / Progress / DelayReason / Documents | `POST .../for-projects` batch lists | Task centre, approval centre and portfolio screens read every project's items |
+| Workflow | `POST /api/workflow/approval-center/for-subjects` | Each register item shows its approval history and approver; the browser no longer keeps its own approval log |
+| SQL | `2026-10-12-add-risk-response-and-settings.sql`, `2026-10-12-add-stakeholder-settings.sql` (+ `RiskSchemaUpgrade`, `StakeholderSchemaUpgrade`) | Additive, guarded, idempotent |
+
+Not added (deliberately): AI-generated document fields (summary/relevance stay UI-local, AI untouched); status-update planned/actual numbers are supplied by the UI until phase 4 computes them from the schedule.

@@ -21,6 +21,10 @@ public static class ProjectDocumentEndpoints
                 (await service.ListByProjectAsync(projectId, cancellationToken)).ToApiResult())
             .RequireAuthorization(ProjectDocumentPermissions.View);
 
+        group.MapPost("/for-projects", async (ListProjectDocumentsForProjectsRequest request, IProjectDocumentService service, CancellationToken cancellationToken) =>
+                (await service.ListForProjectsAsync(request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(ProjectDocumentPermissions.View);
+
         group.MapGet("/{id:guid}", async (Guid id, IProjectDocumentService service, CancellationToken cancellationToken) =>
                 (await service.GetAsync(id, cancellationToken)).ToApiResult())
             .RequireAuthorization(ProjectDocumentPermissions.View);

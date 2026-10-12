@@ -9,6 +9,12 @@ public sealed class DelayReasonRepository(ProgressDbContext dbContext) : IDelayR
     public Task<DelayReason?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
         dbContext.DelayReasons.SingleOrDefaultAsync(reason => reason.Id == id, cancellationToken);
 
+    public async Task<IReadOnlyList<DelayReason>> ListByProjectsAsync(IReadOnlyCollection<Guid> projectIds, CancellationToken cancellationToken) =>
+        await dbContext.DelayReasons
+            .Where(reason => projectIds.Contains(reason.ProjectId))
+            .OrderByDescending(reason => reason.RegisterDate)
+            .ToListAsync(cancellationToken);
+
     public async Task<IReadOnlyList<DelayReason>> ListByProjectAsync(Guid projectId, CancellationToken cancellationToken) =>
         await dbContext.DelayReasons
             .Where(reason => reason.ProjectId == projectId)

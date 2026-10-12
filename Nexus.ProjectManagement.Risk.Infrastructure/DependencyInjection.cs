@@ -18,6 +18,7 @@ public static class DependencyInjection
 
         services.AddScoped<IRiskUnitOfWork>(provider => provider.GetRequiredService<RiskManagementDbContext>());
         services.AddScoped<IRiskRepository, RiskRepository>();
+        services.AddScoped<IRiskSettingsRepository, RiskSettingsRepository>();
 
         return services;
     }

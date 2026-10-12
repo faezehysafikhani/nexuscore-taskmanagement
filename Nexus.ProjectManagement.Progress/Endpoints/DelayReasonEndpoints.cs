@@ -19,6 +19,10 @@ public static class DelayReasonEndpoints
                 (await service.ListByProjectAsync(projectId, cancellationToken)).ToApiResult())
             .RequireAuthorization(DelayReasonPermissions.View);
 
+        group.MapPost("/for-projects", async (ListDelayReasonsForProjectsRequest request, IDelayReasonService service, CancellationToken cancellationToken) =>
+                (await service.ListForProjectsAsync(request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(DelayReasonPermissions.View);
+
         group.MapGet("/{id:guid}", async (Guid id, IDelayReasonService service, CancellationToken cancellationToken) =>
                 (await service.GetAsync(id, cancellationToken)).ToApiResult())
             .RequireAuthorization(DelayReasonPermissions.View);

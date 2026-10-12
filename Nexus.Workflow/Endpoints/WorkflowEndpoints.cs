@@ -64,6 +64,18 @@ public static class WorkflowEndpoints
             })
             .RequireAuthorization(WorkflowPermissions.View);
 
+        // The approvals (with their decisions) started for a set of subjects of one kind - what a register screen shows next to each item.
+        approvalCenter.MapPost("/for-subjects", async (ListInstancesForSubjectsRequest request, ICurrentUserContext currentUser, IWorkflowInstanceService service, CancellationToken cancellationToken) =>
+            {
+                if (currentUser.TenantId is null)
+                {
+                    return Results.Unauthorized();
+                }
+
+                return (await service.ListForSubjectsAsync(currentUser.TenantId.Value, request, cancellationToken)).ToApiResult();
+            })
+            .RequireAuthorization(WorkflowPermissions.View);
+
         approvalCenter.MapGet("/{id:guid}", async (Guid id, IWorkflowInstanceService service, CancellationToken cancellationToken) =>
                 (await service.GetAsync(id, cancellationToken)).ToApiResult())
             .RequireAuthorization(WorkflowPermissions.View);
