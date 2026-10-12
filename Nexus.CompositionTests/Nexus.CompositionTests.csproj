@@ -76,6 +76,7 @@
     <ProjectReference Include="..\Nexus.ProjectManagement.Documents.Infrastructure\Nexus.ProjectManagement.Documents.Infrastructure.csproj" />
     <ProjectReference Include="..\Nexus.ProjectManagement.Kpi\Nexus.ProjectManagement.Kpi.csproj" />
     <ProjectReference Include="..\Nexus.ProjectManagement.Team\Nexus.ProjectManagement.Team.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Team.Infrastructure\Nexus.ProjectManagement.Team.Infrastructure.csproj" />
     <ProjectReference Include="..\Nexus.Portfolio\Nexus.Portfolio.csproj" />
     <ProjectReference Include="..\Nexus.Reporting\Nexus.Reporting.csproj" />
     <ProjectReference Include="..\Nexus.Reporting.Analytics\Nexus.Reporting.Analytics.csproj" />

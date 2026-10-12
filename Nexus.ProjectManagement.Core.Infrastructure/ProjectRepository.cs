@@ -68,6 +68,20 @@ public sealed class ProjectRepository(ProjectManagementCoreDbContext dbContext) 
         await dbContext.Projects.AddAsync(project, cancellationToken);
     }
 
+    public async Task<string?> NextCodeAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        var codes = await dbContext.Projects
+            .Where(project => project.TenantId == tenantId && project.Code.StartsWith("P"))
+            .Select(project => project.Code)
+            .ToListAsync(cancellationToken);
+
+        var highest = codes
+            .Select(code => int.TryParse(code.AsSpan(1), out var number) ? number : 0)
+            .DefaultIfEmpty(0)
+            .Max();
+        return $"P{highest + 1:D4}";
+    }
+
     public Task RemoveAsync(Project project, CancellationToken cancellationToken)
     {
         dbContext.Projects.Remove(project);

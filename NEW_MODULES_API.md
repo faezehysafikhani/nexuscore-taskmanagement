@@ -890,7 +890,7 @@ Status Codes: 200, 401, 403, 404
 ### Module: Projects
 Method: POST
 Route: /api/project-management/projects
-Description: Create a project. Starts in Draft status, NotSubmitted approval status.
+Description: Create a project. Starts in Draft status, NotSubmitted approval status. `code` may be omitted or blank: the next free automatic code (`P0001`, `P0002`...) is assigned *(added for the PMPB UI, whose form has no code field)*.
 
 Request Body:
 ```json
@@ -1735,6 +1735,26 @@ Response:
 ```json
 [ { "id": "guid", "tenantId": "guid", "projectId": "guid", "userId": "guid", "roleTitle": "string | null" } ]
 ```
+Status Codes: 200, 401, 403
+
+---
+
+### Module: Project Team
+Method: POST
+Route: /api/project-management/team/members/for-projects
+Description: *(added for the PMPB UI)* The members of several projects in one call (the project list screens need everybody's team at once). Needs `ProjectTeam.View`.
+Body: `{ "projectIds": ["guid", ...] }`
+Response: array of members (`id, tenantId, projectId, userId, roleTitle`) for those projects.
+Status Codes: 200, 401, 403
+
+---
+
+### Module: Project Team
+Method: PUT
+Route: /api/project-management/team/members/set
+Description: *(added for the PMPB UI)* Make a project's team exactly the given people: missing ones are added (no role title), the rest removed, those who stay keep their member id and role title. Needs `ProjectTeam.ManageMembers`.
+Body: `{ "tenantId": "guid", "projectId": "guid", "userIds": ["guid", ...] }`
+Response: the resulting members.
 Status Codes: 200, 401, 403
 
 ---

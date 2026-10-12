@@ -18,6 +18,14 @@ public static class TeamEndpoints
                 (await service.ListMembersAsync(projectId, cancellationToken)).ToApiResult())
             .RequireAuthorization(TeamPermissions.View);
 
+        members.MapPost("/for-projects", async (ListMembersForProjectsRequest request, ITeamService service, CancellationToken cancellationToken) =>
+                (await service.ListMembersForProjectsAsync(request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(TeamPermissions.View);
+
+        members.MapPut("/set", async (SetProjectTeamRequest request, ITeamService service, CancellationToken cancellationToken) =>
+                (await service.SetTeamAsync(request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(TeamPermissions.ManageMembers);
+
         members.MapGet("/available-users", async (ICurrentUserContext currentUser, Guid projectId, ITeamService service, CancellationToken cancellationToken) =>
             {
                 if (currentUser.TenantId is null)

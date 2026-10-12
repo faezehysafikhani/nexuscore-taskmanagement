@@ -6,6 +6,11 @@ public interface ITeamRepository
 {
     Task<ProjectMember?> GetMemberByIdAsync(Guid id, CancellationToken cancellationToken);
     Task<IReadOnlyList<ProjectMember>> ListMembersAsync(Guid projectId, CancellationToken cancellationToken);
+
+    /// <summary>The members of several projects at once. A repository written before this existed reports it as unsupported.</summary>
+    Task<IReadOnlyList<ProjectMember>> ListMembersForProjectsAsync(IReadOnlyCollection<Guid> projectIds, CancellationToken cancellationToken) =>
+        throw new NotSupportedException("This team repository cannot list the members of several projects.");
+
     Task<bool> IsMemberAsync(Guid projectId, Guid userId, CancellationToken cancellationToken);
 
     /// <summary>The projects of the tenant the user is a team member of.</summary>

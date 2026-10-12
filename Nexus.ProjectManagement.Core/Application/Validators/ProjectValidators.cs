@@ -8,7 +8,7 @@ public sealed class CreateProjectRequestValidator : AbstractValidator<CreateProj
     public CreateProjectRequestValidator()
     {
         RuleFor(x => x.Name).NotEmpty().MaximumLength(200);
-        RuleFor(x => x.Code).NotEmpty().MaximumLength(40);
+        RuleFor(x => x.Code).MaximumLength(40);
         RuleFor(x => x.EndDate)
             .GreaterThanOrEqualTo(x => x.StartDate!.Value)
             .When(x => x.StartDate is not null && x.EndDate is not null)

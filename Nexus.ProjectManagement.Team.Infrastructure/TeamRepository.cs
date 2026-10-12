@@ -12,6 +12,9 @@ public sealed class TeamRepository(TeamDbContext dbContext) : ITeamRepository
     public async Task<IReadOnlyList<ProjectMember>> ListMembersAsync(Guid projectId, CancellationToken cancellationToken) =>
         await dbContext.ProjectMembers.Where(member => member.ProjectId == projectId).ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<ProjectMember>> ListMembersForProjectsAsync(IReadOnlyCollection<Guid> projectIds, CancellationToken cancellationToken) =>
+        await dbContext.ProjectMembers.Where(member => projectIds.Contains(member.ProjectId)).ToListAsync(cancellationToken);
+
     public Task<bool> IsMemberAsync(Guid projectId, Guid userId, CancellationToken cancellationToken) =>
         dbContext.ProjectMembers.AnyAsync(member => member.ProjectId == projectId && member.UserId == userId, cancellationToken);
 

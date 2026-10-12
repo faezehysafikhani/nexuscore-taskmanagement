@@ -38,9 +38,9 @@ public sealed class ProjectService(
 
     public async Task<Result<ProjectDto>> CreateAsync(CreateProjectRequest request, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(request.Code))
+        if (string.IsNullOrWhiteSpace(request.Name))
         {
-            return Result.Failure<ProjectDto>(Error.Validation("Name and code are required."));
+            return Result.Failure<ProjectDto>(Error.Validation("Name is required."));
         }
 
         var charterError = CheckCharter(request.Name, request.ManagerUserId, request.OrganizationUnitId, request.StartDate, request.EndDate,
@@ -50,14 +50,18 @@ public sealed class ProjectService(
             return Result.Failure<ProjectDto>(charterError);
         }
 
-        if (await repository.CodeExistsAsync(request.TenantId, request.Code, null, cancellationToken))
+        var code = string.IsNullOrWhiteSpace(request.Code)
+            ? await repository.NextCodeAsync(request.TenantId, cancellationToken) ?? $"P{Guid.NewGuid():N}"[..9]
+            : request.Code.Trim();
+
+        if (await repository.CodeExistsAsync(request.TenantId, code, null, cancellationToken))
         {
             return Result.Failure<ProjectDto>(Error.Conflict("A project with this code already exists."));
         }
 
-        var project = new Project(Guid.NewGuid(), request.TenantId, request.Name, request.Code, request.Type, request.ManagerUserId, request.OwnerUserId);
+        var project = new Project(Guid.NewGuid(), request.TenantId, request.Name, code, request.Type, request.ManagerUserId, request.OwnerUserId);
         project.UpdateDetails(
-            request.Name, request.Code, request.ManagerUserId, request.OwnerUserId,
+            request.Name, code, request.ManagerUserId, request.OwnerUserId,
             request.OrganizationUnitId, request.WorkCalendarId, request.StartDate, request.EndDate, request.Cost,
             request.Goal, request.Requirements, request.Constraints, request.Assumptions, request.Description, request.Charter);
 

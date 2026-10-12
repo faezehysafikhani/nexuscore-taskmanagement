@@ -26,10 +26,11 @@ public sealed record ProjectDto(
     string? Charter,
     DateTimeOffset CreatedAtUtc);
 
+/// <summary>Code omitted (or blank) = the next free automatic code ("P0001", "P0002"...) is assigned.</summary>
 public sealed record CreateProjectRequest(
     Guid TenantId,
     string Name,
-    string Code,
+    string? Code,
     ProjectType Type,
     Guid? ManagerUserId,
     Guid? OwnerUserId,

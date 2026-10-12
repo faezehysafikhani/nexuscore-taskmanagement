@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Nexus.Actions.Application;
 using Nexus.Actions.Domain;
 using Nexus.Portfolio.Application;
@@ -60,6 +61,25 @@ public sealed class ProjectLifecycleTests
         var project = new Project(Guid.NewGuid(), Tenant, code, code, ProjectType.Waterfall, manager, owner);
         project.UpdateDetails(code, code, manager, owner, Unit, null, null, null, null, null, null, null, null, null, null);
         return project;
+    }
+
+    // -------------------------------------------------------------- code
+
+    [Fact]
+    public async Task ABlankCode_GetsTheNextFreeAutomaticOne_AndAnExplicitCodeIsKept()
+    {
+        var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<Nexus.ProjectManagement.Core.Infrastructure.ProjectManagementCoreDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
+        await using var db = new Nexus.ProjectManagement.Core.Infrastructure.ProjectManagementCoreDbContext(options);
+        var service = new ProjectService(new Nexus.ProjectManagement.Core.Infrastructure.ProjectRepository(db), db, new NoApproval());
+
+        var first = await service.CreateAsync(Create(code: ""), default);
+        var second = await service.CreateAsync(Create(code: ""), default);
+        var explicitCode = await service.CreateAsync(Create(code: "ALPHA"), default);
+        var third = await service.CreateAsync(Create(code: ""), default);
+
+        Assert.Equal(["P0001", "P0002", "ALPHA", "P0003"], new[] { first, second, explicitCode, third }.Select(r => r.Value!.Code));
+        Assert.Equal("conflict", (await service.CreateAsync(Create(code: "ALPHA"), default)).Error.Code);
     }
 
     // ------------------------------------------------------------ status
