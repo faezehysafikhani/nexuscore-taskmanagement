@@ -45,6 +45,7 @@ public static class MsProjectEndpoints
                 await using var stream = file.OpenReadStream();
                 return (await service.ImportAsync(currentUser.TenantId.Value, projectId, stream, replaceExisting ?? false, cancellationToken)).ToApiResult();
             })
+            .DisableAntiforgery() // a bearer-token API: there is no cookie to forge a request with, and no antiforgery middleware in the hosts
             .RequireAuthorization(WaterfallPermissions.ManageSchedule);
 
         return app;

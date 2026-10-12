@@ -119,6 +119,11 @@ Not added (deliberately): AI-generated document fields (summary/relevance stay U
 | Agile | Status requests (`status-submissions`), decided in the approval workflow; permission `AgileStatus.Submit` | Moving a card needs confirmation; the backend only had direct status changes |
 | Agile | `PUT /sprints/count`, `POST` batch lists for tasks / sprints / requests | The project has a "number of sprints" setting; the batch lists feed the task centre and dashboards |
 | Core | `POST /projects/progress` + `IProjectProgressSource` (registered by Waterfall and Agile) | Portfolio, dashboards and reports show planned / actual progress per project; the browser calculated them from its own copy of the schedule |
+| Waterfall | `freeFloatDays` on the schedule DTO | The schedule table shows free float next to total float |
+| Waterfall | Progress-information copies also write a progress snapshot (S-curve actual points) | The UI's "progress information" copies are what the S-curve's actual line is drawn from |
+| Waterfall | `PUT /activities/{id}/actual-progress` | The schedule table lets a manager correct an activity's progress directly |
+| Waterfall | `.DisableAntiforgery()` on the MS Project import endpoint | Same multipart reason as documents |
+| Core + Waterfall | `IProjectSubmissionCheck` (Core, optional) + `ScheduleWeightsSubmissionCheck` (Waterfall) + option `RequireWeightsTotalOnSubmit` (off by default, on in the host) | The UI refused to send a project whose activity weights did not total 100; that rule now lives in the backend, off for other hosts |
 | Host | `PostBank.Api`: `DefaultPlannedProgress = Continuous`, `RollUpSummaryWeights = true`; seeded roles get the two new permissions | The UI's behaviour |
 | SQL | `2026-10-13-add-waterfall-planning.sql`, `2026-10-13-add-agile-status-submissions.sql` (+ `WaterfallPlanningSchemaUpgrade`, `AgileTaskStatusSchemaUpgrade`) | Additive, guarded, idempotent |
 

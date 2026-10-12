@@ -17,4 +17,8 @@ public sealed class WaterfallOptions
     /// much as the work inside it). Off (the default) uses the weight stored on the group itself, as before. A project that weighs
     /// by time, cost, complexity or a blend always rolls up this way.</summary>
     public bool RollUpSummaryWeights { get; set; }
+
+    /// <summary>When on, a waterfall project that weighs its activities by hand cannot be sent for approval unless the weights of its
+    /// activities add up to 100 (error code <c>project.schedule_weights_not_100</c>). Off (the default) lets any weights through, as before.</summary>
+    public bool RequireWeightsTotalOnSubmit { get; set; }
 }

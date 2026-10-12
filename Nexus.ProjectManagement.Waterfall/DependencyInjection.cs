@@ -28,6 +28,7 @@ public static class DependencyInjection
         services.AddScoped<IActivityDependencyService, ActivityDependencyService>();
         services.AddScoped<IScheduleService, ScheduleService>();
         services.AddScoped<IWaterfallSettingsService, WaterfallSettingsService>();
+        services.AddScoped<Nexus.ProjectManagement.Core.Application.IProjectSubmissionCheck, ScheduleWeightsSubmissionCheck>();
         services.AddScoped<Nexus.ProjectManagement.Core.Application.IProjectProgressSource, WaterfallProjectProgressSource>();
         services.AddScoped<IActivityProgressSubmissionService, ActivityProgressSubmissionService>();
         services.AddScoped<IScheduleBaselineService, ScheduleBaselineService>();

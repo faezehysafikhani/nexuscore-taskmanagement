@@ -125,6 +125,7 @@ builder.Services.AddWaterfallPlanning(options =>
     // The UI reads planned progress from the schedule (spread evenly over each activity) and rolls groups up by what is inside them.
     options.DefaultPlannedProgress = Nexus.ProjectManagement.Waterfall.Domain.PlannedProgressMode.Continuous;
     options.RollUpSummaryWeights = true;
+    options.RequireWeightsTotalOnSubmit = true;
 });
 builder.Services.AddAgilePlanning();
 builder.Services.AddProjectTeam();

@@ -135,6 +135,24 @@ public sealed class ActivityService(
         return Result.Success(ToDto(activity));
     }
 
+    public async Task<Result<ActivityDto>> UpdateActualProgressAsync(Guid id, UpdateActivityActualProgressRequest request, CancellationToken cancellationToken)
+    {
+        if (request.ActualProgress is < 0 or > 100)
+        {
+            return Result.Failure<ActivityDto>(Error.Validation("Progress must be between 0 and 100."));
+        }
+
+        var activity = await repository.GetByIdAsync(id, cancellationToken);
+        if (activity is null)
+        {
+            return Result.Failure<ActivityDto>(Error.NotFound("Activity not found."));
+        }
+
+        activity.UpdateProgress(activity.PlannedProgress, request.ActualProgress);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result.Success(ToDto(activity));
+    }
+
     public async Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
         var activity = await repository.GetByIdAsync(id, cancellationToken);

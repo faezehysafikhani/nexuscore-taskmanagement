@@ -28,3 +28,6 @@ public sealed record UpdateActivityRequest(
     decimal? Cost = null, ActivityLevel? Importance = null, ActivityLevel? Complexity = null);
 
 public sealed record UpdateActivityProgressRequest(decimal PlannedProgress, decimal ActualProgress);
+
+/// <summary>Sets only how much of the activity is done; its stored planned progress is left alone.</summary>
+public sealed record UpdateActivityActualProgressRequest(decimal ActualProgress);

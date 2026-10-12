@@ -66,6 +66,31 @@ public sealed class ScheduleBaselineTests
     }
 
     [Fact]
+    public async Task AProgressCopy_AlsoGivesTheSCurveItsPointForTheDay_AndDeletingItTakesThePointAway()
+    {
+        var f = Build();
+        Add(f, "A", 2).UpdateProgress(0, 50);
+        var snapshots = new FakeSnapshotRepository();
+        var unitOfWork = new FakeWaterfallUnitOfWork();
+        var today = new DateTimeOffset(2026, 4, 1, 12, 0, 0, TimeSpan.Zero);
+        var service = new ScheduleBaselineService(f.Repository, f.Schedule, unitOfWork, snapshots, new FixedTimeProvider(today));
+
+        var plain = await service.CreateAsync(Request(f), default);
+        Assert.Empty(snapshots.Items); // a plain baseline leaves the curve alone
+
+        var copy = (await service.CreateAsync(new CreateScheduleBaselineRequest(Tenant, f.Project.Id, "April", null, BaselineKind.ProgressInformation), default)).Value!;
+        var point = Assert.Single(snapshots.Items);
+        Assert.Equal((new DateOnly(2026, 4, 1), 50m), (point.SnapshotDate, point.ActualProgress));
+
+        // Taking another copy the same day refreshes the point rather than adding one.
+        await service.CreateAsync(new CreateScheduleBaselineRequest(Tenant, f.Project.Id, "April again", null, BaselineKind.ProgressInformation), default);
+        Assert.Single(snapshots.Items);
+
+        Assert.True(plain.IsSuccess);
+        Assert.NotNull(copy);
+    }
+
+    [Fact]
     public async Task CreatingABaseline_FreezesTheCalculatedSchedule_NotJustTheStoredDates()
     {
         var f = Build();

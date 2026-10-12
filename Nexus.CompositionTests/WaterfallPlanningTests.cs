@@ -256,6 +256,23 @@ public sealed class WaterfallPlanningTests
     }
 
     [Fact]
+    public async Task FreeFloat_IsHowFarAnActivityCanSlipBeforeItDelaysASuccessor()
+    {
+        // A(2) -> B(1) runs beside C(4): B finishes a day before the project does; A can slip only if B can... but B follows A at once.
+        var f = Build();
+        var a = Add(f, "A", 2, position: 1);
+        var b = Add(f, "B", 1, position: 2);
+        Add(f, "C", 4, position: 3);
+        f.Dependencies.Items.Add(new ActivityDependency(Guid.NewGuid(), Tenant, f.Project.Id, a.Id, b.Id, DependencyType.FinishToStart, 0));
+
+        var schedule = (await f.Schedule.GetScheduleAsync(f.Project.Id, default)).Value!;
+        ScheduledActivityDto Of(Activity x) => schedule.Activities.Single(s => s.Id == x.Id);
+
+        Assert.Equal((1, 0), (Of(a).TotalFloatDays, Of(a).FreeFloatDays)); // slipping A delays B at once
+        Assert.Equal((1, 1), (Of(b).TotalFloatDays, Of(b).FreeFloatDays)); // nothing follows B
+    }
+
+    [Fact]
     public async Task Plan_BundlesSettingsActivitiesDependenciesAndTheSchedule()
     {
         var f = Build();
@@ -352,6 +369,59 @@ public sealed class WaterfallPlanningTests
         Assert.Empty(dependencies.Items);
     }
 
+
+    // ------------------------------------------------------------ the optional "weights must total 100" rule
+
+    [Fact]
+    public async Task SubmissionCheck_NeedsManualWeightsToAddUpToOneHundred_OnlyWhenTheHostAsksForIt()
+    {
+        var f = Build(new WaterfallOptions { RequireWeightsTotalOnSubmit = true });
+        Add(f, "A", 2, weight: 60);
+        Add(f, "B", 2, weight: 30);
+        var strict = new ScheduleWeightsSubmissionCheck(f.Schedule, f.SettingsRepository, new WaterfallOptions { RequireWeightsTotalOnSubmit = true });
+        var relaxed = new ScheduleWeightsSubmissionCheck(f.Schedule, f.SettingsRepository, new WaterfallOptions());
+
+        var objection = await strict.CheckAsync(f.Project, default);
+        Assert.Equal("project.schedule_weights_not_100", objection!.Code);
+        Assert.Contains("90", objection.Message);
+        Assert.Null(await relaxed.CheckAsync(f.Project, default)); // the original behaviour
+
+        f.Activities.Items.Single(a => a.Name == "B").UpdateDetails("B", null, null, null, null, null, null, null, 2, 2m, 40);
+        Assert.Null(await strict.CheckAsync(f.Project, default));
+
+        // A project that weighs by something else always adds up by construction.
+        f.Activities.Items.Single(a => a.Name == "B").UpdateDetails("B", null, null, null, null, null, null, null, 2, 2m, 5);
+        await SaveAsync(f, WeightingMode.Time);
+        Assert.Null(await strict.CheckAsync(f.Project, default));
+    }
+
+    [Fact]
+    public async Task ProjectService_RefusesToSendAProjectWhenACheckObjects_AndSendsItOtherwise()
+    {
+        var dbOptions = new DbContextOptionsBuilder<Nexus.ProjectManagement.Core.Infrastructure.ProjectManagementCoreDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
+        await using var db = new Nexus.ProjectManagement.Core.Infrastructure.ProjectManagementCoreDbContext(dbOptions);
+        var project = new Project(Guid.NewGuid(), Tenant, "P", "P1", ProjectType.Waterfall);
+        db.Add(project);
+        await db.SaveChangesAsync();
+
+        var objecting = new Nexus.ProjectManagement.Core.Application.ProjectService(
+            new Nexus.ProjectManagement.Core.Infrastructure.ProjectRepository(db), db, new NotConfiguredApprovalRequester(), null, null, [new Objecting()]);
+        var plain = new Nexus.ProjectManagement.Core.Application.ProjectService(
+            new Nexus.ProjectManagement.Core.Infrastructure.ProjectRepository(db), db, new NotConfiguredApprovalRequester());
+
+        var refused = await objecting.SubmitForApprovalAsync(project.Id, default);
+        Assert.Equal("project.no", refused.Error.Code);
+        Assert.NotEqual(ApprovalStatus.Approved, project.ApprovalStatus);
+
+        Assert.True((await plain.SubmitForApprovalAsync(project.Id, default)).IsSuccess);
+    }
+
+    private sealed class Objecting : Nexus.ProjectManagement.Core.Application.IProjectSubmissionCheck
+    {
+        public Task<NexusCore.SharedKernel.Results.Error?> CheckAsync(Project project, CancellationToken ct) =>
+            Task.FromResult<NexusCore.SharedKernel.Results.Error?>(new NexusCore.SharedKernel.Results.Error("project.no", "not yet"));
+    }
 
     // ------------------------------------------------------------ progress reports
 

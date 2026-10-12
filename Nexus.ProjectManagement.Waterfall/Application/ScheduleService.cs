@@ -257,7 +257,7 @@ public sealed class ScheduleService(
             return new ScheduledActivityDto(
                 a.Id, a.ParentId, a.Name, a.IsSummary, a.IsMilestone, a.Start, a.Finish, a.DurationDays,
                 a.LateStart, a.LateFinish, a.TotalFloatDays, a.IsCritical, a.PlannedProgress, a.ActualProgress, a.UsedDefaultDuration,
-                code, level, weight, cost, manHours);
+                code, level, weight, cost, manHours, a.FreeFloatDays);
         }
 
         return new ScheduleDto(

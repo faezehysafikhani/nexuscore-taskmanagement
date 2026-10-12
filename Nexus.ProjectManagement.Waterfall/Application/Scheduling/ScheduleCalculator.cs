@@ -168,6 +168,23 @@ public static class ScheduleCalculator
             lateStart[id] = lf - length;
         }
 
+        // ---- free float: how far a leaf can slip before it delays any successor (its total float when nothing follows it)
+        int FreeFloatOf(Guid id)
+        {
+            if (!outgoing.TryGetValue(id, out var outbound) || outbound.Count == 0)
+            {
+                return Math.Max(lateStart[id] - start[id], 0);
+            }
+
+            return Math.Max(outbound.Min(link => link.Type switch
+            {
+                DependencyType.FinishToStart => start[link.SuccessorId] - (finish[id] + link.LagDays),
+                DependencyType.StartToStart => start[link.SuccessorId] - (start[id] + link.LagDays),
+                DependencyType.FinishToFinish => finish[link.SuccessorId] - (finish[id] + link.LagDays),
+                _ => finish[link.SuccessorId] - (start[id] + link.LagDays)
+            }), 0);
+        }
+
         // ---- results per leaf
         var scheduled = new Dictionary<Guid, ScheduledActivity>();
         foreach (var leaf in leaves)
@@ -186,7 +203,7 @@ public static class ScheduleCalculator
                 LateFinish: leaf.IsMilestone ? DateOfStart(Math.Max(lateStart[id], 1)) : DateOfFinish(lateFinish[id]),
                 floatDays, IsCritical: floatDays == 0,
                 leaf.PlannedProgress, leaf.ActualProgress,
-                start[id], finish[id], defaulted.Contains(id), leaf.Weight);
+                start[id], finish[id], defaulted.Contains(id), leaf.Weight, FreeFloatOf(id));
         }
 
         // ---- summaries, deepest first so each one sees finished children; also the progress roll-up
@@ -207,7 +224,8 @@ public static class ScheduleCalculator
                 children.Min(c => c.LateStart), children.Max(c => c.LateFinish),
                 children.Min(c => c.TotalFloatDays), children.Any(c => c.IsCritical),
                 planned, actual,
-                children.Min(c => c.StartIndex), children.Max(c => c.FinishIndex), UsedDefaultDuration: false, node.Weight);
+                children.Min(c => c.StartIndex), children.Max(c => c.FinishIndex), UsedDefaultDuration: false, node.Weight,
+                children.Min(c => c.FreeFloatDays));
         }
 
         var ordered = scheduled.Values.OrderBy(a => a.StartIndex).ThenBy(a => a.Name, StringComparer.Ordinal).ToList();

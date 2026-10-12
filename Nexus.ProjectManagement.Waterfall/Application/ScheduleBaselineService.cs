@@ -7,7 +7,9 @@ namespace Nexus.ProjectManagement.Waterfall.Application;
 public sealed class ScheduleBaselineService(
     IScheduleBaselineRepository repository,
     IScheduleService scheduleService,
-    IWaterfallUnitOfWork unitOfWork) : IScheduleBaselineService
+    IWaterfallUnitOfWork unitOfWork,
+    IProgressSnapshotRepository? progressSnapshots = null,
+    TimeProvider? timeProvider = null) : IScheduleBaselineService
 {
     /// <summary>A project's baselines are for a handful of agreed plans, not a change log.</summary>
     public const int MaxBaselinesPerProject = 50;
@@ -79,6 +81,24 @@ public sealed class ScheduleBaselineService(
             .ToList();
 
         await repository.AddAsync(baseline, activities, cancellationToken);
+
+        // A copy kept as a record of progress also gives the S-curve its "actual" point for the day.
+        if (request.Kind == BaselineKind.ProgressInformation && progressSnapshots is not null)
+        {
+            var today = Today();
+            var snapshot = await progressSnapshots.GetByDateAsync(request.ProjectId, today, cancellationToken);
+            if (snapshot is null)
+            {
+                await progressSnapshots.AddAsync(
+                    new ProgressSnapshot(Guid.NewGuid(), request.TenantId, request.ProjectId, today, schedule.PlannedProgress, schedule.ActualProgress, request.Name),
+                    cancellationToken);
+            }
+            else
+            {
+                snapshot.Refresh(schedule.PlannedProgress, schedule.ActualProgress, request.Name);
+            }
+        }
+
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success(ToDetail(baseline, activities));
     }
@@ -93,6 +113,17 @@ public sealed class ScheduleBaselineService(
 
         var activities = await repository.ListActivitiesAsync([id], cancellationToken);
         await repository.RemoveAsync(baseline, activities.ToList(), cancellationToken);
+
+        // The record of progress it left on the S-curve goes with it.
+        if (baseline.Kind == BaselineKind.ProgressInformation && progressSnapshots is not null)
+        {
+            var snapshot = await progressSnapshots.GetByDateAsync(baseline.ProjectId, DateOnly.FromDateTime(baseline.CreatedAtUtc.UtcDateTime), cancellationToken);
+            if (snapshot is not null)
+            {
+                await progressSnapshots.RemoveAsync(snapshot, cancellationToken);
+            }
+        }
+
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }
@@ -154,6 +185,8 @@ public sealed class ScheduleBaselineService(
 
         return rows.OrderBy(r => r.CurrentStart ?? r.BaselineStart).ThenBy(r => r.Name, StringComparer.Ordinal).ToList();
     }
+
+    private DateOnly Today() => DateOnly.FromDateTime((timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime);
 
     private static int Days(DateOnly from, DateOnly to) => to.DayNumber - from.DayNumber;
 

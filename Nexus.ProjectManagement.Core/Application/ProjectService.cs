@@ -10,7 +10,8 @@ public sealed class ProjectService(
     IProjectManagementUnitOfWork unitOfWork,
     IApprovalRequester approvalRequester,
     IEnumerable<IProjectDeletionParticipant>? deletionParticipants = null,
-    ProjectOptions? options = null) : IProjectService
+    ProjectOptions? options = null,
+    IEnumerable<IProjectSubmissionCheck>? submissionChecks = null) : IProjectService
 {
     public async Task<Result<PagedResult<ProjectDto>>> ListAsync(ListProjectsRequest request, CancellationToken cancellationToken)
     {
@@ -222,6 +223,15 @@ public sealed class ProjectService(
         if (project is null)
         {
             return Result.Failure<ProjectDto>(Error.NotFound("Project not found."));
+        }
+
+        foreach (var check in submissionChecks ?? [])
+        {
+            var objection = await check.CheckAsync(project, cancellationToken);
+            if (objection is not null)
+            {
+                return Result.Failure<ProjectDto>(objection);
+            }
         }
 
         var subject = new ApprovalSubject("Project", project.Id, project.TenantId);

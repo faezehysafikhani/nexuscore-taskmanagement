@@ -3160,6 +3160,14 @@ Added for the schedule / agile screens. Everything is optional: a project (or ho
   isPartialRejection, comment, documentName, approvalStatus, submittedByUserId, submittedAtUtc }`. Decided in the approval workflow (subject type `ActivityProgress`): on approval the
   activity's actual progress becomes `approvedProgress ?? submittedProgress`; on rejection, if a confirmed figure was set first, that figure still applies (a "partial rejection"). With no workflow the report is confirmed at once.
 
+* **Free float** — every scheduled activity carries `freeFloatDays` (how long it can slip without delaying any successor; total float is unchanged).
+* **Progress-information copies feed the S-curve**: creating a saved copy of kind ProgressInformation also records a progress snapshot (actual and planned % of that day) used for the S-curve's actual line.
+* `PUT /api/project-management/waterfall/activities/{id}/actual-progress { actualProgress }` (0–100; `WaterfallActivities.Edit`) — a direct correction of how much is done, without a report or approval.
+* **MS Project import** (`POST /waterfall/msproject/import`) now disables antiforgery like the other multipart endpoints (bearer-token API; a multipart call from the UI was rejected otherwise).
+* **Weights must total 100 on submission** (opt-in): with `WaterfallOptions.RequireWeightsTotalOnSubmit` the project cannot be sent for approval while its leaf activities' effective weights do not add up to 100
+  (`project.schedule_weights_not_100`, 400; a project with no activities is not checked). It plugs into Core through the optional `IProjectSubmissionCheck` extension point (Core does not know Waterfall);
+  the host `PostBank.Api` turns the option on, others keep today's behaviour.
+
 ### Agile
 
 * `POST /agile/tasks/for-projects`, `POST /agile/sprints/for-projects`, `POST /agile/status-submissions/for-projects` — `{ projectIds }`.

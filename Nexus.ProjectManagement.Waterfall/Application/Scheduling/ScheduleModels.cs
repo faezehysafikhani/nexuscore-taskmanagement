@@ -19,7 +19,7 @@ public sealed record ScheduledActivity(
     DateOnly Start, DateOnly Finish, int DurationDays,
     DateOnly LateStart, DateOnly LateFinish, int TotalFloatDays, bool IsCritical,
     decimal PlannedProgress, decimal ActualProgress,
-    int StartIndex, int FinishIndex, bool UsedDefaultDuration, decimal Weight = 0);
+    int StartIndex, int FinishIndex, bool UsedDefaultDuration, decimal Weight = 0, int FreeFloatDays = 0);
 
 public sealed record ScheduleResult(
     DateOnly ProjectStart, DateOnly ProjectFinish, int ProjectDurationDays,

@@ -7,7 +7,7 @@ public sealed record ScheduledActivityDto(
     DateOnly Start, DateOnly Finish, int DurationDays,
     DateOnly LateStart, DateOnly LateFinish, int TotalFloatDays, bool IsCritical,
     decimal PlannedProgress, decimal ActualProgress, bool UsedDefaultDuration,
-    string WbsCode = "", int Level = 1, decimal Weight = 0, decimal Cost = 0, decimal ManHours = 0);
+    string WbsCode = "", int Level = 1, decimal Weight = 0, decimal Cost = 0, decimal ManHours = 0, int FreeFloatDays = 0);
 
 /// <summary>
 /// A project's calculated schedule. Durations and float are in working days of the project's work
