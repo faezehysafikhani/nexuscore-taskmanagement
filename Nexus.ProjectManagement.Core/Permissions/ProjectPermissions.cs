@@ -9,6 +9,7 @@ public static class ProjectPermissions
     public const string Edit = "Projects.Edit";
     public const string Delete = "Projects.Delete";
     public const string Submit = "Projects.Submit";
+    public const string Remove = "Projects.Remove";
 
     public static IReadOnlyList<PermissionDefinition> All { get; } =
     [
@@ -16,7 +17,8 @@ public static class ProjectPermissions
         new(Create, "ProjectManagement", "ایجاد پروژه"),
         new(Edit, "ProjectManagement", "ویرایش پروژه‌ها"),
         new(Delete, "ProjectManagement", "بایگانی پروژه‌ها"),
-        new(Submit, "ProjectManagement", "ارسال پروژه‌ها برای تأیید")
+        new(Submit, "ProjectManagement", "ارسال پروژه‌ها برای تأیید"),
+        new(Remove, "ProjectManagement", "حذف دائمی پروژه‌ها")
     ];
 }
 

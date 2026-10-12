@@ -150,6 +150,17 @@ public sealed class ArchitectureDependencyTests
         AssertNoReferenceStartingWith("Nexus.Portfolio/Nexus.Portfolio.csproj", "Nexus.Integrations.");
         AssertNoReferenceStartingWith("Nexus.ProjectManagement.Team/Nexus.ProjectManagement.Team.csproj", "Nexus.Integrations.");
         AssertNoReferenceStartingWith("Nexus.Organization/Nexus.Organization.csproj", "Nexus.Integrations.");
+
+        // The modules that hold data about a project without referencing Core are joined to Core's delete only by an integration.
+        foreach (var module in new[] { "Nexus.ProjectManagement.Team", "Nexus.ProjectManagement.Deliverables", "Nexus.ProjectManagement.Kpi", "Nexus.Actions" })
+        {
+            AssertNoReferenceStartingWith($"{module}/{module}.csproj", "Nexus.Integrations.");
+        }
+
+        foreach (var module in new[] { "Nexus.ProjectManagement.Team", "Nexus.ProjectManagement.Deliverables", "Nexus.ProjectManagement.Kpi", "Nexus.Actions" })
+        {
+            Assert.DoesNotContain("Nexus.ProjectManagement.Core", GetProjectReferences($"{module}/{module}.csproj"));
+        }
     }
 
     [Fact]

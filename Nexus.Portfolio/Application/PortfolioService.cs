@@ -2,6 +2,7 @@ using Nexus.Actions.Application;
 using Nexus.Portfolio.Application.Dtos;
 using Nexus.ProjectManagement.Core.Application;
 using Nexus.ProjectManagement.Core.Application.Dtos;
+using Nexus.ProjectManagement.Core.Domain;
 using NexusCore.SharedKernel.Results;
 
 namespace Nexus.Portfolio.Application;
@@ -21,20 +22,7 @@ public sealed class PortfolioService(
 {
     public async Task<Result<PortfolioResultDto>> GetPortfolioAsync(PortfolioQuery query, CancellationToken cancellationToken)
     {
-        // Besides what a user owns, manages or is responsible for, any installed visibility providers
-        // (team membership, organisation chart, pending approvals...) can show them more. Skipped for
-        // ViewAll, which already sees everything.
-        var grant = VisibilityGrant.None;
-        if (!query.ViewAll && visibilityProviders is not null)
-        {
-            var grants = new List<VisibilityGrant>();
-            foreach (var provider in visibilityProviders)
-            {
-                grants.Add(await provider.GetGrantAsync(query.TenantId, query.CurrentUserId, cancellationToken));
-            }
-
-            grant = VisibilityGrant.Union(grants);
-        }
+        var grant = await GetGrantAsync(query, cancellationToken);
 
         var projectsPage = await projectRepository.ListAsync(
             new ListProjectsRequest(query.TenantId, PageNumber: 1, PageSize: 1000, Search: query.Search, OrganizationUnitId: query.OrganizationUnitId),
@@ -78,6 +66,58 @@ public sealed class PortfolioService(
 
         return Result.Success(new PortfolioResultDto(projects, actionItems));
     }
+
+    public async Task<Result<IReadOnlyList<ProjectDto>>> GetVisibleProjectsAsync(PortfolioQuery query, bool includeArchived, CancellationToken cancellationToken)
+    {
+        var grant = await GetGrantAsync(query, cancellationToken);
+        var page = await projectRepository.ListAsync(
+            new ListProjectsRequest(query.TenantId, PageNumber: 1, PageSize: 1000, Search: query.Search, OrganizationUnitId: query.OrganizationUnitId),
+            cancellationToken);
+
+        var projects = page.Items
+            .Where(project => includeArchived || project.Status != ProjectStatus.Archived)
+            .Where(project => query.Type is null || EqualsIgnoreCase(query.Type, project.Type.ToString()))
+            .Where(project => query.Status is null || project.Status.ToString() == query.Status)
+            .Where(project => query.ApprovalStatus is null || project.ApprovalStatus.ToString() == query.ApprovalStatus)
+            .Where(project => query.InvolvedUserId is null || project.OwnerUserId == query.InvolvedUserId || project.ManagerUserId == query.InvolvedUserId)
+            .Where(project => IsVisible(project, query, grant))
+            .OrderByDescending(project => project.CreatedAtUtc)
+            .Select(ToDto)
+            .ToList();
+
+        return Result.Success<IReadOnlyList<ProjectDto>>(projects);
+    }
+
+    // Besides what a user owns, manages or is responsible for, any installed visibility providers
+    // (team membership, organisation chart, pending approvals...) can show them more. Skipped for
+    // ViewAll, which already sees everything.
+    private async Task<VisibilityGrant> GetGrantAsync(PortfolioQuery query, CancellationToken cancellationToken)
+    {
+        if (query.ViewAll || visibilityProviders is null)
+        {
+            return VisibilityGrant.None;
+        }
+
+        var grants = new List<VisibilityGrant>();
+        foreach (var provider in visibilityProviders)
+        {
+            grants.Add(await provider.GetGrantAsync(query.TenantId, query.CurrentUserId, cancellationToken));
+        }
+
+        return VisibilityGrant.Union(grants);
+    }
+
+    private static bool IsVisible(Project project, PortfolioQuery query, VisibilityGrant grant) =>
+        query.ViewAll || project.OwnerUserId == query.CurrentUserId || project.ManagerUserId == query.CurrentUserId
+        || grant.ProjectIds.Contains(project.Id)
+        || (project.OrganizationUnitId is { } unit && grant.OrganizationUnitIds.Contains(unit));
+
+    private static ProjectDto ToDto(Project project) => new(
+        project.Id, project.TenantId, project.Name, project.Code, project.Type, project.Status, project.ApprovalStatus,
+        project.OwnerUserId, project.ManagerUserId, project.OrganizationUnitId, project.WorkCalendarId,
+        project.StartDate, project.EndDate, project.Cost,
+        project.Goal, project.Requirements, project.Constraints, project.Assumptions, project.Description, project.Charter,
+        project.CreatedAtUtc);
 
     private static bool EqualsIgnoreCase(string? requested, string actual) =>
         string.Equals(requested, actual, StringComparison.OrdinalIgnoreCase);

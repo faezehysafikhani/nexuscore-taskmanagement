@@ -1,3 +1,4 @@
+using Nexus.ProjectManagement.Core.Application;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 using Nexus.ProjectManagement.Documents.Application;
@@ -18,7 +19,8 @@ public static class DependencyInjection
     /// AddWorkflowApplication(), IDocumentSummaryGenerator, IDocumentRelevanceAnalyzer.</summary>
     public static IServiceCollection AddProjectDocuments(this IServiceCollection services)
     {
-        services.AddScoped<IProjectDocumentService, ProjectDocumentService>();
+        
+        services.AddScoped<IProjectDeletionParticipant, DocumentsProjectDeletionParticipant>();services.AddScoped<IProjectDocumentService, ProjectDocumentService>();
         services.AddScoped<IValidator<UploadProjectDocumentRequest>, UploadProjectDocumentRequestValidator>();
         services.AddScoped<IValidator<UpdateProjectDocumentRequest>, UpdateProjectDocumentRequestValidator>();
         services.AddScoped<IValidator<UploadProjectDocumentVersionRequest>, UploadProjectDocumentVersionRequestValidator>();

@@ -1,3 +1,4 @@
+using Nexus.ProjectManagement.Core.Application;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 using Nexus.ProjectManagement.StakeholderManagement.Application;
@@ -17,7 +18,8 @@ public static class DependencyInjection
     /// any IStakeholderAnalyzer - fully usable with neither installed.</summary>
     public static IServiceCollection AddStakeholderManagement(this IServiceCollection services)
     {
-        services.AddScoped<IStakeholderService, StakeholderService>();
+        
+        services.AddScoped<IProjectDeletionParticipant, StakeholderProjectDeletionParticipant>();services.AddScoped<IStakeholderService, StakeholderService>();
         services.AddScoped<IValidator<CreateStakeholderRequest>, CreateStakeholderRequestValidator>();
         services.AddScoped<IValidator<UpdateStakeholderRequest>, UpdateStakeholderRequestValidator>();
         services.AddSingleton<IPermissionCatalog, StakeholderPermissionCatalog>();

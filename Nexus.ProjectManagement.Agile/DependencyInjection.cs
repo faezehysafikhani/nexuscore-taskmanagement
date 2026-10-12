@@ -1,3 +1,4 @@
+using Nexus.ProjectManagement.Core.Application;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -19,7 +20,8 @@ public static class DependencyInjection
     /// is never required to run it - the two are independent siblings under Core.</summary>
     public static IServiceCollection AddAgilePlanning(this IServiceCollection services)
     {
-        services.AddScoped<IAgileTaskService, AgileTaskService>();
+        
+        services.AddScoped<IProjectDeletionParticipant, AgileProjectDeletionParticipant>();services.AddScoped<IAgileTaskService, AgileTaskService>();
         services.AddScoped<ISprintService, SprintService>();
         services.AddScoped<IAgileBoardService, AgileBoardService>();
         services.AddScoped<ISprintChartService, SprintChartService>();

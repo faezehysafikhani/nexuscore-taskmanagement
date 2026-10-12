@@ -1,3 +1,4 @@
+using Nexus.ProjectManagement.Core.Application;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -22,7 +23,8 @@ public static class DependencyInjection
         var options = new WaterfallOptions();
         configure?.Invoke(options);
         services.AddSingleton(options);
-        services.AddScoped<IActivityService, ActivityService>();
+        
+        services.AddScoped<IProjectDeletionParticipant, WaterfallProjectDeletionParticipant>();services.AddScoped<IActivityService, ActivityService>();
         services.AddScoped<IActivityDependencyService, ActivityDependencyService>();
         services.AddScoped<IScheduleService, ScheduleService>();
         services.AddScoped<IScheduleBaselineService, ScheduleBaselineService>();

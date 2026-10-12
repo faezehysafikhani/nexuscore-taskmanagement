@@ -10,4 +10,8 @@ public interface IProjectRepository
     Task<PagedResult<Project>> ListAsync(ListProjectsRequest request, CancellationToken cancellationToken);
     Task<bool> CodeExistsAsync(Guid tenantId, string code, Guid? excludeId, CancellationToken cancellationToken);
     Task AddAsync(Project project, CancellationToken cancellationToken);
+
+    /// <summary>Deletes the project row. A repository written before deletion existed need not implement it (deleting then reports as unsupported).</summary>
+    Task RemoveAsync(Project project, CancellationToken cancellationToken) =>
+        throw new NotSupportedException("This project repository does not support deleting projects.");
 }

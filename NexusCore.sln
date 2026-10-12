@@ -171,6 +171,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nexus.Reporting.Analytics",
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PostBank.Api", "PostBank.Api\PostBank.Api.csproj", "{98FA00CA-5DFA-4B40-9021-9E3C39DA54F0}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nexus.Integrations.ProjectDeletion", "Nexus.Integrations.ProjectDeletion\Nexus.Integrations.ProjectDeletion.csproj", "{98EC27A0-DE0F-451C-B67C-6F63A44BE77E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -469,6 +471,10 @@ Global
 		{98FA00CA-5DFA-4B40-9021-9E3C39DA54F0}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{98FA00CA-5DFA-4B40-9021-9E3C39DA54F0}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{98FA00CA-5DFA-4B40-9021-9E3C39DA54F0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{98EC27A0-DE0F-451C-B67C-6F63A44BE77E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{98EC27A0-DE0F-451C-B67C-6F63A44BE77E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{98EC27A0-DE0F-451C-B67C-6F63A44BE77E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{98EC27A0-DE0F-451C-B67C-6F63A44BE77E}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

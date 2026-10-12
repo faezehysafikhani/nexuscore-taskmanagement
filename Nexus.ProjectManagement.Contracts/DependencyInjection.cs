@@ -1,3 +1,4 @@
+using Nexus.ProjectManagement.Core.Application;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 using Nexus.ProjectManagement.Contracts.Application;
@@ -17,7 +18,8 @@ public static class DependencyInjection
     /// it contracts, addenda and invoices are approved as soon as they are submitted.</summary>
     public static IServiceCollection AddContractManagement(this IServiceCollection services)
     {
-        services.AddScoped<IContractService, ContractService>();
+        
+        services.AddScoped<IProjectDeletionParticipant, ContractsProjectDeletionParticipant>();services.AddScoped<IContractService, ContractService>();
         services.AddScoped<IContractAddendumService, ContractAddendumService>();
         services.AddScoped<IContractInvoiceService, ContractInvoiceService>();
 

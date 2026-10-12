@@ -939,6 +939,46 @@ Status Codes: 200, 401, 403, 404
 
 ---
 
+### Module: Projects
+Method: PUT
+Route: /api/project-management/projects/{id}/status
+Description: *(added for the PMPB UI)* Move a project between the working statuses. Needs `Projects.Edit`.
+Body: `{ "status": 0|1|2|3 }` (Draft 0, Active 1, OnHold 2, Completed 3). Archived (4) is refused (400, use `/archive`), and an archived project cannot change status (409).
+Response: the updated project.
+Status Codes: 200, 400, 401, 403, 404, 409
+
+---
+
+### Module: Projects
+Method: DELETE
+Route: /api/project-management/projects/{id}
+Description: *(added for the PMPB UI; the "hard delete guard" item)* Delete a project for good. New permission **`Projects.Remove`** (archiving stays `Projects.Delete`).
+Refused (409) while any installed module still holds data about the project; the message says what (`"... still has: 3 risk(s); 2 document(s) ..."`). Each module takes part through
+`IProjectDeletionParticipant` (Core's extension point, registered by the module itself - Agile, Waterfall, Risk, Stakeholder, Progress, Documents, Contracts, strategy alignment - or, for Team, Deliverables, KPIs and Actions,
+which do not reference Core, by the optional `Nexus.Integrations.ProjectDeletion`: `services.AddProjectDeletionIntegration()`). Once the project is gone the team list and governance roles go with it. With no participant registered nothing blocks the delete.
+Response: empty body.
+Status Codes: 204, 401, 403, 404, 409
+
+---
+
+### Module: Projects
+**Opt-in charter rules.** `AddProjectManagementCore(o => o.ValidateCharter = true)` makes create and update require a complete charter - manager, owning unit, both dates, goal and requirements - and refuse meaningless charter text
+(under four characters, or placeholder words such as "test"). Each failure has its own code (`title` of the problem response): `project.charter.{name|manager|unit|start_date|end_date|goal|requirements}_required`
+and `project.charter.{goal|requirements|constraints|assumptions|description}_meaningless`, all 400, so a client can show the message in the user's language. Off by default: existing callers see no change.
+
+---
+
+### Module: Portfolio
+Method: GET
+Route: /api/portfolio/projects
+Description: *(added for the PMPB UI)* The projects the caller may see, **in full** (same fields as `GET /projects/{id}`), by the portfolio's visibility rule: the caller's own and managed projects, plus what the installed visibility providers grant
+(team membership, unit manager, pending approval); `Portfolio.ViewAll` sees all. Archived projects are left out unless `includeArchived=true`.
+Query: organizationUnitId, status, search, involvedUserId, type, approvalStatus, includeArchived (all optional).
+Response: array of project objects, newest first.
+Status Codes: 200, 401, 403
+
+---
+
 ## 8. Waterfall Activities
 
 Requires ProjectManagement.Core. Permission namespace: `WaterfallActivities.*` (`View`, `Create`,

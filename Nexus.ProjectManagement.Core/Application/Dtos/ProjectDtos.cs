@@ -62,6 +62,9 @@ public sealed record UpdateProjectRequest(
     string? Description,
     string? Charter);
 
+/// <summary>The lifecycle status to move a project to. Archived is reached through the archive call, not this one.</summary>
+public sealed record ChangeProjectStatusRequest(ProjectStatus Status);
+
 public sealed record ListProjectsRequest(
     Guid TenantId,
     int PageNumber = 1,

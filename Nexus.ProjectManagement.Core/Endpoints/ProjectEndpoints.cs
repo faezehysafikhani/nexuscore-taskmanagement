@@ -49,6 +49,14 @@ public static class ProjectEndpoints
                 (await service.ArchiveAsync(id, cancellationToken)).ToApiResult())
             .RequireAuthorization(ProjectPermissions.Delete);
 
+        group.MapPut("/{id:guid}/status", async (Guid id, ChangeProjectStatusRequest request, IProjectService service, CancellationToken cancellationToken) =>
+                (await service.ChangeStatusAsync(id, request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(ProjectPermissions.Edit);
+
+        group.MapDelete("/{id:guid}", async (Guid id, IProjectService service, CancellationToken cancellationToken) =>
+                (await service.DeleteAsync(id, cancellationToken)).ToApiResult())
+            .RequireAuthorization(ProjectPermissions.Remove);
+
         group.MapPost("/{id:guid}/submit-for-approval", async (Guid id, IProjectService service, CancellationToken cancellationToken) =>
                 (await service.SubmitForApprovalAsync(id, cancellationToken)).ToApiResult())
             .RequireAuthorization(ProjectPermissions.Submit);

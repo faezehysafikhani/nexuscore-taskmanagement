@@ -19,6 +19,7 @@ using Nexus.Calendar.Infrastructure;
 using Nexus.Calendar.IranianHolidays;
 using Nexus.Integrations.ProjectCalendar;
 using Nexus.Integrations.ProjectVisibility;
+using Nexus.Integrations.ProjectDeletion;
 using Nexus.Integrations.ProjectWorkflow;
 using Nexus.Integrations.ProjectWorkflow.Endpoints;
 using Nexus.Integrations.StrategyAlignment;
@@ -117,7 +118,7 @@ builder.Services.AddActionManagement();
 builder.Services.AddKnowledgeManagement();
 builder.Services.AddStrategyManagement();
 
-builder.Services.AddProjectManagementCore();
+builder.Services.AddProjectManagementCore(options => options.ValidateCharter = true);
 builder.Services.AddWaterfallPlanning(options => options.ValidateActivityHierarchy = true);
 builder.Services.AddAgilePlanning();
 builder.Services.AddProjectTeam();
@@ -132,6 +133,7 @@ builder.Services.AddProjectHistory();
 
 builder.Services.AddProjectWorkflowIntegration();
 builder.Services.AddProjectVisibilityIntegration();
+builder.Services.AddProjectDeletionIntegration();
 builder.Services.AddProjectCalendarIntegration();
 builder.Services.AddProjectStrategyAlignment();
 

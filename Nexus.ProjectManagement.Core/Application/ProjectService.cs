@@ -8,7 +8,9 @@ namespace Nexus.ProjectManagement.Core.Application;
 public sealed class ProjectService(
     IProjectRepository repository,
     IProjectManagementUnitOfWork unitOfWork,
-    IApprovalRequester approvalRequester) : IProjectService
+    IApprovalRequester approvalRequester,
+    IEnumerable<IProjectDeletionParticipant>? deletionParticipants = null,
+    ProjectOptions? options = null) : IProjectService
 {
     public async Task<Result<PagedResult<ProjectDto>>> ListAsync(ListProjectsRequest request, CancellationToken cancellationToken)
     {
@@ -41,6 +43,13 @@ public sealed class ProjectService(
             return Result.Failure<ProjectDto>(Error.Validation("Name and code are required."));
         }
 
+        var charterError = CheckCharter(request.Name, request.ManagerUserId, request.OrganizationUnitId, request.StartDate, request.EndDate,
+            request.Goal, request.Requirements, request.Constraints, request.Assumptions, request.Description);
+        if (charterError is not null)
+        {
+            return Result.Failure<ProjectDto>(charterError);
+        }
+
         if (await repository.CodeExistsAsync(request.TenantId, request.Code, null, cancellationToken))
         {
             return Result.Failure<ProjectDto>(Error.Conflict("A project with this code already exists."));
@@ -70,6 +79,13 @@ public sealed class ProjectService(
             return Result.Failure<ProjectDto>(Error.Validation("Name and code are required."));
         }
 
+        var charterError = CheckCharter(request.Name, request.ManagerUserId, request.OrganizationUnitId, request.StartDate, request.EndDate,
+            request.Goal, request.Requirements, request.Constraints, request.Assumptions, request.Description);
+        if (charterError is not null)
+        {
+            return Result.Failure<ProjectDto>(charterError);
+        }
+
         if (await repository.CodeExistsAsync(project.TenantId, request.Code, id, cancellationToken))
         {
             return Result.Failure<ProjectDto>(Error.Conflict("A project with this code already exists."));
@@ -97,6 +113,63 @@ public sealed class ProjectService(
         return Result.Success();
     }
 
+    public async Task<Result<ProjectDto>> ChangeStatusAsync(Guid id, ChangeProjectStatusRequest request, CancellationToken cancellationToken)
+    {
+        var project = await repository.GetByIdAsync(id, cancellationToken);
+        if (project is null)
+        {
+            return Result.Failure<ProjectDto>(Error.NotFound("Project not found."));
+        }
+
+        if (!Enum.IsDefined(request.Status) || request.Status == ProjectStatus.Archived)
+        {
+            return Result.Failure<ProjectDto>(Error.Validation("Choose Draft, Active, OnHold or Completed; use the archive call to archive a project."));
+        }
+
+        if (project.Status == ProjectStatus.Archived)
+        {
+            return Result.Failure<ProjectDto>(Error.Conflict("An archived project cannot change status."));
+        }
+
+        project.ChangeStatus(request.Status);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result.Success(ToDto(project));
+    }
+
+    public async Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var project = await repository.GetByIdAsync(id, cancellationToken);
+        if (project is null)
+        {
+            return Result.Failure(Error.NotFound("Project not found."));
+        }
+
+        var participants = deletionParticipants?.ToList() ?? [];
+        var reasons = new List<string>();
+        foreach (var participant in participants)
+        {
+            if (await participant.GetBlockingReasonAsync(project.TenantId, id, cancellationToken) is { } reason)
+            {
+                reasons.Add(reason);
+            }
+        }
+
+        if (reasons.Count > 0)
+        {
+            return Result.Failure(Error.Conflict($"The project cannot be deleted while it still has: {string.Join("; ", reasons)}. Remove those first, or archive the project instead."));
+        }
+
+        await repository.RemoveAsync(project, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        foreach (var participant in participants)
+        {
+            await participant.OnProjectDeletedAsync(project.TenantId, id, cancellationToken);
+        }
+
+        return Result.Success();
+    }
+
     public async Task<Result<ProjectDto>> SubmitForApprovalAsync(Guid id, CancellationToken cancellationToken)
     {
         var project = await repository.GetByIdAsync(id, cancellationToken);
@@ -121,6 +194,13 @@ public sealed class ProjectService(
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success(ToDto(project));
     }
+
+    private Error? CheckCharter(
+        string name, Guid? managerUserId, Guid? organizationUnitId, DateOnly? startDate, DateOnly? endDate,
+        string? goal, string? requirements, string? constraints, string? assumptions, string? description) =>
+        options?.ValidateCharter == true
+            ? CharterRules.Check(name, managerUserId, organizationUnitId, startDate, endDate, goal, requirements, constraints, assumptions, description)
+            : null;
 
     private static ProjectDto ToDto(Project project) => new(
         project.Id, project.TenantId, project.Name, project.Code, project.Type, project.Status, project.ApprovalStatus,

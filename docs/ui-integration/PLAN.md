@@ -72,3 +72,16 @@ separate `Nexus.Reporting.Analytics` project.
 | Identity (host config) | `PostBank.Api/appsettings.json` seeds roles **Project Manager** and **Project Team** with permission sets (created once, never overwritten) | the UI's three roles are backend roles; the "role" dropdown assigns them |
 | Host | `PostBank.Api` registers the Iranian holidays and the project-calendar integration | So calendars actually affect scheduling |
 | SQL | `2026-10-10-add-calendar-policy.sql`, `2026-10-10-add-organization-members.sql` | schema |
+
+
+### Phase 2 — added to the backend (projects, charter, portfolio)
+
+| Where | What | Why (UI need) |
+|---|---|---|
+| Projects | `PUT /projects/{id}/status` (Draft/Active/OnHold/Completed; Archived only via archive) | The UI lets a user set the project's work status; the backend had no way to change it |
+| Projects | `DELETE /projects/{id}` + permission `Projects.Remove`, guarded by `IProjectDeletionParticipant` (409 with what still depends on it); `Nexus.Integrations.ProjectDeletion` for Team/Deliverables/KPIs/Actions | The UI has a "delete project" screen; this is also the deferred "hard delete guard" item for projects |
+| Projects | `ProjectOptions.ValidateCharter` (opt-in, on in the host): required manager/unit/dates/goal/requirements + meaningless-text check, with per-rule error codes | The UI enforced these in the browser (including the "junk text" patterns) |
+| Portfolio | `GET /api/portfolio/projects`: the projects the caller may see, in full | The UI filtered the project list itself (`isProjectVisibleToUser`); visibility now comes from the backend |
+| Host | `AddProjectDeletionIntegration()`, `ValidateCharter = true` | |
+
+Not added (deliberately, a later phase): the per-tenant on/off switches for the visibility sources (UI `visibilitySettings`) - phase 7.

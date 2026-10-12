@@ -1,3 +1,4 @@
+using Nexus.ProjectManagement.Core.Application;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 using Nexus.ProjectManagement.Progress.Application;
@@ -17,7 +18,8 @@ public static class DependencyInjection
     /// any IExecutiveSummaryGenerator - fully usable with neither installed.</summary>
     public static IServiceCollection AddProgressManagement(this IServiceCollection services)
     {
-        services.AddScoped<IProgressService, ProgressService>();
+        
+        services.AddScoped<IProjectDeletionParticipant, ProgressProjectDeletionParticipant>();services.AddScoped<IProgressService, ProgressService>();
         services.AddScoped<IValidator<CreateProgressUpdateRequest>, CreateProgressUpdateRequestValidator>();
         services.AddScoped<IValidator<UpdateProgressUpdateRequest>, UpdateProgressUpdateRequestValidator>();
         services.AddSingleton<IPermissionCatalog, ProgressPermissionCatalog>();

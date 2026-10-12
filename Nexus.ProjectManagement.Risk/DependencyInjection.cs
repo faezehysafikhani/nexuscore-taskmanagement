@@ -1,3 +1,4 @@
+using Nexus.ProjectManagement.Core.Application;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 using Nexus.ProjectManagement.RiskManagement.Application;
@@ -17,7 +18,8 @@ public static class DependencyInjection
     /// any IRiskAnalyzer - Risk Management is fully usable with neither installed.</summary>
     public static IServiceCollection AddRiskManagement(this IServiceCollection services)
     {
-        services.AddScoped<IRiskService, RiskService>();
+        
+        services.AddScoped<IProjectDeletionParticipant, RiskProjectDeletionParticipant>();services.AddScoped<IRiskService, RiskService>();
         services.AddScoped<IValidator<CreateRiskRequest>, CreateRiskRequestValidator>();
         services.AddScoped<IValidator<UpdateRiskRequest>, UpdateRiskRequestValidator>();
         services.AddSingleton<IPermissionCatalog, RiskPermissionCatalog>();

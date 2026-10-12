@@ -68,6 +68,12 @@ public sealed class ProjectRepository(ProjectManagementCoreDbContext dbContext) 
         await dbContext.Projects.AddAsync(project, cancellationToken);
     }
 
+    public Task RemoveAsync(Project project, CancellationToken cancellationToken)
+    {
+        dbContext.Projects.Remove(project);
+        return Task.CompletedTask;
+    }
+
     private static IQueryable<Project> ApplySort(IQueryable<Project> query, ProjectSortBy sortBy, bool descending) => sortBy switch
     {
         ProjectSortBy.Name => descending ? query.OrderByDescending(p => p.Name) : query.OrderBy(p => p.Name),

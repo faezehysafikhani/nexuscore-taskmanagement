@@ -1,3 +1,4 @@
+using Nexus.ProjectManagement.Core.Application;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 using Nexus.Integrations.StrategyAlignment.Application;
@@ -14,6 +15,7 @@ public static class DependencyInjection
     /// those requires this in return.</summary>
     public static IServiceCollection AddProjectStrategyAlignment(this IServiceCollection services)
     {
+        services.AddScoped<IProjectDeletionParticipant, AlignmentProjectDeletionParticipant>();
         services.AddScoped<IAlignmentService, AlignmentService>();
         services.AddScoped<IValidator<CreateAlignmentRequest>, CreateAlignmentRequestValidator>();
         services.AddScoped<IValidator<UpdateAlignmentRequest>, UpdateAlignmentRequestValidator>();

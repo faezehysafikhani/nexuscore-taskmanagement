@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+	  <OutputType>Library</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Joins Project Core's deletion extension point with the modules that keep data about a project
+         without referencing Core (Team, Deliverables, KPIs, Actions). None of them references this
+         project, and it treats each of them as optional: a module that is not registered is skipped. -->
+    <ProjectReference Include="..\Nexus.ProjectManagement.Core\Nexus.ProjectManagement.Core.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Team\Nexus.ProjectManagement.Team.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Deliverables\Nexus.ProjectManagement.Deliverables.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Kpi\Nexus.ProjectManagement.Kpi.csproj" />
+    <ProjectReference Include="..\Nexus.Actions\Nexus.Actions.csproj" />
+    <ProjectReference Include="..\NexusCore.Application\NexusCore.Application.csproj" />
+    <ProjectReference Include="..\NexusCore.SharedKernel\NexusCore.SharedKernel.csproj" />
+  </ItemGroup>
+
+</Project>
