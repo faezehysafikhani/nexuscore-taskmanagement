@@ -940,6 +940,15 @@ Status Codes: 200, 401, 403, 404
 ---
 
 ### Module: Projects
+Method: POST
+Route: /api/project-management/projects/check
+Description: *(added for the PMPB UI)* A dry run of create and update: the same checks (required parts, the charter rules, unique name, unique code, end date after start) without saving. Add `?projectId=` to check an edit of that project (its own name and code do not clash with themselves). Needs `Projects.View`.
+Body: as for create. Response: empty (204) when the project would be accepted; otherwise the same problem save would answer (400 / 409 with the codes above).
+Status Codes: 204, 400, 401, 403, 409
+
+---
+
+### Module: Projects
 Method: PUT
 Route: /api/project-management/projects/{id}/status
 Description: *(added for the PMPB UI)* Move a project between the working statuses. Needs `Projects.Edit`.

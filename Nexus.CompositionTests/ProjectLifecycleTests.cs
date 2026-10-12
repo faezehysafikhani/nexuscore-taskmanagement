@@ -105,6 +105,20 @@ public sealed class ProjectLifecycleTests
         Assert.True((await strict.UpdateAsync(created.Id, keepOwn, default)).IsSuccess); // its own name does not clash with itself
     }
 
+    [Fact]
+    public async Task ACheck_SaysWhatSaveWouldSay_WithoutSavingAnything()
+    {
+        var repo = new Repo(ExistingProject("TAKEN"));
+        var service = Service(repo, null, new ProjectOptions { ValidateCharter = true });
+
+        Assert.Equal("project.charter.manager_required", (await service.CheckAsync(Create(code: "NEW"), null, default)).Error.Code);
+        Assert.Equal("conflict", (await service.CheckAsync(Create(code: "TAKEN", manager: Bob, unit: Unit), null, default)).Error.Code);
+        Assert.True((await service.CheckAsync(Create(code: "NEW", manager: Bob, unit: Unit), null, default)).IsSuccess);
+        Assert.True((await service.CheckAsync(Create(code: "TAKEN", manager: Bob, unit: Unit), repo.Items[0].Id, default)).IsSuccess); // its own code
+        Assert.Equal("validation.error", (await service.CheckAsync(Create(manager: Bob, unit: Unit, start: new DateOnly(2026, 6, 1), end: new DateOnly(2026, 1, 1)), null, default)).Error.Code);
+        Assert.Single(repo.Items);
+    }
+
     // ------------------------------------------------------------ status
 
     [Fact]

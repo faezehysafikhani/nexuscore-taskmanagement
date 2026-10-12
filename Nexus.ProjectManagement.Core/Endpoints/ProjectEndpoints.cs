@@ -37,6 +37,11 @@ public static class ProjectEndpoints
                 (await service.GetAsync(id, cancellationToken)).ToApiResult())
             .RequireAuthorization(ProjectPermissions.View);
 
+        // A dry run of create/update (add ?projectId= for an existing project): answers 204 if the project would be accepted, otherwise the same problem save would.
+        group.MapPost("/check", async (CreateProjectRequest request, Guid? projectId, IProjectService service, CancellationToken cancellationToken) =>
+                (await service.CheckAsync(request, projectId, cancellationToken)).ToApiResult())
+            .RequireAuthorization(ProjectPermissions.View);
+
         group.MapPost("/", async (CreateProjectRequest request, IProjectService service, CancellationToken cancellationToken) =>
                 (await service.CreateAsync(request, cancellationToken)).ToApiResult())
             .RequireAuthorization(ProjectPermissions.Create);

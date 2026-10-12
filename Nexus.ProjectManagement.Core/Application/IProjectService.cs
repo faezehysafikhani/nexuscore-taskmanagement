@@ -7,6 +7,11 @@ public interface IProjectService
 {
     Task<Result<PagedResult<ProjectDto>>> ListAsync(ListProjectsRequest request, CancellationToken cancellationToken);
     Task<Result<ProjectDto>> GetAsync(Guid id, CancellationToken cancellationToken);
+    /// <summary>A dry run of create (or, with <paramref name="existingProjectId"/>, of update): the same checks - required parts, charter rules,
+    /// unique name and code - without saving anything. Success means the request would be accepted.</summary>
+    Task<Result> CheckAsync(CreateProjectRequest request, Guid? existingProjectId, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
     Task<Result<ProjectDto>> CreateAsync(CreateProjectRequest request, CancellationToken cancellationToken);
     Task<Result<ProjectDto>> UpdateAsync(Guid id, UpdateProjectRequest request, CancellationToken cancellationToken);
     Task<Result> ArchiveAsync(Guid id, CancellationToken cancellationToken);

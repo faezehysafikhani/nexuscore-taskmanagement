@@ -36,6 +36,38 @@ public sealed class ProjectService(
             : Result.Success(ToDto(project));
     }
 
+    public async Task<Result> CheckAsync(CreateProjectRequest request, Guid? existingProjectId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.Name))
+        {
+            return Result.Failure(Error.Validation("Name is required."));
+        }
+
+        var charterError = CheckCharter(request.Name, request.ManagerUserId, request.OrganizationUnitId, request.StartDate, request.EndDate,
+            request.Goal, request.Requirements, request.Constraints, request.Assumptions, request.Description);
+        if (charterError is not null)
+        {
+            return Result.Failure(charterError);
+        }
+
+        if (request.StartDate is { } start && request.EndDate is { } end && end < start)
+        {
+            return Result.Failure(Error.Validation("End date must be on or after the start date."));
+        }
+
+        if (options?.RequireUniqueName == true && await repository.NameExistsAsync(request.TenantId, request.Name, existingProjectId, cancellationToken))
+        {
+            return Result.Failure(new Error("project.name_exists", "A project with this name already exists."));
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Code) && await repository.CodeExistsAsync(request.TenantId, request.Code.Trim(), existingProjectId, cancellationToken))
+        {
+            return Result.Failure(Error.Conflict("A project with this code already exists."));
+        }
+
+        return Result.Success();
+    }
+
     public async Task<Result<ProjectDto>> CreateAsync(CreateProjectRequest request, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Name))
