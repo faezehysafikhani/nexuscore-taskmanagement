@@ -3128,6 +3128,58 @@ Schema: tables `risk_management.RiskProjectSettings`, `stakeholder_management.St
 
 ---
 
+## 20c. Planning and progress: weighting, plans, progress reports (Waterfall, Agile, Core)
+
+Added for the schedule / agile screens. Everything is optional: a project (or host) that does not use it behaves exactly as before.
+
+### Waterfall
+
+* **Activities** gain `cost` (decimal, null = not estimated), `importance` and `complexity` (`ActivityLevel`: 0 Low, 1 Medium, 2 High) in the
+  response and, as optional trailing fields, in create / update (omitted on update = unchanged). New activities get a `position`
+  (after the existing ones); siblings, and WBS codes, follow it.
+* `DELETE /api/project-management/waterfall/activities/{id}?withSubActivities=true` deletes the activity with everything under it (and their links);
+  without the flag a parent is still refused (409).
+* `PUT /api/project-management/waterfall/dependencies/predecessor` — `{ tenantId, projectId, successorActivityId, predecessorActivityId | null, type, lagDays }`
+  makes that activity the successor's single predecessor (replacing the links into it; null removes them). Same rules as create (leaf activities, no cycles). Needs `WaterfallSchedule.Manage`.
+* **Settings** `GET /waterfall/settings?projectId`, `POST /waterfall/settings/for-projects { projectIds }`, `PUT /waterfall/settings`
+  `{ tenantId, projectId, weighting, timeFactor, costFactor, complexityFactor, plannedProgress }` (`WeightingMode`: 0 Manual, 1 Time, 2 Cost, 3 Complexity, 4 Combined;
+  `PlannedProgressMode`: 0 Stored, 1 Continuous, 2 ZeroHundred). `combined` needs three factors (0–100) adding up to 100. `isDefault` = no row; the defaults are
+  Manual / host default (`WaterfallOptions.DefaultPlannedProgress`, Stored unless the host says otherwise). Needs `WaterfallSchedule.Manage` to save.
+* **Schedule** (`GET /waterfall/schedule?projectId`) activities now also carry `wbsCode`, `level`, the effective `weight` (a group's is the sum of its children's),
+  rolled-up `cost` and `manHours`; the schedule carries `weighting` and `plannedProgressMode`. With a weighting other than Manual, each leaf weighs its share of
+  the total duration / cost / complexity score (low 1, medium 2, high 3) or the blend; groups roll up by what is inside them (also when the host sets
+  `WaterfallOptions.RollUpSummaryWeights`). With Continuous planned progress an activity's planned % grows evenly over its working days; ZeroHundred keeps it at 0 until its last day
+  is over; both are read for *today*. S-curve and snapshots follow the same modes.
+* **Plan** `GET /waterfall/schedule/plan?projectId` and `POST /waterfall/schedule/plans { projectIds }`: `{ projectId, settings, activities[], dependencies[], schedule }` in one call
+  (a project whose plan cannot be calculated is left out of the batch).
+* **Saved copies** (`/waterfall/baselines`): create takes an optional `kind` (0 Baseline, 1 ProgressInformation); the copy keeps the project's planned/actual progress and, per activity,
+  `weight`, `plannedProgress`, `actualProgress`, `responsibleUserId`, `wbsCode`.
+* **Progress reports** `/api/project-management/waterfall/progress-submissions`: `GET ?projectId=` or `?activityId=` (newest first), `POST /for-projects { projectIds }`,
+  `POST { tenantId, projectId, activityId, progress, comment, documentName }` (needs `WaterfallProgress.Submit`; leaf activities only; one pending report per activity),
+  `PUT /{id}/confirmed-progress { progress }` (needs `WaterfallActivities.Edit`; only while pending). Response: `{ id, projectId, activityId, submittedProgress, approvedProgress,
+  isPartialRejection, comment, documentName, approvalStatus, submittedByUserId, submittedAtUtc }`. Decided in the approval workflow (subject type `ActivityProgress`): on approval the
+  activity's actual progress becomes `approvedProgress ?? submittedProgress`; on rejection, if a confirmed figure was set first, that figure still applies (a "partial rejection"). With no workflow the report is confirmed at once.
+
+### Agile
+
+* `POST /agile/tasks/for-projects`, `POST /agile/sprints/for-projects`, `POST /agile/status-submissions/for-projects` — `{ projectIds }`.
+* `PUT /agile/sprints/count` — `{ tenantId, projectId, count }`: the project gets exactly sprints 1..count (missing ones are created planned; surplus ones are removed from the end while
+  planned and empty, else 409).
+* **Status requests** `/agile/status-submissions`: `GET ?taskId=`, `POST { tenantId, projectId, taskId, status, comment }` (needs `AgileStatus.Submit`). Subject type `AgileTaskStatus`: on approval the
+  task moves to the asked column; with no workflow it moves at once. One pending request per task; asking for the column it is already in is a validation error.
+
+### Core
+
+`POST /api/project-management/projects/progress { projectIds }` → `[ { projectId, type, plannedProgress, actualProgress, performance, totalTasks?, todoTasks?, doingTasks?, doneTasks? } ]`
+(needs `Projects.View`). Waterfall projects report the schedule roll-up, agile projects the share of tasks that are done (a task under review counts as doing); a project with no
+planning module (or no activities) is reported from its dates alone (planned = share of the time gone by, actual 0). `performance` = actual as a percent of planned.
+Modules take part by registering an `IProjectProgressSource`; Core does not know them.
+
+Schema: apply `docs/upgrade/2026-10-13-add-waterfall-planning.sql` (`WaterfallPlanningSchemaUpgrade`) and `docs/upgrade/2026-10-13-add-agile-status-submissions.sql`
+(`AgileTaskStatusSchemaUpgrade`). New permissions: `WaterfallProgress.Submit`, `AgileStatus.Submit` (added to the host's seeded Project Manager / Project Team roles; existing roles keep what they had).
+
+---
+
 ## Enums Reference
 
 Every enum below is serialized as its **raw integer** value in both requests and responses

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Nexus.ProjectManagement.Waterfall.Application;
+using Nexus.ProjectManagement.Waterfall.Application.Dtos;
 using Nexus.ProjectManagement.Waterfall.Permissions;
 using NexusCore.Application.Common;
 
@@ -16,6 +17,14 @@ public static class ScheduleEndpoints
 
         group.MapGet("/", async (Guid projectId, IScheduleService service, CancellationToken cancellationToken) =>
                 (await service.GetScheduleAsync(projectId, cancellationToken)).ToApiResult())
+            .RequireAuthorization(WaterfallPermissions.View);
+
+        group.MapGet("/plan", async (Guid projectId, IScheduleService service, CancellationToken cancellationToken) =>
+                (await service.GetPlanAsync(projectId, cancellationToken)).ToApiResult())
+            .RequireAuthorization(WaterfallPermissions.View);
+
+        group.MapPost("/plans", async (ProjectPlansForProjectsRequest request, IScheduleService service, CancellationToken cancellationToken) =>
+                (await service.GetPlansAsync(request.ProjectIds, cancellationToken)).ToApiResult())
             .RequireAuthorization(WaterfallPermissions.View);
 
         group.MapPost("/apply", async (Guid projectId, IScheduleService service, CancellationToken cancellationToken) =>

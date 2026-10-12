@@ -23,6 +23,10 @@ public static class ActivityDependencyEndpoints
                 (await service.CreateAsync(request, cancellationToken)).ToApiResult())
             .RequireAuthorization(WaterfallPermissions.ManageSchedule);
 
+        group.MapPut("/predecessor", async (SetActivityPredecessorRequest request, IActivityDependencyService service, CancellationToken cancellationToken) =>
+                (await service.SetPredecessorAsync(request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(WaterfallPermissions.ManageSchedule);
+
         group.MapPut("/{id:guid}", async (Guid id, UpdateActivityDependencyRequest request, IActivityDependencyService service, CancellationToken cancellationToken) =>
                 (await service.UpdateAsync(id, request, cancellationToken)).ToApiResult())
             .RequireAuthorization(WaterfallPermissions.ManageSchedule);

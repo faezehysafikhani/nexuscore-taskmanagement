@@ -83,6 +83,66 @@ public sealed class ActivityDependencyService(
         return Result.Success();
     }
 
+    public async Task<Result<IReadOnlyList<ActivityDependencyDto>>> SetPredecessorAsync(SetActivityPredecessorRequest request, CancellationToken cancellationToken)
+    {
+        var activities = await activityRepository.ListByProjectAsync(request.ProjectId, cancellationToken);
+        var successor = activities.SingleOrDefault(a => a.Id == request.SuccessorActivityId);
+        if (successor is null)
+        {
+            return Result.Failure<IReadOnlyList<ActivityDependencyDto>>(Error.NotFound("The activity must exist in the project."));
+        }
+
+        var existing = await repository.ListByProjectAsync(request.ProjectId, cancellationToken);
+        var incoming = existing.Where(d => d.SuccessorActivityId == successor.Id).ToList();
+
+        if (request.PredecessorActivityId is not { } predecessorId)
+        {
+            await repository.RemoveRangeAsync(incoming, cancellationToken);
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+            return Result.Success<IReadOnlyList<ActivityDependencyDto>>([]);
+        }
+
+        var predecessor = activities.SingleOrDefault(a => a.Id == predecessorId);
+        if (predecessor is null)
+        {
+            return Result.Failure<IReadOnlyList<ActivityDependencyDto>>(Error.NotFound("Both activities must exist in the project."));
+        }
+
+        if (predecessor.Id == successor.Id)
+        {
+            return Result.Failure<IReadOnlyList<ActivityDependencyDto>>(Error.Validation("An activity cannot depend on itself."));
+        }
+
+        if (activities.Any(a => a.ParentActivityId == predecessor.Id) || activities.Any(a => a.ParentActivityId == successor.Id))
+        {
+            return Result.Failure<IReadOnlyList<ActivityDependencyDto>>(Error.Validation("Dependencies connect activities without sub-activities."));
+        }
+
+        var remaining = existing.Except(incoming).Select(d => (d.PredecessorActivityId, d.SuccessorActivityId));
+        if (DependencyGraph.WouldCreateCycle(remaining, predecessor.Id, successor.Id))
+        {
+            return Result.Failure<IReadOnlyList<ActivityDependencyDto>>(Error.Conflict("This link would create a circular dependency."));
+        }
+
+        var kept = incoming.FirstOrDefault(d => d.PredecessorActivityId == predecessor.Id);
+        ActivityDependency link;
+        if (kept is not null)
+        {
+            kept.Update(request.Type, request.LagDays);
+            link = kept;
+            await repository.RemoveRangeAsync(incoming.Where(d => d != kept).ToList(), cancellationToken);
+        }
+        else
+        {
+            await repository.RemoveRangeAsync(incoming, cancellationToken);
+            link = new ActivityDependency(Guid.NewGuid(), request.TenantId, request.ProjectId, predecessor.Id, successor.Id, request.Type, request.LagDays);
+            await repository.AddAsync(link, cancellationToken);
+        }
+
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result.Success<IReadOnlyList<ActivityDependencyDto>>([ToDto(link)]);
+    }
+
     private static ActivityDependencyDto ToDto(ActivityDependency dependency) => new(
         dependency.Id, dependency.TenantId, dependency.ProjectId, dependency.PredecessorActivityId,
         dependency.SuccessorActivityId, dependency.Type, dependency.LagDays);

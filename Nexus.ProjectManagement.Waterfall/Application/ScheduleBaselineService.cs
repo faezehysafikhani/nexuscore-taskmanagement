@@ -47,13 +47,19 @@ public sealed class ScheduleBaselineService(
             return Result.Failure<ScheduleBaselineDetailDto>(Error.Conflict($"A project can hold at most {MaxBaselinesPerProject} baselines; delete one first."));
         }
 
-        var schedule = await scheduleService.GetScheduleAsync(request.ProjectId, cancellationToken);
-        if (schedule.IsFailure)
+        if (!Enum.IsDefined(request.Kind))
         {
-            return Result.Failure<ScheduleBaselineDetailDto>(schedule.Error);
+            return Result.Failure<ScheduleBaselineDetailDto>(Error.Validation("Unknown kind of copy."));
         }
 
-        if (schedule.Value!.Activities.Count == 0)
+        var plan = await scheduleService.GetPlanAsync(request.ProjectId, cancellationToken);
+        if (plan.IsFailure)
+        {
+            return Result.Failure<ScheduleBaselineDetailDto>(plan.Error);
+        }
+
+        var schedule = plan.Value!.Schedule;
+        if (schedule.Activities.Count == 0)
         {
             return Result.Failure<ScheduleBaselineDetailDto>(Error.Validation("A project with no activities has nothing to baseline."));
         }
@@ -63,11 +69,13 @@ public sealed class ScheduleBaselineService(
         var number = existing.Count == 0 ? 1 : existing.Max(b => b.Number) + 1;
         var baseline = new ScheduleBaseline(
             Guid.NewGuid(), request.TenantId, request.ProjectId, number, request.Name, request.Note,
-            schedule.Value.ProjectStart, schedule.Value.ProjectFinish);
-        var activities = schedule.Value.Activities
+            schedule.ProjectStart, schedule.ProjectFinish, request.Kind, schedule.PlannedProgress, schedule.ActualProgress);
+        var responsible = plan.Value.Activities.ToDictionary(a => a.Id, a => a.ResponsibleUserId);
+        var activities = schedule.Activities
             .Select(a => new ScheduleBaselineActivity(
                 Guid.NewGuid(), baseline.Id, a.Id, a.ParentActivityId, a.Name, a.IsSummary, a.IsMilestone,
-                a.Start, a.Finish, a.DurationDays))
+                a.Start, a.Finish, a.DurationDays, a.Weight, a.PlannedProgress, a.ActualProgress,
+                responsible.GetValueOrDefault(a.Id), a.WbsCode))
             .ToList();
 
         await repository.AddAsync(baseline, activities, cancellationToken);
@@ -151,11 +159,14 @@ public sealed class ScheduleBaselineService(
 
     private static ScheduleBaselineDto ToDto(ScheduleBaseline baseline, int activityCount) => new(
         baseline.Id, baseline.TenantId, baseline.ProjectId, baseline.Number, baseline.Name, baseline.Note,
-        baseline.ProjectStart, baseline.ProjectFinish, activityCount, baseline.CreatedAtUtc, baseline.CreatedByUserId);
+        baseline.ProjectStart, baseline.ProjectFinish, activityCount, baseline.CreatedAtUtc, baseline.CreatedByUserId,
+        baseline.Kind, baseline.PlannedProgress, baseline.ActualProgress);
 
     private static ScheduleBaselineDetailDto ToDetail(ScheduleBaseline baseline, IReadOnlyCollection<ScheduleBaselineActivity> activities) => new(
         ToDto(baseline, activities.Count),
         activities.OrderBy(a => a.StartDate).ThenBy(a => a.Name, StringComparer.Ordinal)
-            .Select(a => new BaselineActivityDto(a.ActivityId, a.ParentActivityId, a.Name, a.IsSummary, a.IsMilestone, a.StartDate, a.EndDate, a.DurationDays))
+            .Select(a => new BaselineActivityDto(
+                a.ActivityId, a.ParentActivityId, a.Name, a.IsSummary, a.IsMilestone, a.StartDate, a.EndDate, a.DurationDays,
+                a.Weight, a.PlannedProgress, a.ActualProgress, a.ResponsibleUserId, a.WbsCode))
             .ToList());
 }

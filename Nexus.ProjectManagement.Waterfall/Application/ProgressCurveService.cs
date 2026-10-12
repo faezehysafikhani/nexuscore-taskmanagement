@@ -33,7 +33,7 @@ public sealed class ProgressCurveService(
 
         var date = request.SnapshotDate ?? Today();
         var result = calculation.Value!.Result;
-        var planned = Round(new PlannedProgressCurve(result).At(date));
+        var planned = Round(new PlannedProgressCurve(result, CurveMode(calculation.Value!)).At(date));
 
         var existing = await repository.GetByDateAsync(request.ProjectId, date, cancellationToken);
         if (existing is not null)
@@ -76,7 +76,7 @@ public sealed class ProgressCurveService(
         }
 
         var result = calculation.Value!.Result;
-        var curve = new PlannedProgressCurve(result);
+        var curve = new PlannedProgressCurve(result, CurveMode(calculation.Value!));
 
         var span = result.ProjectFinish.DayNumber - result.ProjectStart.DayNumber;
         var step = Math.Max(stepDays, (int)Math.Ceiling(span / (double)MaxPlannedPoints));
@@ -102,6 +102,10 @@ public sealed class ProgressCurveService(
             currentPlanned, currentActual, Round(currentActual - currentPlanned),
             currentPlanned > 0 ? Math.Round(currentActual / currentPlanned, 2) : null));
     }
+
+    /// <summary>A curve is always calculated: a project that keeps stored planned progress still gets the even spread.</summary>
+    private static PlannedProgressMode CurveMode(ScheduleCalculation calculation) =>
+        calculation.PlannedMode == PlannedProgressMode.ZeroHundred ? PlannedProgressMode.ZeroHundred : PlannedProgressMode.Continuous;
 
     private DateOnly Today() => DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
 

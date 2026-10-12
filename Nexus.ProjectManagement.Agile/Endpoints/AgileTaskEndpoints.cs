@@ -18,6 +18,10 @@ public static class AgileTaskEndpoints
                 (await service.ListByProjectAsync(projectId, sprintNumber, cancellationToken)).ToApiResult())
             .RequireAuthorization(AgilePermissions.View);
 
+        group.MapPost("/for-projects", async (ListAgileForProjectsRequest request, IAgileTaskService service, CancellationToken cancellationToken) =>
+                (await service.ListForProjectsAsync(request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(AgilePermissions.View);
+
         group.MapGet("/{id:guid}", async (Guid id, IAgileTaskService service, CancellationToken cancellationToken) =>
                 (await service.GetAsync(id, cancellationToken)).ToApiResult())
             .RequireAuthorization(AgilePermissions.View);

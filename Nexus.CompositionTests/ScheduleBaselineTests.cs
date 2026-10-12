@@ -42,6 +42,30 @@ public sealed class ScheduleBaselineTests
         new(Tenant, f.Project.Id, name, note);
 
     [Fact]
+    public async Task AProgressCopy_KeepsEachActivitysWeightProgressOwnerAndOutlineCode()
+    {
+        var f = Build();
+        var owner = Guid.NewGuid();
+        var a = Add(f, "A", 2);
+        a.UpdateDetails("A", null, null, null, owner, null, null, null, 2, null, 10);
+        a.UpdateProgress(0, 40);
+        a.SetPosition(1);
+        var b = Add(f, "B", 2);
+        b.SetPosition(2);
+
+        var created = (await f.Baselines.CreateAsync(new CreateScheduleBaselineRequest(Tenant, f.Project.Id, "End of March", null, BaselineKind.ProgressInformation), default)).Value!;
+
+        Assert.Equal(BaselineKind.ProgressInformation, created.Baseline.Kind);
+        var row = created.Activities.Single(x => x.ActivityId == a.Id);
+        Assert.Equal((10m, 40m, owner, "1"), (row.Weight, row.ActualProgress, row.ResponsibleUserId, row.WbsCode));
+        Assert.Equal("2", created.Activities.Single(x => x.ActivityId == b.Id).WbsCode);
+        Assert.True(created.Baseline.ActualProgress > 0);
+
+        var plain = (await f.Baselines.CreateAsync(Request(f), default)).Value!;
+        Assert.Equal(BaselineKind.Baseline, plain.Baseline.Kind);
+    }
+
+    [Fact]
     public async Task CreatingABaseline_FreezesTheCalculatedSchedule_NotJustTheStoredDates()
     {
         var f = Build();

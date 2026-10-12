@@ -88,3 +88,12 @@ public enum ProjectSortBy
     Status,
     CreatedAtUtc
 }
+
+public sealed record ProjectProgressRequest(IReadOnlyList<Guid> ProjectIds);
+
+/// <summary>Where a project stands. Planned is what the schedule (or, lacking one, the project's dates) says should be done by today,
+/// Actual what has been done; Performance is Actual as a percent of Planned (100 when nothing was due yet but something is done).
+/// The task counts are given for projects planned in tasks.</summary>
+public sealed record ProjectProgressDto(
+    Guid ProjectId, ProjectType Type, decimal PlannedProgress, decimal ActualProgress, decimal Performance,
+    int? TotalTasks = null, int? TodoTasks = null, int? DoingTasks = null, int? DoneTasks = null);

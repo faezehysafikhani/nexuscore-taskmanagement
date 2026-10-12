@@ -8,4 +8,13 @@ public sealed class WaterfallOptions
     /// an activity of the same project, not a milestone, not the activity itself or one of its own descendants,
     /// and must not already carry dependency links. Off (the default) accepts any parent id, as before.</summary>
     public bool ValidateActivityHierarchy { get; set; }
+
+    /// <summary>How planned progress is read for a project that has not chosen a mode of its own. Stored (the default) uses the
+    /// value stored on each activity, as before; Continuous / ZeroHundred calculate it from the schedule.</summary>
+    public Domain.PlannedProgressMode DefaultPlannedProgress { get; set; } = Domain.PlannedProgressMode.Stored;
+
+    /// <summary>When on, a group's weight in the roll-up is the sum of its children's weights (so a group counts for exactly as
+    /// much as the work inside it). Off (the default) uses the weight stored on the group itself, as before. A project that weighs
+    /// by time, cost, complexity or a blend always rolls up this way.</summary>
+    public bool RollUpSummaryWeights { get; set; }
 }

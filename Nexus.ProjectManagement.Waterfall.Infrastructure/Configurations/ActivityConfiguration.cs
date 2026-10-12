@@ -15,6 +15,7 @@ public sealed class ActivityConfiguration : IEntityTypeConfiguration<Activity>
         builder.Property(x => x.Description).HasMaxLength(2000);
         builder.Property(x => x.ManHours).HasColumnType("decimal(9,2)");
         builder.Property(x => x.Weight).HasColumnType("decimal(5,2)");
+        builder.Property(x => x.Cost).HasColumnType("decimal(18,2)");
         builder.Property(x => x.PlannedProgress).HasColumnType("decimal(5,2)");
         builder.Property(x => x.ActualProgress).HasColumnType("decimal(5,2)");
 

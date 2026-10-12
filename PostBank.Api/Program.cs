@@ -119,7 +119,13 @@ builder.Services.AddKnowledgeManagement();
 builder.Services.AddStrategyManagement();
 
 builder.Services.AddProjectManagementCore(options => { options.ValidateCharter = true; options.RequireUniqueName = true; });
-builder.Services.AddWaterfallPlanning(options => options.ValidateActivityHierarchy = true);
+builder.Services.AddWaterfallPlanning(options =>
+{
+    options.ValidateActivityHierarchy = true;
+    // The UI reads planned progress from the schedule (spread evenly over each activity) and rolls groups up by what is inside them.
+    options.DefaultPlannedProgress = Nexus.ProjectManagement.Waterfall.Domain.PlannedProgressMode.Continuous;
+    options.RollUpSummaryWeights = true;
+});
 builder.Services.AddAgilePlanning();
 builder.Services.AddProjectTeam();
 builder.Services.AddProjectDeliverables();

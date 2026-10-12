@@ -17,6 +17,18 @@ public sealed class WaterfallSchemaTests
             .UseSqlServer("Server=.;Database=ModelOnly;Trusted_Connection=True;TrustServerCertificate=True")
             .Options);
 
+    /// <summary>Columns that tables created by the 2026-10-03 script gained later (see 2026-10-13-add-waterfall-planning.sql, checked in
+    /// WaterfallPlanningTests); that older script cannot, and must not, contain them.</summary>
+    private static readonly (string Table, string Column)[] AddedLater =
+    [
+        ("ScheduleBaselines", "Kind"), ("ScheduleBaselines", "PlannedProgress"), ("ScheduleBaselines", "ActualProgress"),
+        ("ScheduleBaselineActivities", "Weight"), ("ScheduleBaselineActivities", "PlannedProgress"), ("ScheduleBaselineActivities", "ActualProgress"),
+        ("ScheduleBaselineActivities", "ResponsibleUserId"), ("ScheduleBaselineActivities", "WbsCode")
+    ];
+
+    private static bool IsAddedLater(string table, string line) =>
+        AddedLater.Any(x => x.Table == table && line.StartsWith($"[{x.Column}] ", StringComparison.Ordinal));
+
     private static string Normalise(string text) => Regex.Replace(text, @"\s+", " ").Trim();
 
     private static string Script() =>
@@ -49,7 +61,7 @@ public sealed class WaterfallSchemaTests
         {
             var lines = ColumnLines(generated, table);
             Assert.True(lines.Count > 3, table);
-            foreach (var line in lines)
+            foreach (var line in lines.Where(l => !IsAddedLater(table, l)))
             {
                 Assert.Contains(Normalise(line), script);
                 Assert.Contains(Normalise(line), helper);

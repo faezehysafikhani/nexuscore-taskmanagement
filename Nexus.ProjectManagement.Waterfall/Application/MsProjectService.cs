@@ -169,6 +169,7 @@ public sealed class MsProjectService(
                 activity.UpdateProgress(0, task.PercentComplete);
             }
 
+            activity.SetPosition(built.Count + 1);
             built[task.Uid] = activity;
         }
 

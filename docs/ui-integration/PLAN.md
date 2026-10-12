@@ -104,3 +104,22 @@ Not added (deliberately, a later phase): the per-tenant on/off switches for the 
 | SQL | `2026-10-12-add-risk-response-and-settings.sql`, `2026-10-12-add-stakeholder-settings.sql` (+ `RiskSchemaUpgrade`, `StakeholderSchemaUpgrade`) | Additive, guarded, idempotent |
 
 Not added (deliberately): AI-generated document fields (summary/relevance stay UI-local, AI untouched); status-update planned/actual numbers are supplied by the UI until phase 4 computes them from the schedule.
+
+### Phase 4 — added to the backend (schedule, agile, progress)
+
+| Where | What | Why (UI need) |
+|---|---|---|
+| Waterfall | Activity `cost`, `importance`, `complexity`, `position` | The schedule table edits them; cost and complexity drive the weighting modes, position keeps the order activities were placed in (WBS numbering) |
+| Waterfall | Per-project settings (`/waterfall/settings`): weighting mode (manual/time/cost/complexity/combined) + factors, planned-progress mode (stored/continuous/zero-hundred); host defaults `DefaultPlannedProgress`, `RollUpSummaryWeights` | The UI computed weights and planned progress in the browser (`calculateScheduleTreeAndProgress`); the rules now live in the backend and the screens read the result |
+| Waterfall | Schedule DTO: WBS code, level, effective weight, rolled-up cost/man-hours; `GET /schedule/plan`, `POST /schedule/plans` | The tree table and dashboards need the whole plan in one call; WBS codes were also computed in the browser |
+| Waterfall | `PUT /dependencies/predecessor` | The screen gives an activity one prerequisite with a type and a lag; the backend replaces the links instead of the browser diffing them |
+| Waterfall | `DELETE /activities/{id}?withSubActivities=true` | The "delete activity" screen deletes the whole branch |
+| Waterfall | Saved copies (`baselines`) gain `kind` (baseline / progress information) and keep per-activity weight, progress, owner and outline code | The UI's "schedule snapshots" are full copies shown on a page of their own; both kinds are now stored by the backend |
+| Waterfall | Activity progress reports (`progress-submissions`), decided in the approval workflow; permission `WaterfallProgress.Submit` | Team members report progress and an approver confirms it (optionally a different figure; a partial rejection keeps it) |
+| Agile | Status requests (`status-submissions`), decided in the approval workflow; permission `AgileStatus.Submit` | Moving a card needs confirmation; the backend only had direct status changes |
+| Agile | `PUT /sprints/count`, `POST` batch lists for tasks / sprints / requests | The project has a "number of sprints" setting; the batch lists feed the task centre and dashboards |
+| Core | `POST /projects/progress` + `IProjectProgressSource` (registered by Waterfall and Agile) | Portfolio, dashboards and reports show planned / actual progress per project; the browser calculated them from its own copy of the schedule |
+| Host | `PostBank.Api`: `DefaultPlannedProgress = Continuous`, `RollUpSummaryWeights = true`; seeded roles get the two new permissions | The UI's behaviour |
+| SQL | `2026-10-13-add-waterfall-planning.sql`, `2026-10-13-add-agile-status-submissions.sql` (+ `WaterfallPlanningSchemaUpgrade`, `AgileTaskStatusSchemaUpgrade`) | Additive, guarded, idempotent |
+
+Not added (deliberately): per-activity second/third approvers (the screens only ever use the first; stage-based approval is the Workflow module's job, phase 7); AI WBS generation stays as it is (its result is applied through the normal create calls).

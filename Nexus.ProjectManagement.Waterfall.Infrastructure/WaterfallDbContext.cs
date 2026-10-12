@@ -12,6 +12,8 @@ public sealed class WaterfallDbContext(DbContextOptions<WaterfallDbContext> opti
     public DbSet<ScheduleBaseline> ScheduleBaselines => Set<ScheduleBaseline>();
     public DbSet<ProgressSnapshot> ProgressSnapshots => Set<ProgressSnapshot>();
     public DbSet<ScheduleBaselineActivity> ScheduleBaselineActivities => Set<ScheduleBaselineActivity>();
+    public DbSet<WaterfallProjectSettings> ProjectSettings => Set<WaterfallProjectSettings>();
+    public DbSet<ActivityProgressSubmission> ProgressSubmissions => Set<ActivityProgressSubmission>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

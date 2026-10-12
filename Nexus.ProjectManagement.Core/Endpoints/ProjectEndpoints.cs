@@ -33,6 +33,18 @@ public static class ProjectEndpoints
             })
             .RequireAuthorization(ProjectPermissions.View);
 
+        // Planned / actual progress of several projects at once, read from whichever planning modules are installed.
+        group.MapPost("/progress", async (ProjectProgressRequest request, ICurrentUserContext currentUser, IProjectProgressService service, CancellationToken cancellationToken) =>
+            {
+                if (currentUser.TenantId is null)
+                {
+                    return Results.Unauthorized();
+                }
+
+                return (await service.GetAsync(currentUser.TenantId.Value, request, cancellationToken)).ToApiResult();
+            })
+            .RequireAuthorization(ProjectPermissions.View);
+
         group.MapGet("/{id:guid}", async (Guid id, IProjectService service, CancellationToken cancellationToken) =>
                 (await service.GetAsync(id, cancellationToken)).ToApiResult())
             .RequireAuthorization(ProjectPermissions.View);

@@ -34,8 +34,10 @@ public static class ActivityEndpoints
                 (await service.UpdateProgressAsync(id, request, cancellationToken)).ToApiResult())
             .RequireAuthorization(WaterfallPermissions.Edit);
 
-        group.MapDelete("/{id:guid}", async (Guid id, IActivityService service, CancellationToken cancellationToken) =>
-                (await service.DeleteAsync(id, cancellationToken)).ToApiResult())
+        group.MapDelete("/{id:guid}", async (Guid id, bool? withSubActivities, IActivityService service, CancellationToken cancellationToken) =>
+                (withSubActivities == true
+                    ? await service.DeleteWithSubActivitiesAsync(id, cancellationToken)
+                    : await service.DeleteAsync(id, cancellationToken)).ToApiResult())
             .RequireAuthorization(WaterfallPermissions.Delete);
 
         group.MapPost("/{id:guid}/submit-for-approval", async (Guid id, IActivityService service, CancellationToken cancellationToken) =>
@@ -58,6 +60,8 @@ public static class ActivityEndpoints
 
         app.MapActivityDependencyEndpoints();
         app.MapScheduleEndpoints();
+        app.MapWaterfallSettingsEndpoints();
+        app.MapActivityProgressSubmissionEndpoints();
         app.MapScheduleBaselineEndpoints();
         app.MapProgressCurveEndpoints();
         app.MapMsProjectEndpoints();

@@ -1,5 +1,6 @@
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Nexus.ProjectManagement.Core.Application;
 using Nexus.ProjectManagement.Core.Application.Dtos;
 using Nexus.ProjectManagement.Core.Application.EventHandlers;
@@ -23,6 +24,8 @@ public static class DependencyInjection
         configure?.Invoke(options);
         services.AddSingleton(options);
         services.AddScoped<IProjectService, ProjectService>();
+        services.AddScoped<IProjectProgressService, ProjectProgressService>();
+        services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<IValidator<CreateProjectRequest>, CreateProjectRequestValidator>();
         services.AddScoped<IValidator<UpdateProjectRequest>, UpdateProjectRequestValidator>();
         services.AddSingleton<IPermissionCatalog, ProjectPermissionCatalog>();

@@ -2,6 +2,15 @@ using NexusCore.SharedKernel.Domain;
 
 namespace Nexus.ProjectManagement.Waterfall.Domain;
 
+/// <summary>What a saved copy of the schedule is for. Stored as its integer value; never renumber.</summary>
+public enum BaselineKind
+{
+    /// <summary>The plan as it was agreed, to compare the live plan against.</summary>
+    Baseline = 0,
+    /// <summary>The plan together with how far each activity had got on the day, kept as a record of progress.</summary>
+    ProgressInformation = 1
+}
+
 /// <summary>
 /// A frozen copy of a project's calculated schedule, kept so the live plan can later be compared
 /// with what was originally agreed. Numbered 1, 2, 3... per project; never edited after it is
@@ -16,8 +25,12 @@ public sealed class ScheduleBaseline : AuditableEntity<Guid>
 
     public ScheduleBaseline(
         Guid id, Guid tenantId, Guid projectId, int number, string name, string? note,
-        DateOnly projectStart, DateOnly projectFinish) : base(id)
+        DateOnly projectStart, DateOnly projectFinish,
+        BaselineKind kind = BaselineKind.Baseline, decimal plannedProgress = 0, decimal actualProgress = 0) : base(id)
     {
+        Kind = kind;
+        PlannedProgress = plannedProgress;
+        ActualProgress = actualProgress;
         TenantId = tenantId;
         ProjectId = projectId;
         Number = number;
@@ -39,6 +52,11 @@ public sealed class ScheduleBaseline : AuditableEntity<Guid>
     public string? Note { get; private set; }
     public DateOnly ProjectStart { get; private set; }
     public DateOnly ProjectFinish { get; private set; }
+    public BaselineKind Kind { get; private set; }
+
+    /// <summary>The project's planned and actual progress on the day the copy was taken.</summary>
+    public decimal PlannedProgress { get; private set; }
+    public decimal ActualProgress { get; private set; }
 }
 
 /// <summary>One activity's dates as they stood when the baseline was taken. ActivityId is a bare
@@ -53,8 +71,14 @@ public sealed class ScheduleBaselineActivity : Entity<Guid>
 
     public ScheduleBaselineActivity(
         Guid id, Guid baselineId, Guid activityId, Guid? parentActivityId, string name,
-        bool isSummary, bool isMilestone, DateOnly startDate, DateOnly endDate, int durationDays) : base(id)
+        bool isSummary, bool isMilestone, DateOnly startDate, DateOnly endDate, int durationDays,
+        decimal weight = 0, decimal plannedProgress = 0, decimal actualProgress = 0, Guid? responsibleUserId = null, string wbsCode = "") : base(id)
     {
+        Weight = weight;
+        PlannedProgress = plannedProgress;
+        ActualProgress = actualProgress;
+        ResponsibleUserId = responsibleUserId;
+        WbsCode = wbsCode;
         BaselineId = baselineId;
         ActivityId = activityId;
         ParentActivityId = parentActivityId;
@@ -77,4 +101,11 @@ public sealed class ScheduleBaselineActivity : Entity<Guid>
 
     /// <summary>Working days of the calendar in force when the baseline was taken.</summary>
     public int DurationDays { get; private set; }
+
+    /// <summary>The activity's effective weight, progress, owner and place in the outline on that day.</summary>
+    public decimal Weight { get; private set; }
+    public decimal PlannedProgress { get; private set; }
+    public decimal ActualProgress { get; private set; }
+    public Guid? ResponsibleUserId { get; private set; }
+    public string WbsCode { get; private set; } = string.Empty;
 }

@@ -19,6 +19,17 @@ public sealed class AgileTaskService(
         return Result.Success<IReadOnlyList<AgileTaskDto>>(tasks.Select(ToDto).ToList());
     }
 
+    public async Task<Result<IReadOnlyList<AgileTaskDto>>> ListForProjectsAsync(ListAgileForProjectsRequest request, CancellationToken cancellationToken)
+    {
+        var all = new List<AgileTaskDto>();
+        foreach (var projectId in request.ProjectIds.Distinct())
+        {
+            all.AddRange((await repository.ListByProjectAsync(projectId, null, cancellationToken)).Select(ToDto));
+        }
+
+        return Result.Success<IReadOnlyList<AgileTaskDto>>(all);
+    }
+
     public async Task<Result<AgileTaskDto>> GetAsync(Guid id, CancellationToken cancellationToken)
     {
         var task = await repository.GetByIdAsync(id, cancellationToken);

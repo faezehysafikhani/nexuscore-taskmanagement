@@ -21,6 +21,7 @@ public static class DependencyInjection
         services.AddScoped<ISprintRepository, SprintRepository>();
         services.AddScoped<ISprintEventRepository, SprintEventRepository>();
         services.AddScoped<IAgileChecklistRepository, AgileChecklistRepository>();
+        services.AddScoped<IAgileTaskStatusSubmissionRepository, AgileTaskStatusSubmissionRepository>();
 
         return services;
     }

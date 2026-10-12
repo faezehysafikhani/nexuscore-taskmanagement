@@ -6,6 +6,15 @@ namespace Nexus.ProjectManagement.Agile.Application;
 public interface ISprintService
 {
     Task<Result<IReadOnlyList<SprintDto>>> ListByProjectAsync(Guid projectId, CancellationToken cancellationToken);
+    /// <summary>The sprints of several projects at once. A service written before this existed reports it as unsupported.</summary>
+    Task<Result<IReadOnlyList<SprintDto>>> ListForProjectsAsync(ListAgileForProjectsRequest request, CancellationToken cancellationToken) =>
+        throw new NotSupportedException("This sprint service cannot list the sprints of several projects.");
+
+    /// <summary>Gives the project exactly sprints 1..Count: missing ones are created (planned); surplus ones are removed from the end
+    /// while they are planned and hold no tasks. A service written before this existed reports it as unsupported.</summary>
+    Task<Result<IReadOnlyList<SprintDto>>> SetCountAsync(SetSprintCountRequest request, CancellationToken cancellationToken) =>
+        throw new NotSupportedException("This sprint service cannot set a sprint count.");
+
     Task<Result<SprintDto>> GetAsync(Guid id, CancellationToken cancellationToken);
     Task<Result<SprintDto>> CreateAsync(CreateSprintRequest request, CancellationToken cancellationToken);
     Task<Result<SprintDto>> UpdateAsync(Guid id, UpdateSprintRequest request, CancellationToken cancellationToken);

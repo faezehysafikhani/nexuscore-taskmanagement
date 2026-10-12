@@ -10,6 +10,9 @@ public static class WaterfallPermissions
     public const string Delete = "WaterfallActivities.Delete";
     public const string Submit = "WaterfallActivities.Submit";
 
+    /// <summary>Reporting an activity's progress for confirmation (the report is decided by the approval workflow).</summary>
+    public const string SubmitProgress = "WaterfallProgress.Submit";
+
     /// <summary>Dependencies, schedule calculation and its application, baselines, progress
     /// snapshots and MS Project import: everything that shapes the plan rather than one activity.</summary>
     public const string ManageSchedule = "WaterfallSchedule.Manage";
@@ -21,6 +24,7 @@ public static class WaterfallPermissions
         new(Edit, "WaterfallPlanning", "ویرایش فعالیت‌ها و پیشرفت ساختار شکست کار"),
         new(Delete, "WaterfallPlanning", "حذف فعالیت‌های ساختار شکست کار"),
         new(Submit, "WaterfallPlanning", "ارسال فعالیت‌ها برای تأیید"),
+        new(SubmitProgress, "WaterfallPlanning", "ثبت گزارش پیشرفت فعالیت برای تأیید"),
         new(ManageSchedule, "WaterfallPlanning", "مدیریت زمان‌بندی: وابستگی‌ها، محاسبه برنامه، خط مبنا و اسنپ‌شات پیشرفت")
     ];
 }

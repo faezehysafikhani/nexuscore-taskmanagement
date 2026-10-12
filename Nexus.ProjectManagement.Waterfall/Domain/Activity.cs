@@ -3,6 +3,14 @@ using NexusCore.SharedKernel.Domain;
 
 namespace Nexus.ProjectManagement.Waterfall.Domain;
 
+/// <summary>Low / medium / high, for an activity's importance and complexity. Stored as its integer value; never renumber.</summary>
+public enum ActivityLevel
+{
+    Low = 0,
+    Medium = 1,
+    High = 2
+}
+
 /// <summary>
 /// WBS node. ProjectId is a required reference to ProjectManagement.Core's Project (Waterfall
 /// depends on Core); DeliverableId is a soft, optional reference to the Deliverables capability
@@ -43,9 +51,43 @@ public sealed class Activity : AuditableEntity<Guid>
     /// of its own, so DurationDays is 0 and its end date is its start date. It is always a leaf.</summary>
     public bool IsMilestone { get; private set; }
 
+    /// <summary>Where the activity sits among the project's activities (siblings are listed in this order). Set when it is created;
+    /// activities that predate it all read 0 and fall back to creation order.</summary>
+    public int Position { get; private set; }
+
+    public void SetPosition(int position) => Position = position;
+
+    /// <summary>What the activity is expected to cost; one input of cost-based and combined weighting. Null = not estimated.</summary>
+    public decimal? Cost { get; private set; }
+
+    /// <summary>How much the activity matters to the project's outcome.</summary>
+    public ActivityLevel Importance { get; private set; } = ActivityLevel.Medium;
+
+    /// <summary>How hard the activity is; one input of complexity-based and combined weighting.</summary>
+    public ActivityLevel Complexity { get; private set; } = ActivityLevel.Medium;
+
     public decimal PlannedProgress { get; private set; }
     public decimal ActualProgress { get; private set; }
     public ApprovalStatus ApprovalStatus { get; private set; }
+
+    /// <summary>A value left null is left as it is, so a caller that predates these estimates cannot wipe them.</summary>
+    public void SetEstimates(decimal? cost, ActivityLevel? importance, ActivityLevel? complexity)
+    {
+        if (cost is not null)
+        {
+            Cost = Math.Max(cost.Value, 0);
+        }
+
+        if (importance is not null)
+        {
+            Importance = importance.Value;
+        }
+
+        if (complexity is not null)
+        {
+            Complexity = complexity.Value;
+        }
+    }
 
     public void UpdateDetails(
         string name, string? description, Guid? parentActivityId, Guid? deliverableId,

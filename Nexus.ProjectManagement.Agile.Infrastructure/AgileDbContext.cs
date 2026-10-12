@@ -11,6 +11,7 @@ public sealed class AgileDbContext(DbContextOptions<AgileDbContext> options)
     public DbSet<Sprint> Sprints => Set<Sprint>();
     public DbSet<SprintEvent> SprintEvents => Set<SprintEvent>();
     public DbSet<AgileChecklistItem> ChecklistItems => Set<AgileChecklistItem>();
+    public DbSet<AgileTaskStatusSubmission> StatusSubmissions => Set<AgileTaskStatusSubmission>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

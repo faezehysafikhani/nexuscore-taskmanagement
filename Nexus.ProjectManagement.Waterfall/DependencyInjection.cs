@@ -27,6 +27,9 @@ public static class DependencyInjection
         services.AddScoped<IProjectDeletionParticipant, WaterfallProjectDeletionParticipant>();services.AddScoped<IActivityService, ActivityService>();
         services.AddScoped<IActivityDependencyService, ActivityDependencyService>();
         services.AddScoped<IScheduleService, ScheduleService>();
+        services.AddScoped<IWaterfallSettingsService, WaterfallSettingsService>();
+        services.AddScoped<Nexus.ProjectManagement.Core.Application.IProjectProgressSource, WaterfallProjectProgressSource>();
+        services.AddScoped<IActivityProgressSubmissionService, ActivityProgressSubmissionService>();
         services.AddScoped<IScheduleBaselineService, ScheduleBaselineService>();
         services.AddScoped<IProgressCurveService, ProgressCurveService>();
         services.AddScoped<IMsProjectService, MsProjectService>();
@@ -46,6 +49,8 @@ public static class DependencyInjection
 
         services.AddScoped<IDomainEventHandler<ApprovalGranted>, ActivityApprovalGrantedHandler>();
         services.AddScoped<IDomainEventHandler<ApprovalRejected>, ActivityApprovalRejectedHandler>();
+        services.AddScoped<IDomainEventHandler<ApprovalGranted>, ActivityProgressApprovalGrantedHandler>();
+        services.AddScoped<IDomainEventHandler<ApprovalRejected>, ActivityProgressApprovalRejectedHandler>();
 
         services.AddAuthorization(options =>
         {

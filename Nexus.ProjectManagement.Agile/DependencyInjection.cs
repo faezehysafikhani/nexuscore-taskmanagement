@@ -26,6 +26,8 @@ public static class DependencyInjection
         services.AddScoped<IAgileBoardService, AgileBoardService>();
         services.AddScoped<ISprintChartService, SprintChartService>();
         services.AddScoped<IAgileChecklistService, AgileChecklistService>();
+        services.AddScoped<IAgileTaskStatusSubmissionService, AgileTaskStatusSubmissionService>();
+        services.AddScoped<Nexus.ProjectManagement.Core.Application.IProjectProgressSource, AgileProjectProgressSource>();
         services.AddScoped<SprintTracker>();
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<IValidator<CreateAgileTaskRequest>, CreateAgileTaskRequestValidator>();
@@ -39,6 +41,8 @@ public static class DependencyInjection
 
         services.AddScoped<IDomainEventHandler<ApprovalGranted>, AgileTaskApprovalGrantedHandler>();
         services.AddScoped<IDomainEventHandler<ApprovalRejected>, AgileTaskApprovalRejectedHandler>();
+        services.AddScoped<IDomainEventHandler<ApprovalGranted>, AgileTaskStatusApprovalGrantedHandler>();
+        services.AddScoped<IDomainEventHandler<ApprovalRejected>, AgileTaskStatusApprovalRejectedHandler>();
 
         services.AddAuthorization(options =>
         {

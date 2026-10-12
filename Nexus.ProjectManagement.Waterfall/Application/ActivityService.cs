@@ -49,10 +49,15 @@ public sealed class ActivityService(
             request.Name, request.Description, request.ParentActivityId, request.DeliverableId,
             request.ResponsibleUserId, request.ApproverUserId,
             request.StartDate, request.EndDate, request.DurationDays, request.ManHours, request.Weight);
+        activity.SetEstimates(request.Cost, request.Importance, request.Complexity);
         if (request.IsMilestone == true)
         {
             activity.SetMilestone(true);
         }
+
+        // New activities go after the ones already there.
+        var existing = await repository.ListByProjectAsync(request.ProjectId, cancellationToken);
+        activity.SetPosition(existing.Count == 0 ? 1 : existing.Max(a => a.Position) + 1);
 
         await repository.AddAsync(activity, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -101,6 +106,7 @@ public sealed class ActivityService(
             request.Name, request.Description, request.ParentActivityId, request.DeliverableId,
             request.ResponsibleUserId, request.ApproverUserId,
             request.StartDate, request.EndDate, request.DurationDays, request.ManHours, request.Weight);
+        activity.SetEstimates(request.Cost, request.Importance, request.Complexity);
         if (request.IsMilestone is { } isMilestone && (isMilestone || activity.IsMilestone))
         {
             activity.SetMilestone(isMilestone);
@@ -148,6 +154,31 @@ public sealed class ActivityService(
         await dependencyRepository.RemoveRangeAsync(links, cancellationToken);
 
         await repository.RemoveAsync(activity, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result.Success();
+    }
+
+    public async Task<Result> DeleteWithSubActivitiesAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var activity = await repository.GetByIdAsync(id, cancellationToken);
+        if (activity is null)
+        {
+            return Result.Failure(Error.NotFound("Activity not found."));
+        }
+
+        var all = await repository.ListByProjectAsync(activity.ProjectId, cancellationToken);
+        var doomed = new List<Activity> { activity };
+        for (var i = 0; i < doomed.Count; i++)
+        {
+            doomed.AddRange(all.Where(a => a.ParentActivityId == doomed[i].Id && !doomed.Contains(a)));
+        }
+
+        foreach (var member in doomed)
+        {
+            await dependencyRepository.RemoveRangeAsync(await dependencyRepository.ListByActivityAsync(member.Id, cancellationToken), cancellationToken);
+            await repository.RemoveAsync(member, cancellationToken);
+        }
+
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }
@@ -219,9 +250,10 @@ public sealed class ActivityService(
         return Result.Success(ToDto(activity));
     }
 
-    private static ActivityDto ToDto(Activity activity) => new(
+    internal static ActivityDto ToDto(Activity activity) => new(
         activity.Id, activity.TenantId, activity.ProjectId, activity.ParentActivityId,
         activity.Name, activity.Description, activity.DeliverableId, activity.ResponsibleUserId, activity.ApproverUserId,
         activity.StartDate, activity.EndDate, activity.DurationDays, activity.ManHours, activity.Weight,
-        activity.PlannedProgress, activity.ActualProgress, activity.ApprovalStatus, activity.IsMilestone);
+        activity.PlannedProgress, activity.ActualProgress, activity.ApprovalStatus, activity.IsMilestone,
+        activity.Cost, activity.Importance, activity.Complexity);
 }

@@ -18,6 +18,64 @@ public sealed class SprintService(
         return Result.Success<IReadOnlyList<SprintDto>>(sprints.OrderBy(s => s.Number).Select(s => ToDto(s, tasks)).ToList());
     }
 
+    public async Task<Result<IReadOnlyList<SprintDto>>> ListForProjectsAsync(ListAgileForProjectsRequest request, CancellationToken cancellationToken)
+    {
+        var all = new List<SprintDto>();
+        foreach (var projectId in request.ProjectIds.Distinct())
+        {
+            all.AddRange((await ListByProjectAsync(projectId, cancellationToken)).Value!);
+        }
+
+        return Result.Success<IReadOnlyList<SprintDto>>(all);
+    }
+
+    public async Task<Result<IReadOnlyList<SprintDto>>> SetCountAsync(SetSprintCountRequest request, CancellationToken cancellationToken)
+    {
+        if (request.Count is < 0 or > MaxSprintCount)
+        {
+            return Result.Failure<IReadOnlyList<SprintDto>>(Error.Validation($"The number of sprints must be between 0 and {MaxSprintCount}."));
+        }
+
+        var sprints = (await sprintRepository.ListByProjectAsync(request.ProjectId, cancellationToken)).ToList();
+        var tasks = await taskRepository.ListByProjectAsync(request.ProjectId, null, cancellationToken);
+
+        // Surplus sprints first: a refusal must not leave the missing ones half-created.
+        foreach (var surplus in sprints.Where(s => s.Number > request.Count).OrderByDescending(s => s.Number).ToList())
+        {
+            if (surplus.Status != SprintStatus.Planned)
+            {
+                return Result.Failure<IReadOnlyList<SprintDto>>(Error.Conflict($"Sprint {surplus.Number} is {surplus.Status} and is part of the project's history; it cannot be removed."));
+            }
+
+            if (tasks.Any(t => t.SprintNumber == surplus.Number))
+            {
+                return Result.Failure<IReadOnlyList<SprintDto>>(Error.Conflict($"Sprint {surplus.Number} still has tasks; move them first."));
+            }
+        }
+
+        foreach (var surplus in sprints.Where(s => s.Number > request.Count).ToList())
+        {
+            await eventRepository.RemoveRangeAsync(await eventRepository.ListBySprintAsync(request.ProjectId, surplus.Number, cancellationToken), cancellationToken);
+            await sprintRepository.RemoveAsync(surplus, cancellationToken);
+            sprints.Remove(surplus);
+        }
+
+        for (var number = 1; number <= request.Count; number++)
+        {
+            if (sprints.All(s => s.Number != number))
+            {
+                var sprint = new Sprint(Guid.NewGuid(), request.TenantId, request.ProjectId, number, $"Sprint {number}", null, null, null);
+                await sprintRepository.AddAsync(sprint, cancellationToken);
+                sprints.Add(sprint);
+            }
+        }
+
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result.Success<IReadOnlyList<SprintDto>>(sprints.OrderBy(s => s.Number).Select(s => ToDto(s, tasks)).ToList());
+    }
+
+    public const int MaxSprintCount = 100;
+
     public async Task<Result<SprintDto>> GetAsync(Guid id, CancellationToken cancellationToken)
     {
         var sprint = await sprintRepository.GetByIdAsync(id, cancellationToken);

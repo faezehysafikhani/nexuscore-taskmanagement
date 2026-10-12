@@ -56,6 +56,20 @@ public static class AgileBoardEndpoints
                 (await service.GetVelocityAsync(projectId, sprints ?? SprintChartService.DefaultVelocitySprints, metric ?? ChartMetric.Points, cancellationToken)).ToApiResult())
             .RequireAuthorization(AgilePermissions.View);
 
+        var statusChanges = root.MapGroup("/status-submissions");
+
+        statusChanges.MapGet("/", async (Guid taskId, IAgileTaskStatusSubmissionService service, CancellationToken cancellationToken) =>
+                (await service.ListByTaskAsync(taskId, cancellationToken)).ToApiResult())
+            .RequireAuthorization(AgilePermissions.View);
+
+        statusChanges.MapPost("/for-projects", async (ListAgileForProjectsRequest request, IAgileTaskStatusSubmissionService service, CancellationToken cancellationToken) =>
+                (await service.ListForProjectsAsync(request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(AgilePermissions.View);
+
+        statusChanges.MapPost("/", async (SubmitAgileTaskStatusRequest request, IAgileTaskStatusSubmissionService service, CancellationToken cancellationToken) =>
+                (await service.SubmitAsync(request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(AgilePermissions.SubmitStatus);
+
         var sprints = root.MapGroup("/sprints");
 
         sprints.MapGet("/{id:guid}/burn", async (Guid id, ChartMetric? metric, ISprintChartService service, CancellationToken cancellationToken) =>
@@ -65,6 +79,14 @@ public static class AgileBoardEndpoints
         sprints.MapGet("/", async (Guid projectId, ISprintService service, CancellationToken cancellationToken) =>
                 (await service.ListByProjectAsync(projectId, cancellationToken)).ToApiResult())
             .RequireAuthorization(AgilePermissions.View);
+
+        sprints.MapPost("/for-projects", async (ListAgileForProjectsRequest request, ISprintService service, CancellationToken cancellationToken) =>
+                (await service.ListForProjectsAsync(request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(AgilePermissions.View);
+
+        sprints.MapPut("/count", async (SetSprintCountRequest request, ISprintService service, CancellationToken cancellationToken) =>
+                (await service.SetCountAsync(request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(AgilePermissions.ManageSprints);
 
         sprints.MapGet("/{id:guid}", async (Guid id, ISprintService service, CancellationToken cancellationToken) =>
                 (await service.GetAsync(id, cancellationToken)).ToApiResult())
