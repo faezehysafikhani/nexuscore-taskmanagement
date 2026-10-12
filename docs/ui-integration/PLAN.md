@@ -86,6 +86,6 @@ separate `Nexus.Reporting.Analytics` project.
 | Projects | `POST /projects/check` (dry run of create/update) | The form validated before the (AI) charter check and before saving; the same rules now answer from the backend without saving |
 | Projects | `code` optional on create (automatic `P0001`...) | The project form has no code field |
 | Team | `POST /team/members/for-projects`, `PUT /team/members/set` | The project form edits the team as a list of people: the backend now applies the list (no add/remove diffing in the browser) and the list screens read everybody's team in one call |
-| Host | `AddProjectDeletionIntegration()`, `ValidateCharter = true` | |
+| Host | `AddProjectDeletionIntegration()`, `ValidateCharter = true`, `RequireUniqueName = true`; seeded roles Project Manager / Project Team also get `users.view` (the project forms list people) | |
 
 Not added (deliberately, a later phase): the per-tenant on/off switches for the visibility sources (UI `visibilitySettings`) - phase 7.
