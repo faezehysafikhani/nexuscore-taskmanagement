@@ -55,6 +55,7 @@ public static class ProjectDocumentEndpoints
                 await using var stream = file.OpenReadStream();
                 return (await service.UploadAsync(request, stream, cancellationToken)).ToApiResult();
             })
+            .DisableAntiforgery() // a bearer-token API: there is no cookie to forge a request with, and no antiforgery middleware in the hosts
             .RequireAuthorization(ProjectDocumentPermissions.Upload);
 
         group.MapGet("/{id:guid}/versions", async (Guid id, IProjectDocumentService service, CancellationToken cancellationToken) =>
@@ -68,6 +69,7 @@ public static class ProjectDocumentEndpoints
                 await using var stream = file.OpenReadStream();
                 return (await service.UploadVersionAsync(id, request, stream, cancellationToken)).ToApiResult();
             })
+            .DisableAntiforgery()
             .RequireAuthorization(ProjectDocumentPermissions.Upload);
 
         group.MapGet("/{id:guid}/versions/{versionNumber:int}/download", async (

@@ -100,6 +100,7 @@ Not added (deliberately, a later phase): the per-tenant on/off switches for the 
 | Stakeholder | `quadrant` and resolved `strategy` in responses; per-project strategy wording per quadrant (`/stakeholders/settings`); table `StakeholderProjectSettings` | The UI showed a strategy text per quadrant (computed in the browser) and let a project edit it |
 | Risk / Stakeholder / Progress / DelayReason / Documents | `POST .../for-projects` batch lists | Task centre, approval centre and portfolio screens read every project's items |
 | Workflow | `POST /api/workflow/approval-center/for-subjects` | Each register item shows its approval history and approver; the browser no longer keeps its own approval log |
+| Documents | `.DisableAntiforgery()` on the two file-upload endpoints (document and new version) | A multipart upload from the UI would be rejected by .NET 8's antiforgery check in a host that does not run the antiforgery middleware (the other upload endpoints already do this); bearer-token API, no cookie to forge |
 | SQL | `2026-10-12-add-risk-response-and-settings.sql`, `2026-10-12-add-stakeholder-settings.sql` (+ `RiskSchemaUpgrade`, `StakeholderSchemaUpgrade`) | Additive, guarded, idempotent |
 
 Not added (deliberately): AI-generated document fields (summary/relevance stay UI-local, AI untouched); status-update planned/actual numbers are supplied by the UI until phase 4 computes them from the schedule.
