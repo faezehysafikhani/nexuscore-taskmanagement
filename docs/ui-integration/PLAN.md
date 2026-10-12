@@ -82,6 +82,7 @@ separate `Nexus.Reporting.Analytics` project.
 | Projects | `DELETE /projects/{id}` + permission `Projects.Remove`, guarded by `IProjectDeletionParticipant` (409 with what still depends on it); `Nexus.Integrations.ProjectDeletion` for Team/Deliverables/KPIs/Actions | The UI has a "delete project" screen; this is also the deferred "hard delete guard" item for projects |
 | Projects | `ProjectOptions.ValidateCharter` (opt-in, on in the host): required manager/unit/dates/goal/requirements + meaningless-text check, with per-rule error codes | The UI enforced these in the browser (including the "junk text" patterns) |
 | Portfolio | `GET /api/portfolio/projects`: the projects the caller may see, in full | The UI filtered the project list itself (`isProjectVisibleToUser`); visibility now comes from the backend |
+| Projects | `ProjectOptions.RequireUniqueName` (opt-in, on in the host), code `project.name_exists` | The UI refused a duplicate project name in the browser |
 | Projects | `code` optional on create (automatic `P0001`...) | The project form has no code field |
 | Team | `POST /team/members/for-projects`, `PUT /team/members/set` | The project form edits the team as a list of people: the backend now applies the list (no add/remove diffing in the browser) and the list screens read everybody's team in one call |
 | Host | `AddProjectDeletionIntegration()`, `ValidateCharter = true` | |

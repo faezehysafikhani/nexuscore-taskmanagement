@@ -965,6 +965,7 @@ Status Codes: 204, 401, 403, 404, 409
 **Opt-in charter rules.** `AddProjectManagementCore(o => o.ValidateCharter = true)` makes create and update require a complete charter - manager, owning unit, both dates, goal and requirements - and refuse meaningless charter text
 (under four characters, or placeholder words such as "test"). Each failure has its own code (`title` of the problem response): `project.charter.{name|manager|unit|start_date|end_date|goal|requirements}_required`
 and `project.charter.{goal|requirements|constraints|assumptions|description}_meaningless`, all 400, so a client can show the message in the user's language. Off by default: existing callers see no change.
+`o.RequireUniqueName = true` makes two projects of a tenant unable to share a name (ignoring case): create/update answer 400 with code `project.name_exists`. Also off by default.
 
 ---
 

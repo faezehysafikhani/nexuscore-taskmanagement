@@ -50,6 +50,11 @@ public sealed class ProjectService(
             return Result.Failure<ProjectDto>(charterError);
         }
 
+        if (options?.RequireUniqueName == true && await repository.NameExistsAsync(request.TenantId, request.Name, null, cancellationToken))
+        {
+            return Result.Failure<ProjectDto>(new Error("project.name_exists", "A project with this name already exists."));
+        }
+
         var code = string.IsNullOrWhiteSpace(request.Code)
             ? await repository.NextCodeAsync(request.TenantId, cancellationToken) ?? $"P{Guid.NewGuid():N}"[..9]
             : request.Code.Trim();
@@ -88,6 +93,11 @@ public sealed class ProjectService(
         if (charterError is not null)
         {
             return Result.Failure<ProjectDto>(charterError);
+        }
+
+        if (options?.RequireUniqueName == true && await repository.NameExistsAsync(project.TenantId, request.Name, id, cancellationToken))
+        {
+            return Result.Failure<ProjectDto>(new Error("project.name_exists", "A project with this name already exists."));
         }
 
         if (await repository.CodeExistsAsync(project.TenantId, request.Code, id, cancellationToken))

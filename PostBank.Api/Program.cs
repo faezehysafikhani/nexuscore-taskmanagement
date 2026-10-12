@@ -118,7 +118,7 @@ builder.Services.AddActionManagement();
 builder.Services.AddKnowledgeManagement();
 builder.Services.AddStrategyManagement();
 
-builder.Services.AddProjectManagementCore(options => options.ValidateCharter = true);
+builder.Services.AddProjectManagementCore(options => { options.ValidateCharter = true; options.RequireUniqueName = true; });
 builder.Services.AddWaterfallPlanning(options => options.ValidateActivityHierarchy = true);
 builder.Services.AddAgilePlanning();
 builder.Services.AddProjectTeam();

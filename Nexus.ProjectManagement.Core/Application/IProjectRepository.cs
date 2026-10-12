@@ -11,6 +11,9 @@ public interface IProjectRepository
     Task<bool> CodeExistsAsync(Guid tenantId, string code, Guid? excludeId, CancellationToken cancellationToken);
     Task AddAsync(Project project, CancellationToken cancellationToken);
 
+    /// <summary>Whether another project of the tenant already has this name (ignoring case). A repository written before this existed says no.</summary>
+    Task<bool> NameExistsAsync(Guid tenantId, string name, Guid? excludeId, CancellationToken cancellationToken) => Task.FromResult(false);
+
     /// <summary>The next free automatic project code for the tenant ("P0001", "P0002"...), or null when this repository does not generate them.</summary>
     Task<string?> NextCodeAsync(Guid tenantId, CancellationToken cancellationToken) => Task.FromResult<string?>(null);
 

@@ -8,4 +8,7 @@ public sealed class ProjectOptions
     /// goal and requirements) and refuses charter text that is meaningless (shorter than four characters, or
     /// placeholder words such as "test"). Off (the default) accepts whatever the earlier rules accepted.</summary>
     public bool ValidateCharter { get; set; }
+
+    /// <summary>When on, two projects of a tenant cannot share a name (compared ignoring case). Off (the default) allows it, as before.</summary>
+    public bool RequireUniqueName { get; set; }
 }

@@ -68,6 +68,14 @@ public sealed class ProjectRepository(ProjectManagementCoreDbContext dbContext) 
         await dbContext.Projects.AddAsync(project, cancellationToken);
     }
 
+    public Task<bool> NameExistsAsync(Guid tenantId, string name, Guid? excludeId, CancellationToken cancellationToken)
+    {
+        var wanted = name.Trim().ToLower();
+        return dbContext.Projects.AnyAsync(
+            project => project.TenantId == tenantId && project.Name.ToLower() == wanted && project.Id != excludeId,
+            cancellationToken);
+    }
+
     public async Task<string?> NextCodeAsync(Guid tenantId, CancellationToken cancellationToken)
     {
         var codes = await dbContext.Projects

@@ -82,6 +82,29 @@ public sealed class ProjectLifecycleTests
         Assert.Equal("conflict", (await service.CreateAsync(Create(code: "ALPHA"), default)).Error.Code);
     }
 
+    [Fact]
+    public async Task ProjectNames_AreUniquePerTenantOnlyWhenTheOptionIsOn()
+    {
+        var dbOptions = new DbContextOptionsBuilder<Nexus.ProjectManagement.Core.Infrastructure.ProjectManagementCoreDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
+        await using var db = new Nexus.ProjectManagement.Core.Infrastructure.ProjectManagementCoreDbContext(dbOptions);
+        var repo = new Nexus.ProjectManagement.Core.Infrastructure.ProjectRepository(db);
+        var relaxed = new ProjectService(repo, db, new NoApproval());
+        var strict = new ProjectService(repo, db, new NoApproval(), null, new ProjectOptions { RequireUniqueName = true });
+
+        Assert.True((await relaxed.CreateAsync(Create(code: "A") with { Name = "Same name" }, default)).IsSuccess);
+        Assert.True((await relaxed.CreateAsync(Create(code: "B") with { Name = "same NAME" }, default)).IsSuccess); // as it always was
+
+        var refused = await strict.CreateAsync(Create(code: "C") with { Name = "SAME name" }, default);
+        Assert.Equal("project.name_exists", refused.Error.Code);
+
+        var created = (await strict.CreateAsync(Create(code: "D") with { Name = "Another" }, default)).Value!;
+        var clash = new UpdateProjectRequest("same name", "D", null, null, null, null, null, null, null, null, null, null, null, null, null);
+        Assert.Equal("project.name_exists", (await strict.UpdateAsync(created.Id, clash, default)).Error.Code);
+        var keepOwn = new UpdateProjectRequest("another", "D", null, null, null, null, null, null, null, null, null, null, null, null, null);
+        Assert.True((await strict.UpdateAsync(created.Id, keepOwn, default)).IsSuccess); // its own name does not clash with itself
+    }
+
     // ------------------------------------------------------------ status
 
     [Fact]
