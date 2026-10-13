@@ -48,6 +48,9 @@
     <!-- Companies, positions, manager / subordinates (the optional module under test) -->
     <ProjectReference Include="..\Nexus.OrgStructure\Nexus.OrgStructure.csproj" />
     <ProjectReference Include="..\Nexus.OrgStructure.Infrastructure\Nexus.OrgStructure.Infrastructure.csproj" />
+
+    <!-- Task reports that follow the organization structure -->
+    <ProjectReference Include="..\Nexus.Integrations.TaskReporting\Nexus.Integrations.TaskReporting.csproj" />
   </ItemGroup>
 
 </Project>

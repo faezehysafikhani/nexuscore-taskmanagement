@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Nexus.Integrations.TaskNotifications;
+using Nexus.Integrations.TaskReporting;
 using Nexus.Organization;
 using Nexus.Organization.Endpoints;
 using Nexus.Organization.Infrastructure;
@@ -49,6 +50,7 @@ builder.Services.AddTaskManagement();
 builder.Services.AddTaskNotificationsIntegration();
 builder.Services.AddOrganizationApplication();
 builder.Services.AddOrgStructure();
+builder.Services.AddTaskReporting();
 
 // --- Infrastructure tier
 builder.Services.AddInfrastructure(builder.Configuration);
@@ -176,6 +178,7 @@ app.MapHub<NotificationHub>("/hubs/notifications");
 
 app.MapOrganizationEndpoints();
 app.MapOrgStructureEndpoints();
+app.MapTaskReportEndpoints();
 
 if (builder.Configuration.GetValue("Database:SeedOnStartup", true))
 {

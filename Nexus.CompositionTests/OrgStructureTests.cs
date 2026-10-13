@@ -253,7 +253,8 @@ public sealed class OrgStructureTests
         foreach (var csproj in Directory.GetFiles(root.FullName, "*.csproj", SearchOption.AllDirectories))
         {
             var name = Path.GetFileNameWithoutExtension(csproj);
-            if (name.StartsWith("Nexus.OrgStructure", StringComparison.Ordinal) || name is "TejaratBank.Api" or "Nexus.CompositionTests")
+            // Optional integrations built on the module (and the test host / tests) may reference it.
+            if (name.StartsWith("Nexus.OrgStructure", StringComparison.Ordinal) || name is "TejaratBank.Api" or "Nexus.CompositionTests" or "Nexus.Integrations.TaskReporting")
             {
                 continue;
             }
