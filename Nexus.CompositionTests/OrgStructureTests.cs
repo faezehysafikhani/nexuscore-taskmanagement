@@ -150,7 +150,7 @@ public sealed class OrgStructureTests
         var deputy = world.Unit("معاونت", managerUserId: deputyHead);
         var expert = world.User("کارشناس");
         await world.Service.LinkUnitAsync(Tenant, deputy.Id, new LinkUnitRequest(company), default);
-        var position = (await world.Service.CreatePositionAsync(Tenant, new CreatePositionRequest("کارشناس ارشد", "E2"), default)).Value!;
+        var position = (await world.Service.CreatePositionAsync(Tenant, new CreatePositionRequest("کارشناس ارشد"), default)).Value!;
 
         await world.Service.SetAssignmentAsync(Tenant, deputyHead, new SetUserAssignmentRequest(company, deputy.Id, null, null), default);
         var placed = (await world.Service.SetAssignmentAsync(Tenant, expert, new SetUserAssignmentRequest(company, deputy.Id, position.Id, null), default)).Value!;
@@ -288,8 +288,8 @@ public sealed class OrgStructureTests
 
         public OrganizationUnit Unit(string name, Guid? parentId = null, Guid? managerUserId = null)
         {
-            var unit = new OrganizationUnit(Guid.NewGuid(), Tenant, name, "U" + Guid.NewGuid().ToString("N")[..6], parentId);
-            unit.Update(unit.Name, unit.Code, parentId, managerUserId, isActive: true);
+            var unit = new OrganizationUnit(Guid.NewGuid(), Tenant, name, managerUserId);
+            unit.Update(unit.Name, managerUserId, isActive: true);
             _organization.OrganizationUnits.Add(unit);
             _organization.SaveChanges();
             return unit;

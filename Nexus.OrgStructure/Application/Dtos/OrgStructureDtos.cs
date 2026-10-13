@@ -21,11 +21,11 @@ public sealed record CompanyUnitDto(Guid UnitId, string UnitName, Guid CompanyId
 
 public sealed record LinkUnitRequest(Guid CompanyId);
 
-public sealed record PositionDto(Guid Id, string Title, string? Code, bool IsActive);
+public sealed record PositionDto(Guid Id, string Title, Guid? ParentPositionId, bool IsActive);
 
-public sealed record CreatePositionRequest(string Title, string? Code);
+public sealed record CreatePositionRequest(string Title, Guid? ParentPositionId = null);
 
-public sealed record UpdatePositionRequest(string Title, string? Code, bool IsActive);
+public sealed record UpdatePositionRequest(string Title, bool IsActive, Guid? ParentPositionId = null);
 
 /// <summary>Source: "Explicit" (set on the assignment), "UnitManager" or "CompanyManager".</summary>
 public sealed record ManagerDto(Guid UserId, string DisplayName, bool IsActive, string Source);
@@ -64,7 +64,6 @@ public sealed record OrgChartMemberDto(Guid UserId, string DisplayName, bool IsA
 public sealed record OrgChartUnitDto(
     Guid UnitId,
     string Name,
-    string Code,
     PersonRef? Manager,
     IReadOnlyList<OrgChartMemberDto> Members,
     IReadOnlyList<OrgChartUnitDto> Children);

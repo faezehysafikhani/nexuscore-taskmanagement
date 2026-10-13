@@ -190,8 +190,11 @@ if (builder.Configuration.GetValue("Database:SeedOnStartup", true))
     await ModuleSchemaInitializer.EnsureCreatedAsync(services.GetRequiredService<TaskManagementDbContext>(), cancellationToken);
     await ModuleSchemaInitializer.EnsureCreatedAsync(services.GetRequiredService<NotificationDbContext>(), cancellationToken);
     await ModuleSchemaInitializer.EnsureCreatedAsync(services.GetRequiredService<ChatDbContext>(), cancellationToken);
-    await ModuleSchemaInitializer.EnsureCreatedAsync(services.GetRequiredService<OrganizationDbContext>(), cancellationToken);
-    await ModuleSchemaInitializer.EnsureCreatedAsync(services.GetRequiredService<OrgStructureDbContext>(), cancellationToken);
+    // Organization and OrgStructure modules use EF Core Migrations in this host. Avoid creating their tables at runtime
+    // to prevent schema drift or accidental recreation of dropped columns. Apply migrations explicitly instead.
+    // To re-enable runtime table creation uncomment the following lines.
+    // await ModuleSchemaInitializer.EnsureCreatedAsync(services.GetRequiredService<OrganizationDbContext>(), cancellationToken);
+    // await ModuleSchemaInitializer.EnsureCreatedAsync(services.GetRequiredService<OrgStructureDbContext>(), cancellationToken);
 }
 
 app.Run();

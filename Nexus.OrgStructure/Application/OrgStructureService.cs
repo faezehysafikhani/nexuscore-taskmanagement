@@ -42,7 +42,6 @@ public sealed class OrgStructureService(
     IUserDirectory users) : IOrgStructureService
 {
     private const int MaxNameLength = 200;
-    private const int MaxCodeLength = 40;
     private const int MaxTitleLength = 120;
     private const int MaxDescriptionLength = 1000;
 
@@ -139,7 +138,7 @@ public sealed class OrgStructureService(
             return Error.Validation("Name and code are required.");
         }
 
-        if (name.Trim().Length > MaxNameLength || code.Trim().Length > MaxCodeLength || (description?.Trim().Length ?? 0) > MaxDescriptionLength)
+        if (name.Trim().Length > MaxNameLength || code.Trim().Length > 40 || (description?.Trim().Length ?? 0) > MaxDescriptionLength)
         {
             return Error.Validation("Name, code or description is too long.");
         }
@@ -188,12 +187,6 @@ public sealed class OrgStructureService(
         }
 
         var resolver = snapshot.Resolver();
-        var parent = snapshot.Units[unitId].ParentId;
-        if (parent is { } parentId && resolver.LinkedAncestorOf(parentId) is not null)
-        {
-            return Result.Failure<CompanyUnitDto>(Error.Validation(
-                "A unit above this one is already linked to a company, so this unit already belongs to it."));
-        }
 
         var subtree = resolver.SubtreeOf(unitId);
         if (snapshot.Links.Any(link => link.UnitId != unitId && subtree.Contains(link.UnitId)))
@@ -249,13 +242,19 @@ public sealed class OrgStructureService(
 
     public async Task<Result<PositionDto>> CreatePositionAsync(Guid tenantId, CreatePositionRequest request, CancellationToken cancellationToken)
     {
-        var invalid = await ValidatePositionAsync(tenantId, null, request.Title, request.Code, cancellationToken);
+        var invalid = await ValidatePositionAsync(tenantId, null, request.Title, cancellationToken);
         if (invalid is not null)
         {
             return Result.Failure<PositionDto>(invalid);
         }
 
-        var position = new Position(Guid.NewGuid(), tenantId, request.Title, request.Code);
+        var snapshot = await LoadAsync(tenantId, cancellationToken);
+        if (request.ParentPositionId is { } parentId && !snapshot.Positions.ContainsKey(parentId))
+        {
+            return Result.Failure<PositionDto>(Error.Validation("Parent position was not found."));
+        }
+
+        var position = new Position(Guid.NewGuid(), tenantId, request.Title, request.ParentPositionId);
         await repository.AddPositionAsync(position, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success(ToDto(position));
@@ -269,13 +268,43 @@ public sealed class OrgStructureService(
             return Result.Failure<PositionDto>(Error.NotFound("Position was not found."));
         }
 
-        var invalid = await ValidatePositionAsync(tenantId, id, request.Title, request.Code, cancellationToken);
+        var invalid = await ValidatePositionAsync(tenantId, id, request.Title, cancellationToken);
         if (invalid is not null)
         {
             return Result.Failure<PositionDto>(invalid);
         }
 
-        position.Update(request.Title, request.Code, request.IsActive);
+        if (request.ParentPositionId == id)
+        {
+            return Result.Failure<PositionDto>(Error.Validation("A position cannot be its own parent."));
+        }
+
+        var snapshot = await LoadAsync(tenantId, cancellationToken);
+        if (request.ParentPositionId is { } parentId && !snapshot.Positions.ContainsKey(parentId))
+        {
+            return Result.Failure<PositionDto>(Error.Validation("Parent position was not found."));
+        }
+
+        // Prevent cycles: walk up from the new parent and ensure we never hit this position.
+        if (request.ParentPositionId is { } newParent)
+        {
+            var visited = new HashSet<Guid>();
+            var current = newParent;
+            while (true)
+            {
+                if (!visited.Add(current)) break;
+                if (current == id)
+                {
+                    return Result.Failure<PositionDto>(Error.Conflict("This change would create a position hierarchy loop."));
+                }
+
+                var parent = snapshot.Positions.GetValueOrDefault(current)?.ParentPositionId;
+                if (parent is null) break;
+                current = parent.Value;
+            }
+        }
+
+        position.Update(request.Title, request.ParentPositionId, request.IsActive);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success(ToDto(position));
     }
@@ -288,6 +317,12 @@ public sealed class OrgStructureService(
             return Result.Failure(Error.NotFound("Position was not found."));
         }
 
+        var snapshot = await LoadAsync(tenantId, cancellationToken);
+        if (snapshot.Positions.Values.Any(p => p.ParentPositionId == id))
+        {
+            return Result.Failure(Error.Conflict("This position has child positions. Reassign or remove them first."));
+        }
+
         if ((await repository.ListAssignmentsAsync(tenantId, cancellationToken)).Any(a => a.PositionId == id))
         {
             return Result.Failure(Error.Conflict("People hold this position. Change their position first, or deactivate it instead."));
@@ -298,16 +333,16 @@ public sealed class OrgStructureService(
         return Result.Success();
     }
 
-    private async Task<Error?> ValidatePositionAsync(Guid tenantId, Guid? id, string? title, string? code, CancellationToken cancellationToken)
+    private async Task<Error?> ValidatePositionAsync(Guid tenantId, Guid? id, string? title, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(title))
         {
             return Error.Validation("Title is required.");
         }
 
-        if (title.Trim().Length > MaxTitleLength || (code?.Trim().Length ?? 0) > MaxCodeLength)
+        if (title.Trim().Length > MaxTitleLength)
         {
-            return Error.Validation("Title or code is too long.");
+            return Error.Validation("Title is too long.");
         }
 
         return await repository.PositionTitleExistsAsync(tenantId, title.Trim(), id, cancellationToken)
@@ -499,10 +534,8 @@ public sealed class OrgStructureService(
                 .Concat(snapshot.Units.Values.Select(u => u.ManagerUserId)),
             cancellationToken);
 
-        var children = snapshot.Units.Values
-            .Where(unit => unit.ParentId is not null)
-            .GroupBy(unit => unit.ParentId!.Value)
-            .ToDictionary(group => group.Key, group => group.OrderBy(unit => unit.Name).ToList());
+        // Units no longer carry parent references: build an empty children map.
+        var children = new Dictionary<Guid, List<OrganizationUnit>>();
 
         OrgChartMemberDto Member(UserAssignment a)
         {
@@ -513,13 +546,9 @@ public sealed class OrgStructureService(
         OrgChartUnitDto BuildUnit(OrganizationUnit unit, HashSet<Guid> visited) => new(
             unit.Id,
             unit.Name,
-            unit.Code,
             unit.ManagerUserId is { } m ? Person(m, people) : null,
             snapshot.Assignments.Where(a => a.UnitId == unit.Id).Select(Member).OrderBy(x => x.DisplayName).ToList(),
-            (children.GetValueOrDefault(unit.Id) ?? [])
-                .Where(child => visited.Add(child.Id))
-                .Select(child => BuildUnit(child, visited))
-                .ToList());
+            new List<OrgChartUnitDto>());
 
         var chart = snapshot.Companies.Values
             .Where(company => companyId is null || company.Id == companyId)
@@ -619,7 +648,7 @@ public sealed class OrgStructureService(
         link.CompanyId,
         snapshot.Companies.GetValueOrDefault(link.CompanyId)?.Name ?? string.Empty);
 
-    private static PositionDto ToDto(Position position) => new(position.Id, position.Title, position.Code, position.IsActive);
+    private static PositionDto ToDto(Position position) => new(position.Id, position.Title, position.ParentPositionId, position.IsActive);
 
     private async Task<UserAssignmentDto> ToDtoAsync(UserAssignment assignment, Snapshot snapshot, CancellationToken cancellationToken)
     {
@@ -680,7 +709,7 @@ public sealed class OrgStructureService(
                 company => companyManagerOverride is { } o && o.CompanyId == company.Id ? o.ManagerUserId : company.ManagerUserId);
 
             return new HierarchyResolver(
-                Units.Values.Select(unit => new UnitNode(unit.Id, unit.ParentId, unit.ManagerUserId)),
+                Units.Values.Select(unit => new UnitNode(unit.Id, null, unit.ManagerUserId)),
                 Links.ToDictionary(link => link.UnitId, link => link.CompanyId),
                 companyManagers,
                 assignments);

@@ -44,7 +44,8 @@ public sealed class PositionConfiguration : IEntityTypeConfiguration<Position>
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).ValueGeneratedNever();
         builder.Property(x => x.Title).HasMaxLength(120).IsRequired();
-        builder.Property(x => x.Code).HasMaxLength(40);
+        builder.Property(x => x.ParentPositionId);
+        builder.HasIndex(x => x.ParentPositionId);
         builder.HasIndex(x => new { x.TenantId, x.Title }).IsUnique();
     }
 }

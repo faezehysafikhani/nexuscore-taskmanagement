@@ -79,23 +79,23 @@ public sealed class Position : AuditableEntity<Guid>
         Title = string.Empty;
     }
 
-    public Position(Guid id, Guid tenantId, string title, string? code) : base(id)
+    public Position(Guid id, Guid tenantId, string title, Guid? parentPositionId = null) : base(id)
     {
         TenantId = tenantId;
         Title = title.Trim();
-        Code = string.IsNullOrWhiteSpace(code) ? null : code.Trim();
+        ParentPositionId = parentPositionId;
         IsActive = true;
     }
 
     public Guid TenantId { get; private set; }
     public string Title { get; private set; }
-    public string? Code { get; private set; }
+    public Guid? ParentPositionId { get; private set; }
     public bool IsActive { get; private set; }
 
-    public void Update(string title, string? code, bool isActive)
+    public void Update(string title, Guid? parentPositionId, bool isActive)
     {
         Title = title.Trim();
-        Code = string.IsNullOrWhiteSpace(code) ? null : code.Trim();
+        ParentPositionId = parentPositionId;
         IsActive = isActive;
     }
 }
