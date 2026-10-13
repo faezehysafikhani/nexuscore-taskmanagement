@@ -38,8 +38,7 @@ public sealed class TaskReportTests
 
         var structure = OrgStructure();
         var unitsDb = new OrganizationDbContext(new DbContextOptionsBuilder<OrganizationDbContext>().UseInMemoryDatabase("org-" + _db).Options);
-        var deputy = new OrganizationUnit(Guid.NewGuid(), Tenant, "معاونت", "D1");
-        deputy.Update(deputy.Name, deputy.Code, null, _deputyHead, true);
+        var deputy = new OrganizationUnit(Guid.NewGuid(), Tenant, "معاونت", _deputyHead);
         unitsDb.OrganizationUnits.Add(deputy);
         await unitsDb.SaveChangesAsync();
 
