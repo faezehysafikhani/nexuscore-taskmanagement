@@ -26,6 +26,17 @@
     <ProjectReference Include="..\NexusCore.Infrastructure\NexusCore.Infrastructure.csproj" />
     <ProjectReference Include="..\NexusCore.SharedKernel\NexusCore.SharedKernel.csproj" />
 
+    <!-- What TMPB composes, so the TMPBUI front end runs fully against this host -->
+    <ProjectReference Include="..\Chat.Api\Chat.Api.csproj" />
+    <ProjectReference Include="..\Chat.Application\Chat.Application.csproj" />
+    <ProjectReference Include="..\Chat.Infrastructure\Chat.Infrastructure.csproj" />
+    <ProjectReference Include="..\Notifications.Api\Notifications.Api.csproj" />
+    <ProjectReference Include="..\Notifications.Application\Notifications.Application.csproj" />
+    <ProjectReference Include="..\Notifications.Infrastructure\Notifications.Infrastructure.csproj" />
+    <ProjectReference Include="..\Nexus.TaskManagement\Nexus.TaskManagement.csproj" />
+    <ProjectReference Include="..\Nexus.TaskManagement.Infrastructure\Nexus.TaskManagement.Infrastructure.csproj" />
+    <ProjectReference Include="..\Nexus.Integrations.TaskNotifications\Nexus.Integrations.TaskNotifications.csproj" />
+
     <!-- Organization units (the deputies / departments) -->
     <ProjectReference Include="..\Nexus.Organization\Nexus.Organization.csproj" />
     <ProjectReference Include="..\Nexus.Organization.Infrastructure\Nexus.Organization.Infrastructure.csproj" />
