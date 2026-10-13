@@ -12,8 +12,6 @@ public sealed class OrganizationUnitConfiguration : IEntityTypeConfiguration<Org
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).ValueGeneratedNever();
         builder.Property(x => x.Name).HasMaxLength(160).IsRequired();
-        builder.Property(x => x.Code).HasMaxLength(40).IsRequired();
-        builder.HasIndex(x => new { x.TenantId, x.Code }).IsUnique();
-        builder.HasIndex(x => x.ParentId);
+        // Code and parent were removed: units are flat in this product.
     }
 }
