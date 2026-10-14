@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using NexusCore.Application.Files;
 using NexusCore.Application.Identity.Interfaces;
+using NexusCore.Application.Identity.Permissions;
 using NexusCore.SharedKernel.Interfaces;
 using NexusCore.SharedKernel.Results;
 
@@ -50,12 +51,24 @@ public sealed class TeamConversationService(
     ICurrentUserContext currentUser,
     IUserDirectory userDirectory)
 {
+    /// <summary>
+    /// Team conversations are part of the work-team feature: without its permissions (seeing or
+    /// managing work teams) a user has no team conversations at all, even of teams they are in.
+    /// </summary>
+    public static bool MayUseTeamConversations(ICurrentUserContext user) =>
+        user.HasPermission(UserGroupPermissions.GroupsViewOwn) || user.HasPermission(UserGroupPermissions.GroupsManageOwn);
+
     /// <summary>The caller and the team's active members (caller included), or "not found" for a team they are not in.</summary>
     public async Task<Result<(UserContact Me, IReadOnlyList<UserContact> Members)>> ResolveAsync(Guid teamId, CancellationToken cancellationToken)
     {
         if (currentUser.UserId is not { } meId || currentUser.TenantId is not { } tenantId)
         {
             return Result.Failure<(UserContact, IReadOnlyList<UserContact>)>(Error.Unauthorized());
+        }
+
+        if (!MayUseTeamConversations(currentUser))
+        {
+            return Result.Failure<(UserContact, IReadOnlyList<UserContact>)>(Error.NotFound("Team was not found."));
         }
 
         // Active teams the caller belongs to (as member or owner); anything else is "not found".
@@ -150,6 +163,12 @@ public sealed class TeamConversationService(
         if (teamId is not { } team)
         {
             return true;
+        }
+
+        // The signed-in user asking for themselves (hub, message and attachment endpoints).
+        if (userId == currentUser.UserId && !MayUseTeamConversations(currentUser))
+        {
+            return false;
         }
 
         if (!(await userDirectory.GetGroupIdsOfUserAsync(userId, cancellationToken)).Contains(team))
@@ -348,6 +367,11 @@ public sealed class GetTeamUnreadCountsQueryHandler(
         if (currentUser.UserId is not { } meId)
         {
             return Result.Failure<List<TeamUnreadDto>>(Error.Unauthorized());
+        }
+
+        if (!TeamConversationService.MayUseTeamConversations(currentUser))
+        {
+            return Result.Success(new List<TeamUnreadDto>());
         }
 
         // Only the teams the caller is in now - a former member's old thread is not counted.
