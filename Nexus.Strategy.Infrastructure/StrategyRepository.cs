@@ -10,7 +10,7 @@ public sealed class StrategyRepository(StrategyManagementDbContext dbContext) : 
         dbContext.Strategies.SingleOrDefaultAsync(strategy => strategy.Id == id, cancellationToken);
 
     public async Task<IReadOnlyList<Strategy>> ListAsync(Guid tenantId, CancellationToken cancellationToken) =>
-        await dbContext.Strategies.Where(strategy => strategy.TenantId == tenantId).OrderBy(strategy => strategy.Name).ToListAsync(cancellationToken);
+        await dbContext.Strategies.Where(strategy => strategy.TenantId == tenantId).OrderBy(strategy => strategy.SortOrder).ThenBy(strategy => strategy.Name).ToListAsync(cancellationToken);
 
     public async Task AddAsync(Strategy strategy, CancellationToken cancellationToken)
     {

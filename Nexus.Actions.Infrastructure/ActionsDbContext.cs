@@ -8,6 +8,7 @@ public sealed class ActionsDbContext(DbContextOptions<ActionsDbContext> options)
     : DbContext(options), IActionsUnitOfWork
 {
     public DbSet<ActionItem> Actions => Set<ActionItem>();
+    public DbSet<ActionStatusSubmission> StatusSubmissions => Set<ActionStatusSubmission>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

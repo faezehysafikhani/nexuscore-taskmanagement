@@ -114,7 +114,8 @@ builder.Services.AddOrganizationApplication();
 builder.Services.AddCalendarApplication(options => options.SingleDefaultPerTenant = true);
 builder.Services.AddIranianOfficialHolidays();
 builder.Services.AddWorkflowApplication();
-builder.Services.AddActionManagement();
+// The UI keeps every occurrence of a repeating action inside one action (listed from its rule), so completing one must not spawn a copy.
+builder.Services.AddActionManagement(options => options.CreateNextOccurrenceOnCompletion = false);
 builder.Services.AddKnowledgeManagement();
 builder.Services.AddStrategyManagement();
 

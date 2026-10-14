@@ -128,3 +128,23 @@ Not added (deliberately): AI-generated document fields (summary/relevance stay U
 | SQL | `2026-10-13-add-waterfall-planning.sql`, `2026-10-13-add-agile-status-submissions.sql` (+ `WaterfallPlanningSchemaUpgrade`, `AgileTaskStatusSchemaUpgrade`) | Additive, guarded, idempotent |
 
 Not added (deliberately): per-activity second/third approvers (the screens only ever use the first; stage-based approval is the Workflow module's job, phase 7); AI WBS generation stays as it is (its result is applied through the normal create calls).
+
+### Phases 5 and 6 — added to the backend (actions, risk-response reports, strategy, alignment, knowledge, contracts)
+
+| Where | What | Why (UI need) |
+|---|---|---|
+| Actions | `ActionStatus.OnHold` | The UI's work status has "On Hold"; the backend had no such status |
+| Actions | Optional `sourceType` / `sourceId` on an action | The UI creates actions from a risk or a stakeholder and shows where they came from; the module cannot know those modules, so it stores an opaque link |
+| Actions | Optional recurrence pattern (weekdays, Jalali day of month, Jalali months, hours per occurrence) + `GET /{id}/occurrences` | The UI's repeat form has these fields and its occurrence list was generated in the browser (`generateRecurringOccurrences`); now the backend lists them |
+| Actions | `ActionsOptions.CreateNextOccurrenceOnCompletion` (default on = unchanged; off in `PostBank.Api`) | The UI keeps every occurrence inside one action, so completing it must not create a copy |
+| Actions | `DELETE /api/actions/{id}` | The UI deletes actions; the backend could only cancel |
+| Actions | Status requests (`/status-submissions`), decided in the approval workflow; permission `ActionStatus.Submit` | The responsible person asks to change an action's status and an approver confirms it (the UI kept its own approval log) |
+| Risk | Response reports (`/response-submissions`), decided in the approval workflow; permission `RiskResponse.Submit` | "Risk response execution and verification": the task centre reports the response status and an approver verifies it; the UI kept a second approval round locally |
+| Strategy | `GET /tree`, `PUT /tree` (save all, top-level weights must total 100), `SortOrder` | The UI rolled weights up and checked the total in the browser; it saves the whole tree at once |
+| Alignment | `POST /scores`, `PUT /levels` | The UI worked out each project's alignment percentage and saved levels per cell; now one call each |
+| Knowledge | `KnowledgeDocumentType.Pamphlet`; antiforgery disabled on upload | The UI has a "Pamphlet" type; multipart upload from the UI |
+| Contracts | Supervisor / beneficiary names; addendum period; invoice title and period; `POST /for-projects` | The UI's contract, addendum and invoice forms have these fields; the tabs list every project's contracts at once |
+| Host | `PostBank.Api`: seeded roles get `ActionStatus.Submit` and `RiskResponse.Submit` | The UI's behaviour |
+| SQL | `2026-10-14-add-action-status-and-patterns.sql`, `2026-10-14-add-risk-response-submissions.sql`, `2026-10-14-add-strategy-sort-order.sql`, `2026-10-14-add-contract-parties-and-billing.sql` (+ their code twins) | Additive, guarded, idempotent |
+
+Not added (deliberately): per-action approvers 1-3 (the approver comes from the Workflow definition - phase 7 adds item-level placeholders); contract / invoice per-project permissions and the app-level visibility switches for contracts (phase 7); AI features untouched.

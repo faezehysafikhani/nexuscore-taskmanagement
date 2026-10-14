@@ -17,10 +17,18 @@ public sealed class ContractsSchemaTests
     {
         using var db = NewSqlServerContext();
 
-        SchemaUpgradeVerifier.AssertMatchesModel(
+        SchemaUpgradeVerifier.AssertMatchesModelExcept(
             db, "project_contracts", ScriptFile, typeof(ContractsSchemaUpgrade),
-            ["Contracts", "ContractAddenda", "ContractInvoices"]);
+            ["Contracts", "ContractAddenda", "ContractInvoices"], AddedLater);
     }
+
+    /// <summary>Columns the 2026-10-03 script's tables gained later (2026-10-14-add-contract-parties-and-billing.sql, checked in ContractPartiesTests).</summary>
+    internal static readonly (string Table, string Column)[] AddedLater =
+    [
+        ("Contracts", "SupervisorName"), ("Contracts", "BeneficiaryName"),
+        ("ContractAddenda", "StartDate"), ("ContractAddenda", "EndDate"),
+        ("ContractInvoices", "Title"), ("ContractInvoices", "PeriodStartDate"), ("ContractInvoices", "PeriodEndDate")
+    ];
 
     [Fact]
     public void TheCreationScript_OnlyCreates()

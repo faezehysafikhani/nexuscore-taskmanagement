@@ -46,6 +46,7 @@ public sealed class ContractInvoiceService(
         }
 
         var invoice = new ContractInvoice(Guid.NewGuid(), request.TenantId, contractId, number, request.InvoiceDate, request.Amount, request.Description);
+        invoice.SetBilling(request.Title, request.PeriodStartDate, request.PeriodEndDate);
         await repository.AddInvoiceAsync(invoice, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success(ContractMapper.ToDto(invoice));
@@ -78,6 +79,11 @@ public sealed class ContractInvoiceService(
         }
 
         invoice.UpdateDetails(number, request.InvoiceDate, request.Amount, request.Description);
+        if (request.Title is not null || request.PeriodStartDate is not null || request.PeriodEndDate is not null)
+        {
+            invoice.SetBilling(request.Title ?? invoice.Title, request.PeriodStartDate ?? invoice.PeriodStartDate, request.PeriodEndDate ?? invoice.PeriodEndDate);
+        }
+
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success(ContractMapper.ToDto(invoice));
     }

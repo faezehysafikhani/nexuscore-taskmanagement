@@ -8,7 +8,9 @@ public enum ActionStatus
     Open,
     InProgress,
     Completed,
-    Cancelled
+    Cancelled,
+    /// <summary>Added later; stored as its integer value (4), so existing rows are untouched.</summary>
+    OnHold
 }
 
 /// <summary>Stored as its integer value; never reorder or renumber the members.</summary>
@@ -64,6 +66,11 @@ public sealed class ActionItem : AuditableEntity<Guid>
     public Guid? ResponsibleUserId { get; private set; }
     public ActionStatus Status { get; private set; }
     public ActionPriority Priority { get; private set; }
+
+    /// <summary>What the action was raised from ("Risk", "Stakeholder", ...), as an opaque label: this module knows nothing about those
+    /// modules, it only remembers the link. Null = created by hand.</summary>
+    public string? SourceType { get; private set; }
+    public Guid? SourceId { get; private set; }
     public Guid OrganizationUnitId { get; private set; }
     public Guid WorkCalendarId { get; private set; }
     public Guid? ProjectId { get; private set; }
@@ -80,6 +87,19 @@ public sealed class ActionItem : AuditableEntity<Guid>
 
     /// <summary>No occurrence is created that would start after this date. Null = no end.</summary>
     public DateOnly? RecurrenceEndDate { get; private set; }
+
+    /// <summary>Optional: which days of the week (bit i = <see cref="DayOfWeek"/> i, Sunday = 0) a repeating action falls on.
+    /// Null = the rule's default for its unit. Only read when the occurrences of the rule are listed.</summary>
+    public int? RecurrenceDaysOfWeek { get; private set; }
+
+    /// <summary>Optional: the day of the Jalali month (1-31) a monthly rule falls on.</summary>
+    public int? RecurrenceDayOfMonth { get; private set; }
+
+    /// <summary>Optional: the Jalali months (bit m-1 = month m) a monthly rule falls in. Null = every month.</summary>
+    public int? RecurrenceMonths { get; private set; }
+
+    /// <summary>Optional: how many hours each occurrence takes.</summary>
+    public decimal? RecurrenceDurationHours { get; private set; }
 
     /// <summary>The previous occurrence this one was created from.</summary>
     public Guid? RecurrenceSourceId { get; private set; }
@@ -113,11 +133,26 @@ public sealed class ActionItem : AuditableEntity<Guid>
         RecurrenceEndDate = endDate;
     }
 
+    public void SetRecurrencePattern(int? daysOfWeekMask, int? dayOfMonth, int? monthsMask, decimal? durationHours)
+    {
+        RecurrenceDaysOfWeek = daysOfWeekMask;
+        RecurrenceDayOfMonth = dayOfMonth;
+        RecurrenceMonths = monthsMask;
+        RecurrenceDurationHours = durationHours;
+    }
+
+    public void SetSource(string? sourceType, Guid? sourceId)
+    {
+        SourceType = string.IsNullOrWhiteSpace(sourceType) ? null : sourceType.Trim();
+        SourceId = SourceType is null ? null : sourceId;
+    }
+
     public void ClearRecurrence()
     {
         RecurrenceUnit = null;
         RecurrenceInterval = null;
         RecurrenceEndDate = null;
+        SetRecurrencePattern(null, null, null, null);
     }
 
     /// <summary>
@@ -149,6 +184,8 @@ public sealed class ActionItem : AuditableEntity<Guid>
         next.UpdateDetails(Title, Description, OwnerUserId, ResponsibleUserId, OrganizationUnitId, WorkCalendarId, ProjectId, nextStart, nextEnd);
         next.ChangePriority(Priority);
         next.SetRecurrence(unit, interval, RecurrenceEndDate);
+        next.SetRecurrencePattern(RecurrenceDaysOfWeek, RecurrenceDayOfMonth, RecurrenceMonths, RecurrenceDurationHours);
+        next.SetSource(SourceType, SourceId);
         next.RecurrenceSourceId = Id;
         NextOccurrenceId = newId;
         return next;

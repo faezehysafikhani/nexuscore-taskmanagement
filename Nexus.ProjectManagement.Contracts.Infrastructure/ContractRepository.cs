@@ -12,6 +12,9 @@ public sealed class ContractRepository(ContractsDbContext dbContext) : IContract
     public async Task<IReadOnlyList<Contract>> ListContractsAsync(Guid projectId, CancellationToken cancellationToken) =>
         await dbContext.Contracts.Where(c => c.ProjectId == projectId).ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<Contract>> ListContractsForProjectsAsync(IReadOnlyCollection<Guid> projectIds, CancellationToken cancellationToken) =>
+        await dbContext.Contracts.Where(c => projectIds.Contains(c.ProjectId)).ToListAsync(cancellationToken);
+
     public Task<bool> ContractNumberExistsAsync(Guid projectId, string contractNumber, Guid? excludeContractId, CancellationToken cancellationToken) =>
         dbContext.Contracts.AnyAsync(
             c => c.ProjectId == projectId && c.ContractNumber == contractNumber && (excludeContractId == null || c.Id != excludeContractId),

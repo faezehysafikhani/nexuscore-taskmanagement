@@ -18,17 +18,18 @@ public sealed record ContractDto(
     Guid Id, Guid TenantId, Guid ProjectId, string ContractNumber, string ContractNumberFa, string Title, string Counterparty,
     string? Description, DateOnly? SignDate, string? SignDateFa, DateOnly? StartDate, string? StartDateFa,
     DateOnly? EndDate, string? EndDateFa, MoneyDto OriginalAmount, ContractStatus Status, ApprovalStatus ApprovalStatus,
-    ContractSummaryDto Summary, Guid? CreatedByUserId);
+    ContractSummaryDto Summary, Guid? CreatedByUserId, string? SupervisorName = null, string? BeneficiaryName = null);
 
 public sealed record ContractAddendumDto(
     Guid Id, Guid ContractId, int Number, string Title, string? Description, DateOnly? AddendumDate, string? AddendumDateFa,
     decimal AmountChange, string AmountChangeFormatted, string AmountChangeInWords, int ExtensionDays, ApprovalStatus ApprovalStatus,
-    Guid? CreatedByUserId);
+    Guid? CreatedByUserId, DateOnly? StartDate = null, string? StartDateFa = null, DateOnly? EndDate = null, string? EndDateFa = null);
 
 public sealed record ContractInvoiceDto(
     Guid Id, Guid ContractId, string InvoiceNumber, string InvoiceNumberFa, DateOnly InvoiceDate, string InvoiceDateFa,
     MoneyDto Amount, string? Description, MoneyDto PaidAmount, MoneyDto UnpaidAmount, DateOnly? LastPaymentDate, string? LastPaymentDateFa,
-    ApprovalStatus ApprovalStatus, Guid? CreatedByUserId);
+    ApprovalStatus ApprovalStatus, Guid? CreatedByUserId,
+    string? Title = null, DateOnly? PeriodStartDate = null, string? PeriodStartDateFa = null, DateOnly? PeriodEndDate = null, string? PeriodEndDateFa = null);
 
 /// <summary>A contract with its addenda and invoices.</summary>
 public sealed record ContractDetailDto(
@@ -42,27 +43,36 @@ public sealed record ProjectContractsSummaryDto(
 
 public sealed record CreateContractRequest(
     Guid TenantId, Guid ProjectId, string ContractNumber, string Title, string Counterparty, string? Description,
-    DateOnly? SignDate, DateOnly? StartDate, DateOnly? EndDate, decimal OriginalAmount);
+    DateOnly? SignDate, DateOnly? StartDate, DateOnly? EndDate, decimal OriginalAmount,
+    string? SupervisorName = null, string? BeneficiaryName = null);
 
 public sealed record UpdateContractRequest(
     string ContractNumber, string Title, string Counterparty, string? Description,
-    DateOnly? SignDate, DateOnly? StartDate, DateOnly? EndDate, decimal OriginalAmount);
+    DateOnly? SignDate, DateOnly? StartDate, DateOnly? EndDate, decimal OriginalAmount,
+    string? SupervisorName = null, string? BeneficiaryName = null);
 
 public sealed record ChangeContractStatusRequest(ContractStatus Status);
 
 /// <summary>AmountChange is negative for a reduction; ExtensionDays is how many days the end date moves. At least one must be non-zero.</summary>
 public sealed record CreateContractAddendumRequest(
-    Guid TenantId, string Title, string? Description, DateOnly? AddendumDate, decimal AmountChange, int ExtensionDays);
+    Guid TenantId, string Title, string? Description, DateOnly? AddendumDate, decimal AmountChange, int ExtensionDays,
+    DateOnly? StartDate = null, DateOnly? EndDate = null);
 
 public sealed record UpdateContractAddendumRequest(
-    string Title, string? Description, DateOnly? AddendumDate, decimal AmountChange, int ExtensionDays);
+    string Title, string? Description, DateOnly? AddendumDate, decimal AmountChange, int ExtensionDays,
+    DateOnly? StartDate = null, DateOnly? EndDate = null);
 
 public sealed record CreateContractInvoiceRequest(
-    Guid TenantId, string InvoiceNumber, DateOnly InvoiceDate, decimal Amount, string? Description);
+    Guid TenantId, string InvoiceNumber, DateOnly InvoiceDate, decimal Amount, string? Description,
+    string? Title = null, DateOnly? PeriodStartDate = null, DateOnly? PeriodEndDate = null);
 
-public sealed record UpdateContractInvoiceRequest(string InvoiceNumber, DateOnly InvoiceDate, decimal Amount, string? Description);
+public sealed record UpdateContractInvoiceRequest(
+    string InvoiceNumber, DateOnly InvoiceDate, decimal Amount, string? Description,
+    string? Title = null, DateOnly? PeriodStartDate = null, DateOnly? PeriodEndDate = null);
 
 /// <summary>The invoice's total paid so far (not an increment), and the date of the latest payment.</summary>
 public sealed record RecordInvoicePaymentRequest(decimal PaidAmount, DateOnly? PaymentDate);
 
 public sealed record AmountInWordsDto(MoneyDto Amount);
+
+public sealed record ListContractsForProjectsRequest(IReadOnlyList<Guid> ProjectIds);

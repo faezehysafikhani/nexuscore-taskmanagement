@@ -27,3 +27,9 @@ public sealed record UpdateRiskRequest(
 public sealed record ChangeRiskResponseStatusRequest(RiskResponseStatus Status);
 
 public sealed record ListRisksForProjectsRequest(IReadOnlyList<Guid> ProjectIds);
+
+public sealed record SubmitRiskResponseRequest(Guid TenantId, Guid RiskId, RiskResponseStatus Status, string? Comment);
+
+public sealed record RiskResponseSubmissionDto(
+    Guid Id, Guid TenantId, Guid ProjectId, Guid RiskId, RiskResponseStatus PreviousStatus, RiskResponseStatus SubmittedStatus, string? Comment,
+    ApprovalStatus ApprovalStatus, Guid? SubmittedByUserId, DateTimeOffset SubmittedAtUtc);

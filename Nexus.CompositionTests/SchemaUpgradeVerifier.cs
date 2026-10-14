@@ -36,7 +36,13 @@ internal static class SchemaUpgradeVerifier
     /// <param name="addedColumns">Columns the upgrade adds to tables that already existed, as EF declares them ("[Rank] int NOT NULL").</param>
     public static void AssertMatchesModel(
         DbContext db, string schema, string scriptFile, Type helper,
-        string[] newTables, params (string Table, string ColumnLine)[] addedColumns)
+        string[] newTables, params (string Table, string ColumnLine)[] addedColumns) =>
+        AssertMatchesModelExcept(db, schema, scriptFile, helper, newTables, addedLater: null, addedColumns);
+
+    /// <param name="addedLater">Columns of the new tables that a later upgrade script adds (this older script cannot, and must not, contain them).</param>
+    public static void AssertMatchesModelExcept(
+        DbContext db, string schema, string scriptFile, Type helper,
+        string[] newTables, (string Table, string Column)[]? addedLater, params (string Table, string ColumnLine)[] addedColumns)
     {
         var generated = db.Database.GenerateCreateScript();
         var script = Normalise(ReadScript(scriptFile));
@@ -46,7 +52,7 @@ internal static class SchemaUpgradeVerifier
         {
             var lines = ColumnLines(generated, schema, table);
             Assert.True(lines.Count > 3, table);
-            foreach (var line in lines)
+            foreach (var line in lines.Where(l => addedLater?.Any(x => x.Table == table && l.StartsWith($"[{x.Column}] ", StringComparison.Ordinal)) != true))
             {
                 Assert.Contains(Normalise(line), script);
                 Assert.Contains(Normalise(line), helperText);

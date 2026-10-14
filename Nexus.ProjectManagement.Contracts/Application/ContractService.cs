@@ -26,6 +26,33 @@ public sealed class ContractService(
             .ToList());
     }
 
+    public async Task<Result<IReadOnlyList<ContractDetailDto>>> ListForProjectsAsync(ListContractsForProjectsRequest request, CancellationToken cancellationToken)
+    {
+        var projectIds = request.ProjectIds.Distinct().ToList();
+        if (projectIds.Count == 0)
+        {
+            return Result.Success<IReadOnlyList<ContractDetailDto>>([]);
+        }
+
+        var contracts = await repository.ListContractsForProjectsAsync(projectIds, cancellationToken);
+        var ids = contracts.Select(c => c.Id).ToList();
+        var addenda = (await repository.ListAddendaAsync(ids, cancellationToken)).GroupBy(a => a.ContractId).ToDictionary(g => g.Key, g => g.ToList());
+        var invoices = (await repository.ListInvoicesAsync(ids, cancellationToken)).GroupBy(i => i.ContractId).ToDictionary(g => g.Key, g => g.ToList());
+
+        return Result.Success<IReadOnlyList<ContractDetailDto>>(contracts
+            .OrderBy(c => c.ProjectId).ThenBy(c => c.ContractNumber, StringComparer.Ordinal)
+            .Select(c =>
+            {
+                var contractAddenda = addenda.GetValueOrDefault(c.Id) ?? [];
+                var contractInvoices = invoices.GetValueOrDefault(c.Id) ?? [];
+                return new ContractDetailDto(
+                    ContractMapper.ToDto(c, ContractCalculator.Summarize(c, contractAddenda, contractInvoices)),
+                    contractAddenda.OrderBy(a => a.Number).Select(ContractMapper.ToDto).ToList(),
+                    contractInvoices.OrderBy(i => i.InvoiceDate).ThenBy(i => i.InvoiceNumber, StringComparer.Ordinal).Select(ContractMapper.ToDto).ToList());
+            })
+            .ToList());
+    }
+
     public async Task<Result<ContractDetailDto>> GetAsync(Guid id, CancellationToken cancellationToken)
     {
         var contract = await repository.GetContractAsync(id, cancellationToken);
@@ -79,6 +106,7 @@ public sealed class ContractService(
 
         var contract = new Contract(Guid.NewGuid(), request.TenantId, request.ProjectId, number, request.Title, request.Counterparty, request.OriginalAmount);
         contract.UpdateDetails(number, request.Title, request.Counterparty, request.Description, request.SignDate, request.StartDate, request.EndDate, request.OriginalAmount);
+        contract.SetParties(request.SupervisorName, request.BeneficiaryName);
 
         await repository.AddContractAsync(contract, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -118,6 +146,12 @@ public sealed class ContractService(
         }
 
         contract.UpdateDetails(number, request.Title, request.Counterparty, request.Description, request.SignDate, request.StartDate, request.EndDate, request.OriginalAmount);
+        // Omitted (null) keeps what is stored, so a client that predates these fields can still edit a contract; an empty text clears it.
+        if (request.SupervisorName is not null || request.BeneficiaryName is not null)
+        {
+            contract.SetParties(request.SupervisorName ?? contract.SupervisorName, request.BeneficiaryName ?? contract.BeneficiaryName);
+        }
+
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success(await ToDtoAsync(contract, cancellationToken));
     }

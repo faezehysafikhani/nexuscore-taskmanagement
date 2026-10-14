@@ -26,6 +26,9 @@ public static class DependencyInjection
 
         services.AddScoped<IDomainEventHandler<ApprovalGranted>, RiskApprovalGrantedHandler>();
         services.AddScoped<IDomainEventHandler<ApprovalRejected>, RiskApprovalRejectedHandler>();
+        services.AddScoped<IRiskResponseSubmissionService, RiskResponseSubmissionService>();
+        services.AddScoped<IDomainEventHandler<ApprovalGranted>, RiskResponseApprovalGrantedHandler>();
+        services.AddScoped<IDomainEventHandler<ApprovalRejected>, RiskResponseApprovalRejectedHandler>();
 
         services.AddAuthorization(options =>
         {

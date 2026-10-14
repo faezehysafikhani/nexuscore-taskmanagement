@@ -14,6 +14,8 @@ public sealed class ContractConfiguration : IEntityTypeConfiguration<Contract>
         builder.Property(x => x.ContractNumber).HasMaxLength(100).IsRequired();
         builder.Property(x => x.Title).HasMaxLength(300).IsRequired();
         builder.Property(x => x.Counterparty).HasMaxLength(300).IsRequired();
+        builder.Property(x => x.SupervisorName).HasMaxLength(300);
+        builder.Property(x => x.BeneficiaryName).HasMaxLength(300);
         builder.Property(x => x.Description).HasMaxLength(4000);
         builder.Property(x => x.OriginalAmount).HasColumnType("decimal(19,0)");
 
@@ -46,6 +48,7 @@ public sealed class ContractInvoiceConfiguration : IEntityTypeConfiguration<Cont
         builder.Property(x => x.Id).ValueGeneratedNever();
         builder.Property(x => x.InvoiceNumber).HasMaxLength(100).IsRequired();
         builder.Property(x => x.Description).HasMaxLength(2000);
+        builder.Property(x => x.Title).HasMaxLength(300);
         builder.Property(x => x.Amount).HasColumnType("decimal(19,0)");
         builder.Property(x => x.PaidAmount).HasColumnType("decimal(19,0)");
 

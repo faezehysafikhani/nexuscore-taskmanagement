@@ -48,6 +48,10 @@ public sealed class Contract : AuditableEntity<Guid>
     /// <summary>The other party: the contractor, supplier or consultant.</summary>
     public string Counterparty { get; private set; }
 
+    /// <summary>The supervisor (consultant) and the beneficiary (the party that will operate what the contract delivers), as names.</summary>
+    public string? SupervisorName { get; private set; }
+    public string? BeneficiaryName { get; private set; }
+
     public string? Description { get; private set; }
     public DateOnly? SignDate { get; private set; }
     public DateOnly? StartDate { get; private set; }
@@ -71,6 +75,12 @@ public sealed class Contract : AuditableEntity<Guid>
         StartDate = startDate;
         EndDate = endDate;
         OriginalAmount = originalAmount;
+    }
+
+    public void SetParties(string? supervisorName, string? beneficiaryName)
+    {
+        SupervisorName = string.IsNullOrWhiteSpace(supervisorName) ? null : supervisorName.Trim();
+        BeneficiaryName = string.IsNullOrWhiteSpace(beneficiaryName) ? null : beneficiaryName.Trim();
     }
 
     public void ChangeStatus(ContractStatus status) => Status = status;
@@ -116,6 +126,10 @@ public sealed class ContractAddendum : AuditableEntity<Guid>
     public string? Description { get; private set; }
     public DateOnly? AddendumDate { get; private set; }
 
+    /// <summary>The period the addendum covers, when it has one (informational: the end date of the contract moves by <see cref="ExtensionDays"/>).</summary>
+    public DateOnly? StartDate { get; private set; }
+    public DateOnly? EndDate { get; private set; }
+
     /// <summary>Rials added to (positive) or taken from (negative) the contract's value.</summary>
     public decimal AmountChange { get; private set; }
 
@@ -123,6 +137,12 @@ public sealed class ContractAddendum : AuditableEntity<Guid>
     public int ExtensionDays { get; private set; }
 
     public ApprovalStatus ApprovalStatus { get; private set; }
+
+    public void SetPeriod(DateOnly? startDate, DateOnly? endDate)
+    {
+        StartDate = startDate;
+        EndDate = endDate;
+    }
 
     public void UpdateDetails(string title, string? description, DateOnly? addendumDate, decimal amountChange, int extensionDays)
     {
@@ -169,6 +189,11 @@ public sealed class ContractInvoice : AuditableEntity<Guid>
     public string InvoiceNumber { get; private set; }
     public DateOnly InvoiceDate { get; private set; }
 
+    /// <summary>An optional heading for the invoice and the period it bills for.</summary>
+    public string? Title { get; private set; }
+    public DateOnly? PeriodStartDate { get; private set; }
+    public DateOnly? PeriodEndDate { get; private set; }
+
     /// <summary>The invoiced amount in rials.</summary>
     public decimal Amount { get; private set; }
 
@@ -186,6 +211,13 @@ public sealed class ContractInvoice : AuditableEntity<Guid>
         InvoiceDate = invoiceDate;
         Amount = amount;
         Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
+    }
+
+    public void SetBilling(string? title, DateOnly? periodStartDate, DateOnly? periodEndDate)
+    {
+        Title = string.IsNullOrWhiteSpace(title) ? null : title.Trim();
+        PeriodStartDate = periodStartDate;
+        PeriodEndDate = periodEndDate;
     }
 
     public void RecordPayment(decimal paidAmount, DateOnly? paymentDate)

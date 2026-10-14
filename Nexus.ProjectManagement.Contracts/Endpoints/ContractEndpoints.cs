@@ -17,6 +17,10 @@ public static class ContractEndpoints
                 (await service.ListByProjectAsync(projectId, cancellationToken)).ToApiResult())
             .RequireAuthorization(ContractPermissions.View);
 
+        group.MapPost("/for-projects", async (ListContractsForProjectsRequest request, IContractService service, CancellationToken cancellationToken) =>
+                (await service.ListForProjectsAsync(request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(ContractPermissions.View);
+
         group.MapGet("/summary", async (Guid projectId, IContractService service, CancellationToken cancellationToken) =>
                 (await service.GetProjectSummaryAsync(projectId, cancellationToken)).ToApiResult())
             .RequireAuthorization(ContractPermissions.View);

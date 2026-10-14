@@ -89,6 +89,8 @@
     <ProjectReference Include="..\Nexus.Organization\Nexus.Organization.csproj" />
     <ProjectReference Include="..\Nexus.Organization.Infrastructure\Nexus.Organization.Infrastructure.csproj" />
     <ProjectReference Include="..\Nexus.Strategy\Nexus.Strategy.csproj" />
+    <ProjectReference Include="..\Nexus.Strategy.Infrastructure\Nexus.Strategy.Infrastructure.csproj" />
+    <ProjectReference Include="..\Nexus.Integrations.ProjectStrategyAlignment.Infrastructure\Nexus.Integrations.ProjectStrategyAlignment.Infrastructure.csproj" />
     <ProjectReference Include="..\Nexus.Integrations.ProjectStrategyAlignment\Nexus.Integrations.ProjectStrategyAlignment.csproj" />
     <ProjectReference Include="..\Nexus.Calendar\Nexus.Calendar.csproj" />
     <ProjectReference Include="..\Nexus.Calendar.Infrastructure\Nexus.Calendar.Infrastructure.csproj" />

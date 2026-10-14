@@ -34,18 +34,20 @@ public static class ContractMapper
         c.Id, c.TenantId, c.ProjectId, c.ContractNumber, PersianNumbers.ToPersianDigits(c.ContractNumber), c.Title, c.Counterparty,
         c.Description, c.SignDate, PersianDates.Format(c.SignDate), c.StartDate, PersianDates.Format(c.StartDate),
         c.EndDate, PersianDates.Format(c.EndDate), Money(c.OriginalAmount), c.Status, c.ApprovalStatus,
-        ToDto(summary), c.CreatedByUserId);
+        ToDto(summary), c.CreatedByUserId, c.SupervisorName, c.BeneficiaryName);
 
     public static ContractAddendumDto ToDto(ContractAddendum a) => new(
         a.Id, a.ContractId, a.Number, a.Title, a.Description, a.AddendumDate, PersianDates.Format(a.AddendumDate),
         a.AmountChange, PersianNumbers.FormatRials(a.AmountChange),
         Math.Abs(a.AmountChange) <= PersianNumbers.MaxValue ? PersianNumbers.RialsInWords(a.AmountChange) : string.Empty,
-        a.ExtensionDays, a.ApprovalStatus, a.CreatedByUserId);
+        a.ExtensionDays, a.ApprovalStatus, a.CreatedByUserId,
+        a.StartDate, PersianDates.Format(a.StartDate), a.EndDate, PersianDates.Format(a.EndDate));
 
     public static ContractInvoiceDto ToDto(ContractInvoice i) => new(
         i.Id, i.ContractId, i.InvoiceNumber, PersianNumbers.ToPersianDigits(i.InvoiceNumber), i.InvoiceDate, PersianDates.Format(i.InvoiceDate),
         Money(i.Amount), i.Description, Money(i.PaidAmount), Money(i.Amount - i.PaidAmount),
-        i.LastPaymentDate, PersianDates.Format(i.LastPaymentDate), i.ApprovalStatus, i.CreatedByUserId);
+        i.LastPaymentDate, PersianDates.Format(i.LastPaymentDate), i.ApprovalStatus, i.CreatedByUserId,
+        i.Title, i.PeriodStartDate, PersianDates.Format(i.PeriodStartDate), i.PeriodEndDate, PersianDates.Format(i.PeriodEndDate));
 
     /// <summary>A number typed in any script, reduced to plain 0-9 digits and trimmed, so it can be compared and kept unique.</summary>
     public static string NormalizeNumber(string? number) => PersianNumbers.ToLatinDigits(number).Trim();

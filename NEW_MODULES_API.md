@@ -3188,6 +3188,41 @@ Schema: apply `docs/upgrade/2026-10-13-add-waterfall-planning.sql` (`WaterfallPl
 
 ---
 
+## 20d. Actions, risk-response reports, strategy tree, alignment scores, knowledge, contracts (phases 5 and 6)
+
+### Actions (`Nexus.Actions`)
+
+* `ActionStatus.OnHold = 4` (appended; the stored values 0-3 keep their meaning).
+* **Source link**: create / update take optional `sourceType` (an opaque label such as `"Risk"` or `"Stakeholder"`) and `sourceId`; the DTO returns them. Omitted on update = unchanged.
+* **Pattern of a repeating action**: `recurrence` (request and DTO) gains optional `daysOfWeek` (0 Sunday ... 6 Saturday), `dayOfMonth` (1-31, Jalali), `months` (1-12, Jalali; all twelve = every month) and `durationHours` (0-24). A request replaces the whole rule, so a field left out is cleared.
+* `GET /api/actions/{id}/occurrences` → `[ { index, date, durationHours } ]`: the occurrences of the rule inside the action's own date range (daily every N days; weekly on the chosen weekdays, Saturday-Wednesday by default, every Nth week; monthly on the Jalali day of the chosen Jalali months, every Nth month, the last day for a day the month lacks; yearly). A one-off action has one occurrence. Capped at 100.
+* **Host switch** `ActionsOptions.CreateNextOccurrenceOnCompletion` (`AddActionManagement(o => ...)`, default `true` = the "chain" behaviour: completing a repeating action creates the next one). `PostBank.Api` sets it to `false`: its UI keeps all occurrences inside one action.
+* `DELETE /api/actions/{id}` (needs `Actions.Delete`; 409 while the action waits for approval).
+* **Status requests** `/api/actions/status-submissions`: `GET ?actionId=` or `?projectId=` (newest first), `POST { tenantId, actionId, status, comment }` (needs `ActionStatus.Submit`). Subject type `ActionStatus` (scope Project when the action has a project): on approval the action takes the status; with no workflow it takes it at once. One pending request per action; asking for the status it already has is a validation error.
+
+### Risk (`Nexus.ProjectManagement.Risk`)
+
+* **Response reports** `/api/project-management/risks/response-submissions`: `POST /for-projects { projectIds }`, `GET ?riskId=`, `POST { tenantId, riskId, status, comment }` (needs `RiskResponse.Submit`; approved risks only; one pending report per risk). Subject type `RiskResponseStatus`: on verification the risk's response status becomes the reported one; with no workflow at once. The direct `PUT /{id}/response-status` stays as it was.
+
+### Strategy and alignment
+
+* `GET /api/strategy/tree` → `{ nodes: [ { id, name, description, storedWeight, effectiveWeight, parentStrategyId, level, isLeaf, sortOrder } ], totalWeight }`, a parent before its children. A strategy with sub-strategies weighs the sum of theirs; a leaf weighs its own.
+* `PUT /api/strategy/tree` (needs `Strategy.Edit`) saves the whole tree: `{ tenantId, items: [ { key, name, description, weight, parentKey } ] }`; `key` is the id of an existing strategy (updated) or any label (created); strategies not listed are deleted; list order is the shown order (`SortOrder`). The top-level weights must add up to 100 (rounded), else 400 `strategy.weights_not_100`; nothing is saved on a refusal. An empty list is fine.
+* `POST /api/integrations/project-strategy-alignment/scores { projectIds }` → per project its level on every leaf strategy and `percentage` (levels None 0 .. High 3, weighted by the leaf's weight, over the best possible). `PUT /levels { tenantId, projectId, levels: [ { strategyId, level } ] }` sets several leaf strategies at once and returns the score. Alignment rows left behind by a deleted strategy are ignored.
+
+### Knowledge
+
+* `KnowledgeDocumentType.Pamphlet = 4` (appended). The upload endpoint disables antiforgery like the other multipart endpoints (bearer-token API).
+
+### Contracts
+
+* Contract: optional `supervisorName`, `beneficiaryName` (the contractor stays `counterparty`). Addendum: optional `startDate`, `endDate` (the period it covers; the contract's end moves only by `extensionDays`). Invoice: optional `title`, `periodStartDate`, `periodEndDate`. Request fields are optional trailing ones (omitted on update = unchanged, empty text clears a name); DTOs return them (dates also as `...Fa`).
+* `POST /api/project-management/contracts/for-projects { projectIds }` → every contract of those projects with its addenda and invoices (`ContractDetailDto[]`).
+
+Schema: apply `docs/upgrade/2026-10-14-add-action-status-and-patterns.sql` (`ActionsPlanningSchemaUpgrade`), `2026-10-14-add-risk-response-submissions.sql` (`RiskResponseSchemaUpgrade`), `2026-10-14-add-strategy-sort-order.sql` (`StrategySchemaUpgrade`) and `2026-10-14-add-contract-parties-and-billing.sql` (`ContractsPartiesSchemaUpgrade`). New permissions: `ActionStatus.Submit`, `RiskResponse.Submit` (added to the host's seeded Project Manager / Project Team roles; existing roles keep what they had).
+
+---
+
 ## Enums Reference
 
 Every enum below is serialized as its **raw integer** value in both requests and responses

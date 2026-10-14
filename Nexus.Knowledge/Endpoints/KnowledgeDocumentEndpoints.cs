@@ -57,7 +57,8 @@ public static class KnowledgeDocumentEndpoints
                 await using var stream = file.OpenReadStream();
                 return (await service.UploadAsync(request, stream, cancellationToken)).ToApiResult();
             })
-            .RequireAuthorization(KnowledgePermissions.Upload);
+            .RequireAuthorization(KnowledgePermissions.Upload)
+            .DisableAntiforgery(); // a bearer-token API: there is no cookie to forge a request with, and no antiforgery middleware in the hosts
 
         group.MapPut("/{id:guid}", async (Guid id, UpdateKnowledgeDocumentRequest request, IKnowledgeDocumentService service, CancellationToken cancellationToken) =>
                 (await service.UpdateAsync(id, request, cancellationToken)).ToApiResult())

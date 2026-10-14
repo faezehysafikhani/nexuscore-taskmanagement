@@ -13,6 +13,8 @@ public sealed class ActionItemConfiguration : IEntityTypeConfiguration<ActionIte
         builder.Property(x => x.Id).ValueGeneratedNever();
         builder.Property(x => x.Title).HasMaxLength(200).IsRequired();
         builder.Property(x => x.Description).HasMaxLength(2000);
+        builder.Property(x => x.SourceType).HasMaxLength(40);
+        builder.Property(x => x.RecurrenceDurationHours).HasPrecision(5, 2);
 
         builder.HasIndex(x => x.TenantId);
         builder.HasIndex(x => x.ProjectId);

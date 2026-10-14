@@ -13,6 +13,10 @@ public interface IContractService
     Task<Result<ContractDto>> ChangeStatusAsync(Guid id, ChangeContractStatusRequest request, CancellationToken cancellationToken);
     Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken);
     Task<Result<ContractDto>> SubmitForApprovalAsync(Guid id, CancellationToken cancellationToken);
+
+    /// <summary>Every contract of the given projects with its addenda and invoices. A default member, so another implementation keeps compiling.</summary>
+    Task<Result<IReadOnlyList<ContractDetailDto>>> ListForProjectsAsync(ListContractsForProjectsRequest request, CancellationToken cancellationToken) =>
+        Task.FromResult(Result.Failure<IReadOnlyList<ContractDetailDto>>(Error.NotFound("Not supported.")));
 }
 
 public interface IContractAddendumService

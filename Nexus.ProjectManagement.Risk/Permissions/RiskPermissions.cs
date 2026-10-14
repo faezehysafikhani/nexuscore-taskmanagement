@@ -9,6 +9,7 @@ public static class RiskPermissions
     public const string Edit = "Risks.Edit";
     public const string Delete = "Risks.Delete";
     public const string Submit = "Risks.Submit";
+    public const string SubmitResponse = "RiskResponse.Submit";
 
     public static IReadOnlyList<PermissionDefinition> All { get; } =
     [
@@ -16,7 +17,8 @@ public static class RiskPermissions
         new(Create, "RiskManagement", "ایجاد ریسک"),
         new(Edit, "RiskManagement", "ویرایش ریسک‌ها"),
         new(Delete, "RiskManagement", "حذف ریسک‌ها"),
-        new(Submit, "RiskManagement", "ارسال ریسک‌ها برای تأیید")
+        new(Submit, "RiskManagement", "ارسال ریسک‌ها برای تأیید"),
+        new(SubmitResponse, "RiskManagement", "ارسال گزارش وضعیت اقدام پاسخ ریسک برای صحه‌گذاری")
     ];
 }
 

@@ -27,6 +27,12 @@ public sealed class Strategy : AuditableEntity<Guid>
     public decimal Weight { get; private set; }
     public Guid? ParentStrategyId { get; private set; }
 
+    /// <summary>Where the strategy stands among its siblings when the tree is shown; ties (and every strategy created before this
+    /// existed, all 0) fall back to the name.</summary>
+    public int SortOrder { get; private set; }
+
+    public void SetSortOrder(int sortOrder) => SortOrder = sortOrder;
+
     public void UpdateDetails(string name, string? description, decimal weight, Guid? parentStrategyId)
     {
         Name = name.Trim();

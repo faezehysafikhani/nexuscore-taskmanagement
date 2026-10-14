@@ -38,6 +38,18 @@ public static class RiskEndpoints
                 (await service.ChangeResponseStatusAsync(id, request, cancellationToken)).ToApiResult())
             .RequireAuthorization(RiskPermissions.Edit);
 
+        group.MapPost("/response-submissions/for-projects", async (ListRisksForProjectsRequest request, IRiskResponseSubmissionService service, CancellationToken cancellationToken) =>
+                (await service.ListForProjectsAsync(request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(RiskPermissions.View);
+
+        group.MapGet("/response-submissions", async (Guid riskId, IRiskResponseSubmissionService service, CancellationToken cancellationToken) =>
+                (await service.ListByRiskAsync(riskId, cancellationToken)).ToApiResult())
+            .RequireAuthorization(RiskPermissions.View);
+
+        group.MapPost("/response-submissions", async (SubmitRiskResponseRequest request, IRiskResponseSubmissionService service, CancellationToken cancellationToken) =>
+                (await service.SubmitAsync(request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(RiskPermissions.SubmitResponse);
+
         group.MapGet("/matrix", async (Guid projectId, IRiskService service, CancellationToken cancellationToken) =>
                 (await service.GetMatrixAsync(projectId, cancellationToken)).ToApiResult())
             .RequireAuthorization(RiskPermissions.View);

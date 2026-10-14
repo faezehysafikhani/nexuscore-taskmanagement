@@ -12,6 +12,8 @@ public sealed class CreateContractRequestValidator : AbstractValidator<CreateCon
         RuleFor(x => x.Counterparty).NotEmpty().MaximumLength(300);
         RuleFor(x => x.Description).MaximumLength(4000);
         RuleFor(x => x.OriginalAmount).InclusiveBetween(0, ContractMapper.MaxAmount);
+        RuleFor(x => x.SupervisorName).MaximumLength(300);
+        RuleFor(x => x.BeneficiaryName).MaximumLength(300);
     }
 }
 
@@ -24,6 +26,8 @@ public sealed class UpdateContractRequestValidator : AbstractValidator<UpdateCon
         RuleFor(x => x.Counterparty).NotEmpty().MaximumLength(300);
         RuleFor(x => x.Description).MaximumLength(4000);
         RuleFor(x => x.OriginalAmount).InclusiveBetween(0, ContractMapper.MaxAmount);
+        RuleFor(x => x.SupervisorName).MaximumLength(300);
+        RuleFor(x => x.BeneficiaryName).MaximumLength(300);
     }
 }
 
@@ -51,6 +55,7 @@ public sealed class CreateContractInvoiceRequestValidator : AbstractValidator<Cr
     {
         RuleFor(x => x.InvoiceNumber).NotEmpty().MaximumLength(100);
         RuleFor(x => x.Description).MaximumLength(2000);
+        RuleFor(x => x.Title).MaximumLength(300);
     }
 }
 
@@ -60,5 +65,6 @@ public sealed class UpdateContractInvoiceRequestValidator : AbstractValidator<Up
     {
         RuleFor(x => x.InvoiceNumber).NotEmpty().MaximumLength(100);
         RuleFor(x => x.Description).MaximumLength(2000);
+        RuleFor(x => x.Title).MaximumLength(300);
     }
 }

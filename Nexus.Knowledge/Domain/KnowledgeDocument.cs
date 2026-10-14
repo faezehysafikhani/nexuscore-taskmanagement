@@ -2,7 +2,8 @@ using NexusCore.SharedKernel.Domain;
 
 namespace Nexus.Knowledge.Domain;
 
-public enum KnowledgeDocumentType { Book, Software, Notes, Other }
+/// <summary>Stored as its integer value; Pamphlet was added later (4) so the existing values keep their meaning.</summary>
+public enum KnowledgeDocumentType { Book, Software, Notes, Other, Pamphlet }
 
 /// <summary>Standalone - no Project reference of any kind. Owns only metadata; file bytes
 /// live behind NexusCore's shared IFileStorage, same reuse pattern as ProjectDocument.</summary>

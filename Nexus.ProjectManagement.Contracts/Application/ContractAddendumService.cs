@@ -42,6 +42,7 @@ public sealed class ContractAddendumService(
         var addendum = new ContractAddendum(
             Guid.NewGuid(), request.TenantId, contractId, number, request.Title, request.Description,
             request.AddendumDate, request.AmountChange, request.ExtensionDays);
+        addendum.SetPeriod(request.StartDate, request.EndDate);
 
         await repository.AddAddendumAsync(addendum, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -68,6 +69,11 @@ public sealed class ContractAddendumService(
         }
 
         addendum.UpdateDetails(request.Title, request.Description, request.AddendumDate, request.AmountChange, request.ExtensionDays);
+        if (request.StartDate is not null || request.EndDate is not null)
+        {
+            addendum.SetPeriod(request.StartDate ?? addendum.StartDate, request.EndDate ?? addendum.EndDate);
+        }
+
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success(ContractMapper.ToDto(addendum));
     }
