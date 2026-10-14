@@ -24,17 +24,17 @@ public static class TaskManagementPermissions
 
     public static IReadOnlyList<PermissionDefinition> All { get; } =
     [
-        new(View, "TaskManagement", "مشاهده وظایف"),
-        new(Create, "TaskManagement", "ایجاد وظیفه"),
-        new(Edit, "TaskManagement", "ویرایش وظیفه"),
-        new(Delete, "TaskManagement", "حذف وظیفه"),
-        new(Assign, "TaskManagement", "واگذاری وظیفه به کاربران و تیم‌ها"),
-        new(ManageRecurring, "TaskManagement", "مدیریت زمان‌بندی وظایف تکرارشونده"),
-        new(ManageTags, "TaskManagement", "مدیریت برچسب‌های وظایف"),
-        new(UploadFiles, "TaskManagement", "بارگذاری و حذف پیوست وظایف"),
+        new(View, "TaskManagement", "مشاهده فعالیت‌ها"),
+        new(Create, "TaskManagement", "ایجاد فعالیت جدید"),
+        new(Edit, "TaskManagement", "ویرایش فعالیت‌ها"),
+        new(Delete, "TaskManagement", "حذف فعالیت‌ها"),
+        new(Assign, "TaskManagement", "واگذاری فعالیت به کاربران و تیم‌ها"),
+        new(ManageRecurring, "TaskManagement", "مدیریت فعالیت‌های تکرارشونده"),
+        new(ManageTags, "TaskManagement", "مدیریت برچسب‌ها"),
+        new(UploadFiles, "TaskManagement", "افزودن و حذف پیوست فعالیت‌ها"),
         new(ManageNotes, "TaskManagement", "مدیریت یادداشت‌های شخصی"),
-        new(Comment, "TaskManagement", "ثبت نظر روی وظایف"),
-        new(ManageAll, "TaskManagement", "مشاهده و مدیریت همه وظایف سازمان")
+        new(Comment, "TaskManagement", "ثبت دیدگاه روی فعالیت‌ها"),
+        new(ManageAll, "TaskManagement", "مشاهده و مدیریت همه فعالیت‌های سازمان")
     ];
 }
 

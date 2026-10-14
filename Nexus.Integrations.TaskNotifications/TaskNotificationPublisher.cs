@@ -95,6 +95,8 @@ public static class DependencyInjection
         services.AddScoped<NexusCore.SharedKernel.Domain.IDomainEventHandler<Nexus.TaskManagement.Domain.TaskItemDueChanged>, TaskChangeSmsNotifier>();
         // The texts of those SMS, editable in the SMS panel.
         services.AddSingleton<NexusCore.Application.Messaging.ISmsTemplateCatalog, TaskSmsTemplateCatalog>();
+        // People added to a work team are told so in the app (the Core's default tells no one).
+        services.AddScoped<NexusCore.Application.Identity.Interfaces.IUserGroupMembershipNotifier, TeamMembershipNotifier>();
         return services;
     }
 }

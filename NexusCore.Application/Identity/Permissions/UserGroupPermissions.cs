@@ -22,14 +22,23 @@ public static class UserGroupPermissions
     /// </summary>
     public const string GroupsManageOwn = "groups.manage_own";
 
+    /// <summary>
+    /// See the "my work team" section: the teams one belongs to and their members, read only.
+    /// Without it (or GroupsManageOwn, which implies it) the section is not shown at all.
+    /// Listing one's own teams stays open to every user on the server (GET /groups/mine) -
+    /// chat needs it to show a member their team conversation.
+    /// </summary>
+    public const string GroupsViewOwn = "groups.view_own";
+
     public static IReadOnlyList<PermissionDefinition> All { get; } =
     [
         new(GroupsView, "Identity", "مشاهده گروه‌های کاربری"),
-        new(GroupsCreate, "Identity", "ایجاد گروه کاربری"),
+        new(GroupsCreate, "Identity", "تعریف گروه کاربری جدید"),
         new(GroupsUpdate, "Identity", "ویرایش گروه‌های کاربری"),
-        new(GroupsAssignPermissions, "Identity", "تخصیص مجوز به گروه‌های کاربری"),
-        new(GroupsManageMembers, "Identity", "افزودن یا حذف اعضای گروه"),
+        new(GroupsAssignPermissions, "Identity", "تعیین دسترسی‌های گروه‌های کاربری"),
+        new(GroupsManageMembers, "Identity", "تعیین اعضای گروه‌های کاربری"),
         new(GroupsDelete, "Identity", "حذف گروه‌های کاربری"),
-        new(GroupsManageOwn, "Identity", "ایجاد و مدیریت تیم‌های کاری خود")
+        new(GroupsViewOwn, "Identity", "مشاهده بخش تیم کاری من"),
+        new(GroupsManageOwn, "Identity", "ساخت و مدیریت تیم‌های کاری")
     ];
 }

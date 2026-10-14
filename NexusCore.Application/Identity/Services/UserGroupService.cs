@@ -17,7 +17,8 @@ public sealed class UserGroupService(
     IUnitOfWork unitOfWork,
     IPlatformService platformService,
     ICurrentUserContext currentUser,
-    IOptions<ManagedPermissionOptions> managedPermissionOptions) : IUserGroupService
+    IOptions<ManagedPermissionOptions> managedPermissionOptions,
+    IUserGroupMembershipNotifier membershipNotifier) : IUserGroupService
 {
     private readonly ManagedPermissionOptions _managed = managedPermissionOptions.Value;
 
@@ -161,9 +162,11 @@ public sealed class UserGroupService(
             return Result.Failure(Error.Validation("All members must belong to the same tenant as the group."));
         }
 
+        var previousMemberIds = group.Members.Select(member => member.UserId).ToList();
         group.SetMembers(request.UserIds);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await platformService.AuditAsync("groups.manage_members", nameof(UserGroup), group.Id.ToString(), string.Join(",", request.UserIds), cancellationToken);
+        await NotifyNewMembersAsync(group, previousMemberIds, cancellationToken);
         return Result.Success();
     }
 
@@ -269,9 +272,11 @@ public sealed class UserGroupService(
             return Result.Failure<UserGroupDto>(Error.Validation("All members must belong to the same tenant as the team."));
         }
 
+        var previousMemberIds = team.Members.Select(member => member.UserId).ToList();
         team.SetMembers(memberIds);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await platformService.AuditAsync("groups.manage_own_members", nameof(UserGroup), team.Id.ToString(), string.Join(",", memberIds), cancellationToken);
+        await NotifyNewMembersAsync(team, previousMemberIds, cancellationToken);
         return Result.Success(ToDto(team, users));
     }
 
@@ -281,6 +286,33 @@ public sealed class UserGroupService(
         return owned.IsFailure
             ? Result.Failure(owned.Error)
             : await RemoveAsync(owned.Value!, "groups.delete_own", cancellationToken);
+    }
+
+    /// <summary>
+    /// Lets the people who were not members before know they were added - never the person
+    /// who added them (they already know).
+    /// </summary>
+    private async Task NotifyNewMembersAsync(UserGroup group, IReadOnlyCollection<Guid> previousMemberIds, CancellationToken cancellationToken)
+    {
+        var added = group.Members
+            .Select(member => member.UserId)
+            .Where(userId => !previousMemberIds.Contains(userId) && userId != currentUser.UserId)
+            .Distinct()
+            .ToList();
+        if (added.Count == 0)
+        {
+            return;
+        }
+
+        string? addedByName = null;
+        if (currentUser.UserId is { } actorId)
+        {
+            addedByName = (await repository.ListUsersAsync([actorId], cancellationToken)).FirstOrDefault()?.DisplayName;
+        }
+
+        await membershipNotifier.MembersAddedAsync(
+            new UserGroupMembersAdded(group.TenantId, group.Id, group.Name, group.IsPersonalTeam, addedByName, added),
+            cancellationToken);
     }
 
     /// <summary>
