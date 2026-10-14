@@ -162,6 +162,36 @@ public sealed class RecurringTaskReminderTests : IDisposable
         Assert.Equal(new DateTimeOffset(2026, 1, 2, 5, 30, 0, TimeSpan.Zero), next);
     }
 
+    [Theory]
+    [InlineData(TaskItemStatus.Paused)]
+    [InlineData(TaskItemStatus.Completed)]
+    public async Task APausedOrCompletedTask_IsNotReminded_ButItsScheduleMovesOn(TaskItemStatus status)
+    {
+        var owner = User("09120000001");
+        var assignee = User("09120000002");
+        var (_, scheduleId) = await RecurringTaskAsync(owner, assignedUserId: assignee.Id, startTime: new TimeOnly(9, 0), status: status);
+
+        await PassAsync();
+
+        Assert.Empty(_notifications.Sent);
+        Assert.Empty(_smsProvider.Sent);
+        // Not held back: once the task is resumed, its next occurrence is announced.
+        Assert.True((await ScheduleAsync(scheduleId)).NextExecutionAtUtc > DateTimeOffset.UtcNow);
+    }
+
+    [Fact]
+    public async Task AnInProgressTask_IsReminded()
+    {
+        var owner = User("09120000001");
+        var assignee = User("09120000002");
+        await RecurringTaskAsync(owner, assignedUserId: assignee.Id, status: TaskItemStatus.InProgress);
+
+        await PassAsync();
+
+        Assert.Equal(assignee.Id, Assert.Single(_notifications.Sent).UserId);
+        Assert.Single(_smsProvider.Sent);
+    }
+
     [Fact]
     public async Task AnInactiveSchedule_IsNotProcessed()
     {
@@ -556,7 +586,7 @@ public sealed class RecurringTaskReminderTests : IDisposable
     private async Task<(Guid TaskId, Guid ScheduleId)> RecurringTaskAsync(
         UserContact owner, Guid? assignedUserId = null, Guid? assignedUserGroupId = null,
         DateTimeOffset? nextRunUtc = null, bool active = true, TimeOnly? startTime = null, string title = "Weekly report",
-        IReadOnlyList<Guid>? collaboratorIds = null, IReadOnlyList<Guid>? responsibleIds = null)
+        IReadOnlyList<Guid>? collaboratorIds = null, IReadOnlyList<Guid>? responsibleIds = null, TaskItemStatus? status = null)
     {
         using var scope = _services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<TaskManagementDbContext>();
@@ -582,6 +612,11 @@ public sealed class RecurringTaskReminderTests : IDisposable
         if (collaboratorIds is not null)
         {
             task.AssignUsers(collaboratorIds);
+        }
+
+        if (status is { } taskStatus)
+        {
+            task.ChangeStatus(taskStatus, DateTimeOffset.UtcNow);
         }
         var schedule = new RepetitiveTask(Guid.NewGuid(), _tenant, task.Id, RecurrenceFrequency.Daily, new DateOnly(2026, 1, 1));
         schedule.UpdateSchedule(RecurrenceFrequency.Daily, null, startTime, null, null, null, null, null, new DateOnly(2026, 1, 1), null);

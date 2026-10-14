@@ -47,6 +47,15 @@ public sealed class RepetitiveTaskDueHandler(
                 return;
             }
 
+            // A paused or completed task is not reminded of; its schedule keeps moving on, so the
+            // next occurrence after it is resumed (or reopened) is announced again.
+            if (task.Status is TaskItemStatus.Paused or TaskItemStatus.Completed)
+            {
+                logger.LogInformation(
+                    "Recurring task {TaskId} is due but {Status}; nothing was sent.", domainEvent.TaskId, task.Status);
+                return;
+            }
+
             var recipients = await ResolveRecipientsAsync(task, cancellationToken);
             if (recipients.Count == 0)
             {

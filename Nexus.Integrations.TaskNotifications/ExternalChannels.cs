@@ -45,11 +45,11 @@ public sealed class TaskSmsTemplateCatalog : ISmsTemplateCatalog
     [
         new(TaskSmsTemplateKeys.TaskAssigned, "ارجاع فعالیت", ["TaskTitle", "DueDate", "CreatorName"],
             "فعالیت جدیدی با عنوان «{TaskTitle}» به شما ارجاع شد.\nموعد انجام: {DueDate}",
-            "وقتی فعالیتی ثبت می‌شود یا مسئول اجرای آن عوض می‌شود، فقط برای مسئول اجرا ارسال می‌شود.",
+            "وقتی فعالیتی ثبت می‌شود یا مسئول اجرای آن عوض می‌شود، فقط برای مسئول اجرا ارسال می‌شود (نه برای کسی که خودش آن را ثبت یا تغییر داده).",
             ["TaskTitle"]),
         new(TaskSmsTemplateKeys.RecurringTaskReminder, "یادآوری فعالیت تکرارشونده", ["TaskTitle", "ExecutionDateTime", "ExecutionDate", "ExecutionTime"],
             "یادآوری فعالیت تکرارشونده:\n{TaskTitle}\nزمان انجام: {ExecutionDateTime}",
-            "در زمان هر نوبت فعالیت تکرارشونده، فقط برای مسئول اجرای آن ارسال می‌شود.",
+            "در زمان هر نوبت فعالیت تکرارشونده، فقط برای مسئول اجرای آن ارسال می‌شود (فعالیت متوقف یا تکمیل‌شده یادآوری ندارد).",
             ["TaskTitle"]),
         new(TaskSmsTemplateKeys.TaskDueChanged, "تغییر موعد فعالیت", ["TaskTitle", "DueDate"],
             "موعد فعالیت «{TaskTitle}» تغییر کرد.\nموعد جدید: {DueDate}",
@@ -76,8 +76,8 @@ public sealed class DirectoryUserContactResolver(IUserDirectory directory) : IUs
 
 /// <summary>
 /// When a task is created, tells each of its responsible people by SMS with the "task_assigned"
-/// template - only them: not the creator for creating it, nor people on its access list or team
-/// members. Each gets it once; a creator who is also responsible gets it once too.
+/// template - only them: not people on its access list or team members, and not the creator, who
+/// knows the task is theirs (also when they made themselves responsible). Each gets it once.
 ///
 /// Runs after the task is saved and in the background, so a slow or unreachable gateway
 /// never delays or fails the request that created the task. Delivery is best-effort: a failed
@@ -89,7 +89,7 @@ public sealed class TaskCreatedChannelNotifier(IServiceScopeFactory scopeFactory
     {
         _ = Task.Run(() => ResponsibleSms.SendAsync(
             scopeFactory, domainEvent.TenantId, domainEvent.TaskId, TaskSmsTemplateKeys.TaskAssigned,
-            task => task.ResponsibleUserIds, skipUserId: null));
+            task => task.ResponsibleUserIds, skipUserId: null, skipCreator: true));
         return Task.CompletedTask;
     }
 
@@ -140,7 +140,7 @@ internal static class ResponsibleSms
 {
     public static async Task SendAsync(
         IServiceScopeFactory scopeFactory, Guid tenantId, Guid taskId, string templateKey,
-        Func<TaskItem, IEnumerable<Guid>> recipients, Guid? skipUserId)
+        Func<TaskItem, IEnumerable<Guid>> recipients, Guid? skipUserId, bool skipCreator = false)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var services = scope.ServiceProvider;
@@ -166,7 +166,10 @@ internal static class ResponsibleSms
             }
 
             var responsible = task.ResponsibleUserIds;
-            var userIds = recipients(task).Distinct().Where(id => id != skipUserId && responsible.Contains(id)).ToList();
+            var creatorId = skipCreator ? task.OwnerUserId : null;
+            var userIds = recipients(task).Distinct()
+                .Where(id => id != skipUserId && id != creatorId && responsible.Contains(id))
+                .ToList();
             if (userIds.Count == 0)
             {
                 return;
