@@ -49,6 +49,30 @@ So a unit's head reports to the head of the unit above, and the head of a compan
 reports to the company's head. Writes that would create a loop are rejected; reads are
 loop-safe even if units are later rearranged in `Nexus.Organization`.
 
+## Organizational teams
+
+A unit (deputy) can have teams, e.g. «تیم فرانت‌اند» of «معاونت فناوری». They are part of the
+official structure, defined by an administrator (`org_structure.manage_teams`), and each person
+is in at most one (`UserAssignment.TeamId`). They are not personal work teams (user groups anyone
+may build for their tasks and chat).
+
+- Putting someone in a team (`PUT /assignments/{userId}/team`) moves them into the team's unit
+  and its company, keeping their position and any manager set on them.
+- Moving someone to another unit takes them out of their team; deleting a team keeps its people
+  in the unit.
+- A team never changes anyone's manager (its lead is shown only).
+- `/chart` lists each unit's teams with their people, and the unit's people in no team;
+  `/unplaced-users` lists people with no place yet.
+
+## Titles before names
+
+A list of titles per organization («آقای»، «خانم»، «جناب مهندس»...) and one per user. A user's
+display name starts with their title, so every module shows it; renaming a title renames its
+holders. The name is set through the Core's `IUserTitleWriter` (no table of the Core changes).
+They go with user administration: `users.create` manages the list, `users.create` or
+`users.update` gives a user a title. Saving a user's first and last name rebuilds their display
+name, so the UI sets the title again after saving.
+
 ## Permissions (module "Organization")
 
 | Permission | Allows |
