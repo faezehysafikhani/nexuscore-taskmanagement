@@ -62,5 +62,45 @@ public sealed class UserAssignmentConfiguration : IEntityTypeConfiguration<UserA
         builder.HasIndex(x => x.CompanyId);
         builder.HasIndex(x => x.UnitId);
         builder.HasIndex(x => x.ManagerUserId);
+        builder.HasIndex(x => x.TeamId);
+    }
+}
+
+public sealed class OrgTeamConfiguration : IEntityTypeConfiguration<OrgTeam>
+{
+    public void Configure(EntityTypeBuilder<OrgTeam> builder)
+    {
+        builder.ToTable("Teams", OrgStructureSchema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.Property(x => x.Name).HasMaxLength(200).IsRequired();
+        builder.Property(x => x.Description).HasMaxLength(1000);
+        // Team names are unique within their unit.
+        builder.HasIndex(x => new { x.TenantId, x.UnitId, x.Name }).IsUnique();
+    }
+}
+
+public sealed class HonorificConfiguration : IEntityTypeConfiguration<Honorific>
+{
+    public void Configure(EntityTypeBuilder<Honorific> builder)
+    {
+        builder.ToTable("Honorifics", OrgStructureSchema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.Property(x => x.Title).HasMaxLength(40).IsRequired();
+        builder.HasIndex(x => new { x.TenantId, x.Title }).IsUnique();
+    }
+}
+
+public sealed class UserHonorificConfiguration : IEntityTypeConfiguration<UserHonorific>
+{
+    public void Configure(EntityTypeBuilder<UserHonorific> builder)
+    {
+        builder.ToTable("UserHonorifics", OrgStructureSchema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        // One title per user per tenant.
+        builder.HasIndex(x => new { x.TenantId, x.UserId }).IsUnique();
+        builder.HasIndex(x => x.HonorificId);
     }
 }

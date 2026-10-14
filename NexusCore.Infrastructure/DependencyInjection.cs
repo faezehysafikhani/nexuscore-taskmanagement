@@ -66,6 +66,8 @@ public static class DependencyInjection
         services.AddScoped<IApprovalRequester, NullApprovalRequester>();
         services.AddScoped<IFileStorage, LocalDiskFileStorage>();
         services.AddScoped<IUserDirectory, UserDirectory>();
+        // Used only by modules that keep users' titles (Nexus.OrgStructure); changes no table.
+        services.AddScoped<IUserTitleWriter, UserTitleWriter>();
 
         // Sign-in CAPTCHA and attempt limits. The in-memory cache is only the default: a host that
         // registers a distributed cache (Redis, SQL Server) shares this state across instances.

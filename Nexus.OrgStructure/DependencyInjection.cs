@@ -16,6 +16,7 @@ public static class DependencyInjection
     public static IServiceCollection AddOrgStructure(this IServiceCollection services)
     {
         services.AddScoped<IOrgStructureService, OrgStructureService>();
+        services.AddScoped<IHonorificService, HonorificService>();
         services.AddSingleton<IPermissionCatalog, OrgStructurePermissionCatalog>();
 
         services.AddAuthorization(options =>
@@ -29,6 +30,15 @@ public static class DependencyInjection
             options.AddPolicy(OrgStructurePermissions.ReadPolicy, policy =>
                 policy.RequireAuthenticatedUser().RequireAssertion(context =>
                     OrgStructurePermissions.All.Any(permission => context.User.HasClaim("permission", permission.Name))));
+
+            options.AddPolicy(OrgStructurePermissions.TitlesReadPolicy, policy =>
+                policy.RequireAuthenticatedUser().RequireAssertion(context =>
+                    OrgStructurePermissions.TitleReaders.Concat(OrgStructurePermissions.All.Select(p => p.Name))
+                        .Any(permission => context.User.HasClaim("permission", permission))));
+
+            options.AddPolicy(OrgStructurePermissions.TitlesAssignPolicy, policy =>
+                policy.RequireAuthenticatedUser().RequireAssertion(context =>
+                    OrgStructurePermissions.TitleAssigners.Any(permission => context.User.HasClaim("permission", permission))));
         });
 
         return services;

@@ -55,4 +55,43 @@ public sealed class OrgStructureRepository(OrgStructureDbContext dbContext) : IO
         await dbContext.UserAssignments.AddAsync(assignment, cancellationToken);
 
     public void RemoveAssignment(UserAssignment assignment) => dbContext.UserAssignments.Remove(assignment);
+
+    public async Task<IReadOnlyList<OrgTeam>> ListTeamsAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        await dbContext.Teams.Where(x => x.TenantId == tenantId).OrderBy(x => x.Name).ToListAsync(cancellationToken);
+
+    public Task<OrgTeam?> GetTeamAsync(Guid tenantId, Guid id, CancellationToken cancellationToken) =>
+        dbContext.Teams.SingleOrDefaultAsync(x => x.TenantId == tenantId && x.Id == id, cancellationToken);
+
+    public Task<bool> TeamNameExistsAsync(Guid tenantId, Guid unitId, string name, Guid? excludeId, CancellationToken cancellationToken) =>
+        dbContext.Teams.AnyAsync(x => x.TenantId == tenantId && x.UnitId == unitId && x.Name == name && x.Id != excludeId, cancellationToken);
+
+    public async Task AddTeamAsync(OrgTeam team, CancellationToken cancellationToken) =>
+        await dbContext.Teams.AddAsync(team, cancellationToken);
+
+    public void RemoveTeam(OrgTeam team) => dbContext.Teams.Remove(team);
+
+    public async Task<IReadOnlyList<Honorific>> ListHonorificsAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        await dbContext.Honorifics.Where(x => x.TenantId == tenantId).OrderBy(x => x.SortOrder).ThenBy(x => x.Title).ToListAsync(cancellationToken);
+
+    public Task<Honorific?> GetHonorificAsync(Guid tenantId, Guid id, CancellationToken cancellationToken) =>
+        dbContext.Honorifics.SingleOrDefaultAsync(x => x.TenantId == tenantId && x.Id == id, cancellationToken);
+
+    public Task<bool> HonorificTitleExistsAsync(Guid tenantId, string title, Guid? excludeId, CancellationToken cancellationToken) =>
+        dbContext.Honorifics.AnyAsync(x => x.TenantId == tenantId && x.Title == title && x.Id != excludeId, cancellationToken);
+
+    public async Task AddHonorificAsync(Honorific honorific, CancellationToken cancellationToken) =>
+        await dbContext.Honorifics.AddAsync(honorific, cancellationToken);
+
+    public void RemoveHonorific(Honorific honorific) => dbContext.Honorifics.Remove(honorific);
+
+    public async Task<IReadOnlyList<UserHonorific>> ListUserHonorificsAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        await dbContext.UserHonorifics.Where(x => x.TenantId == tenantId).ToListAsync(cancellationToken);
+
+    public Task<UserHonorific?> GetUserHonorificAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken) =>
+        dbContext.UserHonorifics.SingleOrDefaultAsync(x => x.TenantId == tenantId && x.UserId == userId, cancellationToken);
+
+    public async Task AddUserHonorificAsync(UserHonorific userHonorific, CancellationToken cancellationToken) =>
+        await dbContext.UserHonorifics.AddAsync(userHonorific, cancellationToken);
+
+    public void RemoveUserHonorific(UserHonorific userHonorific) => dbContext.UserHonorifics.Remove(userHonorific);
 }

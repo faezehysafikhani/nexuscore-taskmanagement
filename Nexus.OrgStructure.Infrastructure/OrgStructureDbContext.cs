@@ -12,6 +12,9 @@ public sealed class OrgStructureDbContext(DbContextOptions<OrgStructureDbContext
     public DbSet<CompanyUnit> CompanyUnits => Set<CompanyUnit>();
     public DbSet<Position> Positions => Set<Position>();
     public DbSet<UserAssignment> UserAssignments => Set<UserAssignment>();
+    public DbSet<OrgTeam> Teams => Set<OrgTeam>();
+    public DbSet<Honorific> Honorifics => Set<Honorific>();
+    public DbSet<UserHonorific> UserHonorifics => Set<UserHonorific>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
