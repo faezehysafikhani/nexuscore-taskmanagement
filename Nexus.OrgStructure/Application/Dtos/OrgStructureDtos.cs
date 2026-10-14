@@ -90,7 +90,8 @@ public sealed record OrgChartUnitDto(
     IReadOnlyList<OrgChartMemberDto> Members,
     IReadOnlyList<OrgChartUnitDto> Children,
     IReadOnlyList<OrgChartTeamDto> Teams,
-    bool IsActive = true);
+    bool IsActive = true,
+    int PeopleCount = 0);
 
 public sealed record OrgChartCompanyDto(
     Guid CompanyId,
@@ -99,7 +100,8 @@ public sealed record OrgChartCompanyDto(
     bool IsActive,
     PersonRef? Manager,
     IReadOnlyList<OrgChartMemberDto> Members,
-    IReadOnlyList<OrgChartUnitDto> Units);
+    IReadOnlyList<OrgChartUnitDto> Units,
+    int PeopleCount = 0);
 
 /// <summary>Someone of the organization who has no place in the structure yet.</summary>
 public sealed record UnplacedUserDto(Guid UserId, string DisplayName, string? AvatarUrl);

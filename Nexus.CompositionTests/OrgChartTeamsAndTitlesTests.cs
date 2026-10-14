@@ -47,6 +47,8 @@ public sealed class OrgChartTeamsAndTitlesTests
         Assert.Equal(loner, Assert.Single(units[tech.Id].Members).UserId);
         Assert.Empty(units[ops.Id].Teams);
         Assert.Empty(units[ops.Id].Members); // the ops person is in a team (of another unit)
+        Assert.Equal(3, units[tech.Id].PeopleCount);
+        Assert.Equal(1, units[ops.Id].PeopleCount);
         Assert.Empty((await world.Service.ListTeamsOutsideUnitsAsync(Tenant, default)).Value!);
     }
 

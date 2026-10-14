@@ -562,7 +562,8 @@ public sealed class OrgStructureService(
                 unitPeople.Where(a => !inSomeTeam.Contains(a.UserId)).Select(Member).OrderBy(x => x.DisplayName).ToList(),
                 new List<OrgChartUnitDto>(),
                 teams.Where(team => UnitOfOwner(snapshot, team) == unit.Id).Select(team => TeamDto(team, snapshot, resolver, people)).ToList(),
-                unit.IsActive);
+                unit.IsActive,
+                unitPeople.Count);
         }
 
         var chart = snapshot.Companies.Values
@@ -593,7 +594,8 @@ public sealed class OrgStructureService(
                     company.IsActive,
                     company.ManagerUserId is { } m ? Person(m, people) : null,
                     companyMembers,
-                    topUnits.Select(unit => BuildUnit(unit, visited)).ToList());
+                    topUnits.Select(unit => BuildUnit(unit, visited)).ToList(),
+                    snapshot.Assignments.Count(a => a.CompanyId == company.Id));
             })
             .ToList();
 
