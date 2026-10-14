@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Nexus.OrgStructure.Application;
 using Nexus.OrgStructure.Permissions;
+using NexusCore.Application.Identity.Interfaces;
 using NexusCore.Application.Identity.Permissions;
 
 namespace Nexus.OrgStructure;
@@ -18,10 +19,13 @@ public static class DependencyInjection
         services.AddScoped<IOrgStructureService, OrgStructureService>();
         services.AddScoped<IHonorificService, HonorificService>();
         services.AddSingleton<IPermissionCatalog, OrgStructurePermissionCatalog>();
+        // Work-team builders add their own deputy's people (more with TeamMembersFromAnyUnit).
+        // The Core registers its unlimited default with TryAdd, so this one wins whichever runs first.
+        services.AddScoped<IWorkTeamMemberScope, DeputyWorkTeamMemberScope>();
 
         services.AddAuthorization(options =>
         {
-            foreach (var permission in OrgStructurePermissions.All)
+            foreach (var permission in OrgStructurePermissions.All.Concat(OrgStructurePermissions.WorkTeams))
             {
                 options.AddPolicy(permission.Name, policy =>
                     policy.RequireAuthenticatedUser().AddRequirements(new PermissionRequirement(permission.Name)));

@@ -58,6 +58,15 @@ more than once. A unit's people who are in no work team are listed apart. Teams 
 in no unit of a company come from `/teams-outside-units`. The module stores no teams of its own
 (migration `RemoveOrgTeams` drops the short-lived organizational teams).
 
+## Whom a work team's builder may add
+
+With this module, the builder of a work team adds the people of their own unit (deputy) only;
+`org_structure.team_members_any_unit` lets them add people of other units too. A builder in no
+unit (directly under a company, or with no place yet) is not limited. Only people being added are
+checked: members a team already has stay. The module provides this through the Core's
+`IWorkTeamMemberScope`; a product without the module keeps the Core's default (anyone may be
+added). `GET /api/identity/groups/mine/member-scope` tells the UI whom the caller may add.
+
 ## Titles before names
 
 A list of titles per organization («آقای»، «خانم»، «جناب مهندس»...) and one per user. A user's
@@ -75,8 +84,9 @@ name, so the UI sets the title again after saving.
 | `org_structure.manage_companies` | companies, and linking units to them |
 | `org_structure.manage_positions` | positions |
 | `org_structure.manage_assignments` | each user's company / unit / position / manager |
+| `org_structure.team_members_any_unit` | add people of other units to one's work teams (gives no access to the structure) |
 
-Any of them also allows reading. Every signed-in user may read their own place (`/me`).
+Any of the first four also allows reading. Every signed-in user may read their own place (`/me`).
 The built-in administrator role gets all of them automatically.
 
 ## Endpoints (`/api/org-structure`)

@@ -5,7 +5,9 @@ using Nexus.OrgStructure.Application;
 using Nexus.OrgStructure.Application.Dtos;
 using Nexus.OrgStructure.Infrastructure;
 using NexusCore.Application.Identity.Interfaces;
+using Nexus.OrgStructure.Permissions;
 using NexusCore.Infrastructure.Identity;
+using NexusCore.SharedKernel.Interfaces;
 using NexusCore.SharedKernel.Results;
 
 namespace Nexus.CompositionTests;
@@ -129,9 +131,62 @@ public sealed class OrgChartTeamsAndTitlesTests
 
     // ------------------------------------------------------------------ test world
 
+    // ------------------------------------------------------------------ whom a team builder may add
+
+    [Fact]
+    public async Task ATeamBuilder_AddsTheirOwnDeputysPeople_Only()
+    {
+        var world = new World();
+        var builder = world.User("سازنده");
+        var colleague = world.User("همکار");
+        var other = world.User("معاونت دیگر");
+        var direct = world.User("زیر شرکت");
+        var tech = world.Unit("معاونت فناوری");
+        var ops = world.Unit("معاونت عملیات");
+        var company = await world.CompanyAsync("C1");
+        await world.Service.LinkUnitAsync(Tenant, tech.Id, new LinkUnitRequest(company), default);
+        await world.Service.LinkUnitAsync(Tenant, ops.Id, new LinkUnitRequest(company), default);
+        await world.Service.SetAssignmentAsync(Tenant, builder, new SetUserAssignmentRequest(company, tech.Id, null, null), default);
+        await world.Service.SetAssignmentAsync(Tenant, colleague, new SetUserAssignmentRequest(company, tech.Id, null, null), default);
+        await world.Service.SetAssignmentAsync(Tenant, other, new SetUserAssignmentRequest(company, ops.Id, null, null), default);
+        await world.Service.SetAssignmentAsync(Tenant, direct, new SetUserAssignmentRequest(company, null, null, null), default);
+
+        var limit = await world.MemberScope(builder).GetLimitAsync(Tenant, builder, default);
+
+        Assert.NotNull(limit);
+        Assert.Equal("معاونت فناوری", limit.ScopeName);
+        Assert.Equal(new[] { builder, colleague }.Order(), limit.AllowedUserIds.Order());
+    }
+
+    [Fact]
+    public async Task WithThePermission_OrInNoDeputy_ATeamBuilderMayAddAnyone()
+    {
+        var world = new World();
+        var builder = world.User("سازنده");
+        var manager = world.User("مدیرعامل");
+        var tech = world.Unit("معاونت فناوری");
+        var company = await world.CompanyAsync("C1");
+        await world.Service.LinkUnitAsync(Tenant, tech.Id, new LinkUnitRequest(company), default);
+        await world.Service.SetAssignmentAsync(Tenant, builder, new SetUserAssignmentRequest(company, tech.Id, null, null), default);
+        await world.Service.SetAssignmentAsync(Tenant, manager, new SetUserAssignmentRequest(company, null, null, null), default);
+        var unplaced = world.User("بدون جایگاه");
+
+        Assert.Null(await world.MemberScope(builder, OrgStructurePermissions.TeamMembersFromAnyUnit).GetLimitAsync(Tenant, builder, default));
+        Assert.Null(await world.MemberScope(manager).GetLimitAsync(Tenant, manager, default));
+        Assert.Null(await world.MemberScope(unplaced).GetLimitAsync(Tenant, unplaced, default));
+    }
+
+    [Fact]
+    public void ThePermissionForOtherDeputies_IsListed_ButGivesNoAccessToTheStructure()
+    {
+        Assert.Contains(new OrgStructurePermissionCatalog().GetPermissions(), p => p.Name == OrgStructurePermissions.TeamMembersFromAnyUnit);
+        Assert.DoesNotContain(OrgStructurePermissions.All, p => p.Name == OrgStructurePermissions.TeamMembersFromAnyUnit);
+    }
+
     private sealed class World
     {
         private readonly OrganizationDbContext _organization;
+        private readonly OrgStructureRepository _repository;
         private readonly Directory _users = new();
         private readonly WorkTeams _teams = new();
 
@@ -140,7 +195,7 @@ public sealed class OrgChartTeamsAndTitlesTests
             var name = Guid.NewGuid().ToString();
             _organization = new OrganizationDbContext(new DbContextOptionsBuilder<OrganizationDbContext>().UseInMemoryDatabase("org-" + name).Options);
             var structure = new OrgStructureDbContext(new DbContextOptionsBuilder<OrgStructureDbContext>().UseInMemoryDatabase("orgs-" + name).Options);
-            var repository = new OrgStructureRepository(structure);
+            var repository = _repository = new OrgStructureRepository(structure);
             Service = new OrgStructureService(repository, structure, new OrganizationUnitRepository(_organization), _users, _teams);
             Titles = new HonorificService(repository, structure, _users, _users);
         }
@@ -149,6 +204,10 @@ public sealed class OrgChartTeamsAndTitlesTests
         public IHonorificService Titles { get; }
 
         public string NameOf(Guid userId) => _users.Names[userId];
+
+        /// <summary>Whom <paramref name="signedIn"/> may add to their work teams, holding <paramref name="permissions"/>.</summary>
+        public IWorkTeamMemberScope MemberScope(Guid signedIn, params string[] permissions) =>
+            new DeputyWorkTeamMemberScope(_repository, new OrganizationUnitRepository(_organization), new SignedIn(signedIn, permissions));
 
         public void Team(string name, Guid owner, params Guid[] members) =>
             _teams.Teams.Add(new WorkTeamInfo(Guid.NewGuid(), name, null, owner, members));
@@ -171,6 +230,15 @@ public sealed class OrgChartTeamsAndTitlesTests
 
         public async Task<Guid> CompanyAsync(string code) =>
             (await Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("شرکت " + code, code, null, null), default)).Value!.Id;
+    }
+
+    private sealed class SignedIn(Guid userId, string[] permissions) : ICurrentUserContext
+    {
+        public Guid? UserId => userId;
+        public Guid? TenantId => Tenant;
+        public string? Email => null;
+        public string? IpAddress => null;
+        public bool HasPermission(string permission) => permissions.Contains(permission);
     }
 
     private sealed class WorkTeams : IWorkTeamDirectory

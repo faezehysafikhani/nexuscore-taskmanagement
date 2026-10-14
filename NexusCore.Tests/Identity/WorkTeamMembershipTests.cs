@@ -22,6 +22,7 @@ public sealed class WorkTeamMembershipTests
     private readonly User _reza = new(Guid.NewGuid(), Tenant, "reza@example.com", "رضا", "hash");
     private readonly FakeGroups _groups = new();
     private readonly RecordingNotifier _notifier = new();
+    private readonly FixedScope _scope = new();
 
     public WorkTeamMembershipTests()
     {
@@ -35,7 +36,8 @@ public sealed class WorkTeamMembershipTests
         Stub<IPlatformService>(),
         new SignedIn(_owner.Id, Tenant),
         Options.Create(new ManagedPermissionOptions()),
-        _notifier);
+        _notifier,
+        _scope);
 
     [Fact]
     public async Task NewTeamMembers_AreNotified_ButNotTheOwner()
@@ -68,6 +70,39 @@ public sealed class WorkTeamMembershipTests
     }
 
     [Fact]
+    public async Task WhenAddingIsLimited_OnlyAllowedPeopleCanBeAdded_AndExistingMembersStay()
+    {
+        var service = Service();
+        var team = (await service.CreateMyTeamAsync(new CreateMyTeamRequest("تیم فناوری", null), default)).Value!;
+        await service.SetMyTeamMembersAsync(team.Id, new SetMyTeamMembersRequest([_reza.Id]), default); // before the limit
+
+        _scope.Limit = new WorkTeamMemberLimit(new HashSet<Guid> { _owner.Id, _nima.Id }, "معاونت فناوری");
+
+        var outside = await service.SetMyTeamMembersAsync(team.Id, new SetMyTeamMembersRequest([_reza.Id, _sara.Id]), default);
+        Assert.True(outside.IsFailure);
+        Assert.Equal("forbidden", outside.Error.Code);
+
+        var inside = await service.SetMyTeamMembersAsync(team.Id, new SetMyTeamMembersRequest([_reza.Id, _nima.Id]), default);
+        Assert.True(inside.IsSuccess);
+        Assert.Equal(new[] { _owner.Id, _reza.Id, _nima.Id }.Order(), inside.Value!.Members.Select(m => m.UserId).Order());
+
+        var scope = (await service.GetMyTeamMemberScopeAsync(default)).Value!;
+        Assert.True(scope.Limited);
+        Assert.Equal("معاونت فناوری", scope.ScopeName);
+        Assert.Equal(new[] { _owner.Id, _nima.Id }.Order(), scope.AllowedUserIds.Order());
+    }
+
+    [Fact]
+    public async Task WithoutALimit_AnyoneCanBeAdded()
+    {
+        var service = Service();
+        var team = (await service.CreateMyTeamAsync(new CreateMyTeamRequest("تیم آزاد", null), default)).Value!;
+
+        Assert.True((await service.SetMyTeamMembersAsync(team.Id, new SetMyTeamMembersRequest([_nima.Id, _sara.Id, _reza.Id]), default)).IsSuccess);
+        Assert.False((await service.GetMyTeamMemberScopeAsync(default)).Value!.Limited);
+    }
+
+    [Fact]
     public void ManagingOwnTeams_ImpliesSeeingTheSection()
     {
         Assert.Contains(UserGroupPermissions.GroupsViewOwn, PermissionPrerequisites.Expand([UserGroupPermissions.GroupsManageOwn]));
@@ -83,6 +118,14 @@ public sealed class WorkTeamMembershipTests
             Changes.Add(change);
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class FixedScope : IWorkTeamMemberScope
+    {
+        public WorkTeamMemberLimit? Limit { get; set; }
+
+        public Task<WorkTeamMemberLimit?> GetLimitAsync(Guid tenantId, Guid ownerUserId, CancellationToken cancellationToken) =>
+            Task.FromResult(Limit);
     }
 
     private sealed class FakeGroups : IUserGroupRepository

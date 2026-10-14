@@ -38,6 +38,8 @@ public static class UserGroupServiceCollectionExtensions
         // Nobody is told about new members unless the host adds a channel (the task-notifications
         // integration does); TryAdd so that registration wins whichever is called first.
         services.TryAddScoped<IUserGroupMembershipNotifier, NullUserGroupMembershipNotifier>();
+        // Anyone may be added to a work team unless a module limits it (Nexus.OrgStructure does).
+        services.TryAddScoped<IWorkTeamMemberScope, UnlimitedWorkTeamMemberScope>();
         services.AddSingleton<IPermissionCatalog, UserGroupPermissionCatalog>();
 
         // The group endpoints require these names as policies. They are registered here, next to
