@@ -29,4 +29,15 @@ public interface IOrgStructureRepository
     Task<UserAssignment?> GetAssignmentAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken);
     Task AddAssignmentAsync(UserAssignment assignment, CancellationToken cancellationToken);
     void RemoveAssignment(UserAssignment assignment);
+
+    Task<IReadOnlyList<Honorific>> ListHonorificsAsync(Guid tenantId, CancellationToken cancellationToken);
+    Task<Honorific?> GetHonorificAsync(Guid tenantId, Guid id, CancellationToken cancellationToken);
+    Task<bool> HonorificTitleExistsAsync(Guid tenantId, string title, Guid? excludeId, CancellationToken cancellationToken);
+    Task AddHonorificAsync(Honorific honorific, CancellationToken cancellationToken);
+    void RemoveHonorific(Honorific honorific);
+
+    Task<IReadOnlyList<UserHonorific>> ListUserHonorificsAsync(Guid tenantId, CancellationToken cancellationToken);
+    Task<UserHonorific?> GetUserHonorificAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken);
+    Task AddUserHonorificAsync(UserHonorific userHonorific, CancellationToken cancellationToken);
+    void RemoveUserHonorific(UserHonorific userHonorific);
 }

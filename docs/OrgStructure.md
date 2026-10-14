@@ -49,6 +49,33 @@ So a unit's head reports to the head of the unit above, and the head of a compan
 reports to the company's head. Writes that would create a loop are rejected; reads are
 loop-safe even if units are later rearranged in `Nexus.Organization`.
 
+## Work teams in the chart
+
+The chart shows the work teams people build for their tasks and chat (the user-group feature's
+personal teams, read through the Core's `IWorkTeamDirectory`): each team under the unit of the
+person who built it, with all its members - from any unit, so a person in several teams appears
+more than once. A unit's people who are in no work team are listed apart. Teams whose builder is
+in no unit of a company come from `/teams-outside-units`. The module stores no teams of its own
+(migration `RemoveOrgTeams` drops the short-lived organizational teams).
+
+## Whom a work team's builder may add
+
+With this module, the builder of a work team adds the people of their own unit (deputy) only;
+`org_structure.team_members_any_unit` lets them add people of other units too. A builder in no
+unit (directly under a company, or with no place yet) is not limited. Only people being added are
+checked: members a team already has stay. The module provides this through the Core's
+`IWorkTeamMemberScope`; a product without the module keeps the Core's default (anyone may be
+added). `GET /api/identity/groups/mine/member-scope` tells the UI whom the caller may add.
+
+## Titles before names
+
+A list of titles per organization («آقای»، «خانم»، «جناب مهندس»...) and one per user. A user's
+display name starts with their title, so every module shows it; renaming a title renames its
+holders. The name is set through the Core's `IUserTitleWriter` (no table of the Core changes).
+They go with user administration: `users.create` manages the list, `users.create` or
+`users.update` gives a user a title. Saving a user's first and last name rebuilds their display
+name, so the UI sets the title again after saving.
+
 ## Permissions (module "Organization")
 
 | Permission | Allows |
@@ -57,8 +84,9 @@ loop-safe even if units are later rearranged in `Nexus.Organization`.
 | `org_structure.manage_companies` | companies, and linking units to them |
 | `org_structure.manage_positions` | positions |
 | `org_structure.manage_assignments` | each user's company / unit / position / manager |
+| `org_structure.team_members_any_unit` | add people of other units to one's work teams (gives no access to the structure) |
 
-Any of them also allows reading. Every signed-in user may read their own place (`/me`).
+Any of the first four also allows reading. Every signed-in user may read their own place (`/me`).
 The built-in administrator role gets all of them automatically.
 
 ## Endpoints (`/api/org-structure`)

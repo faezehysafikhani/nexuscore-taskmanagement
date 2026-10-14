@@ -105,6 +105,41 @@ public static class OrgStructureEndpoints
                 InTenant(user, tenant => service.GetChartAsync(tenant, companyId, ct)))
             .RequireAuthorization(OrgStructurePermissions.ReadPolicy);
 
+        // People of the organization with no place in the structure yet (to place them).
+        group.MapGet("/unplaced-users", (ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.ListUnplacedUsersAsync(tenant, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ReadPolicy);
+
+        // Work teams whose builder is in no unit of a company (the chart shows the rest under units).
+        group.MapGet("/teams-outside-units", (ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.ListTeamsOutsideUnitsAsync(tenant, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ReadPolicy);
+
+        // --- titles before people's names, managed with the users (see OrgStructurePermissions)
+        group.MapGet("/titles", (ICurrentUserContext user, IHonorificService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.ListAsync(tenant, ct)))
+            .RequireAuthorization(OrgStructurePermissions.TitlesReadPolicy);
+
+        group.MapPost("/titles", (CreateHonorificRequest request, ICurrentUserContext user, IHonorificService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.CreateAsync(tenant, request, ct)))
+            .RequireAuthorization(OrgStructurePermissions.TitlesManagePermission);
+
+        group.MapPut("/titles/{id:guid}", (Guid id, UpdateHonorificRequest request, ICurrentUserContext user, IHonorificService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.UpdateAsync(tenant, id, request, ct)))
+            .RequireAuthorization(OrgStructurePermissions.TitlesManagePermission);
+
+        group.MapDelete("/titles/{id:guid}", (Guid id, ICurrentUserContext user, IHonorificService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.DeleteAsync(tenant, id, ct)))
+            .RequireAuthorization(OrgStructurePermissions.TitlesManagePermission);
+
+        group.MapGet("/users/{userId:guid}/title", (Guid userId, ICurrentUserContext user, IHonorificService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.GetUserTitleAsync(tenant, userId, ct)))
+            .RequireAuthorization(OrgStructurePermissions.TitlesReadPolicy);
+
+        group.MapPut("/users/{userId:guid}/title", (Guid userId, SetUserTitleRequest request, ICurrentUserContext user, IHonorificService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.SetUserTitleAsync(tenant, userId, request, ct)))
+            .RequireAuthorization(OrgStructurePermissions.TitlesAssignPolicy);
+
         return app;
     }
 

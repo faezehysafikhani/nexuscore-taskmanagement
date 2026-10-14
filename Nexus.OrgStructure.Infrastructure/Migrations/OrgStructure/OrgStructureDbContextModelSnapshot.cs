@@ -106,6 +106,45 @@ namespace Nexus.OrgStructure.Infrastructure.Migrations.OrgStructure
                     b.ToTable("CompanyUnits", "org_structure");
                 });
 
+            modelBuilder.Entity("Nexus.OrgStructure.Domain.Honorific", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTimeOffset?>("ModifiedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("ModifiedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "Title")
+                        .IsUnique();
+
+                    b.ToTable("Honorifics", "org_structure");
+                });
+
             modelBuilder.Entity("Nexus.OrgStructure.Domain.Position", b =>
                 {
                     b.Property<Guid>("Id")
@@ -194,6 +233,42 @@ namespace Nexus.OrgStructure.Infrastructure.Migrations.OrgStructure
                         .IsUnique();
 
                     b.ToTable("UserAssignments", "org_structure");
+                });
+
+            modelBuilder.Entity("Nexus.OrgStructure.Domain.UserHonorific", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("HonorificId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("ModifiedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("ModifiedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("HonorificId");
+
+                    b.HasIndex("TenantId", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("UserHonorifics", "org_structure");
                 });
 #pragma warning restore 612, 618
         }

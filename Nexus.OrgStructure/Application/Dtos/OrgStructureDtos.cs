@@ -1,6 +1,6 @@
 namespace Nexus.OrgStructure.Application.Dtos;
 
-public sealed record PersonRef(Guid UserId, string DisplayName, bool IsActive);
+public sealed record PersonRef(Guid UserId, string DisplayName, bool IsActive, string? AvatarUrl = null);
 
 public sealed record CompanyDto(
     Guid Id,
@@ -59,14 +59,39 @@ public sealed record SubordinateDto(
 /// <summary>The signed-in user's place: their assignment and their managers, nearest first.</summary>
 public sealed record MyPlacementDto(UserAssignmentDto? Assignment, IReadOnlyList<PersonRef> ManagementChain);
 
-public sealed record OrgChartMemberDto(Guid UserId, string DisplayName, bool IsActive, string? PositionTitle, Guid? ManagerUserId);
+public sealed record OrgChartMemberDto(
+    Guid UserId,
+    string DisplayName,
+    bool IsActive,
+    string? PositionTitle,
+    Guid? ManagerUserId,
+    string? AvatarUrl = null,
+    Guid? PositionId = null);
 
+/// <summary>
+/// A work team (one of the personal teams people build for their tasks and chat), shown under
+/// the unit of the person who built it, with its members - wherever they sit.
+/// </summary>
+public sealed record OrgChartTeamDto(
+    Guid TeamId,
+    string Name,
+    string? Description,
+    PersonRef Owner,
+    IReadOnlyList<OrgChartMemberDto> Members);
+
+/// <summary>
+/// Members: the unit's people who are in no work team. Teams: the work teams built by the unit's
+/// people (a person can be in several, so may appear more than once).
+/// </summary>
 public sealed record OrgChartUnitDto(
     Guid UnitId,
     string Name,
     PersonRef? Manager,
     IReadOnlyList<OrgChartMemberDto> Members,
-    IReadOnlyList<OrgChartUnitDto> Children);
+    IReadOnlyList<OrgChartUnitDto> Children,
+    IReadOnlyList<OrgChartTeamDto> Teams,
+    bool IsActive = true,
+    int PeopleCount = 0);
 
 public sealed record OrgChartCompanyDto(
     Guid CompanyId,
@@ -75,4 +100,19 @@ public sealed record OrgChartCompanyDto(
     bool IsActive,
     PersonRef? Manager,
     IReadOnlyList<OrgChartMemberDto> Members,
-    IReadOnlyList<OrgChartUnitDto> Units);
+    IReadOnlyList<OrgChartUnitDto> Units,
+    int PeopleCount = 0);
+
+/// <summary>Someone of the organization who has no place in the structure yet.</summary>
+public sealed record UnplacedUserDto(Guid UserId, string DisplayName, string? AvatarUrl);
+
+public sealed record HonorificDto(Guid Id, string Title, int SortOrder, bool IsActive, int UserCount);
+
+public sealed record CreateHonorificRequest(string Title, int? SortOrder = null);
+
+public sealed record UpdateHonorificRequest(string Title, int SortOrder, bool IsActive);
+
+public sealed record UserTitleDto(Guid UserId, Guid? HonorificId, string? Title);
+
+/// <summary>Null removes the user's title.</summary>
+public sealed record SetUserTitleRequest(Guid? HonorificId);
