@@ -275,7 +275,7 @@ public sealed class OrgStructureTests
             var name = Guid.NewGuid().ToString();
             _organization = new OrganizationDbContext(new DbContextOptionsBuilder<OrganizationDbContext>().UseInMemoryDatabase("org-" + name).Options);
             var structure = new OrgStructureDbContext(new DbContextOptionsBuilder<OrgStructureDbContext>().UseInMemoryDatabase("orgs-" + name).Options);
-            Service = new OrgStructureService(new OrgStructureRepository(structure), structure, new OrganizationUnitRepository(_organization), _users);
+            Service = new OrgStructureService(new OrgStructureRepository(structure), structure, new OrganizationUnitRepository(_organization), _users, new OrgChartTeamsAndTitlesTests.NoWorkTeams());
         }
 
         public IOrgStructureService Service { get; }

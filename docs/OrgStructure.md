@@ -49,20 +49,14 @@ So a unit's head reports to the head of the unit above, and the head of a compan
 reports to the company's head. Writes that would create a loop are rejected; reads are
 loop-safe even if units are later rearranged in `Nexus.Organization`.
 
-## Organizational teams
+## Work teams in the chart
 
-A unit (deputy) can have teams, e.g. «تیم فرانت‌اند» of «معاونت فناوری». They are part of the
-official structure, defined by an administrator (`org_structure.manage_teams`), and each person
-is in at most one (`UserAssignment.TeamId`). They are not personal work teams (user groups anyone
-may build for their tasks and chat).
-
-- Putting someone in a team (`PUT /assignments/{userId}/team`) moves them into the team's unit
-  and its company, keeping their position and any manager set on them.
-- Moving someone to another unit takes them out of their team; deleting a team keeps its people
-  in the unit.
-- A team never changes anyone's manager (its lead is shown only).
-- `/chart` lists each unit's teams with their people, and the unit's people in no team;
-  `/unplaced-users` lists people with no place yet.
+The chart shows the work teams people build for their tasks and chat (the user-group feature's
+personal teams, read through the Core's `IWorkTeamDirectory`): each team under the unit of the
+person who built it, with all its members - from any unit, so a person in several teams appears
+more than once. A unit's people who are in no work team are listed apart. Teams whose builder is
+in no unit of a company come from `/teams-outside-units`. The module stores no teams of its own
+(migration `RemoveOrgTeams` drops the short-lived organizational teams).
 
 ## Titles before names
 

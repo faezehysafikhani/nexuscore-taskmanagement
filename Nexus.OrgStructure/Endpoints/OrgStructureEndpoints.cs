@@ -110,26 +110,10 @@ public static class OrgStructureEndpoints
                 InTenant(user, tenant => service.ListUnplacedUsersAsync(tenant, ct)))
             .RequireAuthorization(OrgStructurePermissions.ReadPolicy);
 
-        // --- organizational teams inside units, and who is in them
-        group.MapGet("/teams", (Guid? unitId, ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
-                InTenant(user, tenant => service.ListTeamsAsync(tenant, unitId, ct)))
+        // Work teams whose builder is in no unit of a company (the chart shows the rest under units).
+        group.MapGet("/teams-outside-units", (ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.ListTeamsOutsideUnitsAsync(tenant, ct)))
             .RequireAuthorization(OrgStructurePermissions.ReadPolicy);
-
-        group.MapPost("/teams", (CreateOrgTeamRequest request, ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
-                InTenant(user, tenant => service.CreateTeamAsync(tenant, request, ct)))
-            .RequireAuthorization(OrgStructurePermissions.ManageTeams);
-
-        group.MapPut("/teams/{id:guid}", (Guid id, UpdateOrgTeamRequest request, ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
-                InTenant(user, tenant => service.UpdateTeamAsync(tenant, id, request, ct)))
-            .RequireAuthorization(OrgStructurePermissions.ManageTeams);
-
-        group.MapDelete("/teams/{id:guid}", (Guid id, ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
-                InTenant(user, tenant => service.DeleteTeamAsync(tenant, id, ct)))
-            .RequireAuthorization(OrgStructurePermissions.ManageTeams);
-
-        group.MapPut("/assignments/{userId:guid}/team", (Guid userId, SetUserTeamRequest request, ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
-                InTenant(user, tenant => service.SetUserTeamAsync(tenant, userId, request, ct)))
-            .RequireAuthorization(OrgStructurePermissions.ManageTeams);
 
         // --- titles before people's names, managed with the users (see OrgStructurePermissions)
         group.MapGet("/titles", (ICurrentUserContext user, IHonorificService service, CancellationToken ct) =>

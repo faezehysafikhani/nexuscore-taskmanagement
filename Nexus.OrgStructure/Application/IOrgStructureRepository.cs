@@ -30,12 +30,6 @@ public interface IOrgStructureRepository
     Task AddAssignmentAsync(UserAssignment assignment, CancellationToken cancellationToken);
     void RemoveAssignment(UserAssignment assignment);
 
-    Task<IReadOnlyList<OrgTeam>> ListTeamsAsync(Guid tenantId, CancellationToken cancellationToken);
-    Task<OrgTeam?> GetTeamAsync(Guid tenantId, Guid id, CancellationToken cancellationToken);
-    Task<bool> TeamNameExistsAsync(Guid tenantId, Guid unitId, string name, Guid? excludeId, CancellationToken cancellationToken);
-    Task AddTeamAsync(OrgTeam team, CancellationToken cancellationToken);
-    void RemoveTeam(OrgTeam team);
-
     Task<IReadOnlyList<Honorific>> ListHonorificsAsync(Guid tenantId, CancellationToken cancellationToken);
     Task<Honorific?> GetHonorificAsync(Guid tenantId, Guid id, CancellationToken cancellationToken);
     Task<bool> HonorificTitleExistsAsync(Guid tenantId, string title, Guid? excludeId, CancellationToken cancellationToken);

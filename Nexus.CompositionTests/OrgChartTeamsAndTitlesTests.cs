@@ -10,74 +10,57 @@ using NexusCore.SharedKernel.Results;
 
 namespace Nexus.CompositionTests;
 
-/// <summary>Organizational teams inside units, and titles before people's names (Nexus.OrgStructure).</summary>
-public sealed class OrgTeamsAndTitlesTests
+/// <summary>Work teams in the org chart, and titles before people's names (Nexus.OrgStructure).</summary>
+public sealed class OrgChartTeamsAndTitlesTests
 {
     private static readonly Guid Tenant = Guid.NewGuid();
 
-    // ------------------------------------------------------------------ teams
+    // ------------------------------------------------------------------ work teams in the chart
 
     [Fact]
-    public async Task AddingSomeoneToATeam_PutsThemInItsUnit_AndTheChartShowsThemInTheTeam()
+    public async Task AWorkTeam_ShowsUnderItsBuildersUnit_WithAllItsMembers_AndTheRestAreInNoTeam()
     {
         var world = new World();
-        var head = world.User("مدیر فناوری");
+        var builder = world.User("سازنده");
         var dev = world.User("برنامه‌نویس");
+        var opsPerson = world.User("کارمند عملیات");
         var loner = world.User("بدون تیم");
-        var tech = world.Unit("معاونت فناوری", head);
-        var company = await world.CompanyAsync("C1");
-        await world.Service.LinkUnitAsync(Tenant, tech.Id, new LinkUnitRequest(company), default);
-        await world.Service.SetAssignmentAsync(Tenant, loner, new SetUserAssignmentRequest(company, tech.Id, null, null), default);
-
-        var team = (await world.Service.CreateTeamAsync(Tenant, new CreateOrgTeamRequest(tech.Id, "تیم فرانت‌اند", null, null), default)).Value!;
-        var placed = await world.Service.SetUserTeamAsync(Tenant, dev, new SetUserTeamRequest(team.Id), default);
-
-        Assert.True(placed.IsSuccess);
-        Assert.Equal(company, placed.Value!.CompanyId);
-        Assert.Equal(tech.Id, placed.Value.UnitId);
-        Assert.Equal(team.Id, placed.Value.TeamId);
-        Assert.Equal(head, placed.Value.Manager!.UserId); // the unit's manager, as before - a team does not change it
-
-        var unit = Assert.Single(Assert.Single((await world.Service.GetChartAsync(Tenant, null, default)).Value!).Units);
-        var chartTeam = Assert.Single(unit.Teams);
-        Assert.Equal(dev, Assert.Single(chartTeam.Members).UserId);
-        Assert.Equal(loner, Assert.Single(unit.Members).UserId); // in the unit, in no team
-    }
-
-    [Fact]
-    public async Task MovingToAnotherUnit_LeavesTheTeam_AndDeletingATeamKeepsItsPeopleInTheUnit()
-    {
-        var world = new World();
-        var dev = world.User("برنامه‌نویس");
         var tech = world.Unit("معاونت فناوری");
         var ops = world.Unit("معاونت عملیات");
         var company = await world.CompanyAsync("C1");
         await world.Service.LinkUnitAsync(Tenant, tech.Id, new LinkUnitRequest(company), default);
         await world.Service.LinkUnitAsync(Tenant, ops.Id, new LinkUnitRequest(company), default);
-        var team = (await world.Service.CreateTeamAsync(Tenant, new CreateOrgTeamRequest(tech.Id, "تیم بک‌اند", null, null), default)).Value!;
-        await world.Service.SetUserTeamAsync(Tenant, dev, new SetUserTeamRequest(team.Id), default);
+        foreach (var (user, unit) in new[] { (builder, tech), (dev, tech), (loner, tech), (opsPerson, ops) })
+        {
+            await world.Service.SetAssignmentAsync(Tenant, user, new SetUserAssignmentRequest(company, unit.Id, null, null), default);
+        }
 
-        var moved = await world.Service.SetAssignmentAsync(Tenant, dev, new SetUserAssignmentRequest(company, ops.Id, null, null), default);
-        Assert.Null(moved.Value!.TeamId);
+        world.Team("تیم توسعه", builder, builder, dev, opsPerson);
+        world.Team("تیم پشتیبانی", builder, dev); // a person may be in several teams
 
-        await world.Service.SetUserTeamAsync(Tenant, dev, new SetUserTeamRequest(team.Id), default);
-        Assert.True((await world.Service.DeleteTeamAsync(Tenant, team.Id, default)).IsSuccess);
-
-        var after = (await world.Service.GetAssignmentAsync(Tenant, dev, default)).Value!;
-        Assert.Equal(tech.Id, after.UnitId);
-        Assert.Null(after.TeamId);
+        var units = Assert.Single((await world.Service.GetChartAsync(Tenant, null, default)).Value!).Units.ToDictionary(u => u.UnitId);
+        var techTeams = units[tech.Id].Teams;
+        Assert.Equal(["تیم توسعه", "تیم پشتیبانی"], techTeams.Select(t => t.Name));
+        Assert.Equal(builder, techTeams[0].Owner.UserId);
+        Assert.Equal(3, techTeams[0].Members.Count); // from any unit
+        Assert.Equal(dev, Assert.Single(techTeams[1].Members).UserId);
+        Assert.Equal(loner, Assert.Single(units[tech.Id].Members).UserId);
+        Assert.Empty(units[ops.Id].Teams);
+        Assert.Empty(units[ops.Id].Members); // the ops person is in a team (of another unit)
+        Assert.Empty((await world.Service.ListTeamsOutsideUnitsAsync(Tenant, default)).Value!);
     }
 
     [Fact]
-    public async Task ATeamOfAUnitWithNoCompany_CannotTakePeople_AndNamesAreUniquePerUnit()
+    public async Task TeamsOfBuildersInNoUnit_AreListedOnTheirOwn()
     {
         var world = new World();
-        var dev = world.User("برنامه‌نویس");
-        var unlinked = world.Unit("واحد بی‌شرکت");
-        var team = (await world.Service.CreateTeamAsync(Tenant, new CreateOrgTeamRequest(unlinked.Id, "تیم", null, null), default)).Value!;
+        var admin = world.User("مدیر سیستم");
+        var member = world.User("عضو");
+        world.Team("تیم توسعه‌دهندگان", admin, admin, member);
 
-        Assert.False((await world.Service.SetUserTeamAsync(Tenant, dev, new SetUserTeamRequest(team.Id), default)).IsSuccess);
-        Assert.False((await world.Service.CreateTeamAsync(Tenant, new CreateOrgTeamRequest(unlinked.Id, " تیم ", null, null), default)).IsSuccess);
+        var outside = Assert.Single((await world.Service.ListTeamsOutsideUnitsAsync(Tenant, default)).Value!);
+        Assert.Equal("تیم توسعه‌دهندگان", outside.Name);
+        Assert.Equal(admin, outside.Members[0].UserId); // the builder first
     }
 
     [Fact]
@@ -148,6 +131,7 @@ public sealed class OrgTeamsAndTitlesTests
     {
         private readonly OrganizationDbContext _organization;
         private readonly Directory _users = new();
+        private readonly WorkTeams _teams = new();
 
         public World()
         {
@@ -155,7 +139,7 @@ public sealed class OrgTeamsAndTitlesTests
             _organization = new OrganizationDbContext(new DbContextOptionsBuilder<OrganizationDbContext>().UseInMemoryDatabase("org-" + name).Options);
             var structure = new OrgStructureDbContext(new DbContextOptionsBuilder<OrgStructureDbContext>().UseInMemoryDatabase("orgs-" + name).Options);
             var repository = new OrgStructureRepository(structure);
-            Service = new OrgStructureService(repository, structure, new OrganizationUnitRepository(_organization), _users);
+            Service = new OrgStructureService(repository, structure, new OrganizationUnitRepository(_organization), _users, _teams);
             Titles = new HonorificService(repository, structure, _users, _users);
         }
 
@@ -163,6 +147,9 @@ public sealed class OrgTeamsAndTitlesTests
         public IHonorificService Titles { get; }
 
         public string NameOf(Guid userId) => _users.Names[userId];
+
+        public void Team(string name, Guid owner, params Guid[] members) =>
+            _teams.Teams.Add(new WorkTeamInfo(Guid.NewGuid(), name, null, owner, members));
 
         public Guid User(string name)
         {
@@ -182,6 +169,21 @@ public sealed class OrgTeamsAndTitlesTests
 
         public async Task<Guid> CompanyAsync(string code) =>
             (await Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("شرکت " + code, code, null, null), default)).Value!.Id;
+    }
+
+    private sealed class WorkTeams : IWorkTeamDirectory
+    {
+        public List<WorkTeamInfo> Teams { get; } = [];
+
+        public Task<IReadOnlyList<WorkTeamInfo>> ListWorkTeamsAsync(Guid tenantId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<WorkTeamInfo>>(Teams);
+    }
+
+    /// <summary>No work teams at all (tests about other parts of the structure).</summary>
+    public sealed class NoWorkTeams : IWorkTeamDirectory
+    {
+        public Task<IReadOnlyList<WorkTeamInfo>> ListWorkTeamsAsync(Guid tenantId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<WorkTeamInfo>>([]);
     }
 
     /// <summary>The identity side: users' names, and the title writer working on them like the real one.</summary>

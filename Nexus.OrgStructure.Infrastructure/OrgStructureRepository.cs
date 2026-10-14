@@ -56,20 +56,6 @@ public sealed class OrgStructureRepository(OrgStructureDbContext dbContext) : IO
 
     public void RemoveAssignment(UserAssignment assignment) => dbContext.UserAssignments.Remove(assignment);
 
-    public async Task<IReadOnlyList<OrgTeam>> ListTeamsAsync(Guid tenantId, CancellationToken cancellationToken) =>
-        await dbContext.Teams.Where(x => x.TenantId == tenantId).OrderBy(x => x.Name).ToListAsync(cancellationToken);
-
-    public Task<OrgTeam?> GetTeamAsync(Guid tenantId, Guid id, CancellationToken cancellationToken) =>
-        dbContext.Teams.SingleOrDefaultAsync(x => x.TenantId == tenantId && x.Id == id, cancellationToken);
-
-    public Task<bool> TeamNameExistsAsync(Guid tenantId, Guid unitId, string name, Guid? excludeId, CancellationToken cancellationToken) =>
-        dbContext.Teams.AnyAsync(x => x.TenantId == tenantId && x.UnitId == unitId && x.Name == name && x.Id != excludeId, cancellationToken);
-
-    public async Task AddTeamAsync(OrgTeam team, CancellationToken cancellationToken) =>
-        await dbContext.Teams.AddAsync(team, cancellationToken);
-
-    public void RemoveTeam(OrgTeam team) => dbContext.Teams.Remove(team);
-
     public async Task<IReadOnlyList<Honorific>> ListHonorificsAsync(Guid tenantId, CancellationToken cancellationToken) =>
         await dbContext.Honorifics.Where(x => x.TenantId == tenantId).OrderBy(x => x.SortOrder).ThenBy(x => x.Title).ToListAsync(cancellationToken);
 

@@ -145,52 +145,6 @@ namespace Nexus.OrgStructure.Infrastructure.Migrations.OrgStructure
                     b.ToTable("Honorifics", "org_structure");
                 });
 
-            modelBuilder.Entity("Nexus.OrgStructure.Domain.OrgTeam", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTimeOffset>("CreatedAtUtc")
-                        .HasColumnType("datetimeoffset");
-
-                    b.Property<Guid?>("CreatedByUserId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("Description")
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("bit");
-
-                    b.Property<Guid?>("LeaderUserId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTimeOffset?>("ModifiedAtUtc")
-                        .HasColumnType("datetimeoffset");
-
-                    b.Property<Guid?>("ModifiedByUserId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid>("UnitId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TenantId", "UnitId", "Name")
-                        .IsUnique();
-
-                    b.ToTable("Teams", "org_structure");
-                });
-
             modelBuilder.Entity("Nexus.OrgStructure.Domain.Position", b =>
                 {
                     b.Property<Guid>("Id")
@@ -258,9 +212,6 @@ namespace Nexus.OrgStructure.Infrastructure.Migrations.OrgStructure
                     b.Property<Guid?>("PositionId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<Guid?>("TeamId")
-                        .HasColumnType("uniqueidentifier");
-
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uniqueidentifier");
 
@@ -275,8 +226,6 @@ namespace Nexus.OrgStructure.Infrastructure.Migrations.OrgStructure
                     b.HasIndex("CompanyId");
 
                     b.HasIndex("ManagerUserId");
-
-                    b.HasIndex("TeamId");
 
                     b.HasIndex("UnitId");
 

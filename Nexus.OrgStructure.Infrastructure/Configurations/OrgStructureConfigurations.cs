@@ -62,21 +62,6 @@ public sealed class UserAssignmentConfiguration : IEntityTypeConfiguration<UserA
         builder.HasIndex(x => x.CompanyId);
         builder.HasIndex(x => x.UnitId);
         builder.HasIndex(x => x.ManagerUserId);
-        builder.HasIndex(x => x.TeamId);
-    }
-}
-
-public sealed class OrgTeamConfiguration : IEntityTypeConfiguration<OrgTeam>
-{
-    public void Configure(EntityTypeBuilder<OrgTeam> builder)
-    {
-        builder.ToTable("Teams", OrgStructureSchema.Name);
-        builder.HasKey(x => x.Id);
-        builder.Property(x => x.Id).ValueGeneratedNever();
-        builder.Property(x => x.Name).HasMaxLength(200).IsRequired();
-        builder.Property(x => x.Description).HasMaxLength(1000);
-        // Team names are unique within their unit.
-        builder.HasIndex(x => new { x.TenantId, x.UnitId, x.Name }).IsUnique();
     }
 }
 

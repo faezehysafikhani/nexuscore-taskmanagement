@@ -41,9 +41,7 @@ public sealed record UserAssignmentDto(
     Guid? PositionId,
     string? PositionTitle,
     Guid? ExplicitManagerUserId,
-    ManagerDto? Manager,
-    Guid? TeamId = null,
-    string? TeamName = null);
+    ManagerDto? Manager);
 
 public sealed record SetUserAssignmentRequest(Guid CompanyId, Guid? UnitId, Guid? PositionId, Guid? ManagerUserId);
 
@@ -68,19 +66,23 @@ public sealed record OrgChartMemberDto(
     string? PositionTitle,
     Guid? ManagerUserId,
     string? AvatarUrl = null,
-    Guid? PositionId = null,
-    Guid? TeamId = null);
+    Guid? PositionId = null);
 
-/// <summary>An organizational team of a unit, with its members.</summary>
+/// <summary>
+/// A work team (one of the personal teams people build for their tasks and chat), shown under
+/// the unit of the person who built it, with its members - wherever they sit.
+/// </summary>
 public sealed record OrgChartTeamDto(
     Guid TeamId,
     string Name,
     string? Description,
-    PersonRef? Leader,
-    bool IsActive,
+    PersonRef Owner,
     IReadOnlyList<OrgChartMemberDto> Members);
 
-/// <summary>Members: the unit's people who are in none of its teams. Teams: its teams and their people.</summary>
+/// <summary>
+/// Members: the unit's people who are in no work team. Teams: the work teams built by the unit's
+/// people (a person can be in several, so may appear more than once).
+/// </summary>
 public sealed record OrgChartUnitDto(
     Guid UnitId,
     string Name,
@@ -98,25 +100,6 @@ public sealed record OrgChartCompanyDto(
     PersonRef? Manager,
     IReadOnlyList<OrgChartMemberDto> Members,
     IReadOnlyList<OrgChartUnitDto> Units);
-
-/// <summary>An organizational team inside a unit (deputy).</summary>
-public sealed record OrgTeamDto(
-    Guid Id,
-    Guid UnitId,
-    string UnitName,
-    Guid? CompanyId,
-    string Name,
-    string? Description,
-    PersonRef? Leader,
-    bool IsActive,
-    int MemberCount);
-
-public sealed record CreateOrgTeamRequest(Guid UnitId, string Name, string? Description, Guid? LeaderUserId);
-
-public sealed record UpdateOrgTeamRequest(string Name, string? Description, Guid? LeaderUserId, bool IsActive);
-
-/// <summary>Null takes the user out of their team (they stay in the unit).</summary>
-public sealed record SetUserTeamRequest(Guid? TeamId);
 
 /// <summary>Someone of the organization who has no place in the structure yet.</summary>
 public sealed record UnplacedUserDto(Guid UserId, string DisplayName, string? AvatarUrl);

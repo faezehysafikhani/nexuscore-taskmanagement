@@ -8,7 +8,6 @@ public static class OrgStructurePermissions
     public const string ManageCompanies = "org_structure.manage_companies";
     public const string ManagePositions = "org_structure.manage_positions";
     public const string ManageAssignments = "org_structure.manage_assignments";
-    public const string ManageTeams = "org_structure.manage_teams";
 
     /// <summary>
     /// Policy for the read endpoints: any of the permissions above. A manager of companies,
@@ -36,8 +35,7 @@ public static class OrgStructurePermissions
         new(View, "Organization", "مشاهده ساختار سازمانی (شرکت‌ها، سمت‌ها، مدیر و زیردستان کاربران)"),
         new(ManageCompanies, "Organization", "مدیریت شرکت‌ها و تعیین معاونت‌های هر شرکت"),
         new(ManagePositions, "Organization", "مدیریت سمت‌های سازمانی"),
-        new(ManageAssignments, "Organization", "تعیین شرکت، معاونت، سمت و مدیر کاربران"),
-        new(ManageTeams, "Organization", "مدیریت تیم‌های سازمانی و اعضای آن‌ها")
+        new(ManageAssignments, "Organization", "تعیین شرکت، معاونت، سمت و مدیر کاربران")
     ];
 }
 

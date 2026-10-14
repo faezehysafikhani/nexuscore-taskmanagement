@@ -34,11 +34,7 @@ public interface IOrgStructureService
     Task<Result<MyPlacementDto>> GetPlacementAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken);
     Task<Result<IReadOnlyList<OrgChartCompanyDto>>> GetChartAsync(Guid tenantId, Guid? companyId, CancellationToken cancellationToken);
 
-    Task<Result<IReadOnlyList<OrgTeamDto>>> ListTeamsAsync(Guid tenantId, Guid? unitId, CancellationToken cancellationToken);
-    Task<Result<OrgTeamDto>> CreateTeamAsync(Guid tenantId, CreateOrgTeamRequest request, CancellationToken cancellationToken);
-    Task<Result<OrgTeamDto>> UpdateTeamAsync(Guid tenantId, Guid id, UpdateOrgTeamRequest request, CancellationToken cancellationToken);
-    Task<Result> DeleteTeamAsync(Guid tenantId, Guid id, CancellationToken cancellationToken);
-    Task<Result<UserAssignmentDto>> SetUserTeamAsync(Guid tenantId, Guid userId, SetUserTeamRequest request, CancellationToken cancellationToken);
+    Task<Result<IReadOnlyList<OrgChartTeamDto>>> ListTeamsOutsideUnitsAsync(Guid tenantId, CancellationToken cancellationToken);
     Task<Result<IReadOnlyList<UnplacedUserDto>>> ListUnplacedUsersAsync(Guid tenantId, CancellationToken cancellationToken);
 }
 
@@ -46,7 +42,8 @@ public sealed class OrgStructureService(
     IOrgStructureRepository repository,
     IOrgStructureUnitOfWork unitOfWork,
     IOrganizationUnitRepository units,
-    IUserDirectory users) : IOrgStructureService
+    IUserDirectory users,
+    IWorkTeamDirectory workTeams) : IOrgStructureService
 {
     private const int MaxNameLength = 200;
     private const int MaxTitleLength = 120;
@@ -535,12 +532,14 @@ public sealed class OrgStructureService(
     {
         var snapshot = await LoadAsync(tenantId, cancellationToken);
         var resolver = snapshot.Resolver();
+        var teams = await workTeams.ListWorkTeamsAsync(tenantId, cancellationToken);
         var people = await PeopleAsync(
             snapshot.Assignments.Select(a => (Guid?)a.UserId)
                 .Concat(snapshot.Companies.Values.Select(c => c.ManagerUserId))
                 .Concat(snapshot.Units.Values.Select(u => u.ManagerUserId))
-                .Concat(snapshot.Teams.Values.Select(t => t.LeaderUserId)),
+                .Concat(teams.SelectMany(t => t.MemberIds.Append(t.OwnerUserId)).Select(id => (Guid?)id)),
             cancellationToken);
+        var inSomeTeam = teams.SelectMany(t => t.MemberIds).ToHashSet();
 
         // Units no longer carry parent references: build an empty children map.
         var children = new Dictionary<Guid, List<OrganizationUnit>>();
@@ -550,31 +549,19 @@ public sealed class OrgStructureService(
             var person = Person(a.UserId, people);
             return new OrgChartMemberDto(
                 a.UserId, person.DisplayName, person.IsActive, PositionTitle(snapshot, a.UserId), resolver.ManagerOf(a.UserId)?.ManagerUserId,
-                person.AvatarUrl, a.PositionId, TeamOf(snapshot, a)?.Id);
+                person.AvatarUrl, a.PositionId);
         }
 
         OrgChartUnitDto BuildUnit(OrganizationUnit unit, HashSet<Guid> visited)
         {
             var unitPeople = snapshot.Assignments.Where(a => a.UnitId == unit.Id).ToList();
-            var teams = snapshot.Teams.Values
-                .Where(team => team.UnitId == unit.Id)
-                .OrderBy(team => team.Name)
-                .Select(team => new OrgChartTeamDto(
-                    team.Id,
-                    team.Name,
-                    team.Description,
-                    team.LeaderUserId is { } leader ? Person(leader, people) : null,
-                    team.IsActive,
-                    unitPeople.Where(a => TeamOf(snapshot, a)?.Id == team.Id).Select(Member).OrderBy(x => x.DisplayName).ToList()))
-                .ToList();
-
             return new OrgChartUnitDto(
                 unit.Id,
                 unit.Name,
                 unit.ManagerUserId is { } m ? Person(m, people) : null,
-                unitPeople.Where(a => TeamOf(snapshot, a) is null).Select(Member).OrderBy(x => x.DisplayName).ToList(),
+                unitPeople.Where(a => !inSomeTeam.Contains(a.UserId)).Select(Member).OrderBy(x => x.DisplayName).ToList(),
                 new List<OrgChartUnitDto>(),
-                teams,
+                teams.Where(team => UnitOfOwner(snapshot, team) == unit.Id).Select(team => TeamDto(team, snapshot, resolver, people)).ToList(),
                 unit.IsActive);
         }
 
@@ -613,140 +600,19 @@ public sealed class OrgStructureService(
         return Result.Success<IReadOnlyList<OrgChartCompanyDto>>(chart);
     }
 
-    // ---------------------------------------------------------------- teams
+    // ---------------------------------------------------------------- work teams
 
-    public async Task<Result<IReadOnlyList<OrgTeamDto>>> ListTeamsAsync(Guid tenantId, Guid? unitId, CancellationToken cancellationToken)
+    /// <summary>Work teams whose builder is in no unit of a company, so the chart shows them on their own.</summary>
+    public async Task<Result<IReadOnlyList<OrgChartTeamDto>>> ListTeamsOutsideUnitsAsync(Guid tenantId, CancellationToken cancellationToken)
     {
         var snapshot = await LoadAsync(tenantId, cancellationToken);
-        var teams = snapshot.Teams.Values.Where(team => unitId is null || team.UnitId == unitId).ToList();
-        var people = await PeopleAsync(teams.Select(team => team.LeaderUserId), cancellationToken);
-        return Result.Success<IReadOnlyList<OrgTeamDto>>(teams
-            .Select(team => ToDto(team, snapshot, people))
-            .OrderBy(dto => dto.UnitName).ThenBy(dto => dto.Name)
-            .ToList());
-    }
-
-    public async Task<Result<OrgTeamDto>> CreateTeamAsync(Guid tenantId, CreateOrgTeamRequest request, CancellationToken cancellationToken)
-    {
-        var snapshot = await LoadAsync(tenantId, cancellationToken);
-        if (!snapshot.Units.TryGetValue(request.UnitId, out var unit) || !unit.IsActive)
-        {
-            return Result.Failure<OrgTeamDto>(Error.Validation("Organization unit was not found or is inactive."));
-        }
-
-        var invalid = await ValidateTeamAsync(tenantId, null, request.UnitId, request.Name, request.Description, request.LeaderUserId, cancellationToken);
-        if (invalid is not null)
-        {
-            return Result.Failure<OrgTeamDto>(invalid);
-        }
-
-        var team = new OrgTeam(Guid.NewGuid(), tenantId, request.UnitId, request.Name, request.Description, request.LeaderUserId);
-        await repository.AddTeamAsync(team, cancellationToken);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-        return Result.Success(await TeamDtoAsync(tenantId, team, cancellationToken));
-    }
-
-    public async Task<Result<OrgTeamDto>> UpdateTeamAsync(Guid tenantId, Guid id, UpdateOrgTeamRequest request, CancellationToken cancellationToken)
-    {
-        var team = await repository.GetTeamAsync(tenantId, id, cancellationToken);
-        if (team is null)
-        {
-            return Result.Failure<OrgTeamDto>(Error.NotFound("Team was not found."));
-        }
-
-        var invalid = await ValidateTeamAsync(tenantId, id, team.UnitId, request.Name, request.Description, request.LeaderUserId, cancellationToken);
-        if (invalid is not null)
-        {
-            return Result.Failure<OrgTeamDto>(invalid);
-        }
-
-        team.Update(request.Name, request.Description, request.LeaderUserId, request.IsActive);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-        return Result.Success(await TeamDtoAsync(tenantId, team, cancellationToken));
-    }
-
-    /// <summary>The team's people stay in the unit, just in no team.</summary>
-    public async Task<Result> DeleteTeamAsync(Guid tenantId, Guid id, CancellationToken cancellationToken)
-    {
-        var team = await repository.GetTeamAsync(tenantId, id, cancellationToken);
-        if (team is null)
-        {
-            return Result.Failure(Error.NotFound("Team was not found."));
-        }
-
-        foreach (var assignment in (await repository.ListAssignmentsAsync(tenantId, cancellationToken)).Where(a => a.TeamId == id))
-        {
-            assignment.SetTeam(null);
-        }
-
-        repository.RemoveTeam(team);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-        return Result.Success();
-    }
-
-    /// <summary>
-    /// Puts a user in a team (or, with no team, takes them out of theirs). Someone not yet in the
-    /// team's unit is moved there - with its company - keeping their position and any manager
-    /// set on them; the same loop check as any other move applies.
-    /// </summary>
-    public async Task<Result<UserAssignmentDto>> SetUserTeamAsync(Guid tenantId, Guid userId, SetUserTeamRequest request, CancellationToken cancellationToken)
-    {
-        if (!await IsUserOfTenantAsync(tenantId, userId, cancellationToken))
-        {
-            return Result.Failure<UserAssignmentDto>(Error.NotFound("User was not found."));
-        }
-
-        var snapshot = await LoadAsync(tenantId, cancellationToken);
-        var assignment = await repository.GetAssignmentAsync(tenantId, userId, cancellationToken);
-
-        if (request.TeamId is not { } teamId)
-        {
-            if (assignment is null)
-            {
-                return Result.Failure<UserAssignmentDto>(Error.NotFound("This user has no place in the organization structure."));
-            }
-
-            assignment.SetTeam(null);
-            await unitOfWork.SaveChangesAsync(cancellationToken);
-            return Result.Success(await ToDtoAsync(assignment, await LoadAsync(tenantId, cancellationToken), cancellationToken));
-        }
-
-        if (snapshot.Teams.GetValueOrDefault(teamId) is not { IsActive: true } team)
-        {
-            return Result.Failure<UserAssignmentDto>(Error.Validation("Team was not found or is inactive."));
-        }
-
         var resolver = snapshot.Resolver();
-        if (resolver.CompanyOfUnit(team.UnitId) is not { } companyId)
-        {
-            return Result.Failure<UserAssignmentDto>(Error.Validation("The team's unit is not in a company yet."));
-        }
-
-        if (snapshot.Companies.GetValueOrDefault(companyId) is not { IsActive: true })
-        {
-            return Result.Failure<UserAssignmentDto>(Error.Validation("The company is inactive."));
-        }
-
-        if (assignment is null || assignment.UnitId != team.UnitId)
-        {
-            var after = snapshot.Resolver(assignmentOverride: new AssignmentNode(userId, companyId, team.UnitId, assignment?.ManagerUserId));
-            if (after.ManagementChainOf(userId).Count > 0 && LoopsBackTo(after, userId))
-            {
-                return Result.Failure<UserAssignmentDto>(Error.Conflict("This change would create a management loop."));
-            }
-
-            if (assignment is null)
-            {
-                assignment = new UserAssignment(Guid.NewGuid(), tenantId, userId);
-                await repository.AddAssignmentAsync(assignment, cancellationToken);
-            }
-
-            assignment.Set(companyId, team.UnitId, assignment.PositionId, assignment.ManagerUserId);
-        }
-
-        assignment.SetTeam(team.Id);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-        return Result.Success(await ToDtoAsync(assignment, await LoadAsync(tenantId, cancellationToken), cancellationToken));
+        var linkedUnits = snapshot.Links.Select(link => link.UnitId).ToHashSet();
+        var outside = (await workTeams.ListWorkTeamsAsync(tenantId, cancellationToken))
+            .Where(team => UnitOfOwner(snapshot, team) is not { } unitId || !linkedUnits.Contains(unitId))
+            .ToList();
+        var people = await PeopleAsync(outside.SelectMany(t => t.MemberIds.Append(t.OwnerUserId)).Select(id => (Guid?)id), cancellationToken);
+        return Result.Success<IReadOnlyList<OrgChartTeamDto>>(outside.Select(team => TeamDto(team, snapshot, resolver, people)).ToList());
     }
 
     public async Task<Result<IReadOnlyList<UnplacedUserDto>>> ListUnplacedUsersAsync(Guid tenantId, CancellationToken cancellationToken)
@@ -759,49 +625,27 @@ public sealed class OrgStructureService(
             .ToList());
     }
 
-    private async Task<Error?> ValidateTeamAsync(
-        Guid tenantId, Guid? id, Guid unitId, string? name, string? description, Guid? leaderUserId, CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            return Error.Validation("Name is required.");
-        }
+    /// <summary>The unit of the person who built the team; a team shows under it.</summary>
+    private static Guid? UnitOfOwner(Snapshot snapshot, WorkTeamInfo team) =>
+        snapshot.Assignments.FirstOrDefault(a => a.UserId == team.OwnerUserId)?.UnitId;
 
-        if (name.Trim().Length > MaxNameLength || (description?.Trim().Length ?? 0) > MaxDescriptionLength)
-        {
-            return Error.Validation("Name or description is too long.");
-        }
-
-        if (await repository.TeamNameExistsAsync(tenantId, unitId, name.Trim(), id, cancellationToken))
-        {
-            return Error.Conflict("This unit already has a team with this name.");
-        }
-
-        if (leaderUserId is { } leader && !await IsUserOfTenantAsync(tenantId, leader, cancellationToken))
-        {
-            return Error.Validation("The team lead was not found in this organization.");
-        }
-
-        return null;
-    }
-
-    private async Task<OrgTeamDto> TeamDtoAsync(Guid tenantId, OrgTeam team, CancellationToken cancellationToken)
-    {
-        var snapshot = await LoadAsync(tenantId, cancellationToken);
-        var people = await PeopleAsync([team.LeaderUserId], cancellationToken);
-        return ToDto(snapshot.Teams.GetValueOrDefault(team.Id) ?? team, snapshot, people);
-    }
-
-    private static OrgTeamDto ToDto(OrgTeam team, Snapshot snapshot, IReadOnlyDictionary<Guid, UserContact> people) => new(
+    /// <summary>A work team with all its members (placed in the structure or not).</summary>
+    private static OrgChartTeamDto TeamDto(WorkTeamInfo team, Snapshot snapshot, HierarchyResolver resolver, IReadOnlyDictionary<Guid, UserContact> people) => new(
         team.Id,
-        team.UnitId,
-        snapshot.Units.GetValueOrDefault(team.UnitId)?.Name ?? string.Empty,
-        snapshot.Links.FirstOrDefault(link => link.UnitId == team.UnitId)?.CompanyId,
         team.Name,
         team.Description,
-        team.LeaderUserId is { } leader ? Person(leader, people) : null,
-        team.IsActive,
-        snapshot.Assignments.Count(a => TeamOf(snapshot, a)?.Id == team.Id));
+        Person(team.OwnerUserId, people),
+        team.MemberIds.Distinct()
+            .Select(userId =>
+            {
+                var person = Person(userId, people);
+                var assignment = snapshot.Assignments.FirstOrDefault(a => a.UserId == userId);
+                return new OrgChartMemberDto(
+                    userId, person.DisplayName, person.IsActive, PositionTitle(snapshot, userId), resolver.ManagerOf(userId)?.ManagerUserId,
+                    person.AvatarUrl, assignment?.PositionId);
+            })
+            .OrderBy(member => member.UserId != team.OwnerUserId).ThenBy(member => member.DisplayName)
+            .ToList());
 
     // ---------------------------------------------------------------- helpers
 
@@ -891,24 +735,15 @@ public sealed class OrgStructureService(
             assignment.PositionId,
             assignment.PositionId is { } p ? snapshot.Positions.GetValueOrDefault(p)?.Title : null,
             assignment.ManagerUserId,
-            manager is null ? null : ToManagerDto(manager, people),
-            TeamOf(snapshot, assignment)?.Id,
-            TeamOf(snapshot, assignment)?.Name);
+            manager is null ? null : ToManagerDto(manager, people));
     }
-
-    /// <summary>The user's team - only while it is a team of their own unit.</summary>
-    private static OrgTeam? TeamOf(Snapshot snapshot, UserAssignment assignment) =>
-        assignment.TeamId is { } teamId && snapshot.Teams.GetValueOrDefault(teamId) is { } team && team.UnitId == assignment.UnitId
-            ? team
-            : null;
 
     private async Task<Snapshot> LoadAsync(Guid tenantId, CancellationToken cancellationToken) => new(
         (await units.ListAsync(tenantId, cancellationToken)).ToDictionary(unit => unit.Id),
         (await repository.ListCompaniesAsync(tenantId, cancellationToken)).ToDictionary(company => company.Id),
         await repository.ListCompanyUnitsAsync(tenantId, cancellationToken),
         (await repository.ListPositionsAsync(tenantId, cancellationToken)).ToDictionary(position => position.Id),
-        await repository.ListAssignmentsAsync(tenantId, cancellationToken),
-        (await repository.ListTeamsAsync(tenantId, cancellationToken)).ToDictionary(team => team.Id));
+        await repository.ListAssignmentsAsync(tenantId, cancellationToken));
 
     /// <summary>One tenant's structure, read once per request.</summary>
     private sealed record Snapshot(
@@ -916,8 +751,7 @@ public sealed class OrgStructureService(
         IReadOnlyDictionary<Guid, Company> Companies,
         IReadOnlyList<CompanyUnit> Links,
         IReadOnlyDictionary<Guid, Position> Positions,
-        IReadOnlyList<UserAssignment> Assignments,
-        IReadOnlyDictionary<Guid, OrgTeam> Teams)
+        IReadOnlyList<UserAssignment> Assignments)
     {
         public HierarchyResolver Resolver(
             AssignmentNode? assignmentOverride = null,
