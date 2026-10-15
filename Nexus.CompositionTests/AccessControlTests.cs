@@ -21,6 +21,10 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using Nexus.Integrations.TaskNotifications;
+using Notifications.Api.Endpoints;
+using Notifications.Application;
+using Notifications.Infrastructure;
+using Notifications.Infrastructure.Persistence;
 using Nexus.TaskManagement;
 using Nexus.TaskManagement.Endpoints;
 using Nexus.TaskManagement.Infrastructure;
@@ -403,6 +407,9 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
             builder.Services.AddTicketingInfrastructure(builder.Configuration);
             builder.Services.AddChatApplication();
             builder.Services.AddChatInfrastructure(builder.Configuration);
+            // The in-app notifications the task screens and reminders write.
+            builder.Services.AddNotificationApplication();
+            builder.Services.AddNotificationInfrastructure(builder.Configuration);
             builder.Services.AddSignalR();
 
             // One in-memory store per context: each maps the shared identity tables with its own
@@ -411,6 +418,7 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
             UseInMemory<NexusCoreDbContext>(builder.Services, Guid.NewGuid().ToString(), withInterceptors: true);
             UseInMemory<TaskManagementDbContext>(builder.Services, Guid.NewGuid().ToString(), withInterceptors: true);
             UseInMemory<TicketingDbContext>(builder.Services, Guid.NewGuid().ToString(), withInterceptors: false);
+            UseInMemory<NotificationDbContext>(builder.Services, Guid.NewGuid().ToString(), withInterceptors: false);
             // Chat's own database, on SQLite (a real relational engine): its unique indexes
             // (one conversation per pair, one per team) are actually enforced, unlike InMemory.
             builder.Services.RemoveAll<DbContextOptions<ChatDbContext>>();
@@ -450,6 +458,7 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
             _app.MapTaskManagementEndpoints();
             _app.MapTicketEndpoints();
             _app.MapChatEndpoints();
+            _app.MapNotificationEndpoints();
             _app.MapHub<ChatHub>("/hubs/chat");
 
             using (var scope = _app.Services.CreateScope())

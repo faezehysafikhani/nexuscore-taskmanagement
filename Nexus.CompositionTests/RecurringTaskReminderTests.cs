@@ -49,6 +49,7 @@ public sealed class RecurringTaskReminderTests : IDisposable
     private readonly Channels _channels = new();
     private readonly RecordingLogs _logs = new();
     private readonly TemplateStore _templateStore = new();
+    private readonly SettableClock _clock = new();
 
     private readonly Guid _tenant = Guid.NewGuid();
     private readonly Guid _otherTenant = Guid.NewGuid();
@@ -81,6 +82,11 @@ public sealed class RecurringTaskReminderTests : IDisposable
         services.AddSingleton<IUnitOfWork, NoUnitOfWork>();
         services.AddSingleton<ISmsTemplateCatalog, CoreSmsTemplateCatalog>();
         services.AddScoped<ISmsTemplateService, SmsTemplateService>();
+        // Quiet hours as the host has them (22:00-07:00 Tehran unless saved), on a clock the tests set.
+        services.AddSingleton<TimeProvider>(_clock);
+        services.Configure<SmsDeliveryOptions>(options => options.TimeZone = "Asia/Tehran");
+        services.AddScoped<ISmsQuietHours, SmsQuietHours>();
+        services.AddSingleton<ITaskSmsOutbox, TaskSmsOutbox>();
 
         services.AddDbContext<TaskManagementDbContext>((provider, options) => options
             .UseSqlite($"Data Source={_databaseFile};Pooling=False;Default Timeout=30")
@@ -561,6 +567,219 @@ public sealed class RecurringTaskReminderTests : IDisposable
         Assert.Equal(future.ToDateTime(TimeOnly.MinValue), next.DateTime);
     }
 
+    // ---------------------------------------------------------------- due soon, overdue, coming up
+
+    // A day a few days ahead, so every task below is created before its reminders are due.
+    private static readonly DateOnly Day = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, Tehran).DateTime).AddDays(3);
+
+    private static DateTimeOffset At(DateOnly date, int hour, int minute = 0) =>
+        new RecurrenceCalculator(Tehran).FromLocal(date, new TimeOnly(hour, minute));
+
+    [Fact]
+    public async Task ATaskDueAtATime_IsRemindedADayBefore_Once_InTheAppAndBySms()
+    {
+        var owner = User("09120000001");
+        var responsible = User("09120000002");
+        await TaskAsync(owner, Day, new TimeOnly(18, 0), responsibleIds: [responsible.Id]);
+
+        await RemindAsync(At(Day.AddDays(-1), 17, 50));
+        Assert.Empty(_notifications.Sent);
+
+        await RemindAsync(At(Day.AddDays(-1), 18, 5));
+        await RemindAsync(At(Day.AddDays(-1), 18, 30));
+
+        Assert.Equal((responsible.Id, TaskNoticeNotifications.DueSoon), Assert.Single(_notifications.Categories));
+        Assert.Contains("نزدیک", Assert.Single(_notifications.Sent).Message);
+        Assert.Equal("09120000002", Assert.Single(_smsProvider.Sent).Phone);
+    }
+
+    [Fact]
+    public async Task ATaskWithADateOnly_IsRemindedAtTheMorningHour_TheDayBefore()
+    {
+        var owner = User("09120000001");
+        var responsible = User("09120000002");
+        await TaskAsync(owner, Day, responsibleIds: [responsible.Id]);
+
+        await RemindAsync(At(Day.AddDays(-1), 8, 50));
+        Assert.Empty(_notifications.Sent);
+
+        await RemindAsync(At(Day.AddDays(-1), 9, 5));
+        Assert.Equal((responsible.Id, TaskNoticeNotifications.DueSoon), Assert.Single(_notifications.Categories));
+        Assert.Single(_smsProvider.Sent);
+    }
+
+    [Fact]
+    public async Task AnOverdueTask_IsAnnouncedOnce_BySmsToThoseResponsible_AndInTheAppToTheCreatorToo()
+    {
+        var owner = User("09120000001");
+        var responsible = User("09120000002");
+        await TaskAsync(owner, Day, new TimeOnly(10, 0), responsibleIds: [responsible.Id]);
+
+        await RemindAsync(At(Day, 10, 5));
+        await RemindAsync(At(Day, 11, 0));
+        await RemindAsync(At(Day.AddDays(1), 9, 0));
+
+        Assert.Equal(
+            new[] { owner.Id, responsible.Id }.Order(),
+            _notifications.Categories.Where(c => c.Category == TaskNoticeNotifications.Overdue).Select(c => c.UserId).Order());
+        // Past its due moment there is nothing to say it is near.
+        Assert.DoesNotContain(_notifications.Categories, c => c.Category == TaskNoticeNotifications.DueSoon);
+        Assert.Equal("09120000002", Assert.Single(_smsProvider.Sent).Phone);
+    }
+
+    [Theory]
+    [InlineData(TaskItemStatus.Completed)]
+    [InlineData(TaskItemStatus.Paused)]
+    public async Task ADoneOrPausedTask_GetsNoDueReminders(TaskItemStatus status)
+    {
+        var owner = User("09120000001");
+        var responsible = User("09120000002");
+        await TaskAsync(owner, Day, new TimeOnly(10, 0), responsibleIds: [responsible.Id], status: status);
+
+        await RemindAsync(At(Day.AddDays(-1), 10, 5));
+        await RemindAsync(At(Day, 10, 5));
+
+        Assert.Empty(_notifications.Sent);
+        Assert.Empty(_smsProvider.Sent);
+    }
+
+    [Fact]
+    public async Task AMovedDueDate_IsRemindedOfAgain()
+    {
+        var owner = User("09120000001");
+        var responsible = User("09120000002");
+        var taskId = await TaskAsync(owner, Day, new TimeOnly(18, 0), responsibleIds: [responsible.Id]);
+
+        await RemindAsync(At(Day.AddDays(-1), 18, 5));
+        using (var scope = _services.CreateScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<TaskManagementDbContext>().Tasks.IgnoreQueryFilters()
+                .Where(t => t.Id == taskId)
+                .ExecuteUpdateAsync(s => s.SetProperty(t => t.DueDate, Day.AddDays(1)));
+        }
+
+        await RemindAsync(At(Day, 18, 5));
+
+        Assert.Equal(2, _notifications.Categories.Count(c => c.Category == TaskNoticeNotifications.DueSoon));
+        Assert.Equal(2, _smsProvider.Sent.Count);
+    }
+
+    [Fact]
+    public async Task EachOccurrence_IsAnnouncedBeforehand_Once()
+    {
+        var owner = User("09120000001");
+        var responsible = User("09120000002");
+        var (_, scheduleId) = await RecurringTaskAsync(
+            owner, responsibleIds: [responsible.Id], nextRunUtc: At(Day, 15, 0), startTime: new TimeOnly(15, 0),
+            status: TaskItemStatus.Completed);
+
+        // An hour before by default.
+        await RemindAsync(At(Day, 13, 55));
+        Assert.Empty(_notifications.Sent);
+
+        await RemindAsync(At(Day, 14, 5));
+        await RemindAsync(At(Day, 14, 30));
+
+        Assert.Equal((responsible.Id, TaskNoticeNotifications.RecurringSoon), Assert.Single(_notifications.Categories));
+        Assert.Equal("09120000002", Assert.Single(_smsProvider.Sent).Phone);
+        Assert.Contains("۱۵:۰۰", _smsProvider.Sent[0].Text);
+        Assert.Equal(At(Day, 15, 0), (await ScheduleAsync(scheduleId)).UpcomingNotifiedFor);
+    }
+
+    [Fact]
+    public async Task AnSmsInTheQuietHours_WaitsUntilTheyEnd_WhileTheAppNotificationGoesAtOnce()
+    {
+        var owner = User("09120000001");
+        var responsible = User("09120000002");
+        await TaskAsync(owner, Day, new TimeOnly(23, 30), responsibleIds: [responsible.Id]);
+
+        await RemindAsync(At(Day.AddDays(-1), 23, 35));
+        Assert.Single(_notifications.Sent);
+        Assert.Empty(_smsProvider.Sent);
+
+        await RemindAsync(At(Day, 6, 55));
+        Assert.Empty(_smsProvider.Sent);
+
+        await RemindAsync(At(Day, 7, 1));
+        await RemindAsync(At(Day, 7, 5));
+        Assert.Equal("09120000002", Assert.Single(_smsProvider.Sent).Phone);
+        Assert.Contains("نزدیک", _smsProvider.Sent[0].Text);
+    }
+
+    [Fact]
+    public async Task QuietHoursTurnedOff_LetTheSmsGoAtNight()
+    {
+        _templateStore.Settings[$"{_tenant}|{SmsQuietHours.SettingKey}"] = new SystemSetting(
+            Guid.NewGuid(), _tenant, SmsQuietHours.SettingKey, """{"enabled":false,"start":"22:00","end":"07:00"}""", SmsQuietHours.SettingScope);
+        var owner = User("09120000001");
+        var responsible = User("09120000002");
+        await TaskAsync(owner, Day, new TimeOnly(23, 30), responsibleIds: [responsible.Id]);
+
+        await RemindAsync(At(Day.AddDays(-1), 23, 35));
+
+        Assert.Single(_smsProvider.Sent);
+    }
+
+    [Fact]
+    public async Task ATemplateTurnedOffInTheSmsPanel_IsNotSent_ButTheAppStillTells()
+    {
+        _templateStore.Settings[$"{_tenant}|Notifications.SmsTemplates.{TaskSmsTemplateKeys.TaskDueSoon}.Enabled"] = new SystemSetting(
+            Guid.NewGuid(), _tenant, $"Notifications.SmsTemplates.{TaskSmsTemplateKeys.TaskDueSoon}.Enabled", "false", "Integrations");
+        var owner = User("09120000001");
+        var responsible = User("09120000002");
+        await TaskAsync(owner, Day, new TimeOnly(18, 0), responsibleIds: [responsible.Id]);
+
+        await RemindAsync(At(Day.AddDays(-1), 18, 5));
+
+        Assert.Single(_notifications.Sent);
+        Assert.Empty(_smsProvider.Sent);
+    }
+
+    [Fact]
+    public async Task RemindersTurnedOff_InTheSettings_AreNotSent()
+    {
+        _templateStore.Settings[$"{_tenant}|{TaskReminderSettingsService.SettingKey}"] = new SystemSetting(
+            Guid.NewGuid(), _tenant, TaskReminderSettingsService.SettingKey,
+            """{"dueSoonEnabled":false,"dueSoonHoursBefore":24,"morningHour":9,"overdueEnabled":false,"recurringSoonEnabled":false,"recurringSoonMinutesBefore":60}""",
+            TaskReminderSettingsService.SettingScope);
+        var owner = User("09120000001");
+        var responsible = User("09120000002");
+        await TaskAsync(owner, Day, new TimeOnly(18, 0), responsibleIds: [responsible.Id]);
+        await RecurringTaskAsync(owner, responsibleIds: [responsible.Id], nextRunUtc: At(Day, 15, 0), startTime: new TimeOnly(15, 0));
+
+        await RemindAsync(At(Day.AddDays(-1), 18, 5));
+        await RemindAsync(At(Day, 14, 30));
+        await RemindAsync(At(Day, 18, 5));
+
+        Assert.Empty(_notifications.Sent);
+        Assert.Empty(_smsProvider.Sent);
+    }
+
+    [Fact]
+    public async Task SavedReminderTiming_IsFollowed()
+    {
+        _templateStore.Settings[$"{_tenant}|{TaskReminderSettingsService.SettingKey}"] = new SystemSetting(
+            Guid.NewGuid(), _tenant, TaskReminderSettingsService.SettingKey,
+            """{"dueSoonEnabled":true,"dueSoonHoursBefore":3,"morningHour":9,"overdueEnabled":true,"recurringSoonEnabled":true,"recurringSoonMinutesBefore":15}""",
+            TaskReminderSettingsService.SettingScope);
+        var owner = User("09120000001");
+        var responsible = User("09120000002");
+        await TaskAsync(owner, Day, new TimeOnly(18, 0), responsibleIds: [responsible.Id]);
+        await RecurringTaskAsync(owner, responsibleIds: [responsible.Id], nextRunUtc: At(Day, 12, 0), startTime: new TimeOnly(12, 0));
+
+        await RemindAsync(At(Day, 11, 40));
+        Assert.Empty(_notifications.Sent);
+
+        await RemindAsync(At(Day, 11, 50));
+        Assert.Equal(TaskNoticeNotifications.RecurringSoon, Assert.Single(_notifications.Categories).Category);
+
+        await RemindAsync(At(Day, 14, 55));
+        Assert.Single(_notifications.Categories);
+
+        await RemindAsync(At(Day, 15, 5));
+        Assert.Equal(TaskNoticeNotifications.DueSoon, _notifications.Categories[^1].Category);
+    }
+
     // ---------------------------------------------------------------- helpers
 
     private UserContact User(string? phone, bool isActive = true, Guid? tenantId = null)
@@ -617,6 +836,45 @@ public sealed class RecurringTaskReminderTests : IDisposable
         db.RepetitiveTasks.Add(schedule);
         await db.SaveChangesAsync();
         return (task.Id, schedule.Id);
+    }
+
+    private async Task<Guid> TaskAsync(
+        UserContact owner, DateOnly dueDate, TimeOnly? dueTime = null,
+        IReadOnlyList<Guid>? responsibleIds = null, TaskItemStatus? status = null, string title = "Budget review")
+    {
+        using var scope = _services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<TaskManagementDbContext>();
+        foreach (var user in _directory.Users.Values.Where(u => !db.Users.Any(existing => existing.Id == u.Id)))
+        {
+            db.Users.Add(new User(user.Id, user.TenantId, null, user.DisplayName, "not-used"));
+        }
+
+        var task = new TaskItem(Guid.NewGuid(), _tenant, title, dueDate, TaskPriority.Medium, false, owner.Id);
+        task.SetDueTime(dueTime);
+        if (responsibleIds is not null)
+        {
+            task.SetResponsibleUsers(responsibleIds);
+        }
+
+        if (status is { } taskStatus)
+        {
+            task.ChangeStatus(taskStatus, DateTimeOffset.UtcNow);
+        }
+
+        db.Tasks.Add(task);
+        await db.SaveChangesAsync();
+        return task.Id;
+    }
+
+    private async Task RemindAsync(DateTimeOffset now)
+    {
+        _clock.Now = now;
+        await new TaskReminderService(
+                _services,
+                Options.Create(new RepetitiveTaskSchedulerOptions { Enabled = true }),
+                _clock,
+                _services.GetRequiredService<ILogger<TaskReminderService>>())
+            .RunOnceAsync(now, CancellationToken.None);
     }
 
     private RepetitiveTaskSchedulerService Scheduler() => new(
@@ -724,6 +982,14 @@ public sealed class RecurringTaskReminderTests : IDisposable
         public IReadOnlyList<(Guid UserId, Guid? TenantId, string Title, string Message)> Sent => Queue.ToList();
         public HashSet<Guid> FailFor { get; } = [];
         public HashSet<Guid> FailOnceFor { get; } = [];
+        public ConcurrentQueue<(Guid UserId, string? Category)> CategoryQueue { get; } = new();
+        public IReadOnlyList<(Guid UserId, string? Category)> Categories => CategoryQueue.ToList();
+
+        public async Task NotifyAsync(NotificationRequest request, CancellationToken cancellationToken = default)
+        {
+            await NotifyAsync(request.UserId, request.Title, request.Message, request.Type, cancellationToken, request.TenantId);
+            CategoryQueue.Enqueue((request.UserId, request.Category));
+        }
 
         public Task NotifyAsync(Guid userId, string title, string message, string type, CancellationToken cancellationToken = default, Guid? tenantId = null)
         {
@@ -735,6 +1001,14 @@ public sealed class RecurringTaskReminderTests : IDisposable
             Queue.Enqueue((userId, tenantId, title, message));
             return Task.CompletedTask;
         }
+    }
+
+    /// <summary>Midday in Tehran unless a test moves it: outside the SMS quiet hours.</summary>
+    private sealed class SettableClock : TimeProvider
+    {
+        public DateTimeOffset Now { get; set; } = new(DateTime.UtcNow.Date.AddHours(8).AddMinutes(30), TimeSpan.Zero);
+
+        public override DateTimeOffset GetUtcNow() => Now;
     }
 
     private sealed class Channels : INotificationChannelSettingsReader
