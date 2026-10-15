@@ -7,11 +7,11 @@ using Nexus.Workflow.Domain;
 namespace Nexus.Integrations.ProjectVisibility.Application;
 
 /// <summary>A project's team members can see the project (and, through it, the project's actions).</summary>
-public sealed class TeamMembershipVisibilityProvider(ITeamRepository? teamRepository = null) : IVisibilityProvider
+public sealed class TeamMembershipVisibilityProvider(ITeamRepository? teamRepository = null, IVisibilityRules? rules = null) : IVisibilityProvider
 {
     public async Task<VisibilityGrant> GetGrantAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken)
     {
-        if (teamRepository is null)
+        if (teamRepository is null || (rules is not null && !(await rules.GetAsync(tenantId, cancellationToken)).ViewByResources))
         {
             return VisibilityGrant.None;
         }
@@ -26,11 +26,11 @@ public sealed class TeamMembershipVisibilityProvider(ITeamRepository? teamReposi
 /// whoever manages a top-level unit (the root of a branch of the chart) sees the whole branch. An
 /// inactive unit still counts: its history does not disappear from its manager.
 /// </summary>
-public sealed class OrganizationUnitManagerVisibilityProvider(IOrganizationUnitRepository? organizationRepository = null) : IVisibilityProvider
+public sealed class OrganizationUnitManagerVisibilityProvider(IOrganizationUnitRepository? organizationRepository = null, IVisibilityRules? rules = null) : IVisibilityProvider
 {
     public async Task<VisibilityGrant> GetGrantAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken)
     {
-        if (organizationRepository is null)
+        if (organizationRepository is null || (rules is not null && !(await rules.GetAsync(tenantId, cancellationToken)).ViewByOrgHeads))
         {
             return VisibilityGrant.None;
         }
@@ -63,14 +63,14 @@ public sealed class OrganizationUnitManagerVisibilityProvider(IOrganizationUnitR
 /// waits for them. Only the subject types that are themselves a project or an action carry over:
 /// a risk or a document awaiting approval does not say which project it belongs to here.
 /// </summary>
-public sealed class PendingApprovalVisibilityProvider(IWorkflowInstanceService? workflowService = null) : IVisibilityProvider
+public sealed class PendingApprovalVisibilityProvider(IWorkflowInstanceService? workflowService = null, IVisibilityRules? rules = null) : IVisibilityProvider
 {
     public const string ProjectSubjectType = "Project";
     public const string ActionSubjectType = "Action";
 
     public async Task<VisibilityGrant> GetGrantAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken)
     {
-        if (workflowService is null)
+        if (workflowService is null || (rules is not null && !(await rules.GetAsync(tenantId, cancellationToken)).ViewByApprovers))
         {
             return VisibilityGrant.None;
         }

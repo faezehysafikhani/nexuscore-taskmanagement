@@ -34,6 +34,16 @@ public sealed class WorkflowDefinitionRepository(WorkflowDbContext dbContext) : 
                 cancellationToken);
     }
 
+    public Task<WorkflowDefinition?> FindExactAsync(Guid tenantId, string subjectType, string? scopeType, Guid? scopeId, CancellationToken cancellationToken)
+    {
+        var scope = string.IsNullOrWhiteSpace(scopeType) ? WorkflowDefinition.GeneralScope : scopeType;
+        return dbContext.WorkflowDefinitions
+            .Include(d => d.Steps)
+            .Where(d => d.TenantId == tenantId && d.SubjectType == subjectType && d.ScopeType == scope && d.ScopeId == scopeId)
+            .OrderByDescending(d => d.IsActive)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<WorkflowDefinition>> ListAsync(Guid tenantId, string? subjectType, CancellationToken cancellationToken)
     {
         var query = dbContext.WorkflowDefinitions.Include(d => d.Steps).Where(d => d.TenantId == tenantId);

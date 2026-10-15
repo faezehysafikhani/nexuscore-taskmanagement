@@ -12,6 +12,10 @@ public interface IWorkflowDefinitionService
     Task<Result<WorkflowDefinitionDto>> DeleteStepAsync(Guid id, Guid stepId, CancellationToken cancellationToken);
     Task<Result<WorkflowDefinitionDto>> MoveStepAsync(Guid id, Guid stepId, MoveWorkflowStepRequest request, CancellationToken cancellationToken);
 
+    /// <summary>Upserts the definition for a scope and replaces its steps in one go.</summary>
+    Task<Result<WorkflowDefinitionDto>> SetStepsAsync(SetWorkflowStepsRequest request, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
     /// <summary>Deactivates a scope-specific override so resolution falls back to the General definition.</summary>
     Task<Result> ResetToDefaultAsync(Guid id, CancellationToken cancellationToken);
 }

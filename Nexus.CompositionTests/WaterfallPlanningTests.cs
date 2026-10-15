@@ -513,6 +513,25 @@ public sealed class WaterfallPlanningTests
         Assert.Equal("conflict", late.Error.Code);
     }
 
+    private sealed class Policy(bool allowed) : IProgressRejectionPolicy
+    {
+        public Task<bool> AllowsConfirmedProgressAsync(Guid tenantId, CancellationToken ct) => Task.FromResult(allowed);
+    }
+
+    [Fact]
+    public async Task ConfirmingAFigure_FollowsTheInstalledPolicy_AndIsAlwaysAllowedWithoutOne()
+    {
+        var (service, submissions, activities, leaf, _, projectId) = BuildSubmissions(new SubmittingRequester());
+        var submitted = (await service.SubmitAsync(new SubmitActivityProgressRequest(Tenant, projectId, leaf.Id, 90, null, null), default)).Value!;
+
+        var refused = new ActivityProgressSubmissionService(submissions, activities, new FakeWaterfallUnitOfWork(), new SubmittingRequester(), new Policy(false));
+        var allowed = new ActivityProgressSubmissionService(submissions, activities, new FakeWaterfallUnitOfWork(), new SubmittingRequester(), new Policy(true));
+
+        Assert.Equal("forbidden", (await refused.SetConfirmedProgressAsync(submitted.Id, new SetConfirmedProgressRequest(55), default)).Error.Code);
+        Assert.Null(submissions.Items.Single().ApprovedProgress);
+        Assert.Equal(55m, (await allowed.SetConfirmedProgressAsync(submitted.Id, new SetConfirmedProgressRequest(55), default)).Value!.ApprovedProgress);
+    }
+
     [Fact]
     public async Task APlainRejection_ChangesNothingOnTheActivity()
     {

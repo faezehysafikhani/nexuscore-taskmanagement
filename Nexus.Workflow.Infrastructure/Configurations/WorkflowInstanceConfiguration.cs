@@ -12,6 +12,7 @@ public sealed class WorkflowInstanceConfiguration : IEntityTypeConfiguration<Wor
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).ValueGeneratedNever();
         builder.Property(x => x.SubjectType).HasMaxLength(80).IsRequired();
+        builder.Property(x => x.StepsSnapshot);
         builder.Navigation(x => x.Decisions).UsePropertyAccessMode(PropertyAccessMode.Field);
 
         builder.HasMany(x => x.Decisions)

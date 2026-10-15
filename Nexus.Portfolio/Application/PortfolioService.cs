@@ -18,11 +18,13 @@ namespace Nexus.Portfolio.Application;
 public sealed class PortfolioService(
     IProjectRepository projectRepository,
     IActionItemRepository actionRepository,
-    IEnumerable<IVisibilityProvider>? visibilityProviders = null) : IPortfolioService
+    IEnumerable<IVisibilityProvider>? visibilityProviders = null,
+    IVisibilityRules? visibilityRules = null) : IPortfolioService
 {
     public async Task<Result<PortfolioResultDto>> GetPortfolioAsync(PortfolioQuery query, CancellationToken cancellationToken)
     {
         var grant = await GetGrantAsync(query, cancellationToken);
+        var rules = await GetRulesAsync(query, cancellationToken);
 
         var projectsPage = await projectRepository.ListAsync(
             new ListProjectsRequest(query.TenantId, PageNumber: 1, PageSize: 1000, Search: query.Search, OrganizationUnitId: query.OrganizationUnitId),
@@ -38,9 +40,7 @@ public sealed class PortfolioService(
             .Where(project => query.Status is null || project.Status.ToString() == query.Status)
             .Where(project => query.ApprovalStatus is null || project.ApprovalStatus.ToString() == query.ApprovalStatus)
             .Where(project => query.InvolvedUserId is null || project.OwnerUserId == query.InvolvedUserId || project.ManagerUserId == query.InvolvedUserId)
-            .Where(project => query.ViewAll || project.OwnerUserId == query.CurrentUserId || project.ManagerUserId == query.CurrentUserId
-                || grant.ProjectIds.Contains(project.Id)
-                || (project.OrganizationUnitId is { } unit && grant.OrganizationUnitIds.Contains(unit)))
+            .Where(project => IsVisible(project, query, grant, rules))
             .Select(project => new PortfolioProjectItem(
                 project.Id, project.Name, project.Code, project.Type.ToString(), project.Status.ToString(),
                 project.OrganizationUnitId, project.ManagerUserId, project.OwnerUserId, project.ApprovalStatus.ToString(),
@@ -54,7 +54,10 @@ public sealed class PortfolioService(
             .Where(action => query.InvolvedUserId is null || action.OwnerUserId == query.InvolvedUserId || action.ResponsibleUserId == query.InvolvedUserId)
             .Where(action => query.OrganizationUnitId is null || action.OrganizationUnitId == query.OrganizationUnitId)
             .Where(action => query.Status is null || action.Status.ToString() == query.Status)
-            .Where(action => query.ViewAll || action.OwnerUserId == query.CurrentUserId || action.ResponsibleUserId == query.CurrentUserId
+            .Where(action => query.ViewAll
+                || (rules.ViewByOwner && action.OwnerUserId == query.CurrentUserId)
+                || (rules.ViewByManagerOrResponsible && action.ResponsibleUserId == query.CurrentUserId)
+                || (visibilityRules is not null && rules.ViewByApprovers && action.ApproverUserIds.Contains(query.CurrentUserId)) // an action's own approvers see it once visibility rules are installed
                 || grant.ActionIds.Contains(action.Id)
                 || grant.OrganizationUnitIds.Contains(action.OrganizationUnitId)
                 || (action.ProjectId is { } projectId && grant.ProjectIds.Contains(projectId)))
@@ -70,6 +73,7 @@ public sealed class PortfolioService(
     public async Task<Result<IReadOnlyList<ProjectDto>>> GetVisibleProjectsAsync(PortfolioQuery query, bool includeArchived, CancellationToken cancellationToken)
     {
         var grant = await GetGrantAsync(query, cancellationToken);
+        var rules = await GetRulesAsync(query, cancellationToken);
         var page = await projectRepository.ListAsync(
             new ListProjectsRequest(query.TenantId, PageNumber: 1, PageSize: 1000, Search: query.Search, OrganizationUnitId: query.OrganizationUnitId),
             cancellationToken);
@@ -80,7 +84,7 @@ public sealed class PortfolioService(
             .Where(project => query.Status is null || project.Status.ToString() == query.Status)
             .Where(project => query.ApprovalStatus is null || project.ApprovalStatus.ToString() == query.ApprovalStatus)
             .Where(project => query.InvolvedUserId is null || project.OwnerUserId == query.InvolvedUserId || project.ManagerUserId == query.InvolvedUserId)
-            .Where(project => IsVisible(project, query, grant))
+            .Where(project => IsVisible(project, query, grant, rules))
             .OrderByDescending(project => project.CreatedAtUtc)
             .Select(ToDto)
             .ToList();
@@ -107,8 +111,14 @@ public sealed class PortfolioService(
         return VisibilityGrant.Union(grants);
     }
 
-    private static bool IsVisible(Project project, PortfolioQuery query, VisibilityGrant grant) =>
-        query.ViewAll || project.OwnerUserId == query.CurrentUserId || project.ManagerUserId == query.CurrentUserId
+    // Which ways of seeing other people's work are switched on; all of them when nothing says otherwise.
+    private async Task<VisibilityRules> GetRulesAsync(PortfolioQuery query, CancellationToken cancellationToken) =>
+        query.ViewAll || visibilityRules is null ? VisibilityRules.AllOn : await visibilityRules.GetAsync(query.TenantId, cancellationToken);
+
+    private static bool IsVisible(Project project, PortfolioQuery query, VisibilityGrant grant, VisibilityRules rules) =>
+        query.ViewAll
+        || (rules.ViewByOwner && project.OwnerUserId == query.CurrentUserId)
+        || (rules.ViewByManagerOrResponsible && project.ManagerUserId == query.CurrentUserId)
         || grant.ProjectIds.Contains(project.Id)
         || (project.OrganizationUnitId is { } unit && grant.OrganizationUnitIds.Contains(unit));
 

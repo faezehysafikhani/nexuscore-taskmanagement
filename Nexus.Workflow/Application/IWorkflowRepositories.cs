@@ -10,6 +10,10 @@ public interface IWorkflowDefinitionRepository
     /// definition for the same SubjectType when no scope match exists.</summary>
     Task<WorkflowDefinition?> FindApplicableAsync(Guid tenantId, string subjectType, string? scopeType, Guid? scopeId, CancellationToken cancellationToken);
 
+    /// <summary>The definition of exactly this scope (active or not), without falling back to the General one.</summary>
+    Task<WorkflowDefinition?> FindExactAsync(Guid tenantId, string subjectType, string? scopeType, Guid? scopeId, CancellationToken cancellationToken) =>
+        throw new NotSupportedException("This workflow repository cannot look up a definition by exact scope.");
+
     Task<IReadOnlyList<WorkflowDefinition>> ListAsync(Guid tenantId, string? subjectType, CancellationToken cancellationToken);
     Task AddAsync(WorkflowDefinition definition, CancellationToken cancellationToken);
 }

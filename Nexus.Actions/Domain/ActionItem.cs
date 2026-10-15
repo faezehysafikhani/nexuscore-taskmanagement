@@ -78,6 +78,27 @@ public sealed class ActionItem : AuditableEntity<Guid>
     public Guid? Approver2UserId { get; private set; }
     public Guid? Approver3UserId { get; private set; }
 
+    /// <summary>The people around this action as the approval backend names them: who is responsible and who owns it,
+    /// and its approvers in order (the first defaults to the responsible person).</summary>
+    public IReadOnlyDictionary<string, Guid> ApprovalParticipants()
+    {
+        var participants = new Dictionary<string, Guid>();
+        void Add(string key, Guid? userId)
+        {
+            if (userId is { } id)
+            {
+                participants[key] = id;
+            }
+        }
+
+        Add(NexusCore.Application.Approvals.ApprovalParticipants.Manager, ResponsibleUserId);
+        Add(NexusCore.Application.Approvals.ApprovalParticipants.Owner, OwnerUserId);
+        Add(NexusCore.Application.Approvals.ApprovalParticipants.Approver1, Approver1UserId ?? ResponsibleUserId);
+        Add(NexusCore.Application.Approvals.ApprovalParticipants.Approver2, Approver2UserId);
+        Add(NexusCore.Application.Approvals.ApprovalParticipants.Approver3, Approver3UserId);
+        return participants;
+    }
+
     public IReadOnlyList<Guid> ApproverUserIds =>
         new[] { Approver1UserId, Approver2UserId, Approver3UserId }.Where(id => id is not null).Select(id => id!.Value).ToList();
 

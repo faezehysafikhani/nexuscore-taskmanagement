@@ -1,3 +1,4 @@
+using System.Text.Json;
 using NexusCore.Application.Approvals;
 using NexusCore.SharedKernel.Domain;
 
@@ -9,6 +10,9 @@ public enum WorkflowInstanceStatus
     Approved,
     Rejected
 }
+
+/// <summary>One step as this approval runs it: the definition's step with its approver already resolved.</summary>
+public sealed record WorkflowInstanceStep(int Order, string Name, Guid? ApproverUserId);
 
 /// <summary>
 /// One in-flight (or completed) approval run for a single ApprovalSubject. TotalSteps is
@@ -26,6 +30,20 @@ public sealed class WorkflowInstance : AuditableEntity<Guid>
 
     public WorkflowInstance(Guid id, Guid tenantId, Guid workflowDefinitionId, string subjectType, Guid subjectId, int totalSteps) : base(id)
     {
+        Initialize(tenantId, workflowDefinitionId, subjectType, subjectId, totalSteps);
+    }
+
+    /// <summary>Starts an approval with the steps (and their resolved approvers) captured as they are now: a
+    /// later edit of the definition, or of the people behind a placeholder, does not move an approval in flight.</summary>
+    public WorkflowInstance(Guid id, Guid tenantId, Guid workflowDefinitionId, string subjectType, Guid subjectId, IReadOnlyList<WorkflowInstanceStep> steps)
+        : base(id)
+    {
+        Initialize(tenantId, workflowDefinitionId, subjectType, subjectId, steps.Count);
+        StepsSnapshot = JsonSerializer.Serialize(steps);
+    }
+
+    private void Initialize(Guid tenantId, Guid workflowDefinitionId, string subjectType, Guid subjectId, int totalSteps)
+    {
         TenantId = tenantId;
         WorkflowDefinitionId = workflowDefinitionId;
         SubjectType = subjectType;
@@ -42,6 +60,13 @@ public sealed class WorkflowInstance : AuditableEntity<Guid>
     public int TotalSteps { get; private set; }
     public int CurrentStepOrder { get; private set; }
     public WorkflowInstanceStatus Status { get; private set; }
+
+    /// <summary>The steps this approval runs, as JSON (null on approvals started before this existed - they read
+    /// the definition's steps instead).</summary>
+    public string? StepsSnapshot { get; private set; }
+
+    public IReadOnlyList<WorkflowInstanceStep>? GetSteps() =>
+        string.IsNullOrWhiteSpace(StepsSnapshot) ? null : JsonSerializer.Deserialize<List<WorkflowInstanceStep>>(StepsSnapshot);
     /// <summary>Not sorted here - _decisions must stay the exact EF-tracked backing collection
     /// so Include() can populate it. Callers that need order should OrderBy(StepOrder).</summary>
     public IReadOnlyCollection<WorkflowDecision> Decisions => _decisions.AsReadOnly();

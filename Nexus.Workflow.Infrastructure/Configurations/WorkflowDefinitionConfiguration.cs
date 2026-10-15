@@ -33,5 +33,6 @@ public sealed class WorkflowStepConfiguration : IEntityTypeConfiguration<Workflo
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).ValueGeneratedNever();
         builder.Property(x => x.Name).HasMaxLength(160).IsRequired();
+        builder.Property(x => x.ApproverKey).HasMaxLength(40);
     }
 }

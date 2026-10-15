@@ -9,13 +9,15 @@ public sealed class WorkflowStep : Entity<Guid>
         Name = string.Empty;
     }
 
-    internal WorkflowStep(Guid id, Guid workflowDefinitionId, int order, string name, Guid? approverUserId, Guid? approverRoleId) : base(id)
+    internal WorkflowStep(Guid id, Guid workflowDefinitionId, int order, string name, Guid? approverUserId, Guid? approverRoleId, string? approverKey = null, bool isOptional = false) : base(id)
     {
         WorkflowDefinitionId = workflowDefinitionId;
         Order = order;
         Name = name.Trim();
         ApproverUserId = approverUserId;
         ApproverRoleId = approverRoleId;
+        ApproverKey = string.IsNullOrWhiteSpace(approverKey) ? null : approverKey.Trim();
+        IsOptional = isOptional;
     }
 
     public Guid WorkflowDefinitionId { get; private set; }
@@ -26,6 +28,13 @@ public sealed class WorkflowStep : Entity<Guid>
     /// any user holding the Workflow.Approve permission may decide this step.</summary>
     public Guid? ApproverUserId { get; private set; }
     public Guid? ApproverRoleId { get; private set; }
+
+    /// <summary>Instead of naming a user, names a participant of the subject ("Manager", "Owner", ...) that is
+    /// looked up when the approval starts. Ignored when ApproverUserId is set.</summary>
+    public string? ApproverKey { get; private set; }
+
+    /// <summary>With ApproverKey: the step is left out of an approval whose subject has no such participant.</summary>
+    public bool IsOptional { get; private set; }
 
     internal void SetOrder(int order) => Order = order;
 }

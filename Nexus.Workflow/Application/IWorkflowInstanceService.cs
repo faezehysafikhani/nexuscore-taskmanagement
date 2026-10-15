@@ -14,4 +14,13 @@ public interface IWorkflowInstanceService
         throw new NotSupportedException();
     Task<Result<WorkflowInstanceDto>> ApproveAsync(Guid id, Guid decidedByUserId, DecideWorkflowInstanceRequest request, CancellationToken cancellationToken);
     Task<Result<WorkflowInstanceDto>> RejectAsync(Guid id, Guid decidedByUserId, DecideWorkflowInstanceRequest request, CancellationToken cancellationToken);
+
+    /// <summary><paramref name="canActForAnyone"/>: the caller may decide a step designated to someone else (they hold
+    /// Workflow.Configure). It matters only when WorkflowOptions.RequireDesignatedApprover is on; an implementation
+    /// written before it existed simply ignores it.</summary>
+    Task<Result<WorkflowInstanceDto>> ApproveAsync(Guid id, Guid decidedByUserId, DecideWorkflowInstanceRequest request, bool canActForAnyone, CancellationToken cancellationToken) =>
+        ApproveAsync(id, decidedByUserId, request, cancellationToken);
+
+    Task<Result<WorkflowInstanceDto>> RejectAsync(Guid id, Guid decidedByUserId, DecideWorkflowInstanceRequest request, bool canActForAnyone, CancellationToken cancellationToken) =>
+        RejectAsync(id, decidedByUserId, request, cancellationToken);
 }

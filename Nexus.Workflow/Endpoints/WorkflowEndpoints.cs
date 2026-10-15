@@ -35,6 +35,18 @@ public static class WorkflowEndpoints
                 (await service.CreateAsync(request, cancellationToken)).ToApiResult())
             .RequireAuthorization(WorkflowPermissions.Configure);
 
+        // Saves the whole approval chain of one (subject type, scope) at once, creating or reviving the definition.
+        definitions.MapPut("/by-scope", async (ICurrentUserContext currentUser, SetWorkflowStepsRequest request, IWorkflowDefinitionService service, CancellationToken cancellationToken) =>
+            {
+                if (currentUser.TenantId is null)
+                {
+                    return Results.Unauthorized();
+                }
+
+                return (await service.SetStepsAsync(request with { TenantId = currentUser.TenantId.Value }, cancellationToken)).ToApiResult();
+            })
+            .RequireAuthorization(WorkflowPermissions.Configure);
+
         definitions.MapPost("/{id:guid}/steps", async (Guid id, AddWorkflowStepRequest request, IWorkflowDefinitionService service, CancellationToken cancellationToken) =>
                 (await service.AddStepAsync(id, request, cancellationToken)).ToApiResult())
             .RequireAuthorization(WorkflowPermissions.Configure);
@@ -80,25 +92,33 @@ public static class WorkflowEndpoints
                 (await service.GetAsync(id, cancellationToken)).ToApiResult())
             .RequireAuthorization(WorkflowPermissions.View);
 
-        approvalCenter.MapPost("/{id:guid}/approve", async (Guid id, DecideWorkflowInstanceRequest request, ICurrentUserContext currentUser, IWorkflowInstanceService service, CancellationToken cancellationToken) =>
+        approvalCenter.MapPost("/{id:guid}/approve", async (
+                Guid id, DecideWorkflowInstanceRequest request, ICurrentUserContext currentUser,
+                IAuthorizationService authorization, HttpContext httpContext,
+                IWorkflowInstanceService service, CancellationToken cancellationToken) =>
             {
                 if (currentUser.UserId is null)
                 {
                     return Results.Unauthorized();
                 }
 
-                return (await service.ApproveAsync(id, currentUser.UserId.Value, request, cancellationToken)).ToApiResult();
+                var canActForAnyone = (await authorization.AuthorizeAsync(httpContext.User, WorkflowPermissions.Configure)).Succeeded;
+                return (await service.ApproveAsync(id, currentUser.UserId.Value, request, canActForAnyone, cancellationToken)).ToApiResult();
             })
             .RequireAuthorization(WorkflowPermissions.Approve);
 
-        approvalCenter.MapPost("/{id:guid}/reject", async (Guid id, DecideWorkflowInstanceRequest request, ICurrentUserContext currentUser, IWorkflowInstanceService service, CancellationToken cancellationToken) =>
+        approvalCenter.MapPost("/{id:guid}/reject", async (
+                Guid id, DecideWorkflowInstanceRequest request, ICurrentUserContext currentUser,
+                IAuthorizationService authorization, HttpContext httpContext,
+                IWorkflowInstanceService service, CancellationToken cancellationToken) =>
             {
                 if (currentUser.UserId is null)
                 {
                     return Results.Unauthorized();
                 }
 
-                return (await service.RejectAsync(id, currentUser.UserId.Value, request, cancellationToken)).ToApiResult();
+                var canActForAnyone = (await authorization.AuthorizeAsync(httpContext.User, WorkflowPermissions.Configure)).Succeeded;
+                return (await service.RejectAsync(id, currentUser.UserId.Value, request, canActForAnyone, cancellationToken)).ToApiResult();
             })
             .RequireAuthorization(WorkflowPermissions.Reject);
 

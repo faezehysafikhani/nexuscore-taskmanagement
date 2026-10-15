@@ -60,7 +60,8 @@ public sealed class ActionStatusSubmissionService(
 
         var subject = new ApprovalSubject(
             SubjectType, submission.Id, submission.TenantId,
-            ScopeType: action.ProjectId is null ? null : "Project", ScopeId: action.ProjectId);
+            ScopeType: action.ProjectId is null ? null : "Project", ScopeId: action.ProjectId,
+            Participants: action.ApprovalParticipants());
         var outcome = await approvalRequester.RequestApprovalAsync(subject, cancellationToken);
         if (outcome == ApprovalRequestOutcome.Submitted)
         {

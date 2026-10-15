@@ -3224,6 +3224,43 @@ Schema: apply `docs/upgrade/2026-10-13-add-waterfall-planning.sql` (`WaterfallPl
 
 Schema: apply `docs/upgrade/2026-10-14-add-action-status-and-patterns.sql` (`ActionsPlanningSchemaUpgrade`), `2026-10-14-add-risk-response-submissions.sql` (`RiskResponseSchemaUpgrade`), `2026-10-14-add-strategy-sort-order.sql` (`StrategySchemaUpgrade`) and `2026-10-14-add-contract-parties-and-billing.sql` (`ContractsPartiesSchemaUpgrade`). New permissions: `ActionStatus.Submit`, `RiskResponse.Submit` (added to the host's seeded Project Manager / Project Team roles; existing roles keep what they had).
 
+## 20e. Governance: approval chains, item delegation, visibility switches, project settings (phase 7)
+
+### Workflow (`Nexus.Workflow`) - approver placeholders
+
+* A step names its approver either as before (`approverUserId`) or by **placeholder**: `approverKey` is `Manager`, `Owner`, `Approver1`, `Approver2` or `Approver3` (opaque to Workflow; defined in `NexusCore.Application.Approvals.ApprovalParticipants`). `isOptional` leaves the step out of an approval whose subject has no such participant. Both are trailing optional fields of the step request/DTO.
+* **Who the participants are** is told to Workflow when the approval starts: `ApprovalSubject` gained an optional `participants` map (Actions passes its responsible person as `Manager`, its owner as `Owner` and its approvers 1-3 as `Approver1..3`; the first defaults to the responsible person), and an optional extension point `IApprovalParticipantResolver` can add more. `Nexus.Integrations.ProjectWorkflow` registers one that, for anything scoped to a project (or the project itself), answers `Manager` = project manager and `Owner` = project owner. `Owner` falls back to `Manager` when unknown. A required placeholder nobody fills leaves the step open to any holder of the approve permission.
+* **The steps are captured when the approval starts** (`WorkflowInstance.StepsSnapshot`, JSON): the step names and the people they resolved to. Editing the definition, or changing a project's manager, does not move an approval already running. The instance DTO returns them as `steps: [ { order, name, approverUserId } ]`. Approvals started before this keep reading their definition's steps. When every step is optional and none applies, no approval is started (the submitter's own direct-approve rule applies).
+* `PUT /api/workflow/definitions/by-scope` (needs `Workflow.Configure`) `{ subjectType, scopeType?, scopeId?, name?, steps: [ { name, approverUserId?, approverKey?, isOptional } ] }` creates (or brings back a reset) the definition of that scope and replaces its steps in one call. An empty `steps` list means "no approval needed" there.
+* **Host switch** `WorkflowOptions.RequireDesignatedApprover` (`AddWorkflowApplication(o => ...)`, default `false` = anyone with `Workflow.Approve`/`Reject` may decide any step, as before; on in `PostBank.Api`): a step with a designated approver can then only be decided by that person, by someone they have delegated to (period delegation, recorded as "on behalf of"), or by a holder of `Workflow.Configure`; anyone else gets 403 `forbidden`.
+
+### Approval settings by group (`Nexus.Integrations.ProjectWorkflow`)
+
+The screens edit one chain per **group** of things approved the same way; a saved chain is applied to every subject type of the group. Groups: `charter` (Project), `activity_progress` (ActivityProgress, AgileTaskStatus, WaterfallActivity, AgileTask), `risks` (Risk, RiskResponseStatus), `stakeholders`, `status_updates` (ProgressUpdate), `delay_reasons`, `documents`, `contracts` (Contract, ContractAddendum), `invoices`, `actions` (Action, ActionStatus). `ProjectManagementSubjectTypes` gained `ActivityProgress`, `AgileTaskStatus`, `ActionStatus`, `RiskResponseStatus`.
+
+* `GET /api/integrations/project-workflow/settings?projectId=` (needs `Workflow.View`) → per group `{ key, subjectTypes, isConfigured, isCustom, steps, defaultSteps }`. `isConfigured: false` = nothing defined, approvals in that group are not required (direct approve). With `projectId`, a project's own chain wins (`isCustom`).
+* `PUT /settings/{groupKey}` `{ steps }` (needs `ProjectWorkflow.Configure`): the organisation-wide chain; `steps: null` = the standard one. `POST /settings/apply-defaults` creates the standard chain only for groups that have none. Standard chains: one step "Final approval" by the `Manager` for every group; `documents` has two (`Manager`, then `Owner`); `actions` has `Approver1` and optional `Approver2`, `Approver3`.
+* `PUT /projects/{projectId}/settings/{groupKey}` and `DELETE` (back to the organisation's chain): by holders of `ProjectWorkflow.Configure` for any project, otherwise by the project's manager or owner for theirs (403 for anyone else). Step rules: a name, and exactly one of `approverUserId` / `approverKey` (400 otherwise or for an unknown key). An empty chain is allowed (no approval needed).
+
+### Item delegation (`Nexus.ProjectManagement.Delegation`, new, independent)
+
+A record of who handed an activity, task or action to whom (the existing Workflow delegation is a different thing: a period during which someone approves for someone else). Table `item_delegation.ItemDelegations`.
+
+* `GET /api/project-management/delegations?activeOnly=true` (`ItemDelegation.View`): those the caller handed out or received.
+* `POST /` `{ itemType: WaterfallActivity|AgileTask|Action (0-2), itemId, projectId?, delegateUserId }` (`ItemDelegation.Delegate`): the caller is the delegator. Refused (400/409): yourself, nobody, an unknown kind, an item the caller already handed over, or handing to someone who has handed it on (a loop).
+* `POST /{id}/end` (`ItemDelegation.Delegate`; only the delegator, or a holder of `ItemDelegation.Manage`): ends that hand-over and every hand-over of the item made after it (A to B to C: ending B's also ends C's); returns `{ restoreToUserId, endedIds }` - the person the item goes back to. **The module does not change the item**: the screen that shows it sets the assignee (the module owns no activity, task or action).
+
+### Governance switches and project settings (`Nexus.Integrations.ProjectGovernance`, new, opt-in, no tables)
+
+Stored as NexusCore `SystemSettings` (scope `ProjectGovernance`).
+
+* `GET /api/integrations/project-governance/settings` (any signed-in user) / `PUT` (`ProjectGovernance.Configure`): `{ visibility: { viewByOwner, viewByManagerOrResponsible, viewByApprovers, viewByResources, viewByOrgHeads }, allowConfirmedProgressOnRejection }`. Defaults: every visibility switch on, confirmed-progress-on-rejection off.
+* The visibility switches are read through the new Core extension point `IVisibilityRules` (default: all on): Portfolio applies owner / manager-or-responsible (projects and actions) and - only when rules are installed - an action's own approvers; the team-membership, organisation-head and pending-approval providers grant nothing when their switch is off. Users with `Portfolio.ViewAll` still see everything.
+* `allowConfirmedProgressOnRejection` is read by Waterfall through `IProgressRejectionPolicy` (default: allowed): with it off, `PUT /progress-submissions/{id}/confirmed-progress` is refused (403).
+* `GET /projects` (all projects' settings), `GET|PUT /projects/{projectId}/settings` (`Projects.Edit`) `{ enabledTabs?, contractAccess?, invoiceAccess? }`: the sections a project shows (`charter, schedule, team, risks, stakeholders, status, delays, docs, actions, contracts, invoices`; null = all; unknown names refused) and the per-project contract / invoice access matrices (`viewByAdmin, viewByPM, viewByTeam, manageByAdmin, manageByPM`). **The access matrices are stored but not enforced by the Contracts endpoints** (the UI never enforced them either; enforcement needs ownership-aware authorisation, see PLAN.md).
+
+Schema: apply `docs/upgrade/2026-10-15-add-workflow-approver-placeholders.sql` (`WorkflowApproverPlaceholdersSchemaUpgrade`) and `2026-10-15-add-item-delegation.sql` (`ItemDelegationSchemaUpgrade`). New permissions: `ItemDelegation.View`, `ItemDelegation.Delegate`, `ItemDelegation.Manage`, `ProjectGovernance.Configure` (the first two to the host's seeded Project Manager / Project Team roles, `Manage` to Project Manager; existing roles keep what they had).
+
 ---
 
 ## Enums Reference

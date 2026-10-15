@@ -13,7 +13,8 @@ public sealed class WorkflowInstanceService(
     IWorkflowUnitOfWork unitOfWork,
     IWorkflowDefinitionRepository? definitionRepository = null,
     IWorkflowDelegationRepository? delegationRepository = null,
-    TimeProvider? timeProvider = null) : IWorkflowInstanceService
+    TimeProvider? timeProvider = null,
+    WorkflowOptions? options = null) : IWorkflowInstanceService
 {
     private DateOnly Today => DateOnly.FromDateTime((timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime);
 
@@ -67,12 +68,18 @@ public sealed class WorkflowInstanceService(
     }
 
     public Task<Result<WorkflowInstanceDto>> ApproveAsync(Guid id, Guid decidedByUserId, DecideWorkflowInstanceRequest request, CancellationToken cancellationToken) =>
-        DecideAsync(id, decidedByUserId, approved: true, request, cancellationToken);
+        DecideAsync(id, decidedByUserId, approved: true, request, false, cancellationToken);
 
     public Task<Result<WorkflowInstanceDto>> RejectAsync(Guid id, Guid decidedByUserId, DecideWorkflowInstanceRequest request, CancellationToken cancellationToken) =>
-        DecideAsync(id, decidedByUserId, approved: false, request, cancellationToken);
+        DecideAsync(id, decidedByUserId, approved: false, request, false, cancellationToken);
 
-    private async Task<Result<WorkflowInstanceDto>> DecideAsync(Guid id, Guid decidedByUserId, bool approved, DecideWorkflowInstanceRequest request, CancellationToken cancellationToken)
+    public Task<Result<WorkflowInstanceDto>> ApproveAsync(Guid id, Guid decidedByUserId, DecideWorkflowInstanceRequest request, bool canActForAnyone, CancellationToken cancellationToken) =>
+        DecideAsync(id, decidedByUserId, approved: true, request, canActForAnyone, cancellationToken);
+
+    public Task<Result<WorkflowInstanceDto>> RejectAsync(Guid id, Guid decidedByUserId, DecideWorkflowInstanceRequest request, bool canActForAnyone, CancellationToken cancellationToken) =>
+        DecideAsync(id, decidedByUserId, approved: false, request, canActForAnyone, cancellationToken);
+
+    private async Task<Result<WorkflowInstanceDto>> DecideAsync(Guid id, Guid decidedByUserId, bool approved, DecideWorkflowInstanceRequest request, bool canActForAnyone, CancellationToken cancellationToken)
     {
         var instance = await repository.GetByIdAsync(id, cancellationToken);
         if (instance is null)
@@ -99,6 +106,13 @@ public sealed class WorkflowInstanceService(
             }
         }
 
+        // Opt-in strictness: a step with a designated approver is decided by that person, their substitute, or an administrator.
+        if (options?.RequireDesignatedApprover == true && designated is { } required
+            && required != decidedByUserId && onBehalfOf is null && !canActForAnyone)
+        {
+            return Result.Failure<WorkflowInstanceDto>(Error.Forbidden("This step is assigned to another approver."));
+        }
+
         // Queues ApprovalGranted/ApprovalRejected (once the instance concludes) as a domain
         // event on the entity; DomainEventDispatchInterceptor dispatches it automatically as
         // part of SaveChangesAsync below, so the module owning the subject (e.g. Risk, Project)
@@ -113,14 +127,21 @@ public sealed class WorkflowInstanceService(
     private async Task<Dictionary<Guid, Guid?>> CurrentApproversAsync(IReadOnlyCollection<WorkflowInstance> instances, CancellationToken cancellationToken)
     {
         var result = new Dictionary<Guid, Guid?>();
-        if (definitionRepository is null)
-        {
-            return result;
-        }
-
         var definitions = new Dictionary<Guid, WorkflowDefinition?>();
         foreach (var instance in instances)
         {
+            // An approval started with its steps captured keeps them; older ones read the definition.
+            if (instance.GetSteps() is { } snapshot)
+            {
+                result[instance.Id] = snapshot.SingleOrDefault(step => step.Order == instance.CurrentStepOrder)?.ApproverUserId;
+                continue;
+            }
+
+            if (definitionRepository is null)
+            {
+                continue;
+            }
+
             if (!definitions.TryGetValue(instance.WorkflowDefinitionId, out var definition))
             {
                 definition = await definitionRepository.GetByIdAsync(instance.WorkflowDefinitionId, cancellationToken);
@@ -139,5 +160,6 @@ public sealed class WorkflowInstanceService(
         instance.Decisions.OrderBy(d => d.StepOrder)
             .Select(d => new WorkflowDecisionDto(d.Id, d.StepOrder, d.DecidedByUserId, d.Approved, d.Comment, d.DecidedAtUtc, d.OnBehalfOfUserId))
             .ToList(),
-        currentApprover, delegatedFrom);
+        currentApprover, delegatedFrom,
+        instance.GetSteps()?.Select(step => new WorkflowInstanceStepDto(step.Order, step.Name, step.ApproverUserId)).ToList());
 }

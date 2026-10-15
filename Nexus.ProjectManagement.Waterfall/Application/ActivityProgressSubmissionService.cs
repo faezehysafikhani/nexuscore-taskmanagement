@@ -6,6 +6,15 @@ using NexusCore.SharedKernel.Results;
 namespace Nexus.ProjectManagement.Waterfall.Application;
 
 /// <summary>
+/// Optional extension point: whether a reviewer who rejects a progress report may still confirm a progress figure of their own.
+/// With none registered it is always allowed, which is how it behaved before the policy existed.
+/// </summary>
+public interface IProgressRejectionPolicy
+{
+    Task<bool> AllowsConfirmedProgressAsync(Guid tenantId, CancellationToken cancellationToken);
+}
+
+/// <summary>
 /// Reporting an activity's progress for confirmation. Works with or without an approval backend: with none, the report is
 /// confirmed at once, like every other optional approval in the project-management modules.
 /// </summary>
@@ -13,7 +22,8 @@ public sealed class ActivityProgressSubmissionService(
     IActivityProgressSubmissionRepository repository,
     IActivityRepository activityRepository,
     IWaterfallUnitOfWork unitOfWork,
-    IApprovalRequester approvalRequester) : IActivityProgressSubmissionService
+    IApprovalRequester approvalRequester,
+    IProgressRejectionPolicy? progressRejectionPolicy = null) : IActivityProgressSubmissionService
 {
     public const string SubjectType = "ActivityProgress";
 
@@ -101,6 +111,11 @@ public sealed class ActivityProgressSubmissionService(
         if (submission.ApprovalStatus != ApprovalStatus.PendingApproval)
         {
             return Result.Failure<ActivityProgressSubmissionDto>(Error.Conflict("Only a report that is waiting for approval can have its confirmed progress set."));
+        }
+
+        if (progressRejectionPolicy is not null && !await progressRejectionPolicy.AllowsConfirmedProgressAsync(submission.TenantId, cancellationToken))
+        {
+            return Result.Failure<ActivityProgressSubmissionDto>(Error.Forbidden("Confirming a progress figure when rejecting a report is switched off."));
         }
 
         submission.SetApprovedProgress(request.Progress);

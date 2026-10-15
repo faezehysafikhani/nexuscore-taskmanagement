@@ -217,7 +217,8 @@ public sealed class ActionItemService(
         }
 
         var subject = new ApprovalSubject("Action", action.Id, action.TenantId,
-            ScopeType: action.ProjectId is null ? null : "Project", ScopeId: action.ProjectId);
+            ScopeType: action.ProjectId is null ? null : "Project", ScopeId: action.ProjectId,
+            Participants: action.ApprovalParticipants());
         var outcome = await approvalRequester.RequestApprovalAsync(subject, cancellationToken);
 
         if (outcome == ApprovalRequestOutcome.Submitted)

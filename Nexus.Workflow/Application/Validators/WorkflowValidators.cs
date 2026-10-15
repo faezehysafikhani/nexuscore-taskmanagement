@@ -17,5 +17,6 @@ public sealed class AddWorkflowStepRequestValidator : AbstractValidator<AddWorkf
     public AddWorkflowStepRequestValidator()
     {
         RuleFor(x => x.Name).NotEmpty().MaximumLength(160);
+        RuleFor(x => x.ApproverKey).MaximumLength(40);
     }
 }

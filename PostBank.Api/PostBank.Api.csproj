@@ -81,6 +81,9 @@
     <!-- Integrations (Project family x Workflow / Strategy) -->
     <ProjectReference Include="..\Nexus.Integrations.ProjectCalendar\Nexus.Integrations.ProjectCalendar.csproj" />
     <ProjectReference Include="..\Nexus.Integrations.ProjectVisibility\Nexus.Integrations.ProjectVisibility.csproj" />
+    <ProjectReference Include="..\Nexus.Integrations.ProjectGovernance\Nexus.Integrations.ProjectGovernance.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Delegation\Nexus.ProjectManagement.Delegation.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Delegation.Infrastructure\Nexus.ProjectManagement.Delegation.Infrastructure.csproj" />
     <ProjectReference Include="..\Nexus.Integrations.ProjectDeletion\Nexus.Integrations.ProjectDeletion.csproj" />
     <ProjectReference Include="..\Nexus.Integrations.ProjectWorkflow\Nexus.Integrations.ProjectWorkflow.csproj" />
     <ProjectReference Include="..\Nexus.Integrations.ProjectStrategyAlignment\Nexus.Integrations.ProjectStrategyAlignment.csproj" />

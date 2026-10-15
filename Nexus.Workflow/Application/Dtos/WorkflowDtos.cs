@@ -2,7 +2,7 @@ using Nexus.Workflow.Domain;
 
 namespace Nexus.Workflow.Application.Dtos;
 
-public sealed record WorkflowStepDto(Guid Id, int Order, string Name, Guid? ApproverUserId, Guid? ApproverRoleId);
+public sealed record WorkflowStepDto(Guid Id, int Order, string Name, Guid? ApproverUserId, Guid? ApproverRoleId, string? ApproverKey = null, bool IsOptional = false);
 
 public sealed record WorkflowDefinitionDto(
     Guid Id,
@@ -16,7 +16,13 @@ public sealed record WorkflowDefinitionDto(
 
 public sealed record CreateWorkflowDefinitionRequest(Guid TenantId, string Name, string SubjectType, string? ScopeType, Guid? ScopeId);
 
-public sealed record AddWorkflowStepRequest(string Name, Guid? ApproverUserId, Guid? ApproverRoleId);
+public sealed record AddWorkflowStepRequest(string Name, Guid? ApproverUserId, Guid? ApproverRoleId, string? ApproverKey = null, bool IsOptional = false);
+
+/// <summary>Saves the whole approval chain of one definition: the definition for (SubjectType, ScopeType, ScopeId) is
+/// created, or brought back if it was reset, and its steps become exactly <paramref name="Steps"/> (an empty chain
+/// means "no approval needed" there). ScopeType omitted = the General definition.</summary>
+public sealed record SetWorkflowStepsRequest(
+    Guid TenantId, string SubjectType, string? ScopeType, Guid? ScopeId, string? Name, IReadOnlyList<AddWorkflowStepRequest> Steps);
 
 public sealed record MoveWorkflowStepRequest(int NewOrder);
 
@@ -34,7 +40,11 @@ public sealed record WorkflowInstanceDto(
     WorkflowInstanceStatus Status,
     IReadOnlyList<WorkflowDecisionDto> Decisions,
     Guid? CurrentApproverUserId = null,
-    Guid? DelegatedFromUserId = null);
+    Guid? DelegatedFromUserId = null,
+    IReadOnlyList<WorkflowInstanceStepDto>? Steps = null);
+
+/// <summary>A step as this approval runs it: the title and the person it was resolved to when the approval started.</summary>
+public sealed record WorkflowInstanceStepDto(int Order, string Name, Guid? ApproverUserId);
 
 public sealed record DecideWorkflowInstanceRequest(string? Comment);
 

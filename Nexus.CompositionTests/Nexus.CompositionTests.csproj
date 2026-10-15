@@ -84,6 +84,10 @@
     <ProjectReference Include="..\Nexus.Integrations.ProjectDeletion\Nexus.Integrations.ProjectDeletion.csproj" />
     <ProjectReference Include="..\Nexus.Calendar.IranianHolidays\Nexus.Calendar.IranianHolidays.csproj" />
     <ProjectReference Include="..\Nexus.Integrations.ProjectVisibility\Nexus.Integrations.ProjectVisibility.csproj" />
+    <ProjectReference Include="..\Nexus.Integrations.ProjectWorkflow\Nexus.Integrations.ProjectWorkflow.csproj" />
+    <ProjectReference Include="..\Nexus.Integrations.ProjectGovernance\Nexus.Integrations.ProjectGovernance.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Delegation\Nexus.ProjectManagement.Delegation.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Delegation.Infrastructure\Nexus.ProjectManagement.Delegation.Infrastructure.csproj" />
     <ProjectReference Include="..\Nexus.ProjectManagement.History\Nexus.ProjectManagement.History.csproj" />
     <ProjectReference Include="..\Nexus.ProjectManagement.History.Infrastructure\Nexus.ProjectManagement.History.Infrastructure.csproj" />
     <ProjectReference Include="..\Nexus.Organization\Nexus.Organization.csproj" />

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Nexus.Integrations.ProjectWorkflow.Application;
 using Nexus.Integrations.ProjectWorkflow.Permissions;
+using NexusCore.Application.Approvals;
 using NexusCore.Application.Identity.Permissions;
 
 namespace Nexus.Integrations.ProjectWorkflow;
@@ -13,6 +14,8 @@ public static class DependencyInjection
     public static IServiceCollection AddProjectWorkflowIntegration(this IServiceCollection services)
     {
         services.AddScoped<IProjectWorkflowConfigurationService, ProjectWorkflowConfigurationService>();
+        services.AddScoped<IProjectWorkflowSettingsService, ProjectWorkflowSettingsService>();
+        services.AddScoped<IApprovalParticipantResolver, ProjectApprovalParticipantResolver>();
         services.AddSingleton<IPermissionCatalog, ProjectWorkflowPermissionCatalog>();
 
         services.AddAuthorization(options =>

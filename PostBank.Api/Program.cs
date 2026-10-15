@@ -46,6 +46,11 @@ using Nexus.ProjectManagement.Contracts;
 using Nexus.ProjectManagement.Contracts.Endpoints;
 using Nexus.ProjectManagement.Contracts.Infrastructure;
 using Nexus.ProjectManagement.Documents;
+using Nexus.Integrations.ProjectGovernance;
+using Nexus.Integrations.ProjectGovernance.Endpoints;
+using Nexus.ProjectManagement.Delegation;
+using Nexus.ProjectManagement.Delegation.Endpoints;
+using Nexus.ProjectManagement.Delegation.Infrastructure;
 using Nexus.ProjectManagement.History;
 using Nexus.ProjectManagement.History.Endpoints;
 using Nexus.ProjectManagement.History.Infrastructure;
@@ -113,7 +118,7 @@ builder.Services.AddNotificationApplication();
 builder.Services.AddOrganizationApplication();
 builder.Services.AddCalendarApplication(options => options.SingleDefaultPerTenant = true);
 builder.Services.AddIranianOfficialHolidays();
-builder.Services.AddWorkflowApplication();
+builder.Services.AddWorkflowApplication(o => o.RequireDesignatedApprover = true);
 // The UI keeps every occurrence of a repeating action inside one action (listed from its rule), so completing one must not spawn a copy.
 builder.Services.AddActionManagement(options =>
 {
@@ -142,8 +147,10 @@ builder.Services.AddProgressManagement();
 builder.Services.AddProjectDocuments();
 builder.Services.AddContractManagement();
 builder.Services.AddProjectHistory();
+builder.Services.AddItemDelegation();
 
 builder.Services.AddProjectWorkflowIntegration();
+builder.Services.AddProjectGovernance();
 builder.Services.AddProjectVisibilityIntegration();
 builder.Services.AddProjectDeletionIntegration();
 builder.Services.AddProjectCalendarIntegration();
@@ -180,6 +187,7 @@ builder.Services.AddProgressManagementInfrastructure(builder.Configuration);
 builder.Services.AddProjectDocumentsInfrastructure(builder.Configuration);
 builder.Services.AddContractManagementInfrastructure(builder.Configuration);
 builder.Services.AddProjectHistoryInfrastructure(builder.Configuration);
+builder.Services.AddItemDelegationInfrastructure(builder.Configuration);
 
 builder.Services.AddProjectStrategyAlignmentInfrastructure(builder.Configuration);
 
@@ -316,6 +324,8 @@ app.MapProgressEndpoints();
 app.MapProjectDocumentEndpoints();
 app.MapContractEndpoints();
 app.MapProjectHistoryEndpoints();
+app.MapItemDelegationEndpoints();
+app.MapProjectGovernanceEndpoints();
 
 app.MapProjectWorkflowEndpoints();
 app.MapProjectStrategyAlignmentEndpoints();
@@ -356,6 +366,7 @@ if (builder.Configuration.GetValue("Database:SeedOnStartup", true))
     await ModuleSchemaInitializer.EnsureCreatedAsync(services.GetRequiredService<ProjectDocumentsDbContext>(), cancellationToken);
     await ModuleSchemaInitializer.EnsureCreatedAsync(services.GetRequiredService<ContractsDbContext>(), cancellationToken);
     await ModuleSchemaInitializer.EnsureCreatedAsync(services.GetRequiredService<ProjectHistoryDbContext>(), cancellationToken);
+    await ModuleSchemaInitializer.EnsureCreatedAsync(services.GetRequiredService<ItemDelegationDbContext>(), cancellationToken);
 
     await ModuleSchemaInitializer.EnsureCreatedAsync(services.GetRequiredService<StrategyAlignmentDbContext>(), cancellationToken);
 

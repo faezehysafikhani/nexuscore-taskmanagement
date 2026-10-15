@@ -150,3 +150,21 @@ Not added (deliberately): per-activity second/third approvers (the screens only 
 | SQL | `2026-10-14-add-action-status-and-patterns.sql`, `2026-10-14-add-risk-response-submissions.sql`, `2026-10-14-add-strategy-sort-order.sql`, `2026-10-14-add-contract-parties-and-billing.sql` (+ their code twins) | Additive, guarded, idempotent |
 
 Not added (deliberately): per-action approvers 1-3 (the approver comes from the Workflow definition - phase 7 adds item-level placeholders); contract / invoice per-project permissions and the app-level visibility switches for contracts (phase 7); AI features untouched.
+
+### Phase 7 — added to the backend (governance)
+
+| Where | What | Why (UI need) |
+|---|---|---|
+| Core abstractions | `ApprovalSubject.Participants` (optional) + `ApprovalParticipants` keys + `IApprovalParticipantResolver` (optional extension point) | A workflow step says "the project manager / owner" or "this action's approver 2" instead of a fixed user; the submitter (Actions) or an integration (ProjectWorkflow, for projects) says who those are |
+| Workflow | Step `ApproverKey` / `IsOptional`; instance `StepsSnapshot` and `steps` in the DTO; `PUT /definitions/by-scope` (upsert + replace steps) | The UI's stage editor offers "project manager / owner / a user" per stage and per project; running approvals must not change when settings change |
+| Workflow | `WorkflowOptions.RequireDesignatedApprover` (default off; on in `PostBank.Api`); `canActForAnyone` for `Workflow.Configure` holders | The UI only let the stage's approver decide; now the backend enforces it (a substitute through delegation still can) |
+| ProjectWorkflow | Settings by group (`/settings`, `/settings/{group}`, `/settings/apply-defaults`, `/projects/{id}/settings/{group}`), `IApprovalParticipantResolver` for projects, subject types `ActivityProgress` / `AgileTaskStatus` / `ActionStatus` / `RiskResponseStatus` | The UI kept the approval chains in the browser (global and per project); the project-level editor may be used by the project's manager/owner |
+| Actions | Pass `Participants` (responsible, owner, approvers 1-3) when submitting an action or a status request | The action form's approvers 1-3 now route the status approval |
+| Delegation (new module) | `Nexus.ProjectManagement.Delegation` + `.Infrastructure`: table `item_delegation.ItemDelegations`, `/api/project-management/delegations` | The UI's "delegate task" list and the chain rule on taking a task back lived in the browser |
+| Core + Portfolio | `IVisibilityRules` (optional, default all on); Portfolio applies owner / manager / approver switches | The UI's five visibility switches were applied in the browser to a list the backend had already sent |
+| Waterfall | `IProgressRejectionPolicy` (optional, default allowed) | The UI's "approved progress on rejection" switch |
+| ProjectGovernance (new, opt-in, no tables) | Organisation switches (visibility, confirmed progress) and per-project settings (visible sections, contract / invoice access matrices) as `SystemSettings` | The UI kept these in `localStorage` / its project extras |
+| Host | `PostBank.Api`: `RequireDesignatedApprover = true`; modules mapped; seeded roles get `ItemDelegation.*` | The UI's behaviour |
+| SQL | `2026-10-15-add-workflow-approver-placeholders.sql`, `2026-10-15-add-item-delegation.sql` (+ code twins) | Additive, guarded, idempotent |
+
+Not added (deliberately, reported): **ownership-aware authorisation** (who may edit which project's registers by being its manager / owner) - the backend still authorises by permission only, the UI's read-only gating by ownership stays presentation; **enforcement of the per-project contract / invoice access matrices** (stored, not enforced; the UI never enforced them); reassignment of a delegated item (the module records the hand-over, the screen that owns the item sets the assignee).
