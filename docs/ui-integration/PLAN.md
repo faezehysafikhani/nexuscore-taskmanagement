@@ -168,3 +168,15 @@ Not added (deliberately): per-action approvers 1-3 (the approver comes from the 
 | SQL | `2026-10-15-add-workflow-approver-placeholders.sql`, `2026-10-15-add-item-delegation.sql` (+ code twins) | Additive, guarded, idempotent |
 
 Not added (deliberately, reported): **ownership-aware authorisation** (who may edit which project's registers by being its manager / owner) - the backend still authorises by permission only, the UI's read-only gating by ownership stays presentation; **enforcement of the per-project contract / invoice access matrices** (stored, not enforced; the UI never enforced them); reassignment of a delegated item (the module records the hand-over, the screen that owns the item sets the assignee).
+
+### Phase 8 - added to the backend (reports and dashboards)
+
+| Where | What | Why (UI need) |
+|---|---|---|
+| Analytics | `AnalyticsOptions.ProgressFromProjectPlan`, `OnlyApprovedProjects` (default off; on in `PostBank.Api`) | The reports page averaged planned / actual progress in the browser from the schedule it had loaded; the figures now come from the backend's planning modules, and the reports count approved projects only |
+| Analytics | Fields `delayedProjects`, `averagePerformance`, `rating`, `projectIds` on unit and manager rows; `summary` on the unit report; `projectIdsByStatus` on the status matrix | The UI derived "delayed", the performance average, the excellent / good / needs-improvement rating, the organisation total and the project lists behind each number itself |
+| Agile | `GET /api/project-management/agile/sprint-progress` | The burn-up / burn-down chart grouped tasks by sprint in the browser |
+| SQL | none | no schema change |
+
+Not added (deliberately): the portfolio dashboard's small count tiles stay presentation over the project list the backend already sent; AI features untouched.
+

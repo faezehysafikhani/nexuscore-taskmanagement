@@ -28,6 +28,14 @@ public sealed record SprintBurnDto(
     int CommittedScope, int CurrentScope, int CurrentCompleted, int CurrentRemaining,
     IReadOnlyList<BurnPointDto> Points, IReadOnlyList<string> Warnings);
 
+/// <summary>One sprint of the project-wide progress chart: what the sprint holds and how much of it is done, and the running totals
+/// over this and the earlier sprints (what a burn-up or burn-down across the whole project draws).</summary>
+public sealed record SprintProgressPointDto(
+    int SprintNumber, string Name, int SprintTotal, int SprintCompleted,
+    int CumulativeTotal, int CumulativeCompleted, int CumulativeRemaining);
+
+public sealed record ProjectSprintProgressDto(Guid ProjectId, ChartMetric Metric, IReadOnlyList<SprintProgressPointDto> Sprints);
+
 public sealed record SprintVelocityDto(
     Guid SprintId, int Number, string Name, DateOnly StartDate, DateOnly EndDate,
     int Committed, int FinalScope, int Completed, int CarriedOver, decimal? CompletionPercent);

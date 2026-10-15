@@ -3460,3 +3460,22 @@ Every enum below is serialized as its **raw integer** value in both requests and
 against each module's DTO and service-interface source (response bodies, precise nullability, status
 codes) — see the final report in this session for the exact verification steps (real `dotnet build`,
 `dotnet test`, and a live run of NexusCore.Api).*
+
+## 20f. Reports and dashboards from the backend (phase 8)
+
+Nothing here is required: every change is an optional field, an optional constructor parameter or an opt-in switch, and a host that does not turn the switches on gets the old figures. No table changed, so there is **no SQL script** for this phase.
+
+### Analytics (`Nexus.Reporting.Analytics`)
+
+* **`AnalyticsOptions`** (`AddReportingAnalytics(o => ...)`, both default `false`; both on in `PostBank.Api`):
+  * `ProgressFromProjectPlan` - a project's planned / actual progress (and so the deviation and the on-track / at-risk / behind class) is what the planning modules work out from the schedule and the board (`IProjectProgressService`, the same figures the project screens show) instead of the latest progress update people registered. A project the service has no figure for keeps the old source.
+  * `OnlyApprovedProjects` - drafts, projects waiting for approval and rejected ones are left out of the unit and manager reports.
+* **New trailing fields** (old callers ignore them):
+  * `UnitPerformanceDto` / `ProjectManagerEvaluationDto`: `delayedProjects`, `averagePerformance` (average of each project's actual / planned, each capped at 100), `rating` (`Excellent` from 90, `Good` from 70, otherwise `NeedsImprovement`; null when no project has a figure) and `projectIds`.
+  * `UnitPerformanceReportDto.summary`: the whole organisation in one line (`projectCount`, `runningProjects`, `delayedProjects`, `averagePerformance`, `rating`).
+  * `UnitStatusRowDto.projectIdsByStatus`: per status column, the projects counted there (so a screen can open the list behind a number).
+* Classification bands stay -5 / -15 percentage points of deviation. Needs the existing `Reporting.ViewAll` permission (not added to the seeded roles by this phase).
+
+### Agile (`Nexus.ProjectManagement.Agile`)
+
+* `GET /api/project-management/agile/sprint-progress?projectId=&metric=` (needs `Agile.View`; `metric` `Count` (1, default) or `Points` (0)) returns `{ projectId, metric, sprints: [ { sprintNumber, name, sprintTotal, sprintCompleted, cumulativeTotal, cumulativeCompleted, cumulativeRemaining } ] }` for every sprint of the project: the data of the burn-up / burn-down chart. "Completed" means the board's approved-done status. `ISprintChartService.GetProjectProgressAsync` is a default interface member and `SprintChartService` takes the task repository as an optional trailing parameter, so other implementations and hosts are unaffected.

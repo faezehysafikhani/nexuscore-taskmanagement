@@ -13,6 +13,23 @@ public sealed record ProjectPerformanceDto(
     DateOnly? ForecastEnd, int? ForecastDelayDays, bool IsOverdue, HealthStatus Health,
     decimal? ContractedAmount, decimal? InvoicedAmount, decimal? PaidAmount, bool ContractsAvailable, bool ProgressAvailable);
 
+/// <summary>How far, on average, the projects have done what was planned (each project's performance capped at 100):
+/// Excellent from 90, Good from 70, otherwise NeedsImprovement; null when no project has a figure.</summary>
+public static class PerformanceRating
+{
+    public const string Excellent = "Excellent";
+    public const string Good = "Good";
+    public const string NeedsImprovement = "NeedsImprovement";
+
+    public static string? Of(decimal? averagePerformance) => averagePerformance switch
+    {
+        null => null,
+        >= 90 => Excellent,
+        >= 70 => Good,
+        _ => NeedsImprovement
+    };
+}
+
 public sealed record StatusCountDto(string Status, int Count);
 
 /// <summary>A unit of the organisation chart with the projects of its whole subtree rolled up into it.</summary>
@@ -20,24 +37,33 @@ public sealed record UnitPerformanceDto(
     Guid? UnitId, string UnitName, string? UnitCode, int Level,
     int ProjectCount, int RunningProjects, int CompletedProjects, int OverdueProjects,
     decimal TotalBudget, int ProjectsWithProgress, decimal? AveragePlannedProgress, decimal? AverageActualProgress, decimal? AverageDeviation,
-    int OnTrack, int AtRisk, int Behind);
+    int OnTrack, int AtRisk, int Behind,
+    int DelayedProjects = 0, decimal? AveragePerformance = null, string? Rating = null, IReadOnlyList<Guid>? ProjectIds = null);
+
+/// <summary>The whole organisation in one line: every project of the report, whichever unit it is in.</summary>
+public sealed record PerformanceSummaryDto(
+    int ProjectCount, int RunningProjects, int DelayedProjects, decimal? AveragePerformance, string? Rating);
 
 public sealed record UnitPerformanceReportDto(
-    int Level, int MaxLevel, DateOnly AsOf, IReadOnlyList<UnitPerformanceDto> Units);
+    int Level, int MaxLevel, DateOnly AsOf, IReadOnlyList<UnitPerformanceDto> Units, PerformanceSummaryDto? Summary = null);
 
 /// <summary>Rows are units at <c>Level</c>; columns are every project status, so a status with no
 /// project still shows as a zero column.</summary>
 public sealed record UnitStatusMatrixDto(
     int Level, IReadOnlyList<string> Statuses, IReadOnlyList<UnitStatusRowDto> Rows, IReadOnlyList<int> ColumnTotals, int Total);
 
-public sealed record UnitStatusRowDto(Guid? UnitId, string UnitName, string? UnitCode, IReadOnlyList<int> Counts, int Total);
+/// <param name="ProjectIdsByStatus">For each status column (same order as the counts), the projects counted there.</param>
+public sealed record UnitStatusRowDto(
+    Guid? UnitId, string UnitName, string? UnitCode, IReadOnlyList<int> Counts, int Total,
+    IReadOnlyList<IReadOnlyList<Guid>>? ProjectIdsByStatus = null);
 
 /// <summary>How the projects a person manages are doing. The classification counts come from each
 /// project's latest progress update.</summary>
 public sealed record ProjectManagerEvaluationDto(
     Guid? ManagerUserId, int ProjectCount, int RunningProjects, int CompletedProjects, int OverdueProjects,
     decimal TotalBudget, int ProjectsWithProgress, decimal? AveragePlannedProgress, decimal? AverageActualProgress, decimal? AverageDeviation,
-    int OnTrack, int AtRisk, int Behind, decimal? OnTrackShare, int OpenActions);
+    int OnTrack, int AtRisk, int Behind, decimal? OnTrackShare, int OpenActions,
+    int DelayedProjects = 0, decimal? AveragePerformance = null, string? Rating = null, IReadOnlyList<Guid>? ProjectIds = null);
 
 public sealed record ProjectManagerEvaluationReportDto(DateOnly AsOf, IReadOnlyList<ProjectManagerEvaluationDto> Managers);
 

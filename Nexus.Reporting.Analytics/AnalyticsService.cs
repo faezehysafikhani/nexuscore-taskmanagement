@@ -1,4 +1,5 @@
 using Nexus.Actions.Application;
+using NexusCore.Application.Approvals;
 using Nexus.Actions.Domain;
 using Nexus.Integrations.StrategyAlignment.Application;
 using Nexus.Integrations.StrategyAlignment.Domain;
@@ -30,14 +31,20 @@ public sealed class AnalyticsService(
     IOrganizationUnitRepository? organizationRepository = null,
     IStrategyRepository? strategyRepository = null,
     IAlignmentRepository? alignmentRepository = null,
-    TimeProvider? timeProvider = null) : IAnalyticsService
+    TimeProvider? timeProvider = null,
+    IProjectProgressService? planProgressService = null,
+    AnalyticsOptions? options = null) : IAnalyticsService
 {
     private const int MaxProjects = 1000;
     private static readonly ProjectStatus[] Running = [ProjectStatus.Active, ProjectStatus.OnHold];
     private static readonly ActionStatus[] OpenActionStatuses = [ActionStatus.Open, ActionStatus.InProgress];
 
-    /// <summary>A project with its latest progress update (null when Progress is not installed or nothing was reported).</summary>
-    private sealed record Figure(Project Project, ProgressUpdateDto? Latest);
+    /// <summary>Where a project stands: from its latest progress update, or (when asked for) from what its planning modules work out.</summary>
+    private sealed record ProgressPoint(
+        decimal PlannedProgress, decimal ActualProgress, decimal? Performance, DateOnly? RegisterDate, PerformanceClassification PerformanceClassification);
+
+    /// <summary>A project with where it stands (null when nothing is known).</summary>
+    private sealed record Figure(Project Project, ProgressPoint? Latest);
 
     private DateOnly Today => DateOnly.FromDateTime((timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime);
 
@@ -52,7 +59,7 @@ public sealed class AnalyticsService(
         }
 
         var date = asOf ?? Today;
-        var latest = await LatestProgressAsync(projectId, date, cancellationToken);
+        var latest = await ProgressOfAsync(project, date, cancellationToken);
 
         decimal? contracted = null, invoiced = null, paid = null;
         if (contractService is not null)
@@ -76,7 +83,7 @@ public sealed class AnalyticsService(
             ev.BudgetAtCompletion, ev.PlannedValue, ev.EarnedValueAmount, ev.ScheduleVariance, ev.Spi,
             ev.ActualCost, ev.CostVariance, ev.Cpi, ev.EstimateAtCompletion, ev.EstimateToComplete, ev.VarianceAtCompletion,
             ev.ForecastEnd, ev.ForecastDelayDays, ev.IsOverdue, ev.Health,
-            contracted, invoiced, paid, contractService is not null, progressService is not null));
+            contracted, invoiced, paid, contractService is not null, progressService is not null || UsesPlan));
     }
 
     // ------------------------------------------------------------------ units
@@ -108,7 +115,9 @@ public sealed class AnalyticsService(
             units.Add(ToUnitRow(null, "Unassigned", null, 0, unassigned, date));
         }
 
-        return Result.Success(new UnitPerformanceReportDto(level, rollup.MaxLevel, date, units));
+        var all = Aggregate(figures, date);
+        var summary = new PerformanceSummaryDto(all.Count, all.Running, all.Delayed, all.AvgPerformance, PerformanceRating.Of(all.AvgPerformance));
+        return Result.Success(new UnitPerformanceReportDto(level, rollup.MaxLevel, date, units, summary));
     }
 
     public async Task<Result<UnitStatusMatrixDto>> GetUnitStatusMatrixAsync(Guid tenantId, int level, CancellationToken cancellationToken)
@@ -128,7 +137,8 @@ public sealed class AnalyticsService(
         {
             var list = rows.GetValueOrDefault(id ?? Guid.Empty) ?? [];
             var counts = statuses.Select(s => list.Count(p => p.Status == s)).ToList();
-            return new UnitStatusRowDto(id, name, code, counts, list.Count);
+            return new UnitStatusRowDto(id, name, code, counts, list.Count,
+                statuses.Select(s => (IReadOnlyList<Guid>)list.Where(p => p.Status == s).Select(p => p.Id).ToList()).ToList());
         }
 
         var result = rollup.Units
@@ -166,7 +176,8 @@ public sealed class AnalyticsService(
                     g.Key, a.Count, a.Running, a.Completed, a.Overdue, a.Budget, a.WithProgress,
                     a.AvgPlanned, a.AvgActual, a.Deviation, a.OnTrack, a.AtRisk, a.Behind,
                     a.WithProgress > 0 ? Math.Round(a.OnTrack * 100m / a.WithProgress, 2) : null,
-                    g.Key is { } id ? openByPerson.GetValueOrDefault(id) : 0);
+                    g.Key is { } id ? openByPerson.GetValueOrDefault(id) : 0,
+                    a.Delayed, a.AvgPerformance, PerformanceRating.Of(a.AvgPerformance), g.Select(f => f.Project.Id).ToList());
             })
             .OrderByDescending(m => m.ProjectCount)
             .ThenBy(m => m.ManagerUserId)
@@ -287,13 +298,24 @@ public sealed class AnalyticsService(
     private async Task<IReadOnlyList<Project>> LoadProjectsAsync(Guid tenantId, CancellationToken cancellationToken)
     {
         var page = await projectRepository.ListAsync(new ListProjectsRequest(tenantId, PageNumber: 1, PageSize: MaxProjects), cancellationToken);
-        return page.Items.Where(p => p.Status != ProjectStatus.Archived).ToList();
+        return page.Items
+            .Where(p => p.Status != ProjectStatus.Archived)
+            .Where(p => options?.OnlyApprovedProjects != true || p.ApprovalStatus == ApprovalStatus.Approved)
+            .ToList();
     }
 
     private async Task<IReadOnlyList<Figure>> LoadFiguresAsync(Guid tenantId, DateOnly asOf, CancellationToken cancellationToken)
     {
+        var projects = await LoadProjectsAsync(tenantId, cancellationToken);
         var figures = new List<Figure>();
-        foreach (var project in await LoadProjectsAsync(tenantId, cancellationToken))
+        if (UsesPlan)
+        {
+            var known = await PlanFiguresAsync(tenantId, projects, cancellationToken);
+            figures.AddRange(projects.Select(p => new Figure(p, known.GetValueOrDefault(p.Id))));
+            return figures;
+        }
+
+        foreach (var project in projects)
         {
             figures.Add(new Figure(project, await LatestProgressAsync(project.Id, asOf, cancellationToken)));
         }
@@ -301,8 +323,45 @@ public sealed class AnalyticsService(
         return figures;
     }
 
+    private bool UsesPlan => options?.ProgressFromProjectPlan == true && planProgressService is not null;
+
+    private async Task<ProgressPoint?> ProgressOfAsync(Project project, DateOnly asOf, CancellationToken cancellationToken)
+    {
+        if (!UsesPlan)
+        {
+            return await LatestProgressAsync(project.Id, asOf, cancellationToken);
+        }
+
+        return (await PlanFiguresAsync(project.TenantId, [project], cancellationToken)).GetValueOrDefault(project.Id);
+    }
+
+    private async Task<Dictionary<Guid, ProgressPoint>> PlanFiguresAsync(Guid tenantId, IReadOnlyList<Project> projects, CancellationToken cancellationToken)
+    {
+        var known = new Dictionary<Guid, ProgressPoint>();
+        if (projects.Count == 0)
+        {
+            return known;
+        }
+
+        var result = await planProgressService!.GetAsync(tenantId, new ProjectProgressRequest(projects.Select(p => p.Id).ToList()), cancellationToken);
+        foreach (var figure in result.IsSuccess ? result.Value! : [])
+        {
+            known[figure.ProjectId] = new ProgressPoint(figure.PlannedProgress, figure.ActualProgress, figure.Performance, null, Classify(figure.ActualProgress - figure.PlannedProgress));
+        }
+
+        return known;
+    }
+
+    // The same bands the Progress module uses for a registered update.
+    private static PerformanceClassification Classify(decimal deviation) => deviation switch
+    {
+        >= -5 => PerformanceClassification.OnTrack,
+        >= -15 => PerformanceClassification.AtRisk,
+        _ => PerformanceClassification.Behind
+    };
+
     /// <summary>The most recent progress update registered on or before the date; none when Progress is not installed.</summary>
-    private async Task<ProgressUpdateDto?> LatestProgressAsync(Guid projectId, DateOnly asOf, CancellationToken cancellationToken)
+    private async Task<ProgressPoint?> LatestProgressAsync(Guid projectId, DateOnly asOf, CancellationToken cancellationToken)
     {
         if (progressService is null)
         {
@@ -310,9 +369,10 @@ public sealed class AnalyticsService(
         }
 
         var result = await progressService.ListByProjectAsync(projectId, cancellationToken);
-        return result.IsSuccess
+        var latest = result.IsSuccess
             ? result.Value!.Where(u => u.RegisterDate <= asOf).OrderByDescending(u => u.RegisterDate).FirstOrDefault()
             : null;
+        return latest is null ? null : new ProgressPoint(latest.PlannedProgress, latest.ActualProgress, null, latest.RegisterDate, latest.PerformanceClassification);
     }
 
     private static UnitPerformanceDto ToUnitRow(Guid? id, string name, string? code, int level, IReadOnlyList<Figure> figures, DateOnly asOf)
@@ -320,18 +380,21 @@ public sealed class AnalyticsService(
         var a = Aggregate(figures, asOf);
         return new UnitPerformanceDto(
             id, name, code, level, a.Count, a.Running, a.Completed, a.Overdue, a.Budget, a.WithProgress,
-            a.AvgPlanned, a.AvgActual, a.Deviation, a.OnTrack, a.AtRisk, a.Behind);
+            a.AvgPlanned, a.AvgActual, a.Deviation, a.OnTrack, a.AtRisk, a.Behind,
+            a.Delayed, a.AvgPerformance, PerformanceRating.Of(a.AvgPerformance), figures.Select(f => f.Project.Id).ToList());
     }
 
     private sealed record Aggregates(
         int Count, int Running, int Completed, int Overdue, decimal Budget, int WithProgress,
-        decimal? AvgPlanned, decimal? AvgActual, decimal? Deviation, int OnTrack, int AtRisk, int Behind);
+        decimal? AvgPlanned, decimal? AvgActual, decimal? Deviation, int OnTrack, int AtRisk, int Behind,
+        int Delayed, decimal? AvgPerformance);
 
     private static Aggregates Aggregate(IReadOnlyList<Figure> figures, DateOnly asOf)
     {
         var withProgress = figures.Where(f => f.Latest is not null).Select(f => f.Latest!).ToList();
         decimal? avgPlanned = withProgress.Count > 0 ? Math.Round(withProgress.Average(u => u.PlannedProgress), 2) : null;
         decimal? avgActual = withProgress.Count > 0 ? Math.Round(withProgress.Average(u => u.ActualProgress), 2) : null;
+        var performances = withProgress.Where(u => u.Performance is not null).Select(u => u.Performance!.Value).ToList();
         return new Aggregates(
             figures.Count,
             figures.Count(f => Running.Contains(f.Project.Status)),
@@ -343,6 +406,8 @@ public sealed class AnalyticsService(
             avgPlanned is not null ? avgActual - avgPlanned : null,
             withProgress.Count(u => u.PerformanceClassification == PerformanceClassification.OnTrack),
             withProgress.Count(u => u.PerformanceClassification == PerformanceClassification.AtRisk),
-            withProgress.Count(u => u.PerformanceClassification == PerformanceClassification.Behind));
+            withProgress.Count(u => u.PerformanceClassification == PerformanceClassification.Behind),
+            withProgress.Count(u => u.PerformanceClassification != PerformanceClassification.OnTrack),
+            performances.Count > 0 ? Math.Round(performances.Average(v => Math.Min(100m, v)), 2) : null);
     }
 }

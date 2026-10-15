@@ -158,7 +158,7 @@ builder.Services.AddProjectStrategyAlignment();
 
 builder.Services.AddPortfolio();
 builder.Services.AddProjectReporting();
-builder.Services.AddReportingAnalytics();
+builder.Services.AddReportingAnalytics(o => { o.ProgressFromProjectPlan = true; o.OnlyApprovedProjects = true; });
 
 // --- Infrastructure tier: one DbContext per module, all pointed at the same DefaultConnection
 // database (isolated by schema - see each module's own ToTable(name, schema) configuration). ---

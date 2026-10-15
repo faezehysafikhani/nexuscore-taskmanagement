@@ -56,6 +56,11 @@ public static class AgileBoardEndpoints
                 (await service.GetVelocityAsync(projectId, sprints ?? SprintChartService.DefaultVelocitySprints, metric ?? ChartMetric.Points, cancellationToken)).ToApiResult())
             .RequireAuthorization(AgilePermissions.View);
 
+        // The whole project sprint by sprint (a burn-up / burn-down across every sprint).
+        root.MapGet("/sprint-progress", async (Guid projectId, ChartMetric? metric, ISprintChartService service, CancellationToken cancellationToken) =>
+                (await service.GetProjectProgressAsync(projectId, metric ?? ChartMetric.Count, cancellationToken)).ToApiResult())
+            .RequireAuthorization(AgilePermissions.View);
+
         var statusChanges = root.MapGroup("/status-submissions");
 
         statusChanges.MapGet("/", async (Guid taskId, IAgileTaskStatusSubmissionService service, CancellationToken cancellationToken) =>
