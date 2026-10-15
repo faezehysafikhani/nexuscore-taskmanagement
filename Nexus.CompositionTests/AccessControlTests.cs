@@ -397,6 +397,8 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
             // Task SMS through the platform's SMS panel, to a recording provider (never a real gateway).
             builder.Services.AddTaskNotificationsIntegration();
             builder.Services.AddSingleton<ISmsProvider>(Sms);
+            // Always midday in Tehran: the SMS quiet hours (22:00-07:00 by default) never hold a test's message back.
+            builder.Services.AddSingleton<TimeProvider>(new MiddayClock());
             builder.Services.AddTicketingApplication();
             builder.Services.AddTicketingInfrastructure(builder.Configuration);
             builder.Services.AddChatApplication();
@@ -459,6 +461,12 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
             _client = _app.GetTestClient();
 
             await SeedAsync();
+        }
+
+        /// <summary>Today, 12:00 in Tehran (08:30 UTC).</summary>
+        private sealed class MiddayClock : TimeProvider
+        {
+            public override DateTimeOffset GetUtcNow() => new(DateTime.UtcNow.Date.AddHours(8.5), TimeSpan.Zero);
         }
 
         private static void UseInMemory<TContext>(IServiceCollection services, string database, bool withInterceptors)

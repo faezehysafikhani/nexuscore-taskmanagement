@@ -90,6 +90,9 @@ public static class DependencyInjection
         services.AddScoped<ISmsProvider, KavenegarSmsProvider>();
         services.AddScoped<ISmsSender, GatewaySmsSender>();
         services.AddScoped<ISmsTemplateService, SmsTemplateService>();
+        // The hours notification SMS wait for (the SMS panel sets them).
+        services.AddScoped<ISmsQuietHours, SmsQuietHours>();
+        services.Configure<SmsDeliveryOptions>(configuration.GetSection(SmsDeliveryOptions.SectionName));
         // Each module adds its own SMS templates the same way (ISmsTemplateCatalog).
         services.AddSingleton<ISmsTemplateCatalog, CoreSmsTemplateCatalog>();
         services.Configure<SmsTemplateOptions>(configuration.GetSection(SmsTemplateOptions.SectionName));

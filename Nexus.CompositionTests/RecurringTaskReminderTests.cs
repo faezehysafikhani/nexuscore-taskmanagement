@@ -162,29 +162,16 @@ public sealed class RecurringTaskReminderTests : IDisposable
         Assert.Equal(new DateTimeOffset(2026, 1, 2, 5, 30, 0, TimeSpan.Zero), next);
     }
 
+    /// <summary>A recurring task is done again at each occurrence: whatever its status, every one is announced.</summary>
     [Theory]
+    [InlineData(TaskItemStatus.InProgress)]
     [InlineData(TaskItemStatus.Paused)]
     [InlineData(TaskItemStatus.Completed)]
-    public async Task APausedOrCompletedTask_IsNotReminded_ButItsScheduleMovesOn(TaskItemStatus status)
+    public async Task EveryOccurrence_IsReminded_WhateverTheTasksStatus(TaskItemStatus status)
     {
         var owner = User("09120000001");
         var assignee = User("09120000002");
-        var (_, scheduleId) = await RecurringTaskAsync(owner, assignedUserId: assignee.Id, startTime: new TimeOnly(9, 0), status: status);
-
-        await PassAsync();
-
-        Assert.Empty(_notifications.Sent);
-        Assert.Empty(_smsProvider.Sent);
-        // Not held back: once the task is resumed, its next occurrence is announced.
-        Assert.True((await ScheduleAsync(scheduleId)).NextExecutionAtUtc > DateTimeOffset.UtcNow);
-    }
-
-    [Fact]
-    public async Task AnInProgressTask_IsReminded()
-    {
-        var owner = User("09120000001");
-        var assignee = User("09120000002");
-        await RecurringTaskAsync(owner, assignedUserId: assignee.Id, status: TaskItemStatus.InProgress);
+        await RecurringTaskAsync(owner, assignedUserId: assignee.Id, status: status);
 
         await PassAsync();
 

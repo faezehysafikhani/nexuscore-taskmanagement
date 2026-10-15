@@ -68,6 +68,15 @@ public sealed class TaskItem : AuditableEntity<Guid>
 
     public DateTimeOffset? ActualCompletionDateUtc { get; private set; }
 
+    /// <summary>
+    /// The due moment the "due soon" reminder was sent for (null: not yet). Set by the reminder
+    /// job with a conditional update, so a moved due date is reminded of again.
+    /// </summary>
+    public DateTimeOffset? DueSoonNotifiedFor { get; private set; }
+
+    /// <summary>The due moment the "overdue" notice was sent for; once per due moment.</summary>
+    public DateTimeOffset? OverdueNotifiedFor { get; private set; }
+
     public Guid? OwnerUserId { get; private set; }
     public User? OwnerUser { get; private set; }
 

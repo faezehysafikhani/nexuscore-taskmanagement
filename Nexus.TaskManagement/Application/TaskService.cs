@@ -13,7 +13,8 @@ public sealed class TaskService(
     ICurrentUserContext currentUser,
     ITaskActivityService activity,
     IFileStorage fileStorage,
-    ITaskAccessScope access) : ITaskService
+    ITaskAccessScope access,
+    ITaskNoticePublisher notices) : ITaskService
 {
     /// <summary>
     /// Seeing a task (owner, assignee, collaborator, team) lets a user work on it; changing what
@@ -223,6 +224,7 @@ public sealed class TaskService(
         }
 
         var (previousResponsible, previousDueDate, previousDueTime) = (task.ResponsibleUserIds, task.DueDate, task.DueTime);
+        var previousPeople = TaskPeople.Of(task);
         task.SetResponsibleUsers(responsible);
         task.UpdateDetails(
             request.Title, request.Description, request.DueDate, request.Priority,
@@ -247,6 +249,7 @@ public sealed class TaskService(
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await activity.RecordAsync(id, "Task updated", task.Title, cancellationToken);
+        await PublishPeopleChangesAsync(task, previousResponsible, previousPeople, cancellationToken);
 
         var updated = await repository.GetByIdAsync(tenantId, id, cancellationToken);
         return Result.Success(await ToDtoAsync(updated!, cancellationToken));
@@ -270,11 +273,19 @@ public sealed class TaskService(
             return Result.Failure(NotTaskOwner());
         }
 
+        // Taken before the task is gone: after it, nobody can be found to tell.
+        var people = TaskPeople.Of(task).Where(userId => userId != currentUser.UserId).ToList();
         var storedFiles = await repository.ClearLinksForTaskAsync(id, cancellationToken);
         repository.Remove(task);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await DeleteStoredFilesAsync(storedFiles, cancellationToken);
         await activity.RecordAsync(id, "Task deleted", task.Title, cancellationToken);
+        if (people.Count > 0)
+        {
+            await notices.PublishAsync(
+                new TaskNotice(task.TenantId, id, task.Title, currentUser.UserId, TaskNoticeKind.Deleted, "Task deleted", null, people),
+                cancellationToken);
+        }
 
         return Result.Success();
     }
@@ -376,6 +387,7 @@ public sealed class TaskService(
         }
 
         var previousResponsible = task.ResponsibleUserIds;
+        var previousPeople = TaskPeople.Of(task);
         task.SetResponsibleUsers(responsible);
         task.RecordAssignmentAndDueChanges(previousResponsible, task.DueDate, task.DueTime, currentUser.UserId);
 
@@ -391,6 +403,7 @@ public sealed class TaskService(
             .Select(userId => responsibleNames.TryGetValue(userId, out var user) ? user.DisplayName : null)
             .Where(name => !string.IsNullOrWhiteSpace(name)));
         await activity.RecordAsync(id, "Assignee changed", responsibleNamesText, cancellationToken);
+        await PublishPeopleChangesAsync(task, previousResponsible, previousPeople, cancellationToken);
 
         var updated = await repository.GetByIdAsync(tenantId, id, cancellationToken);
         return Result.Success(await ToDtoAsync(updated!, cancellationToken));
@@ -751,6 +764,18 @@ public sealed class TaskService(
 
         await activity.RecordAsync(taskId, request.Action.Trim(), request.Details?.Trim(), cancellationToken);
         return Result.Success();
+    }
+
+    /// <summary>Tells the people of a task who became responsible, stopped being responsible, or got access.</summary>
+    private async Task PublishPeopleChangesAsync(
+        TaskItem task, IReadOnlyCollection<Guid> responsibleBefore, IReadOnlyCollection<Guid> peopleBefore, CancellationToken cancellationToken)
+    {
+        foreach (var (kind, userIds) in TaskPeople.Changes(responsibleBefore, peopleBefore, task, currentUser.UserId))
+        {
+            await notices.PublishAsync(
+                new TaskNotice(task.TenantId, task.Id, task.Title, currentUser.UserId, kind, kind.ToString(), null, userIds),
+                cancellationToken);
+        }
     }
 
     /// <summary>Removes file contents after the rows are gone (never before: a failed save keeps both).</summary>

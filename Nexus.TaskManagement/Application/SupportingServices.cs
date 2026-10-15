@@ -739,7 +739,8 @@ public sealed class TaskCommentService(
     ITaskFileRepository fileRepository,
     ITaskManagementUnitOfWork unitOfWork,
     ICurrentUserContext currentUser,
-    IFileStorage fileStorage) : ITaskCommentService
+    IFileStorage fileStorage,
+    ITaskNoticePublisher notices) : ITaskCommentService
 {
     public async Task<Result<IReadOnlyList<TaskCommentDto>>> ListAsync(Guid taskId, CancellationToken cancellationToken)
     {
@@ -772,7 +773,9 @@ public sealed class TaskCommentService(
         }
 
         var tenantId = currentUser.TenantId.Value;
-        if (await taskRepository.GetForUpdateAsync(tenantId, taskId, cancellationToken) is null)
+        // With its people: they are told of the comment.
+        var task = await taskRepository.GetByIdAsync(tenantId, taskId, cancellationToken);
+        if (task is null)
         {
             return Result.Failure<TaskCommentDto>(Error.NotFound("Task not found."));
         }
@@ -782,6 +785,15 @@ public sealed class TaskCommentService(
 
         await repository.AddAsync(comment, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // Everyone the task concerns but its author hears of a new comment.
+        var people = TaskPeople.Of(task).Where(userId => userId != comment.UserId).ToList();
+        if (people.Count > 0)
+        {
+            await notices.PublishAsync(
+                new TaskNotice(tenantId, taskId, task.Title, comment.UserId, TaskNoticeKind.Comment, "Comment added", comment.Text, people),
+                cancellationToken);
+        }
 
         return Result.Success(ToDto(comment, await DisplayNameAsync(comment.UserId, cancellationToken), []));
     }

@@ -69,6 +69,9 @@ public sealed class RepetitiveTask : AuditableEntity<Guid>
 
     // --- Scheduling state, owned by the future background job ---
     public DateTimeOffset? NextExecutionAtUtc { get; private set; }
+
+    /// <summary>The occurrence the "coming up" reminder was sent for (set by the reminder job).</summary>
+    public DateTimeOffset? UpcomingNotifiedFor { get; private set; }
     public DateTimeOffset? LastExecutionAtUtc { get; private set; }
     public bool IsActive { get; private set; }
 
