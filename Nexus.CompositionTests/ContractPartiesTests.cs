@@ -131,6 +131,21 @@ public sealed class ContractPartiesTests
     }
 
     [Fact]
+    public async Task TheProjectSummary_SplitsTheTotalIntoTheSignedAmountsAndTheApprovedAddenda()
+    {
+        var f = new Fixture();
+        var contract = await f.ContractAsync();
+        var addendum = (await f.Addenda.CreateAsync(contract.Id, new CreateContractAddendumRequest(Tenant, "A1", null, Day, 5_000_000m, 0), default)).Value!;
+        await f.Addenda.SubmitForApprovalAsync(contract.Id, addendum.Id, default); // no workflow: approved at once
+
+        var summary = (await f.Contracts.GetProjectSummaryAsync(Project, default)).Value!;
+
+        Assert.Equal(1_005_000_000m, summary.TotalContractAmount.Rials);
+        Assert.Equal(1_000_000_000m, summary.TotalOriginalAmount!.Rials);
+        Assert.Equal(5_000_000m, summary.TotalApprovedAddenda!.Rials);
+    }
+
+    [Fact]
     public async Task TheBatchList_ReturnsEveryContractOfTheAskedProjects_WithItsAddendaAndInvoices()
     {
         var f = new Fixture();

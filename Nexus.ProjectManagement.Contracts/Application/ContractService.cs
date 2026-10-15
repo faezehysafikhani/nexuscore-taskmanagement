@@ -87,7 +87,9 @@ public sealed class ContractService(
             projectId, contracts.Count, ContractMapper.Money(total), ContractMapper.Money(invoiced), ContractMapper.Money(paid),
             ContractMapper.Money(summaries.Sum(s => s.RemainingCommitment)), ContractMapper.Money(summaries.Sum(s => s.OutstandingPayable)),
             total > 0 ? Math.Round(invoiced * 100m / total, 2) : 0m, total > 0 ? Math.Round(paid * 100m / total, 2) : 0m,
-            summaries.Count(s => s.IsOverInvoiced)));
+            summaries.Count(s => s.IsOverInvoiced),
+            ContractMapper.Money(total - summaries.Sum(s => s.ApprovedAddendaAmount)),
+            ContractMapper.Money(summaries.Sum(s => s.ApprovedAddendaAmount))));
     }
 
     public async Task<Result<ContractDto>> CreateAsync(CreateContractRequest request, CancellationToken cancellationToken)

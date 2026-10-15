@@ -36,11 +36,23 @@ public sealed class ActionItemService(
             : Result.Success(ToDto(action));
     }
 
+    public const string EndNotAfterStartErrorCode = "action.end_not_after_start";
+
+    private Error? CheckDates(DateOnly? start, DateOnly? end) =>
+        options?.RequireEndAfterStart == true && start is { } from && end is { } to && to <= from
+            ? new Error(EndNotAfterStartErrorCode, "The end date must be after the start date.")
+            : null;
+
     public async Task<Result<ActionItemDto>> CreateAsync(CreateActionItemRequest request, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Title))
         {
             return Result.Failure<ActionItemDto>(Error.Validation("Title is required."));
+        }
+
+        if (CheckDates(request.StartDate, request.EndDate) is { } datesError)
+        {
+            return Result.Failure<ActionItemDto>(datesError);
         }
 
         var referenceError = await ValidateRequiredReferencesAsync(request.OrganizationUnitId, request.WorkCalendarId, cancellationToken);
@@ -59,6 +71,15 @@ public sealed class ActionItemService(
         }
 
         action.SetSource(request.SourceType, request.SourceId);
+        if (request.ApproverUserIds is { } approvers)
+        {
+            if (ApproversError(approvers) is { } approversError)
+            {
+                return Result.Failure<ActionItemDto>(approversError);
+            }
+
+            action.SetApprovers(approvers);
+        }
 
         var recurrenceError = ApplyRecurrence(action, request.Recurrence);
         if (recurrenceError is not null)
@@ -90,6 +111,12 @@ public sealed class ActionItemService(
             return Result.Failure<ActionItemDto>(referenceError);
         }
 
+        // Only changed dates are checked, so an action saved before the rule existed can still be edited.
+        if ((request.StartDate != action.StartDate || request.EndDate != action.EndDate) && CheckDates(request.StartDate, request.EndDate) is { } datesError)
+        {
+            return Result.Failure<ActionItemDto>(datesError);
+        }
+
         action.UpdateDetails(
             request.Title, request.Description, request.OwnerUserId, request.ResponsibleUserId,
             request.OrganizationUnitId, request.WorkCalendarId, request.ProjectId, request.StartDate, request.EndDate);
@@ -98,6 +125,17 @@ public sealed class ActionItemService(
         if (request.Priority is { } priority)
         {
             action.ChangePriority(priority);
+        }
+
+        // Likewise for the approvers: omitting the list keeps them; an empty list clears them.
+        if (request.ApproverUserIds is { } approvers)
+        {
+            if (ApproversError(approvers) is { } approversError)
+            {
+                return Result.Failure<ActionItemDto>(approversError);
+            }
+
+            action.SetApprovers(approvers);
         }
 
         // Likewise for the source: omitting it keeps the stored link.
@@ -195,6 +233,11 @@ public sealed class ActionItemService(
         return Result.Success(ToDto(action));
     }
 
+    private static Error? ApproversError(IReadOnlyList<Guid> approvers) =>
+        approvers.Count > 3 || approvers.Distinct().Count() != approvers.Count
+            ? Error.Validation("An action has up to three different approvers.")
+            : null;
+
     /// <summary>Null recurrence = leave the action's rule as it is; a Unit of null removes it.</summary>
     private static Error? ApplyRecurrence(ActionItem action, ActionRecurrenceRequest? recurrence)
     {
@@ -284,5 +327,6 @@ public sealed class ActionItemService(
                 action.RecurrenceMonths is { } mm ? Enumerable.Range(1, 12).Where(m => (mm & (1 << (m - 1))) != 0).ToList() : null,
                 action.RecurrenceDurationHours)
             : null,
-        action.RecurrenceSourceId, action.NextOccurrenceId, action.SourceType, action.SourceId);
+        action.RecurrenceSourceId, action.NextOccurrenceId, action.SourceType, action.SourceId,
+        action.ApproverUserIds.Count == 0 ? null : action.ApproverUserIds);
 }

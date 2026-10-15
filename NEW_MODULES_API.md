@@ -3194,9 +3194,11 @@ Schema: apply `docs/upgrade/2026-10-13-add-waterfall-planning.sql` (`WaterfallPl
 
 * `ActionStatus.OnHold = 4` (appended; the stored values 0-3 keep their meaning).
 * **Source link**: create / update take optional `sourceType` (an opaque label such as `"Risk"` or `"Stakeholder"`) and `sourceId`; the DTO returns them. Omitted on update = unchanged.
+* **Named approvers**: create / update take an optional `approverUserIds` (up to three different users, in order; an empty list clears them; omitted on update = unchanged); the DTO returns them. They are recorded with the action; which approvers a submission goes to is decided by the Workflow definition (item-level approvers are wired in phase 7).
 * **Pattern of a repeating action**: `recurrence` (request and DTO) gains optional `daysOfWeek` (0 Sunday ... 6 Saturday), `dayOfMonth` (1-31, Jalali), `months` (1-12, Jalali; all twelve = every month) and `durationHours` (0-24). A request replaces the whole rule, so a field left out is cleared.
 * `GET /api/actions/{id}/occurrences` → `[ { index, date, durationHours } ]`: the occurrences of the rule inside the action's own date range (daily every N days; weekly on the chosen weekdays, Saturday-Wednesday by default, every Nth week; monthly on the Jalali day of the chosen Jalali months, every Nth month, the last day for a day the month lacks; yearly). A one-off action has one occurrence. Capped at 100.
 * **Host switch** `ActionsOptions.CreateNextOccurrenceOnCompletion` (`AddActionManagement(o => ...)`, default `true` = the "chain" behaviour: completing a repeating action creates the next one). `PostBank.Api` sets it to `false`: its UI keeps all occurrences inside one action.
+* **Host switch** `ActionsOptions.RequireEndAfterStart` (default `false`; on in `PostBank.Api`): an action with both dates must end after it starts (400 `action.end_not_after_start`); an edit that leaves the dates unchanged is never refused.
 * `DELETE /api/actions/{id}` (needs `Actions.Delete`; 409 while the action waits for approval).
 * **Status requests** `/api/actions/status-submissions`: `GET ?actionId=` or `?projectId=` (newest first), `POST { tenantId, actionId, status, comment }` (needs `ActionStatus.Submit`). Subject type `ActionStatus` (scope Project when the action has a project): on approval the action takes the status; with no workflow it takes it at once. One pending request per action; asking for the status it already has is a validation error.
 
@@ -3217,6 +3219,7 @@ Schema: apply `docs/upgrade/2026-10-13-add-waterfall-planning.sql` (`WaterfallPl
 ### Contracts
 
 * Contract: optional `supervisorName`, `beneficiaryName` (the contractor stays `counterparty`). Addendum: optional `startDate`, `endDate` (the period it covers; the contract's end moves only by `extensionDays`). Invoice: optional `title`, `periodStartDate`, `periodEndDate`. Request fields are optional trailing ones (omitted on update = unchanged, empty text clears a name); DTOs return them (dates also as `...Fa`).
+* The project summary (`GET /summary?projectId=`) also carries `totalOriginalAmount` (the signed amounts) and `totalApprovedAddenda`, so a screen can show base, addenda and total without adding anything up.
 * `POST /api/project-management/contracts/for-projects { projectIds }` → every contract of those projects with its addenda and invoices (`ContractDetailDto[]`).
 
 Schema: apply `docs/upgrade/2026-10-14-add-action-status-and-patterns.sql` (`ActionsPlanningSchemaUpgrade`), `2026-10-14-add-risk-response-submissions.sql` (`RiskResponseSchemaUpgrade`), `2026-10-14-add-strategy-sort-order.sql` (`StrategySchemaUpgrade`) and `2026-10-14-add-contract-parties-and-billing.sql` (`ContractsPartiesSchemaUpgrade`). New permissions: `ActionStatus.Submit`, `RiskResponse.Submit` (added to the host's seeded Project Manager / Project Team roles; existing roles keep what they had).

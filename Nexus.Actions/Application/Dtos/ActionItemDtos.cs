@@ -10,7 +10,7 @@ public sealed record ActionItemDto(
     DateOnly? StartDate, DateOnly? EndDate, ApprovalStatus ApprovalStatus,
     ActionPriority Priority = ActionPriority.Normal,
     ActionRecurrenceDto? Recurrence = null, Guid? RecurrenceSourceId = null, Guid? NextOccurrenceId = null,
-    string? SourceType = null, Guid? SourceId = null);
+    string? SourceType = null, Guid? SourceId = null, IReadOnlyList<Guid>? ApproverUserIds = null);
 
 /// <summary>The repeat rule of an action, or null on the action when it is a one-off.</summary>
 public sealed record ActionRecurrenceDto(
@@ -32,13 +32,13 @@ public sealed record CreateActionItemRequest(
     Guid? OwnerUserId, Guid? ResponsibleUserId,
     Guid OrganizationUnitId, Guid WorkCalendarId, Guid? ProjectId,
     DateOnly? StartDate, DateOnly? EndDate, ActionPriority? Priority = null, ActionRecurrenceRequest? Recurrence = null,
-    string? SourceType = null, Guid? SourceId = null);
+    string? SourceType = null, Guid? SourceId = null, IReadOnlyList<Guid>? ApproverUserIds = null);
 
 public sealed record UpdateActionItemRequest(
     string Title, string? Description, Guid? OwnerUserId, Guid? ResponsibleUserId,
     Guid OrganizationUnitId, Guid WorkCalendarId, Guid? ProjectId,
     DateOnly? StartDate, DateOnly? EndDate, ActionPriority? Priority = null, ActionRecurrenceRequest? Recurrence = null,
-    string? SourceType = null, Guid? SourceId = null);
+    string? SourceType = null, Guid? SourceId = null, IReadOnlyList<Guid>? ApproverUserIds = null);
 
 public sealed record ChangeActionStatusRequest(ActionStatus Status);
 

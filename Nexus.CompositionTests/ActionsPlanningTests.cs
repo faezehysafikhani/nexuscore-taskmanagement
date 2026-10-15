@@ -210,6 +210,25 @@ public sealed class ActionsPlanningTests
         Assert.Equal(("Stakeholder", stakeholder), (replaced.SourceType, replaced.SourceId));
     }
 
+    [Fact]
+    public async Task TheNamedApprovers_AreKeptInOrder_AnUpdateThatOmitsThemKeepsThem_AnEmptyListClearsThem_AndMoreThanThreeIsRefused()
+    {
+        var f = new Fixture();
+        var (a, b, c) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        var created = (await f.Service.CreateAsync(new CreateActionItemRequest(
+            Tenant, "Action", null, null, null, Unit, CalendarId, Project, null, null, null, null, null, null, [a, b]), default)).Value!;
+        Assert.Equal([a, b], created.ApproverUserIds);
+
+        UpdateActionItemRequest Update(IReadOnlyList<Guid>? approvers) =>
+            new("Renamed", null, null, null, Unit, CalendarId, Project, null, null, null, null, null, null, approvers);
+
+        Assert.Equal([a, b], (await f.Service.UpdateAsync(created.Id, Update(null), default)).Value!.ApproverUserIds);
+        Assert.Equal([c, a, b], (await f.Service.UpdateAsync(created.Id, Update([c, a, b]), default)).Value!.ApproverUserIds);
+        Assert.Null((await f.Service.UpdateAsync(created.Id, Update([]), default)).Value!.ApproverUserIds);
+        Assert.Equal("validation.error", (await f.Service.UpdateAsync(created.Id, Update([a, b, c, Guid.NewGuid()]), default)).Error.Code);
+        Assert.Equal("validation.error", (await f.Service.UpdateAsync(created.Id, Update([a, a]), default)).Error.Code);
+    }
+
     // ----------------------------------------------------------------- the pattern
 
     [Fact]
@@ -359,6 +378,28 @@ public sealed class ActionsPlanningTests
     }
 
     [Fact]
+    public async Task EndAfterStart_IsOnlyEnforcedWhenTheHostAsks_AndOnlyOnChangedDates()
+    {
+        var lenient = new Fixture();
+        Assert.NotNull(await lenient.AddAsync(D(2026, 1, 5), D(2026, 1, 5))); // today's behaviour: accepted
+
+        var strict = new Fixture(options: new ActionsOptions { RequireEndAfterStart = true });
+        var refused = await strict.Service.CreateAsync(new CreateActionItemRequest(
+            Tenant, "A", null, null, null, Unit, CalendarId, Project, D(2026, 1, 5), D(2026, 1, 5)), default);
+        Assert.Equal(ActionItemService.EndNotAfterStartErrorCode, refused.Error.Code);
+        Assert.Empty(strict.Actions.Items);
+
+        // An action saved before the rule (equal dates) can still be renamed; changing its dates to a bad range cannot.
+        var old = new Fixture();
+        var legacy = await old.AddAsync(D(2026, 1, 5), D(2026, 1, 5));
+        var withRule = new ActionItemService(old.Actions, new FakeUnits(), new FakeCalendars(), new Uow(), new NotConfigured(), new ActionsOptions { RequireEndAfterStart = true });
+        UpdateActionItemRequest Update(DateOnly end) => new("Renamed", null, null, null, Unit, CalendarId, Project, D(2026, 1, 5), end);
+        Assert.True((await withRule.UpdateAsync(legacy.Id, Update(D(2026, 1, 5)), default)).IsSuccess);
+        Assert.Equal(ActionItemService.EndNotAfterStartErrorCode, (await withRule.UpdateAsync(legacy.Id, Update(D(2026, 1, 4)), default)).Error.Code);
+        Assert.True((await withRule.UpdateAsync(legacy.Id, Update(D(2026, 1, 9)), default)).IsSuccess);
+    }
+
+    [Fact]
     public void OnHold_IsAppended_SoExistingStoredValuesKeepTheirMeaning()
     {
         Assert.Equal(0, (int)ActionStatus.Open);
@@ -382,6 +423,9 @@ public sealed class ActionsPlanningTests
             ["ActionStatusSubmissions"],
             ("Actions", "[SourceType] nvarchar(40) NULL"),
             ("Actions", "[SourceId] uniqueidentifier NULL"),
+            ("Actions", "[Approver1UserId] uniqueidentifier NULL"),
+            ("Actions", "[Approver2UserId] uniqueidentifier NULL"),
+            ("Actions", "[Approver3UserId] uniqueidentifier NULL"),
             ("Actions", "[RecurrenceDaysOfWeek] int NULL"),
             ("Actions", "[RecurrenceDayOfMonth] int NULL"),
             ("Actions", "[RecurrenceMonths] int NULL"),

@@ -39,7 +39,8 @@ public sealed record ContractDetailDto(
 public sealed record ProjectContractsSummaryDto(
     Guid ProjectId, int ContractCount, MoneyDto TotalContractAmount, MoneyDto TotalInvoiced, MoneyDto TotalPaid,
     MoneyDto TotalRemainingCommitment, MoneyDto TotalOutstandingPayable, decimal InvoicedPercent, decimal PaidPercent,
-    int OverInvoicedContracts);
+    int OverInvoicedContracts,
+    MoneyDto? TotalOriginalAmount = null, MoneyDto? TotalApprovedAddenda = null);
 
 public sealed record CreateContractRequest(
     Guid TenantId, Guid ProjectId, string ContractNumber, string Title, string Counterparty, string? Description,

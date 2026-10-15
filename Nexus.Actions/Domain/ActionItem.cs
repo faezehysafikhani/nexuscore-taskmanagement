@@ -71,6 +71,22 @@ public sealed class ActionItem : AuditableEntity<Guid>
     /// modules, it only remembers the link. Null = created by hand.</summary>
     public string? SourceType { get; private set; }
     public Guid? SourceId { get; private set; }
+
+    /// <summary>The people named to approve this action, in order (up to three). Recorded with the action; which approvers a submission
+    /// actually goes to is decided by the approval backend (Workflow), so with none configured these are information only.</summary>
+    public Guid? Approver1UserId { get; private set; }
+    public Guid? Approver2UserId { get; private set; }
+    public Guid? Approver3UserId { get; private set; }
+
+    public IReadOnlyList<Guid> ApproverUserIds =>
+        new[] { Approver1UserId, Approver2UserId, Approver3UserId }.Where(id => id is not null).Select(id => id!.Value).ToList();
+
+    public void SetApprovers(IReadOnlyList<Guid> approvers)
+    {
+        Approver1UserId = approvers.Count > 0 ? approvers[0] : null;
+        Approver2UserId = approvers.Count > 1 ? approvers[1] : null;
+        Approver3UserId = approvers.Count > 2 ? approvers[2] : null;
+    }
     public Guid OrganizationUnitId { get; private set; }
     public Guid WorkCalendarId { get; private set; }
     public Guid? ProjectId { get; private set; }
@@ -186,6 +202,7 @@ public sealed class ActionItem : AuditableEntity<Guid>
         next.SetRecurrence(unit, interval, RecurrenceEndDate);
         next.SetRecurrencePattern(RecurrenceDaysOfWeek, RecurrenceDayOfMonth, RecurrenceMonths, RecurrenceDurationHours);
         next.SetSource(SourceType, SourceId);
+        next.SetApprovers(ApproverUserIds);
         next.RecurrenceSourceId = Id;
         NextOccurrenceId = newId;
         return next;

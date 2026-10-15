@@ -4,7 +4,7 @@ namespace Nexus.Actions.Infrastructure;
 
 /// <summary>
 /// Brings an existing deployment's Actions schema up to the current model for: the link from an action to what raised it (SourceType /
-/// SourceId), the optional pattern of a repeating action (days of the week, day of the month, months, hours per occurrence) and the table of
+/// SourceId), the approvers named on an action (Approver1UserId ... Approver3UserId), the optional pattern of a repeating action (days of the week, day of the month, months, hours per occurrence) and the table of
 /// status-change requests. ModuleSchemaInitializer.EnsureCreatedAsync never adds a column or table to a schema that already exists, so they
 /// have to be patched in. A host that runs EnsureCreatedAsync for this module can call this right after it on every start; it is a no-op
 /// once everything exists. Hosts that manage the schema by script apply docs/upgrade/2026-10-14-add-action-status-and-patterns.sql, which
@@ -45,6 +45,21 @@ public static class ActionsPlanningSchemaUpgrade
         """
         IF COL_LENGTH(N'actions.Actions', N'RecurrenceDurationHours') IS NULL
             ALTER TABLE [actions].[Actions] ADD [RecurrenceDurationHours] decimal(5,2) NULL;
+        """,
+
+        """
+        IF COL_LENGTH(N'actions.Actions', N'Approver1UserId') IS NULL
+            ALTER TABLE [actions].[Actions] ADD [Approver1UserId] uniqueidentifier NULL;
+        """,
+
+        """
+        IF COL_LENGTH(N'actions.Actions', N'Approver2UserId') IS NULL
+            ALTER TABLE [actions].[Actions] ADD [Approver2UserId] uniqueidentifier NULL;
+        """,
+
+        """
+        IF COL_LENGTH(N'actions.Actions', N'Approver3UserId') IS NULL
+            ALTER TABLE [actions].[Actions] ADD [Approver3UserId] uniqueidentifier NULL;
         """,
 
         """
