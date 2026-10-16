@@ -54,8 +54,11 @@ public sealed record SmsTemplateDto(
     IReadOnlyList<string> Placeholders,
     string? Description = null,
     IReadOnlyList<string>? RequiredPlaceholders = null,
-    string? DefaultText = null);
+    string? DefaultText = null,
+    bool Enabled = true,
+    bool CanDisable = true);
 
-public sealed record SmsTemplateTextDto(string Key, string Text);
+/// <param name="Enabled">Whether this SMS is sent at all; null leaves it as it is.</param>
+public sealed record SmsTemplateTextDto(string Key, string Text, bool? Enabled = null);
 
 public sealed record SaveSmsTemplatesRequest(IReadOnlyList<SmsTemplateTextDto> Templates);

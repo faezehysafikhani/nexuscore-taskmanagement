@@ -279,6 +279,16 @@ public static class IdentityEndpoints
             .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(IdentityPermissions.SmsSettingsUpdate);
 
+        // The hours notification SMS wait for (e.g. 22:00-07:00).
+        channels.MapGet("/quiet-hours", async (ISmsQuietHours service, CancellationToken cancellationToken) =>
+                (await service.GetAsync(cancellationToken)).ToApiResult())
+            .RequireAuthorization(IdentityPermissions.SmsSettingsView);
+
+        channels.MapPut("/quiet-hours", async (SmsQuietHoursDto request, ISmsQuietHours service, CancellationToken cancellationToken) =>
+                (await service.SaveAsync(request, cancellationToken)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
+            .RequireAuthorization(IdentityPermissions.SmsSettingsUpdate);
+
         // LDAP / Active Directory of the caller's tenant. The bind password is write-only and
         // stored encrypted; the test runs the given (unsaved) settings or the saved ones.
         var ldap = platform.MapGroup("/ldap").WithTags("Platform - LDAP");

@@ -13,11 +13,19 @@ namespace Nexus.Integrations.TaskNotifications;
 /// <summary>
 /// TaskManagement's SMS seam, backed by the platform SMS gateway (tenant notification-channel
 /// settings). Replaces the module's logging-only default.
+///
+/// A template turned off in the SMS panel is not sent. During the organization's quiet hours a
+/// task SMS is rendered and kept (<see cref="ITaskSmsOutbox"/>); the reminder job sends it when
+/// they end. Without the outbox or the quiet hours (a host that has neither) it is sent at once.
 /// </summary>
 public sealed class PlatformTaskSmsSender(
     ISmsSender smsSender,
     INotificationChannelSettingsReader settings,
-    ISmsTemplateService templates) : ITaskSmsSender
+    ISmsTemplateService templates,
+    ISmsQuietHours? quietHours = null,
+    ITaskSmsOutbox? outbox = null,
+    TimeProvider? clock = null,
+    ILogger<PlatformTaskSmsSender>? logger = null) : ITaskSmsSender
 {
     public async Task<bool> IsEnabledAsync(Guid tenantId, CancellationToken cancellationToken) =>
         (await settings.ReadAsync(tenantId, cancellationToken)).Sms.Enabled;
@@ -28,11 +36,38 @@ public sealed class PlatformTaskSmsSender(
         return sent.IsSuccess ? Result.Success() : Result.Failure(sent.Error);
     }
 
-    /// <summary>The tenant's wording of the template (SMS panel), filled in and sent.</summary>
+    /// <summary>The tenant's wording of the template (SMS panel), filled in and sent - or kept for after the quiet hours.</summary>
     public async Task<Result> SendTemplateAsync(
         Guid tenantId, string phoneNumber, string templateKey, IReadOnlyDictionary<string, string?> values,
         string fallbackText, CancellationToken cancellationToken)
     {
+        if (!await templates.IsEnabledAsync(tenantId, templateKey, cancellationToken))
+        {
+            return Result.Failure(Error.Validation(SmsTemplateService.TurnedOffMessage));
+        }
+
+        var now = (clock ?? TimeProvider.System).GetUtcNow();
+        if (quietHours is not null && outbox is not null
+            && await quietHours.QuietUntilAsync(tenantId, now, cancellationToken) is { } until)
+        {
+            var text = await templates.RenderAsync(tenantId, templateKey, values, cancellationToken);
+            if (text.IsFailure)
+            {
+                return Result.Failure(text.Error);
+            }
+
+            try
+            {
+                await outbox.AddAsync(new PendingTaskSms(Guid.NewGuid(), tenantId, phoneNumber, text.Value!, until, now), cancellationToken);
+                return Result.Success();
+            }
+            catch (Exception ex)
+            {
+                // Better at night than never.
+                logger?.LogError(ex, "A task SMS could not be kept for after the quiet hours; it is sent now.");
+            }
+        }
+
         var sent = await templates.SendAsync(tenantId, phoneNumber, templateKey, values, cancellationToken);
         return sent.IsSuccess ? Result.Success() : Result.Failure(sent.Error);
     }
@@ -45,15 +80,27 @@ public sealed class TaskSmsTemplateCatalog : ISmsTemplateCatalog
     [
         new(TaskSmsTemplateKeys.TaskAssigned, "ارجاع فعالیت", ["TaskTitle", "DueDate", "CreatorName"],
             "فعالیت جدیدی با عنوان «{TaskTitle}» به شما ارجاع شد.\nموعد انجام: {DueDate}",
-            "وقتی فعالیتی ثبت می‌شود یا مسئول اجرای آن عوض می‌شود، فقط برای مسئول اجرا ارسال می‌شود.",
+            "وقتی فعالیتی ثبت می‌شود یا مسئول اجرای آن عوض می‌شود، فقط برای مسئول اجرا ارسال می‌شود (نه برای کسی که خودش آن را ثبت یا تغییر داده).",
             ["TaskTitle"]),
         new(TaskSmsTemplateKeys.RecurringTaskReminder, "یادآوری فعالیت تکرارشونده", ["TaskTitle", "ExecutionDateTime", "ExecutionDate", "ExecutionTime"],
             "یادآوری فعالیت تکرارشونده:\n{TaskTitle}\nزمان انجام: {ExecutionDateTime}",
-            "در زمان هر نوبت فعالیت تکرارشونده، فقط برای مسئول اجرای آن ارسال می‌شود.",
+            "در زمان هر نوبت فعالیت تکرارشونده، فقط برای مسئول اجرای آن ارسال می‌شود (هر نوبت، حتی اگر نوبت قبلی انجام شده باشد).",
             ["TaskTitle"]),
         new(TaskSmsTemplateKeys.TaskDueChanged, "تغییر موعد فعالیت", ["TaskTitle", "DueDate"],
             "موعد فعالیت «{TaskTitle}» تغییر کرد.\nموعد جدید: {DueDate}",
             "وقتی تاریخ یا ساعت موعد فعالیت واقعاً تغییر کند، برای مسئول اجرا ارسال می‌شود (نه وقتی خودش آن را تغییر داده باشد).",
+            ["TaskTitle"]),
+        new(TaskSmsTemplateKeys.TaskDueSoon, "یادآوری موعد فعالیت", ["TaskTitle", "DueDate"],
+            "یادآوری: موعد فعالیت «{TaskTitle}» نزدیک است.\nموعد: {DueDate}",
+            "پیش از رسیدن موعد فعالیتی که هنوز انجام نشده (طبق «زمان‌بندی یادآوری‌ها»)، برای مسئول اجرا ارسال می‌شود.",
+            ["TaskTitle"]),
+        new(TaskSmsTemplateKeys.TaskOverdue, "گذشتن موعد فعالیت", ["TaskTitle", "DueDate"],
+            "موعد فعالیت «{TaskTitle}» گذشته و هنوز انجام نشده است.\nموعد: {DueDate}",
+            "یک بار، وقتی موعد فعالیت بگذرد و هنوز انجام نشده یا متوقف نشده باشد، برای مسئول اجرا ارسال می‌شود.",
+            ["TaskTitle"]),
+        new(TaskSmsTemplateKeys.RecurringTaskUpcoming, "یادآوری پیش از نوبت تکرارشونده", ["TaskTitle", "ExecutionDateTime", "ExecutionDate", "ExecutionTime"],
+            "یادآوری: نوبت فعالیت «{TaskTitle}» نزدیک است.\nزمان انجام: {ExecutionDateTime}",
+            "پیش از هر نوبت فعالیت تکرارشونده (طبق «زمان‌بندی یادآوری‌ها»)، برای مسئول اجرا ارسال می‌شود.",
             ["TaskTitle"]),
     ];
 }
@@ -76,8 +123,8 @@ public sealed class DirectoryUserContactResolver(IUserDirectory directory) : IUs
 
 /// <summary>
 /// When a task is created, tells each of its responsible people by SMS with the "task_assigned"
-/// template - only them: not the creator for creating it, nor people on its access list or team
-/// members. Each gets it once; a creator who is also responsible gets it once too.
+/// template - only them: not people on its access list or team members, and not the creator, who
+/// knows the task is theirs (also when they made themselves responsible). Each gets it once.
 ///
 /// Runs after the task is saved and in the background, so a slow or unreachable gateway
 /// never delays or fails the request that created the task. Delivery is best-effort: a failed
@@ -89,7 +136,7 @@ public sealed class TaskCreatedChannelNotifier(IServiceScopeFactory scopeFactory
     {
         _ = Task.Run(() => ResponsibleSms.SendAsync(
             scopeFactory, domainEvent.TenantId, domainEvent.TaskId, TaskSmsTemplateKeys.TaskAssigned,
-            task => task.ResponsibleUserIds, skipUserId: null));
+            task => task.ResponsibleUserIds, skipUserId: null, skipCreator: true));
         return Task.CompletedTask;
     }
 
@@ -140,7 +187,7 @@ internal static class ResponsibleSms
 {
     public static async Task SendAsync(
         IServiceScopeFactory scopeFactory, Guid tenantId, Guid taskId, string templateKey,
-        Func<TaskItem, IEnumerable<Guid>> recipients, Guid? skipUserId)
+        Func<TaskItem, IEnumerable<Guid>> recipients, Guid? skipUserId, bool skipCreator = false)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var services = scope.ServiceProvider;
@@ -166,7 +213,10 @@ internal static class ResponsibleSms
             }
 
             var responsible = task.ResponsibleUserIds;
-            var userIds = recipients(task).Distinct().Where(id => id != skipUserId && responsible.Contains(id)).ToList();
+            var creatorId = skipCreator ? task.OwnerUserId : null;
+            var userIds = recipients(task).Distinct()
+                .Where(id => id != skipUserId && id != creatorId && responsible.Contains(id))
+                .ToList();
             if (userIds.Count == 0)
             {
                 return;

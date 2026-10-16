@@ -94,8 +94,11 @@ public interface ISmsTemplateService
     /// </summary>
     Task<Result<string>> RenderAsync(Guid tenantId, string key, IReadOnlyDictionary<string, string?> values, CancellationToken cancellationToken);
 
-    /// <summary>Renders the template and sends it through the tenant's SMS panel.</summary>
+    /// <summary>Renders the template and sends it through the tenant's SMS panel (nothing when it is turned off).</summary>
     Task<Result<string>> SendAsync(Guid tenantId, string phoneNumber, string key, IReadOnlyDictionary<string, string?> values, CancellationToken cancellationToken);
+
+    /// <summary>Whether the tenant sends this SMS at all (an administrator can turn each one off in the SMS panel).</summary>
+    Task<bool> IsEnabledAsync(Guid tenantId, string key, CancellationToken cancellationToken) => Task.FromResult(true);
 }
 
 /// <summary>
@@ -113,6 +116,10 @@ public sealed partial class SmsTemplateService(
     ILogger<SmsTemplateService> logger) : ISmsTemplateService
 {
     private const string SettingPrefix = "Notifications.SmsTemplates.";
+    private const string EnabledSuffix = ".Enabled";
+
+    /// <summary>Templates that can never be turned off: without them nobody could, say, recover a password.</summary>
+    public static readonly IReadOnlySet<string> AlwaysOn = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { SmsTemplateKeys.PasswordReset };
     private const string SettingScope = "Integrations";
     public const int MaxTextLength = 1000;
 
@@ -197,6 +204,21 @@ public sealed partial class SmsTemplateService(
             {
                 setting.UpdateValue(template.Text.Trim());
             }
+
+            if (template.Enabled is { } enabled && !AlwaysOn.Contains(template.Key))
+            {
+                var enabledKey = key + EnabledSuffix;
+                var enabledText = enabled ? "true" : "false";
+                var enabledSetting = await repository.FindSettingAsync(tenantId, enabledKey, SettingScope, cancellationToken);
+                if (enabledSetting is null)
+                {
+                    await repository.AddSettingAsync(new SystemSetting(Guid.NewGuid(), tenantId, enabledKey, enabledText, SettingScope), cancellationToken);
+                }
+                else
+                {
+                    enabledSetting.UpdateValue(enabledText);
+                }
+            }
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -240,10 +262,28 @@ public sealed partial class SmsTemplateService(
 
     public async Task<Result<string>> SendAsync(Guid tenantId, string phoneNumber, string key, IReadOnlyDictionary<string, string?> values, CancellationToken cancellationToken)
     {
+        if (!await IsEnabledAsync(tenantId, key, cancellationToken))
+        {
+            return Result.Failure<string>(Error.Validation(TurnedOffMessage));
+        }
+
         var text = await RenderAsync(tenantId, key, values, cancellationToken);
         return text.IsFailure
             ? text
             : await smsSender.SendAsync(tenantId, phoneNumber, text.Value!, cancellationToken);
+    }
+
+    public const string TurnedOffMessage = "This SMS is turned off in the SMS panel.";
+
+    public async Task<bool> IsEnabledAsync(Guid tenantId, string key, CancellationToken cancellationToken)
+    {
+        if (AlwaysOn.Contains(key))
+        {
+            return true;
+        }
+
+        var setting = await repository.FindSettingAsync(tenantId, SettingPrefix + key + EnabledSuffix, SettingScope, cancellationToken);
+        return setting is null || !string.Equals(setting.Value, "false", StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task<IReadOnlyList<SmsTemplateDto>> ReadAllAsync(Guid tenantId, CancellationToken cancellationToken)
@@ -257,7 +297,8 @@ public sealed partial class SmsTemplateService(
                 : definition.Placeholders.Append(ProductNamePlaceholder).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             list.Add(new SmsTemplateDto(
                 definition.Key, definition.Title, setting?.Value ?? definition.DefaultText, placeholders,
-                definition.Description, definition.RequiredPlaceholders ?? [], definition.DefaultText));
+                definition.Description, definition.RequiredPlaceholders ?? [], definition.DefaultText,
+                await IsEnabledAsync(tenantId, definition.Key, cancellationToken), !AlwaysOn.Contains(definition.Key)));
         }
 
         return list;

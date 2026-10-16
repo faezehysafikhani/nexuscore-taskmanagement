@@ -14,6 +14,7 @@ public sealed class TeamMembershipNotifier(
     ILogger<TeamMembershipNotifier> logger) : IUserGroupMembershipNotifier
 {
     public const string Title = "عضویت در تیم کاری";
+    public const string Category = "team.member_added";
 
     public async Task MembersAddedAsync(UserGroupMembersAdded change, CancellationToken cancellationToken)
     {
@@ -25,8 +26,9 @@ public sealed class TeamMembershipNotifier(
             try
             {
                 await using var scope = scopeFactory.CreateAsyncScope();
-                await scope.ServiceProvider.GetRequiredService<INotificationService>()
-                    .NotifyAsync(userId, Title, message, "Info", cancellationToken, change.TenantId);
+                await scope.ServiceProvider.GetRequiredService<INotificationService>().NotifyAsync(
+                    new NotificationRequest(userId, Title, message, "Info", change.TenantId, Category, change.GroupId),
+                    cancellationToken);
             }
             catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
             {
