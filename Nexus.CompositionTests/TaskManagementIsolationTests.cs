@@ -65,10 +65,6 @@ public sealed class TaskManagementIsolationTests
             // The same exemption the existing ProjectStrategyAlignment test relies on.
             if (name.StartsWith("Nexus.Integrations.", StringComparison.Ordinal)) continue;
 
-            // A composition host is not a module: TejaratBank.Api is this branch's test host (to be
-            // removed before merging to main) and composes Task Management like any product would.
-            if (name is "TejaratBank.Api") continue;
-
             var references = GetProjectReferences(Path.GetRelativePath(SolutionRoot, projectFile));
             Assert.DoesNotContain(references, r => r.StartsWith("Nexus.TaskManagement", StringComparison.Ordinal));
         }

@@ -502,10 +502,7 @@ $excludedProjects = @(
 
     "Nexus.CompositionTests/Nexus.CompositionTests.csproj",
 
-    "NexusCore.Api/NexusCore.Api.csproj",
-
-    # Test host for the organization structure module; remove with the project before merging to main.
-    "TejaratBank.Api/TejaratBank.Api.csproj"
+    "NexusCore.Api/NexusCore.Api.csproj"
 
 )
 

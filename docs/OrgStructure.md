@@ -104,13 +104,14 @@ The built-in administrator role gets all of them automatically.
 Deleting a company or position that is in use is refused (deactivate it instead); so is
 unlinking or moving a unit while people sit in its branch.
 
-## Trying it: `TejaratBank.Api` (test host, this branch only)
+## Trying it: the Tejarat Bank host
 
-`TejaratBank.Api` composes NexusCore + Organization + this module. Set `DefaultConnection` in its
-`appsettings.json` (default: local SQL Server, database `TejaratBank`), run it, open
-`http://localhost:5271/swagger`, sign in with `POST /api/identity/auth/login`
-(`{ "identifier": "admin", "password": "Admin@12345" }` — the development default) and
-authorize with the access token. A typical first run:
+The product that composes NexusCore + Organization + this module is built outside this
+repository, on the NexusCore packages: **TejaratBank_API** (a separate repository, like TMPB_API
+for Post Bank). Set `DefaultConnection` in its `appsettings`, create the Organization and
+OrgStructure schemas (see its `DEPLOYMENT-CONFIG.md`), run it, open `/swagger`, sign in with
+`POST /api/identity/auth/login` (`{ "identifier": "admin", "password": "Admin@12345" }` — the
+development default) and authorize with the access token. A typical first run:
 
 1. `POST /api/organization/units` — create a deputy (and units under it).
 2. `POST /api/org-structure/companies` — create the company.
@@ -118,7 +119,3 @@ authorize with the access token. A typical first run:
 4. `POST /api/org-structure/positions` — create positions.
 5. `PUT /api/org-structure/assignments/{userId}` — place users.
 6. `GET /api/org-structure/chart`, `/users/{id}/manager`, `/users/{id}/subordinates?all=true`.
-
-**Before merging to `main`:** delete the `TejaratBank.Api` project, its entry in `NexusCore.sln`
-and its line in `eng/pack-core-modules.ps1`'s excluded list. The real product is built outside
-this repository on the NexusCore packages.
