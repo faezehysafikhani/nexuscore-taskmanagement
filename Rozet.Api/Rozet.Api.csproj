@@ -4,7 +4,7 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <UserSecretsId>postbank-api</UserSecretsId>
+    <UserSecretsId>rozet-api</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
@@ -15,8 +15,8 @@
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
   </ItemGroup>
 
-  <!-- PostBank is a consumer of the Nexus Platform: same NexusCore
-       foundation plus the reusable modules this product chooses to compose. Trimming PostBank is
+  <!-- Rozet is a consumer of the Nexus Platform: same NexusCore
+       foundation plus the reusable modules this product chooses to compose. Trimming Rozet is
        a matter of deleting the matching ProjectReference/AddXxx()/MapXxxEndpoints() lines; nothing
        here is load-bearing for any other application host. -->
   <ItemGroup>

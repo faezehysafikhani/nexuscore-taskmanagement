@@ -198,9 +198,9 @@ builder.Services.AddSwaggerGen(options =>
 {
     options.SwaggerDoc("v1", new OpenApiInfo
     {
-        Title = "PostBank API",
+        Title = "Rozet API",
         Version = "v1",
-        Description = "PostBank - a project-management product built on the Nexus Platform: NexusCore foundation plus the full project-management capability set, composed as independent modules."
+        Description = "Rozet - a project-management product built on the Nexus Platform: NexusCore foundation plus the full project-management capability set, composed as independent modules."
     });
 
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme

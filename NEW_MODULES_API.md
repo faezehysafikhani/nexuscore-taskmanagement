@@ -3166,7 +3166,7 @@ Added for the schedule / agile screens. Everything is optional: a project (or ho
 * **MS Project import** (`POST /waterfall/msproject/import`) now disables antiforgery like the other multipart endpoints (bearer-token API; a multipart call from the UI was rejected otherwise).
 * **Weights must total 100 on submission** (opt-in): with `WaterfallOptions.RequireWeightsTotalOnSubmit` the project cannot be sent for approval while its leaf activities' effective weights do not add up to 100
   (`project.schedule_weights_not_100`, 400; a project with no activities is not checked). It plugs into Core through the optional `IProjectSubmissionCheck` extension point (Core does not know Waterfall);
-  the host `PostBank.Api` turns the option on, others keep today's behaviour.
+  the host `Rozet.Api` turns the option on, others keep today's behaviour.
 
 ### Agile
 
@@ -3197,8 +3197,8 @@ Schema: apply `docs/upgrade/2026-10-13-add-waterfall-planning.sql` (`WaterfallPl
 * **Named approvers**: create / update take an optional `approverUserIds` (up to three different users, in order; an empty list clears them; omitted on update = unchanged); the DTO returns them. They are recorded with the action; which approvers a submission goes to is decided by the Workflow definition (item-level approvers are wired in phase 7).
 * **Pattern of a repeating action**: `recurrence` (request and DTO) gains optional `daysOfWeek` (0 Sunday ... 6 Saturday), `dayOfMonth` (1-31, Jalali), `months` (1-12, Jalali; all twelve = every month) and `durationHours` (0-24). A request replaces the whole rule, so a field left out is cleared.
 * `GET /api/actions/{id}/occurrences` → `[ { index, date, durationHours } ]`: the occurrences of the rule inside the action's own date range (daily every N days; weekly on the chosen weekdays, Saturday-Wednesday by default, every Nth week; monthly on the Jalali day of the chosen Jalali months, every Nth month, the last day for a day the month lacks; yearly). A one-off action has one occurrence. Capped at 100.
-* **Host switch** `ActionsOptions.CreateNextOccurrenceOnCompletion` (`AddActionManagement(o => ...)`, default `true` = the "chain" behaviour: completing a repeating action creates the next one). `PostBank.Api` sets it to `false`: its UI keeps all occurrences inside one action.
-* **Host switch** `ActionsOptions.RequireEndAfterStart` (default `false`; on in `PostBank.Api`): an action with both dates must end after it starts (400 `action.end_not_after_start`); an edit that leaves the dates unchanged is never refused.
+* **Host switch** `ActionsOptions.CreateNextOccurrenceOnCompletion` (`AddActionManagement(o => ...)`, default `true` = the "chain" behaviour: completing a repeating action creates the next one). `Rozet.Api` sets it to `false`: its UI keeps all occurrences inside one action.
+* **Host switch** `ActionsOptions.RequireEndAfterStart` (default `false`; on in `Rozet.Api`): an action with both dates must end after it starts (400 `action.end_not_after_start`); an edit that leaves the dates unchanged is never refused.
 * `DELETE /api/actions/{id}` (needs `Actions.Delete`; 409 while the action waits for approval).
 * **Status requests** `/api/actions/status-submissions`: `GET ?actionId=` or `?projectId=` (newest first), `POST { tenantId, actionId, status, comment }` (needs `ActionStatus.Submit`). Subject type `ActionStatus` (scope Project when the action has a project): on approval the action takes the status; with no workflow it takes it at once. One pending request per action; asking for the status it already has is a validation error.
 
@@ -3232,7 +3232,7 @@ Schema: apply `docs/upgrade/2026-10-14-add-action-status-and-patterns.sql` (`Act
 * **Who the participants are** is told to Workflow when the approval starts: `ApprovalSubject` gained an optional `participants` map (Actions passes its responsible person as `Manager`, its owner as `Owner` and its approvers 1-3 as `Approver1..3`; the first defaults to the responsible person), and an optional extension point `IApprovalParticipantResolver` can add more. `Nexus.Integrations.ProjectWorkflow` registers one that, for anything scoped to a project (or the project itself), answers `Manager` = project manager and `Owner` = project owner. `Owner` falls back to `Manager` when unknown. A required placeholder nobody fills leaves the step open to any holder of the approve permission.
 * **The steps are captured when the approval starts** (`WorkflowInstance.StepsSnapshot`, JSON): the step names and the people they resolved to. Editing the definition, or changing a project's manager, does not move an approval already running. The instance DTO returns them as `steps: [ { order, name, approverUserId } ]`. Approvals started before this keep reading their definition's steps. When every step is optional and none applies, no approval is started (the submitter's own direct-approve rule applies).
 * `PUT /api/workflow/definitions/by-scope` (needs `Workflow.Configure`) `{ subjectType, scopeType?, scopeId?, name?, steps: [ { name, approverUserId?, approverKey?, isOptional } ] }` creates (or brings back a reset) the definition of that scope and replaces its steps in one call. An empty `steps` list means "no approval needed" there.
-* **Host switch** `WorkflowOptions.RequireDesignatedApprover` (`AddWorkflowApplication(o => ...)`, default `false` = anyone with `Workflow.Approve`/`Reject` may decide any step, as before; on in `PostBank.Api`): a step with a designated approver can then only be decided by that person, by someone they have delegated to (period delegation, recorded as "on behalf of"), or by a holder of `Workflow.Configure`; anyone else gets 403 `forbidden`.
+* **Host switch** `WorkflowOptions.RequireDesignatedApprover` (`AddWorkflowApplication(o => ...)`, default `false` = anyone with `Workflow.Approve`/`Reject` may decide any step, as before; on in `Rozet.Api`): a step with a designated approver can then only be decided by that person, by someone they have delegated to (period delegation, recorded as "on behalf of"), or by a holder of `Workflow.Configure`; anyone else gets 403 `forbidden`.
 
 ### Approval settings by group (`Nexus.Integrations.ProjectWorkflow`)
 
@@ -3467,7 +3467,7 @@ Nothing here is required: every change is an optional field, an optional constru
 
 ### Analytics (`Nexus.Reporting.Analytics`)
 
-* **`AnalyticsOptions`** (`AddReportingAnalytics(o => ...)`, both default `false`; both on in `PostBank.Api`):
+* **`AnalyticsOptions`** (`AddReportingAnalytics(o => ...)`, both default `false`; both on in `Rozet.Api`):
   * `ProgressFromProjectPlan` - a project's planned / actual progress (and so the deviation and the on-track / at-risk / behind class) is what the planning modules work out from the schedule and the board (`IProjectProgressService`, the same figures the project screens show) instead of the latest progress update people registered. A project the service has no figure for keeps the old source.
   * `OnlyApprovedProjects` - drafts, projects waiting for approval and rejected ones are left out of the unit and manager reports.
 * **New trailing fields** (old callers ignore them):

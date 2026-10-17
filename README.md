@@ -20,7 +20,7 @@ TMPB currently composes only the modules needed by this product:
 | Task Manager | `Nexus.TaskManagement`, `Nexus.TaskManagement.Infrastructure` |
 | Integration | `Nexus.Integrations.TaskNotifications` |
 
-Rozet and PostBank are product hosts and are not part of the TMPB package surface.
+Rozet and TejaratBank are product hosts and are not part of the TMPB package surface.
 
 ## TaskManagement
 

@@ -1,6 +1,9 @@
 # Connecting the PMPB UI to the NexusCore backend
 
-UI repository: `faezehysafikhani/pmpb` (React 19 + Vite, an AI Studio export). Backend: this repository (`PostBank.Api` host).
+> **Host rename.** The host this plan was written for was called `PostBank.Api`; on this branch it is `Rozet.Api` (same composition, same
+> switches, now the host of the Rozet UI). Every "host" / "Rozet.Api" below was `PostBank.Api` when the phases were built.
+
+UI repository: `faezehysafikhani/pmpb` (React 19 + Vite, an AI Studio export). Backend: this repository (`Rozet.Api` host).
 
 ## Decisions (from the product owner)
 
@@ -53,7 +56,7 @@ Each phase: (a) gap analysis for the screens in it, (b) backend additions + test
 
 Other projects already use these modules. So: new fields/endpoints/tables are additive; nothing a module did before changes unless the
 caller asks for it (a trailing optional parameter) or the host switches it on (an options object, off by default, switched on only in
-`PostBank.Api`); a module never gains a required dependency on another (extension-point interfaces, integrations, or a separate opt-in
+`Rozet.Api`); a module never gains a required dependency on another (extension-point interfaces, integrations, or a separate opt-in
 project). Guarded by `ArchitectureDependencyTests.SharedModules_KeepTheirOriginalDependencies` and by tests of the default (off) behaviour.
 
 Switched on in the host: `CalendarOptions.SingleDefaultPerTenant`, `WaterfallOptions.ValidateActivityHierarchy`. Analytics lives in the
@@ -69,8 +72,8 @@ separate `Nexus.Reporting.Analytics` project.
 | Projects | `ListProjectsRequest.WorkCalendarId` filter (internal) | lets the project-calendar integration answer "is this calendar used?" |
 | Calendar | the default calendar cannot be deleted (409) | the UI hid the delete button for it - now the backend's rule |
 | Organization | `code` optional on create (auto `U0001`...); `DELETE` refuses while people are in the unit; deactivating the whole branch is opt-in (`?includeBranch=true`) | the UI generated codes and walked the subtree itself when deleting |
-| Identity (host config) | `PostBank.Api/appsettings.json` seeds roles **Project Manager** and **Project Team** with permission sets (created once, never overwritten) | the UI's three roles are backend roles; the "role" dropdown assigns them |
-| Host | `PostBank.Api` registers the Iranian holidays and the project-calendar integration | So calendars actually affect scheduling |
+| Identity (host config) | `Rozet.Api/appsettings.json` seeds roles **Project Manager** and **Project Team** with permission sets (created once, never overwritten) | the UI's three roles are backend roles; the "role" dropdown assigns them |
+| Host | `Rozet.Api` registers the Iranian holidays and the project-calendar integration | So calendars actually affect scheduling |
 | SQL | `2026-10-10-add-calendar-policy.sql`, `2026-10-10-add-organization-members.sql` | schema |
 
 
@@ -124,7 +127,7 @@ Not added (deliberately): AI-generated document fields (summary/relevance stay U
 | Waterfall | `PUT /activities/{id}/actual-progress` | The schedule table lets a manager correct an activity's progress directly |
 | Waterfall | `.DisableAntiforgery()` on the MS Project import endpoint | Same multipart reason as documents |
 | Core + Waterfall | `IProjectSubmissionCheck` (Core, optional) + `ScheduleWeightsSubmissionCheck` (Waterfall) + option `RequireWeightsTotalOnSubmit` (off by default, on in the host) | The UI refused to send a project whose activity weights did not total 100; that rule now lives in the backend, off for other hosts |
-| Host | `PostBank.Api`: `DefaultPlannedProgress = Continuous`, `RollUpSummaryWeights = true`; seeded roles get the two new permissions | The UI's behaviour |
+| Host | `Rozet.Api`: `DefaultPlannedProgress = Continuous`, `RollUpSummaryWeights = true`; seeded roles get the two new permissions | The UI's behaviour |
 | SQL | `2026-10-13-add-waterfall-planning.sql`, `2026-10-13-add-agile-status-submissions.sql` (+ `WaterfallPlanningSchemaUpgrade`, `AgileTaskStatusSchemaUpgrade`) | Additive, guarded, idempotent |
 
 Not added (deliberately): per-activity second/third approvers (the screens only ever use the first; stage-based approval is the Workflow module's job, phase 7); AI WBS generation stays as it is (its result is applied through the normal create calls).
@@ -137,8 +140,8 @@ Not added (deliberately): per-activity second/third approvers (the screens only 
 | Actions | Optional `sourceType` / `sourceId` on an action | The UI creates actions from a risk or a stakeholder and shows where they came from; the module cannot know those modules, so it stores an opaque link |
 | Actions | Optional `approverUserIds` (up to three, in order) | The UI's action form names up to three approvers; recorded now, used by the Workflow backend once it supports item-level approvers (phase 7) |
 | Actions | Optional recurrence pattern (weekdays, Jalali day of month, Jalali months, hours per occurrence) + `GET /{id}/occurrences` | The UI's repeat form has these fields and its occurrence list was generated in the browser (`generateRecurringOccurrences`); now the backend lists them |
-| Actions | `ActionsOptions.CreateNextOccurrenceOnCompletion` (default on = unchanged; off in `PostBank.Api`) | The UI keeps every occurrence inside one action, so completing it must not create a copy |
-| Actions | `ActionsOptions.RequireEndAfterStart` (default off; on in `PostBank.Api`) | The UI refused an action whose end date was not after its start; the rule now lives in the backend, off for other hosts |
+| Actions | `ActionsOptions.CreateNextOccurrenceOnCompletion` (default on = unchanged; off in `Rozet.Api`) | The UI keeps every occurrence inside one action, so completing it must not create a copy |
+| Actions | `ActionsOptions.RequireEndAfterStart` (default off; on in `Rozet.Api`) | The UI refused an action whose end date was not after its start; the rule now lives in the backend, off for other hosts |
 | Actions | `DELETE /api/actions/{id}` | The UI deletes actions; the backend could only cancel |
 | Actions | Status requests (`/status-submissions`), decided in the approval workflow; permission `ActionStatus.Submit` | The responsible person asks to change an action's status and an approver confirms it (the UI kept its own approval log) |
 | Risk | Response reports (`/response-submissions`), decided in the approval workflow; permission `RiskResponse.Submit` | "Risk response execution and verification": the task centre reports the response status and an approver verifies it; the UI kept a second approval round locally |
@@ -146,7 +149,7 @@ Not added (deliberately): per-activity second/third approvers (the screens only 
 | Alignment | `POST /scores`, `PUT /levels` | The UI worked out each project's alignment percentage and saved levels per cell; now one call each |
 | Knowledge | `KnowledgeDocumentType.Pamphlet`; antiforgery disabled on upload | The UI has a "Pamphlet" type; multipart upload from the UI |
 | Contracts | Supervisor / beneficiary names; addendum period; invoice title and period; `POST /for-projects` | The UI's contract, addendum and invoice forms have these fields; the tabs list every project's contracts at once |
-| Host | `PostBank.Api`: seeded roles get `ActionStatus.Submit` and `RiskResponse.Submit` | The UI's behaviour |
+| Host | `Rozet.Api`: seeded roles get `ActionStatus.Submit` and `RiskResponse.Submit` | The UI's behaviour |
 | SQL | `2026-10-14-add-action-status-and-patterns.sql`, `2026-10-14-add-risk-response-submissions.sql`, `2026-10-14-add-strategy-sort-order.sql`, `2026-10-14-add-contract-parties-and-billing.sql` (+ their code twins) | Additive, guarded, idempotent |
 
 Not added (deliberately): per-action approvers 1-3 (the approver comes from the Workflow definition - phase 7 adds item-level placeholders); contract / invoice per-project permissions and the app-level visibility switches for contracts (phase 7); AI features untouched.
@@ -157,14 +160,14 @@ Not added (deliberately): per-action approvers 1-3 (the approver comes from the 
 |---|---|---|
 | Core abstractions | `ApprovalSubject.Participants` (optional) + `ApprovalParticipants` keys + `IApprovalParticipantResolver` (optional extension point) | A workflow step says "the project manager / owner" or "this action's approver 2" instead of a fixed user; the submitter (Actions) or an integration (ProjectWorkflow, for projects) says who those are |
 | Workflow | Step `ApproverKey` / `IsOptional`; instance `StepsSnapshot` and `steps` in the DTO; `PUT /definitions/by-scope` (upsert + replace steps) | The UI's stage editor offers "project manager / owner / a user" per stage and per project; running approvals must not change when settings change |
-| Workflow | `WorkflowOptions.RequireDesignatedApprover` (default off; on in `PostBank.Api`); `canActForAnyone` for `Workflow.Configure` holders | The UI only let the stage's approver decide; now the backend enforces it (a substitute through delegation still can) |
+| Workflow | `WorkflowOptions.RequireDesignatedApprover` (default off; on in `Rozet.Api`); `canActForAnyone` for `Workflow.Configure` holders | The UI only let the stage's approver decide; now the backend enforces it (a substitute through delegation still can) |
 | ProjectWorkflow | Settings by group (`/settings`, `/settings/{group}`, `/settings/apply-defaults`, `/projects/{id}/settings/{group}`), `IApprovalParticipantResolver` for projects, subject types `ActivityProgress` / `AgileTaskStatus` / `ActionStatus` / `RiskResponseStatus` | The UI kept the approval chains in the browser (global and per project); the project-level editor may be used by the project's manager/owner |
 | Actions | Pass `Participants` (responsible, owner, approvers 1-3) when submitting an action or a status request | The action form's approvers 1-3 now route the status approval |
 | Delegation (new module) | `Nexus.ProjectManagement.Delegation` + `.Infrastructure`: table `item_delegation.ItemDelegations`, `/api/project-management/delegations` | The UI's "delegate task" list and the chain rule on taking a task back lived in the browser |
 | Core + Portfolio | `IVisibilityRules` (optional, default all on); Portfolio applies owner / manager / approver switches | The UI's five visibility switches were applied in the browser to a list the backend had already sent |
 | Waterfall | `IProgressRejectionPolicy` (optional, default allowed) | The UI's "approved progress on rejection" switch |
 | ProjectGovernance (new, opt-in, no tables) | Organisation switches (visibility, confirmed progress) and per-project settings (visible sections, contract / invoice access matrices) as `SystemSettings` | The UI kept these in `localStorage` / its project extras |
-| Host | `PostBank.Api`: `RequireDesignatedApprover = true`; modules mapped; seeded roles get `ItemDelegation.*` | The UI's behaviour |
+| Host | `Rozet.Api`: `RequireDesignatedApprover = true`; modules mapped; seeded roles get `ItemDelegation.*` | The UI's behaviour |
 | SQL | `2026-10-15-add-workflow-approver-placeholders.sql`, `2026-10-15-add-item-delegation.sql` (+ code twins) | Additive, guarded, idempotent |
 
 Not added (deliberately, reported): **ownership-aware authorisation** (who may edit which project's registers by being its manager / owner) - the backend still authorises by permission only, the UI's read-only gating by ownership stays presentation; **enforcement of the per-project contract / invoice access matrices** (stored, not enforced; the UI never enforced them); reassignment of a delegated item (the module records the hand-over, the screen that owns the item sets the assignee).
@@ -173,7 +176,7 @@ Not added (deliberately, reported): **ownership-aware authorisation** (who may e
 
 | Where | What | Why (UI need) |
 |---|---|---|
-| Analytics | `AnalyticsOptions.ProgressFromProjectPlan`, `OnlyApprovedProjects` (default off; on in `PostBank.Api`) | The reports page averaged planned / actual progress in the browser from the schedule it had loaded; the figures now come from the backend's planning modules, and the reports count approved projects only |
+| Analytics | `AnalyticsOptions.ProgressFromProjectPlan`, `OnlyApprovedProjects` (default off; on in `Rozet.Api`) | The reports page averaged planned / actual progress in the browser from the schedule it had loaded; the figures now come from the backend's planning modules, and the reports count approved projects only |
 | Analytics | Fields `delayedProjects`, `averagePerformance`, `rating`, `projectIds` on unit and manager rows; `summary` on the unit report; `projectIdsByStatus` on the status matrix | The UI derived "delayed", the performance average, the excellent / good / needs-improvement rating, the organisation total and the project lists behind each number itself |
 | Agile | `GET /api/project-management/agile/sprint-progress` | The burn-up / burn-down chart grouped tasks by sprint in the browser |
 | SQL | none | no schema change |

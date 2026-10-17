@@ -12,7 +12,7 @@
 
 It is **optional**. A product that does not reference the two packages has none of it: no tables,
 no endpoints, no permissions. NexusCore and `Nexus.Organization` do not reference it and their
-tables are unchanged (a test enforces this), so products such as PostBank or TMPB are unaffected.
+tables are unchanged (a test enforces this), so products such as Rozet or TMPB are unaffected.
 
 ## Turning it on in a product
 

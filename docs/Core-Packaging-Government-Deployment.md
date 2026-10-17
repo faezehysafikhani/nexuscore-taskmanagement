@@ -14,7 +14,7 @@ TMPB intentionally composes only these packages:
 - `Nexus.TaskManagement.*`
 - `Nexus.Integrations.TaskNotifications`
 
-Project/product hosts such as Rozet and PostBank are not part of the Core package surface.
+Project/product hosts such as Rozet and TejaratBank are not part of the Core package surface.
 
 ## Build packages
 

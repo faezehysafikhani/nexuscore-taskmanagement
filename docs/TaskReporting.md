@@ -20,7 +20,7 @@ app.MapTaskReportEndpoints();
 ```
 
 No tables, no permissions of its own (`Tasks.View` is required). Products that don't reference
-the package - TMPB, PostBank - have no report endpoints, and the TMPBUI «گزارش فعالیت‌ها» page
+the package - TMPB, Rozet - have no report endpoints, and the TMPBUI «گزارش فعالیت‌ها» page
 stays hidden there (it is shown only when `/api/task-reports/scope` answers).
 
 ## Endpoints
