@@ -25,12 +25,26 @@ public sealed class OrganizationUnit : AuditableEntity<Guid>
         IsActive = true;
     }
 
+    /// <summary>
+    /// A top-level unit with no code of its own (the shape the flat chart used): the code is derived from the id,
+    /// so it is still unique within the tenant.
+    /// </summary>
+    public OrganizationUnit(Guid id, Guid tenantId, string name, Guid? managerUserId = null)
+        : this(id, tenantId, name, $"U{id:N}")
+    {
+        ManagerUserId = managerUserId;
+    }
+
     public Guid TenantId { get; private set; }
     public string Name { get; private set; }
     public string Code { get; private set; }
     public Guid? ParentId { get; private set; }
     public Guid? ManagerUserId { get; private set; }
     public bool IsActive { get; private set; }
+
+    /// <summary>Renames and re-assigns the unit, keeping its code and its place in the chart.</summary>
+    public void Update(string name, Guid? managerUserId, bool isActive) =>
+        Update(name, Code, ParentId, managerUserId, isActive);
 
     public void Update(string name, string code, Guid? parentId, Guid? managerUserId, bool isActive)
     {

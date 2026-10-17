@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using NexusCore.Application.Identity.Interfaces;
 using NexusCore.Application.Identity.Permissions;
 using NexusCore.Application.Identity.Services;
@@ -34,6 +35,11 @@ public static class UserGroupServiceCollectionExtensions
         services.AddScoped<IUserGroupPermissionProvider, UserGroupPermissionProvider>();
         services.AddScoped<IUserGroupRepository, UserGroupRepository>();
         services.AddScoped<IUserGroupService, UserGroupService>();
+        // Nobody is told about new members unless the host adds a channel (the task-notifications
+        // integration does); TryAdd so that registration wins whichever is called first.
+        services.TryAddScoped<IUserGroupMembershipNotifier, NullUserGroupMembershipNotifier>();
+        // Anyone may be added to a work team unless a module limits it (Nexus.OrgStructure does).
+        services.TryAddScoped<IWorkTeamMemberScope, UnlimitedWorkTeamMemberScope>();
         services.AddSingleton<IPermissionCatalog, UserGroupPermissionCatalog>();
 
         // The group endpoints require these names as policies. They are registered here, next to

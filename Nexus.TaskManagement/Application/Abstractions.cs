@@ -292,4 +292,13 @@ public static class TaskSmsTemplateKeys
 
     /// <summary>An occurrence of a recurring task is due. TaskTitle, ExecutionDateTime, ExecutionDate, ExecutionTime.</summary>
     public const string RecurringTaskReminder = "recurring_task_reminder";
+
+    /// <summary>A task's due moment is near (the day before, by default). TaskTitle, DueDate.</summary>
+    public const string TaskDueSoon = "task_due_soon";
+
+    /// <summary>A task's due moment passed and it is not done. TaskTitle, DueDate.</summary>
+    public const string TaskOverdue = "task_overdue";
+
+    /// <summary>An occurrence of a recurring task is coming up (an hour before, by default). TaskTitle, ExecutionDateTime, ExecutionDate, ExecutionTime.</summary>
+    public const string RecurringTaskUpcoming = "recurring_task_upcoming";
 }

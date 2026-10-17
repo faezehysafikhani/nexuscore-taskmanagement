@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using NexusCore.Application.Identity.Permissions;
 
 namespace Nexus.CompositionTests;
 
@@ -189,6 +190,25 @@ public sealed class ChatTests(AccessControlTests.Host host) : IClassFixture<Acce
         Assert.Equal(HttpStatusCode.NotFound, (await host.SendFormAsync(a, HttpMethod.Post, $"/api/chat/teams/{teamId}/messages", "hi")).StatusCode);
     }
 
+    [Fact]
+    public async Task ATeamMember_WithoutTheWorkTeamPermission_HasNoTeamConversation()
+    {
+        var (a, _) = await SharedTeamPairAsync();
+        var member = await host.UserAsync(host.TenantA, []);
+        var teamId = await host.TeamAsync(host.TenantA, a.Id, member.Id);
+        Assert.Equal(HttpStatusCode.OK, (await host.SendFormAsync(a, HttpMethod.Post, $"/api/chat/teams/{teamId}/messages", "سلام")).StatusCode);
+
+        Assert.Equal(HttpStatusCode.NotFound, (await host.SendAsync(member, HttpMethod.Get, $"/api/chat/teams/{teamId}/messages")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await host.SendFormAsync(member, HttpMethod.Post, $"/api/chat/teams/{teamId}/messages", "hi")).StatusCode);
+        var unread = await Json(await host.SendAsync(member, HttpMethod.Get, "/api/chat/teams/unread-counts"));
+        Assert.Equal(0, unread.GetArrayLength());
+
+        // Given the permission, the same member reaches the thread.
+        var withPermission = await host.UserAsync(host.TenantA, [UserGroupPermissions.GroupsManageOwn]);
+        var team2 = await host.TeamAsync(host.TenantA, a.Id, withPermission.Id);
+        Assert.Equal(HttpStatusCode.OK, (await host.SendAsync(withPermission, HttpMethod.Get, $"/api/chat/teams/{team2}/messages")).StatusCode);
+    }
+
     // 13: every one of the scenarios above answered with the status it names, never a 500 - the
     // one thing this whole stage exists to guarantee. This walks every valid path once more.
     [Fact]
@@ -212,11 +232,14 @@ public sealed class ChatTests(AccessControlTests.Host host) : IClassFixture<Acce
         Assert.All(responses, r => Assert.True((int)r.StatusCode < 500, $"{r.RequestMessage!.RequestUri}: {(int)r.StatusCode}"));
     }
 
-    /// <summary>Two active users of TenantA on the same team, so a direct chat between them is allowed.</summary>
+    /// <summary>
+    /// Two active users of TenantA on the same team, so a direct chat between them is allowed.
+    /// Both may see work teams - without that permission there are no team conversations.
+    /// </summary>
     private async Task<(AccessControlTests.Caller A, AccessControlTests.Caller B)> SharedTeamPairAsync()
     {
-        var a = await host.UserAsync(host.TenantA, []);
-        var b = await host.UserAsync(host.TenantA, []);
+        var a = await host.UserAsync(host.TenantA, [UserGroupPermissions.GroupsViewOwn]);
+        var b = await host.UserAsync(host.TenantA, [UserGroupPermissions.GroupsViewOwn]);
         await host.TeamAsync(host.TenantA, a.Id, b.Id);
         return (a, b);
     }

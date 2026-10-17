@@ -52,6 +52,11 @@
     <ProjectReference Include="..\Chat.Application\Chat.Application.csproj" />
     <ProjectReference Include="..\Chat.Infrastructure\Chat.Infrastructure.csproj" />
 
+    <ProjectReference Include="..\Nexus.Organization\Nexus.Organization.csproj" />
+    <ProjectReference Include="..\Nexus.Organization.Infrastructure\Nexus.Organization.Infrastructure.csproj" />
+    <ProjectReference Include="..\Nexus.OrgStructure\Nexus.OrgStructure.csproj" />
+    <ProjectReference Include="..\Nexus.OrgStructure.Infrastructure\Nexus.OrgStructure.Infrastructure.csproj" />
+    <ProjectReference Include="..\Nexus.Integrations.TaskReporting\Nexus.Integrations.TaskReporting.csproj" />
     <ProjectReference Include="..\Nexus.Actions\Nexus.Actions.csproj" />
     <ProjectReference Include="..\Nexus.Actions.Infrastructure\Nexus.Actions.Infrastructure.csproj" />
     <ProjectReference Include="..\Nexus.Knowledge\Nexus.Knowledge.csproj" />

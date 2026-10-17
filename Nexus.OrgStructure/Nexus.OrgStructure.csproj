@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+	<PropertyGroup>
+		<TargetFramework>net8.0</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<OutputType>Library</OutputType>
+	</PropertyGroup>
+
+	<!-- Optional module: only hosts that reference it get companies, positions and the
+	     manager/subordinate hierarchy. It builds on Nexus.Organization's units (the deputies,
+	     departments, ...) and never changes their tables or NexusCore's. -->
+	<ItemGroup>
+		<ProjectReference Include="..\Nexus.Organization\Nexus.Organization.csproj" />
+		<ProjectReference Include="..\NexusCore.Application\NexusCore.Application.csproj" />
+		<ProjectReference Include="..\NexusCore.SharedKernel\NexusCore.SharedKernel.csproj" />
+	</ItemGroup>
+
+</Project>

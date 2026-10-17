@@ -66,6 +66,11 @@ public static class UserGroupEndpoints
                 (await service.ListMyTeamsAsync(cancellationToken)).ToApiResult())
             .RequireAuthorization();
 
+        // Whom the caller may add to their teams (a product's organization structure can limit it).
+        mine.MapGet("/member-scope", async (IUserGroupService service, CancellationToken cancellationToken) =>
+                (await service.GetMyTeamMemberScopeAsync(cancellationToken)).ToApiResult())
+            .RequireAuthorization(UserGroupPermissions.GroupsManageOwn);
+
         mine.MapPost("/", async (CreateMyTeamRequest request, IUserGroupService service, CancellationToken cancellationToken) =>
                 (await service.CreateMyTeamAsync(request, cancellationToken)).ToApiResult())
             .RequireRateLimiting(NexusRateLimitPolicies.Write)

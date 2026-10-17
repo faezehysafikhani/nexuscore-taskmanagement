@@ -38,7 +38,11 @@ public sealed class GetMyNotificationsQueryHandler
                 n.Message,
                 n.Type,
                 n.IsRead,
-                n.CreatedAt))
+                n.CreatedAt,
+                n.Category,
+                n.ReferenceId,
+                n.ActorUserId,
+                n.ActorName))
             .ToListAsync(cancellationToken);
 
         return Result.Success(notifications);

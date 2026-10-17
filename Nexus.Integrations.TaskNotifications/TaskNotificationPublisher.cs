@@ -53,8 +53,10 @@ public sealed class TaskNotificationPublisher(
             try
             {
                 await using var scope = scopeFactory.CreateAsyncScope();
-                await scope.ServiceProvider.GetRequiredService<INotificationService>()
-                    .NotifyAsync(userId, title, message, "Warning", cancellationToken, notification.TenantId);
+                await scope.ServiceProvider.GetRequiredService<INotificationService>().NotifyAsync(
+                    new NotificationRequest(userId, title, message, "Warning", notification.TenantId,
+                        TaskNoticeNotifications.Reminder, notification.TaskId),
+                    cancellationToken);
                 logger.LogInformation(ReminderDeliveryEvents.NotificationStored,
                     "Reminder notification stored for user {UserId}, task {TaskId}.", userId, notification.TaskId);
                 return;
@@ -85,6 +87,8 @@ public static class DependencyInjection
     public static IServiceCollection AddTaskNotificationsIntegration(this IServiceCollection services)
     {
         services.AddScoped<ITaskNotificationPublisher, TaskNotificationPublisher>();
+        // What happens to tasks, as in-app notifications stored on the server (replaces the module's no-op).
+        services.AddScoped<ITaskNoticePublisher, TaskNoticeNotifications>();
 
         // Real delivery for the module's SMS and contact seams, and SMS on task creation.
         services.AddScoped<ITaskSmsSender, PlatformTaskSmsSender>();
@@ -95,6 +99,8 @@ public static class DependencyInjection
         services.AddScoped<NexusCore.SharedKernel.Domain.IDomainEventHandler<Nexus.TaskManagement.Domain.TaskItemDueChanged>, TaskChangeSmsNotifier>();
         // The texts of those SMS, editable in the SMS panel.
         services.AddSingleton<NexusCore.Application.Messaging.ISmsTemplateCatalog, TaskSmsTemplateCatalog>();
+        // People added to a work team are told so in the app (the Core's default tells no one).
+        services.AddScoped<NexusCore.Application.Identity.Interfaces.IUserGroupMembershipNotifier, TeamMembershipNotifier>();
         return services;
     }
 }

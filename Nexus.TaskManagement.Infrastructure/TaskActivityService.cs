@@ -23,7 +23,8 @@ namespace Nexus.TaskManagement.Infrastructure;
 public sealed class TaskActivityService(
     NexusCoreDbContext coreDb,
     TaskManagementDbContext taskDb,
-    ICurrentUserContext currentUser) : ITaskActivityService
+    ICurrentUserContext currentUser,
+    ITaskNoticePublisher notices) : ITaskActivityService
 {
     public const string TaskEntityName = "TaskManagement.Task";
 
@@ -88,5 +89,19 @@ public sealed class TaskActivityService(
 
         await coreDb.AuditLogs.AddAsync(entry, cancellationToken);
         await coreDb.SaveChangesAsync(cancellationToken);
+
+        // The entry is news for the people of the task - all but whoever made it. A deleted task
+        // is not found here; DeleteAsync tells its people itself.
+        var task = await taskDb.Tasks
+            .IgnoreQueryFilters()
+            .Include(t => t.Assignees)
+            .FirstOrDefaultAsync(t => t.Id == taskId && t.TenantId == entry.TenantId, cancellationToken);
+        var people = task is null ? [] : TaskPeople.Of(task).Where(userId => userId != currentUser.UserId).ToList();
+        if (people.Count > 0)
+        {
+            await notices.PublishAsync(
+                new TaskNotice(task!.TenantId, taskId, task.Title, currentUser.UserId, TaskNoticeKind.Activity, action, details, people),
+                cancellationToken);
+        }
     }
 }

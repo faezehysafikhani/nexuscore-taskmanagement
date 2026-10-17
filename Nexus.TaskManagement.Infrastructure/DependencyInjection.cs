@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Nexus.TaskManagement.Application;
 using NexusCore.Infrastructure.Persistence;
 
@@ -37,9 +38,18 @@ public static class DependencyInjection
         services.Configure<RepetitiveTaskSchedulerOptions>(
             configuration.GetSection(RepetitiveTaskSchedulerOptions.SectionName));
 
+        // First: the columns and tables newer versions need, added to an existing database
+        // before any job below reads them.
+        services.AddHostedService<TaskManagementSchemaPatcher>();
+        services.AddScoped<ITaskSmsOutbox, TaskSmsOutbox>();
+        services.TryAddSingleton(TimeProvider.System);
+
         // Registered unconditionally; it checks its own Enabled flag and exits immediately
         // when off, which keeps the "is the job running" answer in one place.
         services.AddHostedService<RepetitiveTaskSchedulerService>();
+        // Due-soon, overdue and coming-up reminders, with the same switch and interval.
+        services.AddSingleton<TaskReminderService>();
+        services.AddHostedService(provider => provider.GetRequiredService<TaskReminderService>());
 
         return services;
     }

@@ -6,5 +6,9 @@ public record NotificationDto(
     string Message,
     string Type,
     bool IsRead,
-    DateTime CreatedAt
+    DateTime CreatedAt,
+    string? Category = null,
+    Guid? ReferenceId = null,
+    Guid? ActorUserId = null,
+    string? ActorName = null
 );

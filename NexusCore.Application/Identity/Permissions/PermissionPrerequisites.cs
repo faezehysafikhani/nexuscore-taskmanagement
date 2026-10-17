@@ -39,8 +39,8 @@ public static class PermissionPrerequisites
         [UserGroupPermissions.GroupsAssignPermissions] = [UserGroupPermissions.GroupsView, IdentityPermissions.PermissionsView],
         [UserGroupPermissions.GroupsManageMembers] = [UserGroupPermissions.GroupsView, IdentityPermissions.UsersView],
         [UserGroupPermissions.GroupsDelete] = [UserGroupPermissions.GroupsView],
-        // Building a team means picking its members from the user list.
-        [UserGroupPermissions.GroupsManageOwn] = [IdentityPermissions.UsersView]
+        // Building a team means picking its members from the user list - and seeing the section.
+        [UserGroupPermissions.GroupsManageOwn] = [IdentityPermissions.UsersView, UserGroupPermissions.GroupsViewOwn]
     };
 
     /// <summary>

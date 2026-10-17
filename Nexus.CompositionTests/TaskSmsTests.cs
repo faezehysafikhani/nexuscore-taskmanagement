@@ -49,16 +49,15 @@ public sealed class TaskSmsTests(AccessControlTests.Host host) : IClassFixture<A
     }
 
     [Fact]
-    public async Task ACreatorResponsibleForTheirOwnTask_GetsOneSms()
+    public async Task ACreatorResponsibleForTheirOwnTask_GetsNoSms()
     {
         await EnableSmsAsync();
         var (creator, phone) = await UserWithPhoneAsync(Permissions);
 
         await host.CreatedTaskIdAsync(creator, "My own", assignedUserId: creator.Id);
 
-        Assert.Single(await WaitForAsync(phone));
         await SettleAsync();
-        Assert.Single(host.Sms.SentTo(phone));
+        Assert.Empty(host.Sms.SentTo(phone));
     }
 
     [Fact]
@@ -152,12 +151,11 @@ public sealed class TaskSmsTests(AccessControlTests.Host host) : IClassFixture<A
 
         // The owner moving the date of their own task is not texted about it.
         var ownTask = await host.CreatedTaskIdAsync(owner, "Own", assignedUserId: owner.Id);
-        Assert.Single(await WaitForAsync(ownerPhone));
         Assert.Equal(HttpStatusCode.OK, (await EditAsync(owner, ownTask, "Own", "2030-02-01", owner.Id)).StatusCode);
 
         await SettleAsync();
         Assert.Equal(2, host.Sms.SentTo(phone).Count);
-        Assert.Single(host.Sms.SentTo(ownerPhone));
+        Assert.Empty(host.Sms.SentTo(ownerPhone)); // neither for creating it nor for moving it
     }
 
     [Fact]
@@ -176,13 +174,13 @@ public sealed class TaskSmsTests(AccessControlTests.Host host) : IClassFixture<A
         });
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        foreach (var phone in new[] { creatorPhone, firstPhone, secondPhone })
+        foreach (var phone in new[] { firstPhone, secondPhone })
         {
             Assert.Contains("«Split work» به شما ارجاع شد", Assert.Single(await WaitForAsync(phone)));
         }
 
         await SettleAsync();
-        Assert.Single(host.Sms.SentTo(creatorPhone));
+        Assert.Empty(host.Sms.SentTo(creatorPhone)); // responsible too, but they created it
         Assert.Single(host.Sms.SentTo(firstPhone));
         Assert.Single(host.Sms.SentTo(secondPhone));
         Assert.Empty(host.Sms.SentTo(accessPhone));
@@ -200,8 +198,7 @@ public sealed class TaskSmsTests(AccessControlTests.Host host) : IClassFixture<A
             title = "Growing", dueDate = "2030-01-01", priority = "Medium", responsibleUserIds = new[] { owner.Id, first.Id },
         });
         var id = JsonDocument.Parse(await created.Content.ReadAsStringAsync()).RootElement.GetProperty("id").GetGuid();
-        Assert.Single(await WaitForAsync(firstPhone));
-        Assert.Single(await WaitForAsync(ownerPhone));
+        Assert.Single(await WaitForAsync(firstPhone)); // the owner created it: no SMS for them
 
         // Second joins and the date moves in one edit: second is told about the task (with its
         // new date), first about the new date, the owner - who made the change - about nothing.
@@ -214,7 +211,7 @@ public sealed class TaskSmsTests(AccessControlTests.Host host) : IClassFixture<A
         Assert.Contains("به شما ارجاع شد", Assert.Single(await WaitForAsync(secondPhone)));
         Assert.StartsWith("موعد فعالیت «Growing» تغییر کرد.", (await WaitForAsync(firstPhone, count: 2))[1]);
         await SettleAsync();
-        Assert.Single(host.Sms.SentTo(ownerPhone));
+        Assert.Empty(host.Sms.SentTo(ownerPhone));
         Assert.Equal(2, host.Sms.SentTo(firstPhone).Count);
         Assert.Single(host.Sms.SentTo(secondPhone));
     }

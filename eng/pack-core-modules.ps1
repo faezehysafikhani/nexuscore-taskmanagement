@@ -180,6 +180,20 @@ $organizationProjects = @(
 
 
 # ============================================================
+# 7b. Organization structure (optional: companies, positions,
+#     manager / subordinates; builds on Organization)
+# ============================================================
+
+$orgStructureProjects = @(
+
+    "Nexus.OrgStructure/Nexus.OrgStructure.csproj",
+
+    "Nexus.OrgStructure.Infrastructure/Nexus.OrgStructure.Infrastructure.csproj"
+
+)
+
+
+# ============================================================
 # 8. Calendar
 # ============================================================
 
@@ -408,7 +422,9 @@ $integrationProjects = @(
 
     "Nexus.Integrations.ProjectStrategyAlignment/Nexus.Integrations.ProjectStrategyAlignment.csproj",
 
-    "Nexus.Integrations.ProjectStrategyAlignment.Infrastructure/Nexus.Integrations.ProjectStrategyAlignment.Infrastructure.csproj"
+    "Nexus.Integrations.ProjectStrategyAlignment.Infrastructure/Nexus.Integrations.ProjectStrategyAlignment.Infrastructure.csproj",
+
+    "Nexus.Integrations.TaskReporting/Nexus.Integrations.TaskReporting.csproj"
 
 )
 
@@ -432,6 +448,8 @@ $projects = @(
     $taskManagementProjects
 
     $organizationProjects
+
+    $orgStructureProjects
 
     $calendarProjects
 
@@ -484,7 +502,10 @@ $excludedProjects = @(
 
     "Nexus.CompositionTests/Nexus.CompositionTests.csproj",
 
-    "NexusCore.Api/NexusCore.Api.csproj"
+    "NexusCore.Api/NexusCore.Api.csproj",
+
+    # Test host for the organization structure module; remove with the project before merging to main.
+    "TejaratBank.Api/TejaratBank.Api.csproj"
 
 )
 

@@ -47,6 +47,8 @@ public sealed class RepetitiveTaskDueHandler(
                 return;
             }
 
+            // Every occurrence is announced whatever the task's status: a recurring task is work
+            // to do again each time, so having done (or paused) one occurrence never silences the next.
             var recipients = await ResolveRecipientsAsync(task, cancellationToken);
             if (recipients.Count == 0)
             {

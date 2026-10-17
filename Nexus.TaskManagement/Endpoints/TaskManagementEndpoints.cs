@@ -26,8 +26,32 @@ public static class TaskManagementEndpoints
         app.MapTaskTagEndpoints();
         app.MapTaskFileEndpoints();
         app.MapNoteEndpoints();
+        app.MapReminderSettingsEndpoints();
         app.MapHub<TaskManagementHub>(TaskManagementHub.Route)
             .RequireRateLimiting(NexusRateLimitPolicies.Realtime);
+        return app;
+    }
+
+    /// <summary>
+    /// When tasks are reminded of (SMS panel). Anyone signed in may read it - the task screen also
+    /// learns from it that notifications are kept on the server; changing it is for those who
+    /// may change the SMS panel.
+    /// </summary>
+    private static IEndpointRouteBuilder MapReminderSettingsEndpoints(this IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/task-management/reminder-settings")
+            .WithTags("Tasks - reminders")
+            .RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi);
+
+        group.MapGet("/", async (ITaskReminderSettingsService service, CancellationToken cancellationToken) =>
+            (await service.GetAsync(cancellationToken)).ToApiResult());
+
+        group.MapPut("/", async (TaskReminderSettingsDto request, ITaskReminderSettingsService service, CancellationToken cancellationToken) =>
+                (await service.SaveAsync(request, cancellationToken)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
+            .RequireAuthorization(NexusCore.Application.Identity.Permissions.IdentityPermissions.SmsSettingsUpdate);
+
         return app;
     }
 
