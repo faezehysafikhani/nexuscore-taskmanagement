@@ -1,26 +1,26 @@
-# NexusCore platform packages + TMPB
+# NexusCore platform packages
 
 NexusCore is the shared .NET 8 platform for identity, tenants, permissions, audit, settings and
-reusable modules. Product hosts should consume it through internal NuGet packages instead of
+reusable modules. Product hosts consume it through internal NuGet packages instead of
 referencing this source tree directly.
 
-This branch adds the **TMPB** host as a separate .NET 8 project under `TMPB/TMPB.Api`. TMPB is not
-added to `NexusCore.sln`; it is intentionally independent and consumes the approved Core packages
-through `PackageReference`.
+## Product hosts live outside this repository
 
-## TMPB composition
+This solution contains the platform and its modules only — no product host. Each product is a
+separate repository that references the packages built here (`eng/pack-core-modules.ps1`):
 
-TMPB currently composes only the modules needed by this product:
+| Product | Repository | Composes |
+|---|---|---|
+| Post Bank task management | `TMPB_API` | Core, Chat, Notifications, Task Management, `Nexus.Integrations.TaskNotifications` |
+| Tejarat Bank task management | `TejaratBank_API` | the same, plus `Nexus.Organization`, `Nexus.OrgStructure` and `Nexus.Integrations.TaskReporting` |
 
-| Area | Packages/modules |
-|---|---|
-| Shared Core | `NexusCore.Application`, `NexusCore.Infrastructure`, `NexusCore.SharedKernel` |
-| Chat | `Chat.Api`, `Chat.Application`, `Chat.Infrastructure` |
-| Notifications | `Notifications.Api`, `Notifications.Application`, `Notifications.Infrastructure` |
-| Task Manager | `Nexus.TaskManagement`, `Nexus.TaskManagement.Infrastructure` |
-| Integration | `Nexus.Integrations.TaskNotifications` |
+Both use the same front end (TMPBUI), which shows each optional feature only when the host
+answers for it. `NexusCore.Api` in this solution is the platform's own development host, not a
+product.
 
-Rozet and PostBank are product hosts and are not part of the TMPB package surface.
+To release a Core change to a product: pack (below), copy the new `.nupkg` files into the
+product's package feed (its `packages/` folder or the internal feed), raise the package version
+in its `.csproj`, build and deploy it.
 
 ## TaskManagement
 
@@ -47,25 +47,15 @@ accounts, teams, chat, notification gateways and live updates.
 See [docs/Core-Packaging-Government-Deployment.md](docs/Core-Packaging-Government-Deployment.md)
 for the internal NuGet packaging and offline/bank-network deployment workflow.
 
-## Package Core for TMPB
+## Package Core for the products
 
 ```powershell
 pwsh ./eng/pack-core-modules.ps1 -Configuration Release -Version 0.1.0 -Output artifacts/packages
 ```
 
-Copy the produced `.nupkg` files to the approved internal NuGet feed or to an offline package
-share. Do not restore TMPB from public feeds in production networks.
-
-## Restore and run TMPB
-
-```powershell
-dotnet restore TMPB/TMPB.Api/TMPB.Api.csproj --configfile TMPB/nuget.config
-dotnet run --project TMPB/TMPB.Api/TMPB.Api.csproj
-```
-
-`TMPB/TMPB.Api/appsettings.json` contains development placeholders only. Replace connection
-strings, JWT signing keys and CORS origins through environment variables or a vault for real
-deployments.
+The version is `0.1.0.<Persian date><daily build>`, e.g. `0.1.0.1405072501`. Copy the produced
+`.nupkg` files to the approved internal NuGet feed or to the product's offline package folder. Do
+not restore products from public feeds in production networks.
 
 ## Verify Core
 

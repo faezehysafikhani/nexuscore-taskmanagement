@@ -15,7 +15,7 @@ namespace Nexus.CompositionTests;
 /// messages included) then throws, on SQL Server as much as it does here on SQLite. This uses
 /// SQLite only as a real relational engine to prove the mechanism and the patch that closes it
 /// (<see cref="ModuleSchemaInitializer.EnsureColumnAsync"/>); the patch itself runs its own
-/// SQL-Server-specific statements, applied by NexusCore.Api/PostBank.Api at startup.
+/// SQL-Server-specific statements, applied by NexusCore.Api and the product hosts at startup.
 /// </summary>
 public sealed class ChatSchemaPatchTests : IDisposable
 {

@@ -95,7 +95,7 @@ Deleting a team that tasks are still assigned to answers 409.
   `PUT/DELETE /api/chat/messages/{id}` (own messages only),
   `GET /api/chat/messages/{id}/attachment` (participants only).
 * Times are returned as UTC.
-* NexusCore.Api, PostBank.Api and external product hosts that compose Chat/Notifications now
+* NexusCore.Api and the external product hosts that compose Chat/Notifications now
   create the chat and notification schemas at start-up.
 
 ### TaskManagement
