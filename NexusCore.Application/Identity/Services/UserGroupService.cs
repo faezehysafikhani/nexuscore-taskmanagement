@@ -134,7 +134,7 @@ public sealed class UserGroupService(
         }
 
         // The group's permissions of modules this product does not manage stay as they were.
-        group.SetPermissions(request.PermissionIds.Concat(group.Permissions
+        group.SetPermissions(request.PermissionIds.Distinct().Concat(group.Permissions
             .Where(grant => known.TryGetValue(grant.PermissionId, out var permission) && !_managed.IsManaged(permission))
             .Select(grant => grant.PermissionId)).Distinct().ToList());
         await unitOfWork.SaveChangesAsync(cancellationToken);
