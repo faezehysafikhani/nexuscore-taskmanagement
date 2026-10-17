@@ -163,7 +163,7 @@ public sealed class TaskReportTests
     {
         var structure = new OrgStructureDbContext(new DbContextOptionsBuilder<OrgStructureDbContext>().UseInMemoryDatabase("orgs-" + _db).Options);
         var units = new OrganizationDbContext(new DbContextOptionsBuilder<OrganizationDbContext>().UseInMemoryDatabase("org-" + _db).Options);
-        return new OrgStructureService(new OrgStructureRepository(structure), structure, new OrganizationUnitRepository(units), _users);
+        return new OrgStructureService(new OrgStructureRepository(structure), structure, new OrganizationUnitRepository(units), _users, new OrgChartTeamsAndTitlesTests.NoWorkTeams());
     }
 
     private TaskManagementDbContext TasksDb(bool restricted, Guid? userId) =>

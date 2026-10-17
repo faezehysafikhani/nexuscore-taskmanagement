@@ -29,3 +29,9 @@ public sealed record UpdateMyTeamRequest(string Name, string? Description = null
 
 /// <summary>The complete member list. The owner always stays a member.</summary>
 public sealed record SetMyTeamMembersRequest(IReadOnlyList<Guid> UserIds);
+
+/// <summary>
+/// Whom the signed-in user may add to their teams. Limited = false: anyone. Otherwise only
+/// <see cref="AllowedUserIds"/> (members a team already has stay either way).
+/// </summary>
+public sealed record MyTeamMemberScopeDto(bool Limited, IReadOnlyList<Guid> AllowedUserIds, string? ScopeName);

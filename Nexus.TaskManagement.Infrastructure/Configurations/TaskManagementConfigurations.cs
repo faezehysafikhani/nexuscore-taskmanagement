@@ -290,6 +290,21 @@ internal sealed class TaskAssigneeConfiguration : IEntityTypeConfiguration<TaskA
     }
 }
 
+internal sealed class PendingTaskSmsConfiguration : IEntityTypeConfiguration<PendingTaskSms>
+{
+    public void Configure(EntityTypeBuilder<PendingTaskSms> builder)
+    {
+        builder.ToTable("PendingSms", Schema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.Property(x => x.PhoneNumber).HasMaxLength(32).IsRequired();
+        builder.Property(x => x.Text).HasMaxLength(1000).IsRequired();
+
+        // The reminder job's "what may go now" scan.
+        builder.HasIndex(x => x.SendAfterUtc);
+    }
+}
+
 internal sealed class TaskCommentConfiguration : IEntityTypeConfiguration<TaskComment>
 {
     public void Configure(EntityTypeBuilder<TaskComment> builder)

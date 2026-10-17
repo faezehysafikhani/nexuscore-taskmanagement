@@ -70,6 +70,37 @@ namespace Nexus.TaskManagement.Infrastructure.Migrations
                     b.ToTable("Notes", "task_management");
                 });
 
+            modelBuilder.Entity("Nexus.TaskManagement.Domain.PendingTaskSms", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("PhoneNumber")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<DateTimeOffset>("SendAfterUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SendAfterUtc");
+
+                    b.ToTable("PendingSms", "task_management");
+                });
+
             modelBuilder.Entity("Nexus.TaskManagement.Domain.RepetitiveTask", b =>
                 {
                     b.Property<Guid>("Id")
@@ -129,6 +160,9 @@ namespace Nexus.TaskManagement.Infrastructure.Migrations
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("UpcomingNotifiedFor")
+                        .HasColumnType("datetimeoffset");
 
                     b.Property<string>("WeeklyDays")
                         .IsRequired()
@@ -467,6 +501,9 @@ namespace Nexus.TaskManagement.Infrastructure.Migrations
                     b.Property<DateOnly>("DueDate")
                         .HasColumnType("date");
 
+                    b.Property<DateTimeOffset?>("DueSoonNotifiedFor")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<TimeOnly?>("DueTime")
                         .HasColumnType("time");
 
@@ -478,6 +515,9 @@ namespace Nexus.TaskManagement.Infrastructure.Migrations
 
                     b.Property<Guid?>("ModifiedByUserId")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("OverdueNotifiedFor")
+                        .HasColumnType("datetimeoffset");
 
                     b.Property<Guid?>("OwnerUserId")
                         .HasColumnType("uniqueidentifier");

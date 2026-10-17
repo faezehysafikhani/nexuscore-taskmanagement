@@ -38,6 +38,9 @@ public static class DependencyInjection
         // Defaults for the two outbound seams. TryAdd, so a host that installs the
         // notification integration - or a real SMS gateway - wins without touching this file.
         services.TryAddScoped<ITaskNotificationPublisher, NullTaskNotificationPublisher>();
+        services.TryAddScoped<ITaskNoticePublisher, NullTaskNoticePublisher>();
+        services.AddScoped<ITaskReminderSettingsService, TaskReminderSettingsService>();
+        services.AddScoped<TaskReminderDispatcher>();
         services.TryAddScoped<IUserContactResolver, UnavailableUserContactResolver>();
         services.TryAddScoped<ITaskSmsSender, LoggingTaskSmsSender>();
 

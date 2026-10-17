@@ -66,6 +66,10 @@ public static class DependencyInjection
         services.AddScoped<IApprovalRequester, NullApprovalRequester>();
         services.AddScoped<IFileStorage, LocalDiskFileStorage>();
         services.AddScoped<IUserDirectory, UserDirectory>();
+        // Used only by modules that keep users' titles (Nexus.OrgStructure); changes no table.
+        services.AddScoped<IUserTitleWriter, UserTitleWriter>();
+        // Read by modules that show the work teams (Nexus.OrgStructure's chart).
+        services.AddScoped<IWorkTeamDirectory, WorkTeamDirectory>();
 
         // Sign-in CAPTCHA and attempt limits. The in-memory cache is only the default: a host that
         // registers a distributed cache (Redis, SQL Server) shares this state across instances.
@@ -86,6 +90,9 @@ public static class DependencyInjection
         services.AddScoped<ISmsProvider, KavenegarSmsProvider>();
         services.AddScoped<ISmsSender, GatewaySmsSender>();
         services.AddScoped<ISmsTemplateService, SmsTemplateService>();
+        // The hours notification SMS wait for (the SMS panel sets them).
+        services.AddScoped<ISmsQuietHours, SmsQuietHours>();
+        services.Configure<SmsDeliveryOptions>(configuration.GetSection(SmsDeliveryOptions.SectionName));
         // Each module adds its own SMS templates the same way (ISmsTemplateCatalog).
         services.AddSingleton<ISmsTemplateCatalog, CoreSmsTemplateCatalog>();
         services.Configure<SmsTemplateOptions>(configuration.GetSection(SmsTemplateOptions.SectionName));

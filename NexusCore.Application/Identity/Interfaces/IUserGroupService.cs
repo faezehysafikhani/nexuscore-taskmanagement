@@ -19,5 +19,6 @@ public interface IUserGroupService
     Task<Result<UserGroupDto>> CreateMyTeamAsync(CreateMyTeamRequest request, CancellationToken cancellationToken);
     Task<Result<UserGroupDto>> UpdateMyTeamAsync(Guid groupId, UpdateMyTeamRequest request, CancellationToken cancellationToken);
     Task<Result<UserGroupDto>> SetMyTeamMembersAsync(Guid groupId, SetMyTeamMembersRequest request, CancellationToken cancellationToken);
+    Task<Result<MyTeamMemberScopeDto>> GetMyTeamMemberScopeAsync(CancellationToken cancellationToken);
     Task<Result> DeleteMyTeamAsync(Guid groupId, CancellationToken cancellationToken);
 }

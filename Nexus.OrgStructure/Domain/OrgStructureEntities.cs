@@ -131,4 +131,55 @@ public sealed class UserAssignment : AuditableEntity<Guid>
         PositionId = positionId;
         ManagerUserId = managerUserId;
     }
+
+}
+
+/// <summary>A title put before people's names, such as «آقای»، «خانم» or «جناب مهندس».</summary>
+public sealed class Honorific : AuditableEntity<Guid>
+{
+    private Honorific() : base(Guid.Empty)
+    {
+        Title = string.Empty;
+    }
+
+    public Honorific(Guid id, Guid tenantId, string title, int sortOrder) : base(id)
+    {
+        TenantId = tenantId;
+        Title = title.Trim();
+        SortOrder = sortOrder;
+        IsActive = true;
+    }
+
+    public Guid TenantId { get; private set; }
+    public string Title { get; private set; }
+    public int SortOrder { get; private set; }
+    public bool IsActive { get; private set; }
+
+    public void Update(string title, int sortOrder, bool isActive)
+    {
+        Title = title.Trim();
+        SortOrder = sortOrder;
+        IsActive = isActive;
+    }
+}
+
+/// <summary>Which title a user has. Their display name starts with it (see HonorificService).</summary>
+public sealed class UserHonorific : AuditableEntity<Guid>
+{
+    private UserHonorific() : base(Guid.Empty)
+    {
+    }
+
+    public UserHonorific(Guid id, Guid tenantId, Guid userId, Guid honorificId) : base(id)
+    {
+        TenantId = tenantId;
+        UserId = userId;
+        HonorificId = honorificId;
+    }
+
+    public Guid TenantId { get; private set; }
+    public Guid UserId { get; private set; }
+    public Guid HonorificId { get; private set; }
+
+    public void Change(Guid honorificId) => HonorificId = honorificId;
 }

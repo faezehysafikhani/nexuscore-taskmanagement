@@ -13,4 +13,14 @@ public class NotificationDbContext : DbContext, INotificationDbContext
     }
 
     public DbSet<Notification> Notifications => Set<Notification>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        base.OnModelCreating(modelBuilder);
+        modelBuilder.Entity<Notification>(notification =>
+        {
+            notification.Property(n => n.Category).HasMaxLength(64);
+            notification.Property(n => n.ActorName).HasMaxLength(200);
+        });
+    }
 }

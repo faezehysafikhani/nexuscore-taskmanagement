@@ -10,11 +10,31 @@ public static class OrgStructurePermissions
     public const string ManageAssignments = "org_structure.manage_assignments";
 
     /// <summary>
+    /// The builder of a work team may add people of other deputies too (without it, only their own
+    /// deputy's). Not one of <see cref="All"/>: it gives no access to the structure itself.
+    /// </summary>
+    public const string TeamMembersFromAnyUnit = "org_structure.team_members_any_unit";
+
+    /// <summary>
     /// Policy for the read endpoints: any of the permissions above. A manager of companies,
     /// positions or assignments has to see them too, and this module cannot add entries to
     /// NexusCore's PermissionPrerequisites without changing NexusCore for every product.
     /// </summary>
     public const string ReadPolicy = "org_structure.read";
+
+    /// <summary>
+    /// Titles («آقای»، «خانم»...) go with user administration, not with this module's own
+    /// permissions: whoever may add users manages the list (users.create), whoever may add or
+    /// edit users gives them one (TitlesAssignPolicy), and anyone who may see users reads it.
+    /// </summary>
+    public const string TitlesReadPolicy = "org_structure.titles.read";
+    public const string TitlesAssignPolicy = "org_structure.titles.assign";
+    public const string TitlesManagePermission = IdentityPermissions.UsersCreate;
+
+    public static readonly string[] TitleReaders =
+        [IdentityPermissions.UsersView, IdentityPermissions.UsersCreate, IdentityPermissions.UsersUpdate];
+
+    public static readonly string[] TitleAssigners = [IdentityPermissions.UsersCreate, IdentityPermissions.UsersUpdate];
 
     public static IReadOnlyList<PermissionDefinition> All { get; } =
     [
@@ -23,9 +43,15 @@ public static class OrgStructurePermissions
         new(ManagePositions, "Organization", "مدیریت سمت‌های سازمانی"),
         new(ManageAssignments, "Organization", "تعیین شرکت، معاونت، سمت و مدیر کاربران")
     ];
+
+    /// <summary>Permissions about work teams that only mean something with the organization structure.</summary>
+    public static IReadOnlyList<PermissionDefinition> WorkTeams { get; } =
+    [
+        new(TeamMembersFromAnyUnit, "Organization", "افزودن اعضای سایر معاونت‌ها به تیم کاری")
+    ];
 }
 
 public sealed class OrgStructurePermissionCatalog : IPermissionCatalog
 {
-    public IReadOnlyList<PermissionDefinition> GetPermissions() => OrgStructurePermissions.All;
+    public IReadOnlyList<PermissionDefinition> GetPermissions() => [.. OrgStructurePermissions.All, .. OrgStructurePermissions.WorkTeams];
 }

@@ -24,6 +24,9 @@ public static class DependencyInjection
 
         services.AddScoped<INotificationService, NotificationService>();
 
+        // Adds the columns newer versions need to a table an older version created.
+        services.AddHostedService<NotificationSchemaPatcher>();
+
         return services;
     }
 }
