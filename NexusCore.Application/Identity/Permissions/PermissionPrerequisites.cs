@@ -40,7 +40,30 @@ public static class PermissionPrerequisites
         [UserGroupPermissions.GroupsManageMembers] = [UserGroupPermissions.GroupsView, IdentityPermissions.UsersView],
         [UserGroupPermissions.GroupsDelete] = [UserGroupPermissions.GroupsView],
         // Building a team means picking its members from the user list - and seeing the section.
-        [UserGroupPermissions.GroupsManageOwn] = [IdentityPermissions.UsersView, UserGroupPermissions.GroupsViewOwn]
+        [UserGroupPermissions.GroupsManageOwn] = [IdentityPermissions.UsersView, UserGroupPermissions.GroupsViewOwn],
+
+        // Organization module: unit operations require the ability to view units.
+        ["organization_units.create"] = new[] { "organization_units.view" },
+        ["organization_units.update"] = new[] { "organization_units.view" },
+        ["organization_units.delete"] = new[] { "organization_units.view" },
+
+        // Org structure: managing companies/positions/assignments requires view of the structure
+        // and needs user visibility/management because company/assignment operations involve users.
+        ["org_structure.manage_companies"] = new[] { "org_structure.view", IdentityPermissions.UsersView, IdentityPermissions.UsersUpdate },
+        ["org_structure.manage_positions"] = new[] { "org_structure.view", IdentityPermissions.UsersView, IdentityPermissions.UsersUpdate },
+        ["org_structure.manage_assignments"] = new[] { "org_structure.view", IdentityPermissions.UsersView, IdentityPermissions.UsersUpdate },
+
+        // Actions/task management: create/edit/delete/submit require view permission
+        ["Actions.Create"] = new[] { "Actions.View" },
+        ["Actions.Edit"] = new[] { "Actions.View" },
+        ["Actions.Delete"] = new[] { "Actions.View" },
+        ["Actions.Submit"] = new[] { "Actions.View" },
+
+        // Task management: creating/editing/deleting/commenting on tasks requires Tasks.View
+        ["Tasks.Create"] = new[] { "Tasks.View" },
+        ["Tasks.Edit"] = new[] { "Tasks.View" },
+        ["Tasks.Delete"] = new[] { "Tasks.View" },
+        ["Tasks.Comment"] = new[] { "Tasks.View" }
     };
 
     /// <summary>

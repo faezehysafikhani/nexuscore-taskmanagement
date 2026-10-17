@@ -502,6 +502,27 @@ public sealed class IdentityService(
 
         bool Managed(Guid id) => byId.TryGetValue(id, out var permission) && _managed.IsManaged(permission);
 
+        // Ensure Users.View is persisted when assigning user-related permissions that depend on it.
+        // This mirrors the UI behaviour for roles: if a prerequisite (UsersView) is required it
+        // should be stored so the frontend shows it checked after reload.
+        var allPermissions = await repository.ListPermissionsAsync(cancellationToken);
+        var nameMap = allPermissions.ToDictionary(p => p.Name, StringComparer.Ordinal);
+        var requestedNames = requested.Select(id => byId[id].Name).ToList();
+        var expandedNames = PermissionPrerequisites.Expand(requestedNames);
+        if (expandedNames.Contains(IdentityPermissions.UsersView) && nameMap.TryGetValue(IdentityPermissions.UsersView, out var usersView) && _managed.IsManaged(usersView))
+        {
+            // Do not add if explicitly denied.
+            if (requestedDenied is null || !requestedDenied.Contains(usersView.Id))
+            {
+                if (!requested.Contains(usersView.Id))
+                {
+                    requested.Add(usersView.Id);
+                    // Ensure byId includes it for later name lookups.
+                    byId[usersView.Id] = usersView;
+                }
+            }
+        }
+
         // Every change that gives something back needs the caller to hold it: a new grant, and a
         // denial that is added or lifted.
         var changed = requested.Where(id => !currentGranted.Contains(id))
@@ -629,6 +650,20 @@ public sealed class IdentityService(
         if (unmanaged.Count > 0)
         {
             return Result.Failure(Error.Validation("These permissions are not managed in this product: " + string.Join(", ", unmanaged)));
+        }
+
+        // Targeted: ensure Users.View persists when assigning role permissions that require it.
+        var allPermissionsForRoles = await repository.ListPermissionsAsync(cancellationToken);
+        var nameMapForRoles = allPermissionsForRoles.ToDictionary(p => p.Name, StringComparer.Ordinal);
+        var requestedNamesForRoles = known.Select(p => p.Name).ToList();
+        var expandedNamesForRoles = PermissionPrerequisites.Expand(requestedNamesForRoles);
+        if (expandedNamesForRoles.Contains(IdentityPermissions.UsersView) && nameMapForRoles.TryGetValue(IdentityPermissions.UsersView, out var usersViewForRole) && _managed.IsManaged(usersViewForRole))
+        {
+            if (!requested.Contains(usersViewForRole.Id))
+            {
+                requested.Add(usersViewForRole.Id);
+                known = await repository.GetPermissionsByIdsAsync(requested, cancellationToken);
+            }
         }
 
         var already = role.Permissions.Select(grant => grant.PermissionId).ToHashSet();
