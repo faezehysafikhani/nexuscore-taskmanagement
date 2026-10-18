@@ -10,10 +10,29 @@ public sealed class KnowledgeDocumentService(
     IFileStorage fileStorage,
     IKnowledgeUnitOfWork unitOfWork) : IKnowledgeDocumentService
 {
-    public async Task<Result<IReadOnlyList<KnowledgeDocumentDto>>> SearchAsync(Guid tenantId, string? search, KnowledgeDocumentType? documentType, CancellationToken cancellationToken)
+    public Task<Result<IReadOnlyList<KnowledgeDocumentDto>>> SearchAsync(Guid tenantId, string? search, KnowledgeDocumentType? documentType, CancellationToken cancellationToken) =>
+                    SearchAsync(tenantId, search, documentType, null, null, cancellationToken);
+
+    public async Task<Result<IReadOnlyList<KnowledgeDocumentDto>>> SearchAsync(Guid tenantId, string? search, KnowledgeDocumentType? documentType, string? subjectType, Guid? subjectId, CancellationToken cancellationToken)
     {
-        var documents = await repository.SearchAsync(tenantId, search, documentType, cancellationToken);
-        return Result.Success<IReadOnlyList<KnowledgeDocumentDto>>(documents.Select(ToDto).ToList());
+        var hasSubjectType = !string.IsNullOrWhiteSpace(subjectType);
+
+        if (hasSubjectType != subjectId.HasValue)
+        {
+            return Result.Failure<IReadOnlyList<KnowledgeDocumentDto>>(
+                Error.Validation("SubjectType and SubjectId must be supplied together."));
+        }
+
+        if (hasSubjectType && (subjectType!.Trim().Length > 100 || subjectId == Guid.Empty))
+        {
+            return Result.Failure<IReadOnlyList<KnowledgeDocumentDto>>(
+                Error.Validation("The subject filter is invalid."));
+        }
+
+        var documents = await repository.SearchAsync(tenantId, search, documentType, hasSubjectType ? subjectType!.Trim() : null, subjectId, cancellationToken);
+
+        return Result.Success<IReadOnlyList<KnowledgeDocumentDto>>(
+            documents.Select(ToDto).ToList());
     }
 
     public async Task<Result<KnowledgeDocumentDto>> GetAsync(Guid id, CancellationToken cancellationToken)
@@ -58,6 +77,70 @@ public sealed class KnowledgeDocumentService(
         document.UpdateDetails(request.Title, request.Description, request.DocumentType);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success(ToDto(document));
+    }
+
+    public async Task<Result<KnowledgeDocumentLinkDto>> AddLinkAsync(Guid tenantId, Guid documentId, CreateKnowledgeDocumentLinkRequest request, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.SubjectType) || request.SubjectType.Trim().Length > 100 || request.SubjectId == Guid.Empty)
+        {
+            return Result.Failure<KnowledgeDocumentLinkDto>(
+                Error.Validation("The document link is invalid."));
+        }
+
+        var document = await repository.GetByIdForTenantAsync(tenantId, documentId, cancellationToken);
+
+        if (document is null)
+        {
+            return Result.Failure<KnowledgeDocumentLinkDto>(
+                Error.NotFound("Knowledge document not found."));
+        }
+
+        var subjectType = request.SubjectType.Trim();
+
+        var existing = await repository.GetLinkAsync(documentId, subjectType, request.SubjectId, cancellationToken);
+
+        if (existing is not null)
+        {
+            return Result.Failure<KnowledgeDocumentLinkDto>(
+                Error.Conflict("The document is already linked to this subject."));
+        }
+
+        var link = new KnowledgeDocumentLink(Guid.NewGuid(), documentId, subjectType, request.SubjectId);
+
+        await repository.AddLinkAsync(link, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return Result.Success(new KnowledgeDocumentLinkDto(link.Id, link.DocumentId, link.SubjectType, link.SubjectId));
+    }
+
+    public async Task<Result> RemoveLinkAsync(Guid tenantId, Guid documentId, string subjectType, Guid subjectId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(subjectType) || subjectType.Trim().Length > 100 || subjectId == Guid.Empty)
+        {
+            return Result.Failure(
+                Error.Validation("The document link is invalid."));
+        }
+
+        var document = await repository.GetByIdForTenantAsync(tenantId, documentId, cancellationToken);
+
+        if (document is null)
+        {
+            return Result.Failure(
+                Error.NotFound("Knowledge document not found."));
+        }
+
+        var link = await repository.GetLinkAsync(documentId, subjectType.Trim(), subjectId, cancellationToken);
+
+        if (link is null)
+        {
+            return Result.Failure(
+                Error.NotFound("Knowledge document link not found."));
+        }
+
+        await repository.RemoveLinkAsync(link, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return Result.Success();
     }
 
     public async Task<Result<(Stream Content, string FileName, string ContentType)>> DownloadAsync(Guid id, CancellationToken cancellationToken)

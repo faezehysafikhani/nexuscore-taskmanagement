@@ -374,3 +374,4 @@ FodyWeavers.xsd
 
 # Database upgrade scripts are deliverables, not build output.
 !docs/upgrade/*.sql
+CLAUDE.md

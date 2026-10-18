@@ -8,6 +8,7 @@ public sealed class KnowledgeDbContext(DbContextOptions<KnowledgeDbContext> opti
     : DbContext(options), IKnowledgeUnitOfWork
 {
     public DbSet<KnowledgeDocument> KnowledgeDocuments => Set<KnowledgeDocument>();
+    public DbSet<KnowledgeDocumentLink> KnowledgeDocumentLinks => Set<KnowledgeDocumentLink>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
