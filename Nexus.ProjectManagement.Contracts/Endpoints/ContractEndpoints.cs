@@ -97,6 +97,7 @@ public static class ContractEndpoints
 
         app.MapSupplierEndpoints();
         app.MapCommitmentEndpoints();
+        app.MapChangeRequestEndpoints();
 
         return app;
     }

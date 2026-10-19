@@ -20,6 +20,7 @@ public static class DependencyInjection
         services.AddScoped<IContractRepository, ContractRepository>();
         services.AddScoped<ISupplierRepository, SupplierRepository>();
         services.AddScoped<ICommitmentRepository, CommitmentRepository>();
+        services.AddScoped<IChangeRequestRepository, ChangeRequestRepository>();
 
         return services;
     }

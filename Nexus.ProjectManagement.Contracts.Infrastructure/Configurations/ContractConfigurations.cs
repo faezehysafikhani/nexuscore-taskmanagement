@@ -80,6 +80,29 @@ public sealed class SupplierEvaluationConfiguration : IEntityTypeConfiguration<S
     }
 }
 
+public sealed class ChangeRequestConfiguration : IEntityTypeConfiguration<ChangeRequest>
+{
+    public void Configure(EntityTypeBuilder<ChangeRequest> builder)
+    {
+        builder.ToTable("ChangeRequests", "project_contracts");
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.Property(x => x.Title).HasMaxLength(300).IsRequired();
+        builder.Property(x => x.Description).HasMaxLength(4000);
+        builder.Property(x => x.Reason).HasMaxLength(2000);
+        builder.Property(x => x.RequestedBy).HasMaxLength(200);
+        builder.Property(x => x.ScopeImpact).HasMaxLength(4000);
+        builder.Property(x => x.CostImpact).HasColumnType("decimal(19,0)");
+        builder.Property(x => x.OtherImpact).HasMaxLength(2000);
+        builder.Property(x => x.DecisionNote).HasMaxLength(2000);
+        builder.Property(x => x.OutcomeNote).HasMaxLength(2000);
+        builder.Ignore(x => x.HasImpactAssessment);
+
+        // Numbered 1, 2, 3... within a project.
+        builder.HasIndex(x => new { x.ProjectId, x.Number }).IsUnique();
+    }
+}
+
 public sealed class SupplierConfiguration : IEntityTypeConfiguration<Supplier>
 {
     public void Configure(EntityTypeBuilder<Supplier> builder)
