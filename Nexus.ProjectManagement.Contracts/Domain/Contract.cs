@@ -57,6 +57,10 @@ public sealed class Contract : AuditableEntity<Guid>
     public string? BeneficiaryName { get; private set; }
 
     public string? Description { get; private set; }
+
+    /// <summary>What the contract covers (the scope of work), as text.</summary>
+    public string? ScopeOfWork { get; private set; }
+
     public DateOnly? SignDate { get; private set; }
     public DateOnly? StartDate { get; private set; }
     public DateOnly? EndDate { get; private set; }
@@ -80,6 +84,8 @@ public sealed class Contract : AuditableEntity<Guid>
         EndDate = endDate;
         OriginalAmount = originalAmount;
     }
+
+    public void SetScopeOfWork(string? scopeOfWork) => ScopeOfWork = string.IsNullOrWhiteSpace(scopeOfWork) ? null : scopeOfWork.Trim();
 
     public void SetParties(string? supervisorName, string? beneficiaryName)
     {

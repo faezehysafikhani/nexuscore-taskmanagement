@@ -23,6 +23,7 @@ public static class DependencyInjection
         services.AddScoped<IContractAddendumService, ContractAddendumService>();
         services.AddScoped<IContractInvoiceService, ContractInvoiceService>();
         services.AddScoped<ISupplierService, SupplierService>();
+        services.AddScoped<IContractCommitmentService, ContractCommitmentService>();
 
         services.AddScoped<IValidator<CreateContractRequest>, CreateContractRequestValidator>();
         services.AddScoped<IValidator<UpdateContractRequest>, UpdateContractRequestValidator>();

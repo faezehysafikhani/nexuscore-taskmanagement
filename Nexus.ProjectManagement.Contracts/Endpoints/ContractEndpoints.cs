@@ -96,6 +96,7 @@ public static class ContractEndpoints
             .RequireAuthorization(ContractPermissions.RecordPayments);
 
         app.MapSupplierEndpoints();
+        app.MapCommitmentEndpoints();
 
         return app;
     }

@@ -9,7 +9,8 @@ public sealed class ContractService(
     IContractRepository repository,
     IContractsUnitOfWork unitOfWork,
     IApprovalRequester approvalRequester,
-    ISupplierRepository? suppliers = null) : IContractService
+    ISupplierRepository? suppliers = null,
+    ICommitmentRepository? commitments = null) : IContractService
 {
     public const int MaxNumberLength = 50;
     public const string SubjectType = "Contract";
@@ -117,6 +118,7 @@ public sealed class ContractService(
         contract.UpdateDetails(number, request.Title, party.Value!.Name, request.Description, request.SignDate, request.StartDate, request.EndDate, request.OriginalAmount);
         contract.SetParties(request.SupervisorName, request.BeneficiaryName);
         contract.SetSupplier(party.Value!.SupplierId);
+        contract.SetScopeOfWork(request.ScopeOfWork);
 
         await repository.AddContractAsync(contract, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -167,6 +169,11 @@ public sealed class ContractService(
 
         contract.UpdateDetails(number, request.Title, party.Value!.Name, request.Description, request.SignDate, request.StartDate, request.EndDate, request.OriginalAmount);
         contract.SetSupplier(party.Value!.SupplierId);
+        if (request.ScopeOfWork is not null)
+        {
+            contract.SetScopeOfWork(request.ScopeOfWork); // null keeps the stored scope; an empty text clears it
+        }
+
         // Omitted (null) keeps what is stored, so a client that predates these fields can still edit a contract; an empty text clears it.
         if (request.SupervisorName is not null || request.BeneficiaryName is not null)
         {
@@ -226,6 +233,11 @@ public sealed class ContractService(
         }
 
         await repository.RemoveAddendaAsync(addenda, cancellationToken);
+        if (commitments is not null)
+        {
+            await commitments.RemoveAllOfContractAsync(id, cancellationToken);
+        }
+
         await repository.RemoveContractAsync(contract, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success();

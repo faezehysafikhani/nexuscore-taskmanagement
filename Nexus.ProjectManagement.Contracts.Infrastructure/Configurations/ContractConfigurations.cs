@@ -17,11 +17,38 @@ public sealed class ContractConfiguration : IEntityTypeConfiguration<Contract>
         builder.Property(x => x.SupervisorName).HasMaxLength(300);
         builder.Property(x => x.BeneficiaryName).HasMaxLength(300);
         builder.Property(x => x.Description).HasMaxLength(4000);
+        builder.Property(x => x.ScopeOfWork).HasMaxLength(4000);
         builder.Property(x => x.OriginalAmount).HasColumnType("decimal(19,0)");
 
         // A project never has two contracts with the same number.
         builder.HasIndex(x => new { x.ProjectId, x.ContractNumber }).IsUnique();
         builder.HasIndex(x => x.SupplierId);
+    }
+}
+
+public sealed class ContractMilestoneConfiguration : IEntityTypeConfiguration<ContractMilestone>
+{
+    public void Configure(EntityTypeBuilder<ContractMilestone> builder)
+    {
+        builder.ToTable("ContractMilestones", "project_contracts");
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.Property(x => x.Title).HasMaxLength(300).IsRequired();
+        builder.Property(x => x.Description).HasMaxLength(2000);
+        builder.HasIndex(x => x.ContractId);
+    }
+}
+
+public sealed class ContractObligationConfiguration : IEntityTypeConfiguration<ContractObligation>
+{
+    public void Configure(EntityTypeBuilder<ContractObligation> builder)
+    {
+        builder.ToTable("ContractObligations", "project_contracts");
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.Property(x => x.Title).HasMaxLength(300).IsRequired();
+        builder.Property(x => x.Description).HasMaxLength(2000);
+        builder.HasIndex(x => x.ContractId);
     }
 }
 

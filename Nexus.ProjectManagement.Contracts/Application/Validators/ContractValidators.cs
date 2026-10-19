@@ -11,6 +11,7 @@ public sealed class CreateContractRequestValidator : AbstractValidator<CreateCon
         RuleFor(x => x.Title).NotEmpty().MaximumLength(300);
         RuleFor(x => x.Counterparty).NotEmpty().When(x => x.SupplierId is null || x.SupplierId == Guid.Empty).MaximumLength(300);
         RuleFor(x => x.Description).MaximumLength(4000);
+        RuleFor(x => x.ScopeOfWork).MaximumLength(4000);
         RuleFor(x => x.OriginalAmount).InclusiveBetween(0, ContractMapper.MaxAmount);
         RuleFor(x => x.SupervisorName).MaximumLength(300);
         RuleFor(x => x.BeneficiaryName).MaximumLength(300);
@@ -25,6 +26,7 @@ public sealed class UpdateContractRequestValidator : AbstractValidator<UpdateCon
         RuleFor(x => x.Title).NotEmpty().MaximumLength(300);
         RuleFor(x => x.Counterparty).NotEmpty().When(x => x.SupplierId is null || x.SupplierId == Guid.Empty).MaximumLength(300);
         RuleFor(x => x.Description).MaximumLength(4000);
+        RuleFor(x => x.ScopeOfWork).MaximumLength(4000);
         RuleFor(x => x.OriginalAmount).InclusiveBetween(0, ContractMapper.MaxAmount);
         RuleFor(x => x.SupervisorName).MaximumLength(300);
         RuleFor(x => x.BeneficiaryName).MaximumLength(300);
