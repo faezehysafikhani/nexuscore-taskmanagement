@@ -3,6 +3,7 @@ using Nexus.ProjectManagement.Core.Application;
 using Nexus.ProjectManagement.Deliverables.Application;
 using Nexus.ProjectManagement.Kpi.Application;
 using Nexus.ProjectManagement.Meetings.Application;
+using Nexus.ProjectManagement.Raci.Application;
 using Nexus.ProjectManagement.Team.Application;
 
 namespace Nexus.Integrations.ProjectDeletion.Application;
@@ -18,7 +19,9 @@ public sealed class ProjectDataDeletionParticipant(
     IActionItemRepository? actions = null,
     IMeetingRepository? meetings = null,
     ITeamRepository? team = null,
-    ITeamUnitOfWork? teamUnitOfWork = null) : IProjectDeletionParticipant
+    ITeamUnitOfWork? teamUnitOfWork = null,
+    IRaciRepository? raci = null,
+    IRaciUnitOfWork? raciUnitOfWork = null) : IProjectDeletionParticipant
 {
     public async Task<string?> GetBlockingReasonAsync(Guid tenantId, Guid projectId, CancellationToken cancellationToken)
     {
@@ -53,6 +56,17 @@ public sealed class ProjectDataDeletionParticipant(
 
     public async Task OnProjectDeletedAsync(Guid tenantId, Guid projectId, CancellationToken cancellationToken)
     {
+        // The RACI roles of a project mean nothing without it, so they go with it (when the module is installed).
+        if (raci is not null && raciUnitOfWork is not null)
+        {
+            foreach (var assignment in await raci.ListByProjectAsync(projectId, cancellationToken))
+            {
+                await raci.RemoveAsync(assignment, cancellationToken);
+            }
+
+            await raciUnitOfWork.SaveChangesAsync(cancellationToken);
+        }
+
         if (team is null || teamUnitOfWork is null)
         {
             return;

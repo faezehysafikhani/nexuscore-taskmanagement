@@ -67,6 +67,24 @@ public sealed class WorkflowInstanceService(
             instances.Select(instance => ToDto(instance, approvers.GetValueOrDefault(instance.Id), null)).ToList());
     }
 
+    public async Task<Result<IReadOnlyList<WorkflowInstanceDto>>> ListDecidedByAsync(Guid tenantId, Guid userId, int take, CancellationToken cancellationToken)
+    {
+        var instances = await repository.ListDecidedByAsync(tenantId, userId, take, cancellationToken);
+        return await ToDtosAsync(instances, cancellationToken);
+    }
+
+    public async Task<Result<IReadOnlyList<WorkflowInstanceDto>>> ListRequestedByAsync(Guid tenantId, Guid userId, int take, CancellationToken cancellationToken)
+    {
+        var instances = await repository.ListRequestedByAsync(tenantId, userId, take, cancellationToken);
+        return await ToDtosAsync(instances, cancellationToken);
+    }
+
+    private async Task<Result<IReadOnlyList<WorkflowInstanceDto>>> ToDtosAsync(IReadOnlyList<WorkflowInstance> instances, CancellationToken cancellationToken)
+    {
+        var approvers = await CurrentApproversAsync(instances.Where(i => i.Status == WorkflowInstanceStatus.InProgress).ToList(), cancellationToken);
+        return Result.Success<IReadOnlyList<WorkflowInstanceDto>>(instances.Select(instance => ToDto(instance, approvers.GetValueOrDefault(instance.Id), null)).ToList());
+    }
+
     public Task<Result<WorkflowInstanceDto>> ApproveAsync(Guid id, Guid decidedByUserId, DecideWorkflowInstanceRequest request, CancellationToken cancellationToken) =>
         DecideAsync(id, decidedByUserId, approved: true, request, false, cancellationToken);
 
@@ -161,5 +179,6 @@ public sealed class WorkflowInstanceService(
             .Select(d => new WorkflowDecisionDto(d.Id, d.StepOrder, d.DecidedByUserId, d.Approved, d.Comment, d.DecidedAtUtc, d.OnBehalfOfUserId))
             .ToList(),
         currentApprover, delegatedFrom,
-        instance.GetSteps()?.Select(step => new WorkflowInstanceStepDto(step.Order, step.Name, step.ApproverUserId)).ToList());
+        instance.GetSteps()?.Select(step => new WorkflowInstanceStepDto(step.Order, step.Name, step.ApproverUserId)).ToList(),
+        instance.CreatedAtUtc == default ? null : instance.CreatedAtUtc, instance.CreatedByUserId);
 }

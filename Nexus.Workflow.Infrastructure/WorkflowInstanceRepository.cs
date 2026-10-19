@@ -23,6 +23,22 @@ public sealed class WorkflowInstanceRepository(WorkflowDbContext dbContext) : IW
             .OrderByDescending(i => i.CreatedAtUtc)
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<WorkflowInstance>> ListDecidedByAsync(Guid tenantId, Guid userId, int take, CancellationToken cancellationToken) =>
+        await dbContext.WorkflowInstances
+            .Include(i => i.Decisions)
+            .Where(i => i.TenantId == tenantId && i.Decisions.Any(d => d.DecidedByUserId == userId))
+            .OrderByDescending(i => i.Decisions.Max(d => d.DecidedAtUtc))
+            .Take(take)
+            .ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<WorkflowInstance>> ListRequestedByAsync(Guid tenantId, Guid userId, int take, CancellationToken cancellationToken) =>
+        await dbContext.WorkflowInstances
+            .Include(i => i.Decisions)
+            .Where(i => i.TenantId == tenantId && i.CreatedByUserId == userId)
+            .OrderByDescending(i => i.CreatedAtUtc)
+            .Take(take)
+            .ToListAsync(cancellationToken);
+
     public Task<IReadOnlyList<WorkflowInstance>> ListPendingForApproverAsync(Guid tenantId, Guid approverUserId, CancellationToken cancellationToken) =>
         ListPendingForApproverAsync(tenantId, approverUserId, [], cancellationToken);
 

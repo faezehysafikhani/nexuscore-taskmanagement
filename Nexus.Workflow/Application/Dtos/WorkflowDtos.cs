@@ -41,7 +41,9 @@ public sealed record WorkflowInstanceDto(
     IReadOnlyList<WorkflowDecisionDto> Decisions,
     Guid? CurrentApproverUserId = null,
     Guid? DelegatedFromUserId = null,
-    IReadOnlyList<WorkflowInstanceStepDto>? Steps = null);
+    IReadOnlyList<WorkflowInstanceStepDto>? Steps = null,
+    DateTimeOffset? CreatedAtUtc = null,
+    Guid? RequestedByUserId = null);
 
 /// <summary>A step as this approval runs it: the title and the person it was resolved to when the approval started.</summary>
 public sealed record WorkflowInstanceStepDto(int Order, string Name, Guid? ApproverUserId);

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Nexus.ProjectManagement.Delegation.Application;
 using Nexus.ProjectManagement.Delegation.Application.Dtos;
+using Nexus.ProjectManagement.Delegation.Domain;
 using Nexus.ProjectManagement.Delegation.Permissions;
 using NexusCore.Application.Common;
 using NexusCore.SharedKernel.Interfaces;
@@ -24,6 +25,23 @@ public static class ItemDelegationEndpoints
                 }
 
                 return (await service.ListMineAsync(currentUser.TenantId.Value, currentUser.UserId.Value, activeOnly ?? true, cancellationToken)).ToApiResult();
+            })
+            .RequireAuthorization(ItemDelegationPermissions.View);
+
+        // The trail of hand-overs of one item or of a project, ended ones included. Everyone with View sees their own;
+        // whoever may manage others' delegations sees all of them.
+        group.MapGet("/history", async (
+                Guid? projectId, DelegatedItemType? itemType, Guid? itemId,
+                ICurrentUserContext currentUser, IAuthorizationService authorization, HttpContext httpContext,
+                IItemDelegationService service, CancellationToken cancellationToken) =>
+            {
+                if (currentUser.TenantId is null || currentUser.UserId is null)
+                {
+                    return Results.Unauthorized();
+                }
+
+                var canViewAll = (await authorization.AuthorizeAsync(httpContext.User, ItemDelegationPermissions.Manage)).Succeeded;
+                return (await service.ListHistoryAsync(currentUser.TenantId.Value, currentUser.UserId.Value, canViewAll, projectId, itemType, itemId, cancellationToken)).ToApiResult();
             })
             .RequireAuthorization(ItemDelegationPermissions.View);
 

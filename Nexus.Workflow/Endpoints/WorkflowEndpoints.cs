@@ -76,6 +76,29 @@ public static class WorkflowEndpoints
             })
             .RequireAuthorization(WorkflowPermissions.View);
 
+        // What I decided and what I submitted: the other two views of the approval center next to "waiting for me".
+        approvalCenter.MapGet("/decided", async (ICurrentUserContext currentUser, int? take, IWorkflowInstanceService service, CancellationToken cancellationToken) =>
+            {
+                if (currentUser.TenantId is null || currentUser.UserId is null)
+                {
+                    return Results.Unauthorized();
+                }
+
+                return (await service.ListDecidedByAsync(currentUser.TenantId.Value, currentUser.UserId.Value, Math.Clamp(take ?? 50, 1, 200), cancellationToken)).ToApiResult();
+            })
+            .RequireAuthorization(WorkflowPermissions.View);
+
+        approvalCenter.MapGet("/requested", async (ICurrentUserContext currentUser, int? take, IWorkflowInstanceService service, CancellationToken cancellationToken) =>
+            {
+                if (currentUser.TenantId is null || currentUser.UserId is null)
+                {
+                    return Results.Unauthorized();
+                }
+
+                return (await service.ListRequestedByAsync(currentUser.TenantId.Value, currentUser.UserId.Value, Math.Clamp(take ?? 50, 1, 200), cancellationToken)).ToApiResult();
+            })
+            .RequireAuthorization(WorkflowPermissions.View);
+
         // The approvals (with their decisions) started for a set of subjects of one kind - what a register screen shows next to each item.
         approvalCenter.MapPost("/for-subjects", async (ListInstancesForSubjectsRequest request, ICurrentUserContext currentUser, IWorkflowInstanceService service, CancellationToken cancellationToken) =>
             {

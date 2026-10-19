@@ -20,6 +20,18 @@ public sealed class ItemDelegationRepository(ItemDelegationDbContext dbContext) 
             .Where(d => d.TenantId == tenantId && d.ItemType == itemType && d.ItemId == itemId && d.IsActive)
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<ItemDelegation>> ListForItemAsync(Guid tenantId, DelegatedItemType itemType, Guid itemId, CancellationToken cancellationToken) =>
+        await dbContext.ItemDelegations
+            .Where(d => d.TenantId == tenantId && d.ItemType == itemType && d.ItemId == itemId)
+            .OrderBy(d => d.CreatedAtUtc)
+            .ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<ItemDelegation>> ListForProjectAsync(Guid tenantId, Guid projectId, CancellationToken cancellationToken) =>
+        await dbContext.ItemDelegations
+            .Where(d => d.TenantId == tenantId && d.ProjectId == projectId)
+            .OrderByDescending(d => d.CreatedAtUtc)
+            .ToListAsync(cancellationToken);
+
     public async Task AddAsync(ItemDelegation delegation, CancellationToken cancellationToken) =>
         await dbContext.ItemDelegations.AddAsync(delegation, cancellationToken);
 }

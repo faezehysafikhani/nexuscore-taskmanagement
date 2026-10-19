@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+	  <OutputType>Library</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- No reference to ProjectManagement.Core: the project is a bare Guid, so Raci works on its own
+         and is joined to the project's delete by the ProjectDeletion integration, like Team and Deliverables. -->
+    <ProjectReference Include="..\NexusCore.Application\NexusCore.Application.csproj" />
+    <ProjectReference Include="..\NexusCore.SharedKernel\NexusCore.SharedKernel.csproj" />
+  </ItemGroup>
+
+</Project>

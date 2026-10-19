@@ -17,6 +17,16 @@ public interface IItemDelegationRepository
     /// <summary>Every active delegation of one item.</summary>
     Task<IReadOnlyList<ItemDelegation>> ListActiveForItemAsync(Guid tenantId, DelegatedItemType itemType, Guid itemId, CancellationToken cancellationToken);
 
+    /// <summary>Every delegation of one item, active or ended, oldest first (the trail of who held it). A repository written
+    /// before this existed reports it as unsupported.</summary>
+    Task<IReadOnlyList<ItemDelegation>> ListForItemAsync(Guid tenantId, DelegatedItemType itemType, Guid itemId, CancellationToken cancellationToken) =>
+        throw new NotSupportedException("This delegation repository cannot list the history of an item.");
+
+    /// <summary>Every delegation recorded against a project, active or ended, newest first. A repository written
+    /// before this existed reports it as unsupported.</summary>
+    Task<IReadOnlyList<ItemDelegation>> ListForProjectAsync(Guid tenantId, Guid projectId, CancellationToken cancellationToken) =>
+        throw new NotSupportedException("This delegation repository cannot list the history of a project.");
+
     Task AddAsync(ItemDelegation delegation, CancellationToken cancellationToken);
 }
 
@@ -24,6 +34,13 @@ public interface IItemDelegationService
 {
     Task<Result<IReadOnlyList<ItemDelegationDto>>> ListMineAsync(Guid tenantId, Guid userId, bool activeOnly, CancellationToken cancellationToken);
     Task<Result<ItemDelegationDto>> DelegateAsync(Guid tenantId, Guid callerUserId, DelegateItemRequest request, CancellationToken cancellationToken);
+
+    /// <summary>The trail of hand-overs, active and ended: of one item, or of a whole project. A caller who may not see everyone's
+    /// (<paramref name="canViewAll"/> false) gets only the hand-overs they gave or received. An implementation written before this
+    /// existed reports it as unsupported.</summary>
+    Task<Result<IReadOnlyList<ItemDelegationDto>>> ListHistoryAsync(
+        Guid tenantId, Guid callerUserId, bool canViewAll, Guid? projectId, DelegatedItemType? itemType, Guid? itemId, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
 
     /// <summary>Ends a hand-over, and with it every hand-over made of that item after it. Only the one who handed it
     /// over may end it, or whoever may manage others' delegations (<paramref name="canManageOthers"/>).</summary>
@@ -38,6 +55,32 @@ public sealed class ItemDelegationService(
     public async Task<Result<IReadOnlyList<ItemDelegationDto>>> ListMineAsync(Guid tenantId, Guid userId, bool activeOnly, CancellationToken cancellationToken) =>
         Result.Success<IReadOnlyList<ItemDelegationDto>>(
             (await repository.ListForUserAsync(tenantId, userId, activeOnly, cancellationToken)).Select(ToDto).ToList());
+
+    public async Task<Result<IReadOnlyList<ItemDelegationDto>>> ListHistoryAsync(
+        Guid tenantId, Guid callerUserId, bool canViewAll, Guid? projectId, DelegatedItemType? itemType, Guid? itemId, CancellationToken cancellationToken)
+    {
+        if (itemId is { } item && itemId != Guid.Empty)
+        {
+            if (itemType is not { } type || !Enum.IsDefined(type))
+            {
+                return Result.Failure<IReadOnlyList<ItemDelegationDto>>(Error.Validation("The kind of item is required with an item."));
+            }
+
+            var ofItem = await repository.ListForItemAsync(tenantId, type, item, cancellationToken);
+            return Result.Success<IReadOnlyList<ItemDelegationDto>>(Visible(ofItem, callerUserId, canViewAll).Select(ToDto).ToList());
+        }
+
+        if (projectId is not { } project || project == Guid.Empty)
+        {
+            return Result.Failure<IReadOnlyList<ItemDelegationDto>>(Error.Validation("A project or an item is required."));
+        }
+
+        var ofProject = await repository.ListForProjectAsync(tenantId, project, cancellationToken);
+        return Result.Success<IReadOnlyList<ItemDelegationDto>>(Visible(ofProject, callerUserId, canViewAll).Select(ToDto).ToList());
+    }
+
+    private static IEnumerable<ItemDelegation> Visible(IEnumerable<ItemDelegation> all, Guid callerUserId, bool canViewAll) =>
+        canViewAll ? all : all.Where(d => d.DelegatorUserId == callerUserId || d.DelegateUserId == callerUserId);
 
     public async Task<Result<ItemDelegationDto>> DelegateAsync(Guid tenantId, Guid callerUserId, DelegateItemRequest request, CancellationToken cancellationToken)
     {

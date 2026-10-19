@@ -8,7 +8,7 @@ public interface IProjectHistoryUnitOfWork : IUnitOfWork;
 /// <summary>Only changes of the caller's own tenant are ever returned (TenantId), including when a project id of another tenant is asked for.</summary>
 public sealed record ProjectHistoryQuery(
     Guid TenantId, Guid ProjectId, string? EntityName = null, ProjectChangeKind? Kind = null, Guid? UserId = null,
-    DateTimeOffset? From = null, DateTimeOffset? To = null, int Skip = 0, int Take = 50);
+    DateTimeOffset? From = null, DateTimeOffset? To = null, int Skip = 0, int Take = 50, Guid? EntityId = null);
 
 public interface IProjectHistoryRepository
 {

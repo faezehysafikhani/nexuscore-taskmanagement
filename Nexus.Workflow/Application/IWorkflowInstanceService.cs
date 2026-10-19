@@ -12,6 +12,16 @@ public interface IWorkflowInstanceService
     /// <summary>Every approval started for the given subjects of one kind, newest first, each with its decisions and (while in progress) its current approver.</summary>
     Task<Result<IReadOnlyList<WorkflowInstanceDto>>> ListForSubjectsAsync(Guid tenantId, ListInstancesForSubjectsRequest request, CancellationToken cancellationToken) =>
         throw new NotSupportedException();
+
+    /// <summary>The approvals the user decided a step of, most recently decided first. An implementation written before this existed reports it as unsupported.</summary>
+    Task<Result<IReadOnlyList<WorkflowInstanceDto>>> ListDecidedByAsync(Guid tenantId, Guid userId, int take, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    /// <summary>The approvals the user started, newest first, each with its decisions and (while in progress) its current approver.
+    /// An implementation written before this existed reports it as unsupported.</summary>
+    Task<Result<IReadOnlyList<WorkflowInstanceDto>>> ListRequestedByAsync(Guid tenantId, Guid userId, int take, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
     Task<Result<WorkflowInstanceDto>> ApproveAsync(Guid id, Guid decidedByUserId, DecideWorkflowInstanceRequest request, CancellationToken cancellationToken);
     Task<Result<WorkflowInstanceDto>> RejectAsync(Guid id, Guid decidedByUserId, DecideWorkflowInstanceRequest request, CancellationToken cancellationToken);
 

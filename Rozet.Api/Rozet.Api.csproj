@@ -67,6 +67,8 @@
     <ProjectReference Include="..\Nexus.ProjectManagement.Kpi.Infrastructure\Nexus.ProjectManagement.Kpi.Infrastructure.csproj" />
     <ProjectReference Include="..\Nexus.ProjectManagement.Meetings\Nexus.ProjectManagement.Meetings.csproj" />
     <ProjectReference Include="..\Nexus.ProjectManagement.Meetings.Infrastructure\Nexus.ProjectManagement.Meetings.Infrastructure.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Raci\Nexus.ProjectManagement.Raci.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Raci.Infrastructure\Nexus.ProjectManagement.Raci.Infrastructure.csproj" />
     <ProjectReference Include="..\Nexus.ProjectManagement.Risk\Nexus.ProjectManagement.Risk.csproj" />
     <ProjectReference Include="..\Nexus.ProjectManagement.Risk.Infrastructure\Nexus.ProjectManagement.Risk.Infrastructure.csproj" />
     <ProjectReference Include="..\Nexus.ProjectManagement.Stakeholder\Nexus.ProjectManagement.Stakeholder.csproj" />

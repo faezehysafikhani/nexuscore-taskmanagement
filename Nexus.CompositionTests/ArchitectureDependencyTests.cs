@@ -36,7 +36,7 @@ public sealed class ArchitectureDependencyTests
         {
             "Nexus.ProjectManagement.Waterfall", "Nexus.ProjectManagement.Agile",
             "Nexus.ProjectManagement.Team", "Nexus.ProjectManagement.Deliverables",
-            "Nexus.ProjectManagement.Kpi", "Nexus.ProjectManagement.Meetings", "Nexus.ProjectManagement.Risk",
+            "Nexus.ProjectManagement.Kpi", "Nexus.ProjectManagement.Meetings", "Nexus.ProjectManagement.Raci", "Nexus.ProjectManagement.Risk",
             "Nexus.ProjectManagement.Stakeholder", "Nexus.ProjectManagement.Progress",
             "Nexus.ProjectManagement.Documents", "Nexus.ProjectManagement.Contracts", "Nexus.Workflow"
         };
@@ -152,12 +152,12 @@ public sealed class ArchitectureDependencyTests
         AssertNoReferenceStartingWith("Nexus.Organization/Nexus.Organization.csproj", "Nexus.Integrations.");
 
         // The modules that hold data about a project without referencing Core are joined to Core's delete only by an integration.
-        foreach (var module in new[] { "Nexus.ProjectManagement.Team", "Nexus.ProjectManagement.Deliverables", "Nexus.ProjectManagement.Kpi", "Nexus.ProjectManagement.Meetings", "Nexus.Actions" })
+        foreach (var module in new[] { "Nexus.ProjectManagement.Team", "Nexus.ProjectManagement.Deliverables", "Nexus.ProjectManagement.Kpi", "Nexus.ProjectManagement.Meetings", "Nexus.ProjectManagement.Raci", "Nexus.Actions" })
         {
             AssertNoReferenceStartingWith($"{module}/{module}.csproj", "Nexus.Integrations.");
         }
 
-        foreach (var module in new[] { "Nexus.ProjectManagement.Team", "Nexus.ProjectManagement.Deliverables", "Nexus.ProjectManagement.Kpi", "Nexus.ProjectManagement.Meetings", "Nexus.Actions" })
+        foreach (var module in new[] { "Nexus.ProjectManagement.Team", "Nexus.ProjectManagement.Deliverables", "Nexus.ProjectManagement.Kpi", "Nexus.ProjectManagement.Meetings", "Nexus.ProjectManagement.Raci", "Nexus.Actions" })
         {
             Assert.DoesNotContain("Nexus.ProjectManagement.Core", GetProjectReferences($"{module}/{module}.csproj"));
         }

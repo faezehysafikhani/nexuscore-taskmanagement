@@ -17,6 +17,11 @@ public sealed class ProjectHistoryRepository(ProjectHistoryDbContext dbContext) 
             changes = changes.Where(c => c.EntityName == query.EntityName);
         }
 
+        if (query.EntityId is { } entityId)
+        {
+            changes = changes.Where(c => c.EntityId == entityId);
+        }
+
         if (query.Kind is { } kind)
         {
             changes = changes.Where(c => c.Kind == kind);

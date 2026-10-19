@@ -34,6 +34,16 @@ public interface IWorkflowInstanceRepository
     Task<IReadOnlyList<WorkflowInstance>> ListForSubjectsAsync(Guid tenantId, string subjectType, IReadOnlyCollection<Guid> subjectIds, CancellationToken cancellationToken) =>
         throw new NotSupportedException("This workflow repository cannot list approvals by subject.");
 
+    /// <summary>The approvals this user has decided at least one step of (approved or rejected, as themselves or as a substitute),
+    /// the most recently decided first, at most <paramref name="take"/>. A repository written before this existed reports it as unsupported.</summary>
+    Task<IReadOnlyList<WorkflowInstance>> ListDecidedByAsync(Guid tenantId, Guid userId, int take, CancellationToken cancellationToken) =>
+        throw new NotSupportedException("This workflow repository cannot list the approvals a user decided.");
+
+    /// <summary>The approvals this user started (the person who submitted the item), newest first, at most <paramref name="take"/>.
+    /// A repository written before this existed reports it as unsupported.</summary>
+    Task<IReadOnlyList<WorkflowInstance>> ListRequestedByAsync(Guid tenantId, Guid userId, int take, CancellationToken cancellationToken) =>
+        throw new NotSupportedException("This workflow repository cannot list the approvals a user started.");
+
     Task AddAsync(WorkflowInstance instance, CancellationToken cancellationToken);
 }
 

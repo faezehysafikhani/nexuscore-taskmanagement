@@ -16,6 +16,7 @@
     <ProjectReference Include="..\Nexus.ProjectManagement.Deliverables\Nexus.ProjectManagement.Deliverables.csproj" />
     <ProjectReference Include="..\Nexus.ProjectManagement.Kpi\Nexus.ProjectManagement.Kpi.csproj" />
     <ProjectReference Include="..\Nexus.ProjectManagement.Meetings\Nexus.ProjectManagement.Meetings.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Raci\Nexus.ProjectManagement.Raci.csproj" />
     <ProjectReference Include="..\Nexus.Actions\Nexus.Actions.csproj" />
     <ProjectReference Include="..\NexusCore.Application\NexusCore.Application.csproj" />
     <ProjectReference Include="..\NexusCore.SharedKernel\NexusCore.SharedKernel.csproj" />
