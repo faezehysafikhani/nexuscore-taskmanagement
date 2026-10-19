@@ -36,6 +36,12 @@ public sealed class CommitmentRepository(ContractsDbContext dbContext) : ICommit
         return Task.CompletedTask;
     }
 
+    public async Task<IReadOnlyList<ContractMilestone>> ListMilestonesForContractsAsync(IReadOnlyCollection<Guid> contractIds, CancellationToken cancellationToken) =>
+        await dbContext.ContractMilestones.Where(m => contractIds.Contains(m.ContractId)).ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<ContractObligation>> ListObligationsForContractsAsync(IReadOnlyCollection<Guid> contractIds, CancellationToken cancellationToken) =>
+        await dbContext.ContractObligations.Where(o => contractIds.Contains(o.ContractId)).ToListAsync(cancellationToken);
+
     public Task<ContractLink?> GetLinkAsync(Guid id, CancellationToken cancellationToken) =>
         dbContext.ContractLinks.SingleOrDefaultAsync(l => l.Id == id, cancellationToken);
 

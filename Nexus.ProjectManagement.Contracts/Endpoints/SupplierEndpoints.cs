@@ -22,6 +22,13 @@ public static class SupplierEndpoints
                     : Results.Unauthorized())
             .RequireAuthorization(ContractPermissions.View);
 
+        // Every supplier side by side across all projects, with what needs attention (for senior management).
+        group.MapGet("/dashboard", async (ICurrentUserContext currentUser, ISupplierDashboardService service, CancellationToken cancellationToken) =>
+                currentUser.TenantId is { } tenantId
+                    ? (await service.GetAsync(tenantId, cancellationToken)).ToApiResult()
+                    : Results.Unauthorized())
+            .RequireAuthorization(ContractPermissions.View);
+
         group.MapGet("/{id:guid}", async (Guid id, ICurrentUserContext currentUser, ISupplierService service, CancellationToken cancellationToken) =>
                 currentUser.TenantId is { } tenantId
                     ? (await service.GetAsync(tenantId, id, cancellationToken)).ToApiResult()
