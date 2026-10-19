@@ -16,6 +16,8 @@ public static class DependencyInjection
         services.AddSingleton(options);
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<IAnalyticsService, AnalyticsService>();
+        // Who may read one project's figures without ViewAll: asks the portfolio (registered or not) for what the caller may see.
+        services.AddScoped<IProjectViewAccess, PortfolioProjectViewAccess>();
         return services;
     }
 }

@@ -21,6 +21,11 @@
     <ProjectReference Include="..\Nexus.Strategy\Nexus.Strategy.csproj" />
     <ProjectReference Include="..\Nexus.Integrations.ProjectStrategyAlignment\Nexus.Integrations.ProjectStrategyAlignment.csproj" />
     <ProjectReference Include="..\Nexus.ProjectManagement.Contracts\Nexus.ProjectManagement.Contracts.csproj" />
+    <!-- Waterfall: the planned-progress curve that the cost curve prices. Portfolio: the visibility rule, so a
+         project's own team can read its figures without Reporting.ViewAll. Both are optional constructor
+         parameters / registrations: the report that needs a missing one says so, the rest still works. -->
+    <ProjectReference Include="..\Nexus.ProjectManagement.Waterfall\Nexus.ProjectManagement.Waterfall.csproj" />
+    <ProjectReference Include="..\Nexus.Portfolio\Nexus.Portfolio.csproj" />
     <ProjectReference Include="..\NexusCore.Application\NexusCore.Application.csproj" />
     <ProjectReference Include="..\NexusCore.SharedKernel\NexusCore.SharedKernel.csproj" />
   </ItemGroup>

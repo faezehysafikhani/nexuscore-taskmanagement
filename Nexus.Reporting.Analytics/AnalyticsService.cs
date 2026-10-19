@@ -5,12 +5,14 @@ using Nexus.Integrations.StrategyAlignment.Application;
 using Nexus.Integrations.StrategyAlignment.Domain;
 using Nexus.Organization.Application;
 using Nexus.ProjectManagement.Contracts.Application;
+using Nexus.ProjectManagement.Contracts.Application.Dtos;
 using Nexus.ProjectManagement.Core.Application;
 using Nexus.ProjectManagement.Core.Application.Dtos;
 using Nexus.ProjectManagement.Core.Domain;
 using Nexus.ProjectManagement.Progress.Application;
 using Nexus.ProjectManagement.Progress.Application.Dtos;
 using Nexus.ProjectManagement.Progress.Domain;
+using Nexus.ProjectManagement.Waterfall.Application;
 using Nexus.StrategyManagement.Application;
 using NexusCore.SharedKernel.Results;
 
@@ -33,9 +35,11 @@ public sealed class AnalyticsService(
     IAlignmentRepository? alignmentRepository = null,
     TimeProvider? timeProvider = null,
     IProjectProgressService? planProgressService = null,
-    AnalyticsOptions? options = null) : IAnalyticsService
+    AnalyticsOptions? options = null,
+    IProgressCurveService? progressCurveService = null) : IAnalyticsService
 {
     private const int MaxProjects = 1000;
+    private const int DefaultCurveStepDays = 14;
     private static readonly ProjectStatus[] Running = [ProjectStatus.Active, ProjectStatus.OnHold];
     private static readonly ActionStatus[] OpenActionStatuses = [ActionStatus.Open, ActionStatus.InProgress];
 
@@ -43,8 +47,8 @@ public sealed class AnalyticsService(
     private sealed record ProgressPoint(
         decimal PlannedProgress, decimal ActualProgress, decimal? Performance, DateOnly? RegisterDate, PerformanceClassification PerformanceClassification);
 
-    /// <summary>A project with where it stands (null when nothing is known).</summary>
-    private sealed record Figure(Project Project, ProgressPoint? Latest);
+    /// <summary>A project with where it stands (null when nothing is known) and what its approved invoices come to (null without Contracts).</summary>
+    private sealed record Figure(Project Project, ProgressPoint? Latest, decimal? ActualCost = null);
 
     private DateOnly Today => DateOnly.FromDateTime((timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime);
 
@@ -84,6 +88,73 @@ public sealed class AnalyticsService(
             ev.ActualCost, ev.CostVariance, ev.Cpi, ev.EstimateAtCompletion, ev.EstimateToComplete, ev.VarianceAtCompletion,
             ev.ForecastEnd, ev.ForecastDelayDays, ev.IsOverdue, ev.Health,
             contracted, invoiced, paid, contractService is not null, progressService is not null || UsesPlan));
+    }
+
+    // ----------------------------------------------------------- cost curve
+
+    public async Task<Result<CostCurveDto>> GetProjectCostCurveAsync(Guid tenantId, Guid projectId, int? stepDays, CancellationToken cancellationToken)
+    {
+        var project = await projectRepository.GetByIdAsync(projectId, cancellationToken);
+        if (project is null || project.TenantId != tenantId)
+        {
+            return Result.Failure<CostCurveDto>(Error.NotFound("Project not found."));
+        }
+
+        if (progressCurveService is null)
+        {
+            return Result.Failure<CostCurveDto>(Error.Conflict("The schedule (waterfall) module is not installed, so there is no planned progress to price."));
+        }
+
+        var curveResult = await progressCurveService.GetSCurveAsync(projectId, stepDays ?? DefaultCurveStepDays, cancellationToken);
+        if (curveResult.IsFailure)
+        {
+            return Result.Failure<CostCurveDto>(curveResult.Error);
+        }
+
+        var curve = curveResult.Value!;
+        var budget = project.Cost;
+        decimal Price(decimal percent) => Math.Round(budget!.Value * percent / 100m, 2);
+
+        var planned = budget is null ? [] : curve.Planned.Select(p => new MoneyPointDto(p.Date, Price(p.PlannedProgress))).ToList();
+        var earned = budget is null ? [] : curve.Actual.Select(a => new MoneyPointDto(a.Date, Price(a.ActualProgress))).ToList();
+
+        var invoices = await ApprovedInvoicesAsync(projectId, cancellationToken);
+        var running = 0m;
+        var actualCost = new List<MoneyPointDto>();
+        foreach (var day in (invoices ?? []).GroupBy(i => i.Date).OrderBy(g => g.Key))
+        {
+            running += day.Sum(i => i.Amount);
+            actualCost.Add(new MoneyPointDto(day.Key, running));
+        }
+
+        var costToday = (invoices ?? []).Where(i => i.Date <= curve.Today).Sum(i => i.Amount);
+        return Result.Success(new CostCurveDto(
+            project.Id, budget, curve.ProjectStart, curve.ProjectFinish, curve.Today, curve.StepDays,
+            planned, earned, actualCost,
+            budget is null ? null : Price(curve.CurrentPlannedProgress),
+            budget is null ? null : Price(curve.CurrentActualProgress),
+            costToday, invoices is not null));
+    }
+
+    /// <summary>The approved invoices of the project's contracts (date, amount in rials); null when Contracts is not installed.</summary>
+    private async Task<List<(DateOnly Date, decimal Amount)>?> ApprovedInvoicesAsync(Guid projectId, CancellationToken cancellationToken)
+    {
+        if (contractService is null)
+        {
+            return null;
+        }
+
+        var details = await contractService.ListForProjectsAsync(new ListContractsForProjectsRequest([projectId]), cancellationToken);
+        if (!details.IsSuccess)
+        {
+            return null;
+        }
+
+        return details.Value!
+            .SelectMany(d => d.Invoices)
+            .Where(i => i.ApprovalStatus == ApprovalStatus.Approved)
+            .Select(i => (i.InvoiceDate, i.Amount.Rials))
+            .ToList();
     }
 
     // ------------------------------------------------------------------ units
@@ -177,7 +248,8 @@ public sealed class AnalyticsService(
                     a.AvgPlanned, a.AvgActual, a.Deviation, a.OnTrack, a.AtRisk, a.Behind,
                     a.WithProgress > 0 ? Math.Round(a.OnTrack * 100m / a.WithProgress, 2) : null,
                     g.Key is { } id ? openByPerson.GetValueOrDefault(id) : 0,
-                    a.Delayed, a.AvgPerformance, PerformanceRating.Of(a.AvgPerformance), g.Select(f => f.Project.Id).ToList());
+                    a.Delayed, a.AvgPerformance, PerformanceRating.Of(a.AvgPerformance), g.Select(f => f.Project.Id).ToList(),
+                    a.ActualCost, a.EarnedValue, a.Cpi);
             })
             .OrderByDescending(m => m.ProjectCount)
             .ThenBy(m => m.ManagerUserId)
@@ -307,20 +379,44 @@ public sealed class AnalyticsService(
     private async Task<IReadOnlyList<Figure>> LoadFiguresAsync(Guid tenantId, DateOnly asOf, CancellationToken cancellationToken)
     {
         var projects = await LoadProjectsAsync(tenantId, cancellationToken);
+        var invoiced = await InvoicedByProjectAsync(projects, cancellationToken);
         var figures = new List<Figure>();
         if (UsesPlan)
         {
             var known = await PlanFiguresAsync(tenantId, projects, cancellationToken);
-            figures.AddRange(projects.Select(p => new Figure(p, known.GetValueOrDefault(p.Id))));
+            figures.AddRange(projects.Select(p => new Figure(p, known.GetValueOrDefault(p.Id), InvoicedOf(invoiced, p.Id))));
             return figures;
         }
 
         foreach (var project in projects)
         {
-            figures.Add(new Figure(project, await LatestProgressAsync(project.Id, asOf, cancellationToken)));
+            figures.Add(new Figure(project, await LatestProgressAsync(project.Id, asOf, cancellationToken), InvoicedOf(invoiced, project.Id)));
         }
 
         return figures;
+    }
+
+    private static decimal? InvoicedOf(Dictionary<Guid, decimal>? invoiced, Guid projectId) =>
+        invoiced is not null && invoiced.TryGetValue(projectId, out var amount) ? amount : null;
+
+    /// <summary>What each project's approved invoices come to (rials), in one call; null when Contracts cannot say.
+    /// A project without a contract has no entry, so its cost stays unknown rather than zero.</summary>
+    private async Task<Dictionary<Guid, decimal>?> InvoicedByProjectAsync(IReadOnlyList<Project> projects, CancellationToken cancellationToken)
+    {
+        if (contractService is null || projects.Count == 0)
+        {
+            return null;
+        }
+
+        var details = await contractService.ListForProjectsAsync(new ListContractsForProjectsRequest(projects.Select(p => p.Id).ToList()), cancellationToken);
+        if (!details.IsSuccess)
+        {
+            return null;
+        }
+
+        return details.Value!
+            .GroupBy(d => d.Contract.ProjectId)
+            .ToDictionary(g => g.Key, g => g.Sum(d => d.Contract.Summary.InvoicedAmount.Rials));
     }
 
     private bool UsesPlan => options?.ProgressFromProjectPlan == true && planProgressService is not null;
@@ -381,17 +477,19 @@ public sealed class AnalyticsService(
         return new UnitPerformanceDto(
             id, name, code, level, a.Count, a.Running, a.Completed, a.Overdue, a.Budget, a.WithProgress,
             a.AvgPlanned, a.AvgActual, a.Deviation, a.OnTrack, a.AtRisk, a.Behind,
-            a.Delayed, a.AvgPerformance, PerformanceRating.Of(a.AvgPerformance), figures.Select(f => f.Project.Id).ToList());
+            a.Delayed, a.AvgPerformance, PerformanceRating.Of(a.AvgPerformance), figures.Select(f => f.Project.Id).ToList(),
+            a.ActualCost, a.EarnedValue, a.Cpi);
     }
 
     private sealed record Aggregates(
         int Count, int Running, int Completed, int Overdue, decimal Budget, int WithProgress,
         decimal? AvgPlanned, decimal? AvgActual, decimal? Deviation, int OnTrack, int AtRisk, int Behind,
-        int Delayed, decimal? AvgPerformance);
+        int Delayed, decimal? AvgPerformance, decimal? ActualCost = null, decimal? EarnedValue = null, decimal? Cpi = null);
 
     private static Aggregates Aggregate(IReadOnlyList<Figure> figures, DateOnly asOf)
     {
         var withProgress = figures.Where(f => f.Latest is not null).Select(f => f.Latest!).ToList();
+        var costed = figures.Where(f => f.ActualCost is not null && f.Latest is not null && f.Project.Cost is not null).ToList();
         decimal? avgPlanned = withProgress.Count > 0 ? Math.Round(withProgress.Average(u => u.PlannedProgress), 2) : null;
         decimal? avgActual = withProgress.Count > 0 ? Math.Round(withProgress.Average(u => u.ActualProgress), 2) : null;
         var performances = withProgress.Where(u => u.Performance is not null).Select(u => u.Performance!.Value).ToList();
@@ -408,6 +506,17 @@ public sealed class AnalyticsService(
             withProgress.Count(u => u.PerformanceClassification == PerformanceClassification.AtRisk),
             withProgress.Count(u => u.PerformanceClassification == PerformanceClassification.Behind),
             withProgress.Count(u => u.PerformanceClassification != PerformanceClassification.OnTrack),
-            performances.Count > 0 ? Math.Round(performances.Average(v => Math.Min(100m, v)), 2) : null);
+            performances.Count > 0 ? Math.Round(performances.Average(v => Math.Min(100m, v)), 2) : null,
+            costed.Count > 0 ? costed.Sum(f => f.ActualCost!.Value) : null,
+            costed.Count > 0 ? Math.Round(costed.Sum(f => f.Project.Cost!.Value * f.Latest!.ActualProgress / 100m), 2) : null,
+            Cpi(costed));
+    }
+
+    /// <summary>Earned value over actual cost across the projects that have a budget, a known progress and invoices; null when it cannot be worked out.</summary>
+    private static decimal? Cpi(IReadOnlyList<Figure> costed)
+    {
+        var cost = costed.Sum(f => f.ActualCost!.Value);
+        var earned = costed.Sum(f => f.Project.Cost!.Value * f.Latest!.ActualProgress / 100m);
+        return cost > 0 && earned > 0 ? Math.Round(earned / cost, 2) : null;
     }
 }

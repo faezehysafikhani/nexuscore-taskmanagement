@@ -38,7 +38,8 @@ public sealed record UnitPerformanceDto(
     int ProjectCount, int RunningProjects, int CompletedProjects, int OverdueProjects,
     decimal TotalBudget, int ProjectsWithProgress, decimal? AveragePlannedProgress, decimal? AverageActualProgress, decimal? AverageDeviation,
     int OnTrack, int AtRisk, int Behind,
-    int DelayedProjects = 0, decimal? AveragePerformance = null, string? Rating = null, IReadOnlyList<Guid>? ProjectIds = null);
+    int DelayedProjects = 0, decimal? AveragePerformance = null, string? Rating = null, IReadOnlyList<Guid>? ProjectIds = null,
+    decimal? ActualCost = null, decimal? EarnedValue = null, decimal? Cpi = null);
 
 /// <summary>The whole organisation in one line: every project of the report, whichever unit it is in.</summary>
 public sealed record PerformanceSummaryDto(
@@ -63,7 +64,8 @@ public sealed record ProjectManagerEvaluationDto(
     Guid? ManagerUserId, int ProjectCount, int RunningProjects, int CompletedProjects, int OverdueProjects,
     decimal TotalBudget, int ProjectsWithProgress, decimal? AveragePlannedProgress, decimal? AverageActualProgress, decimal? AverageDeviation,
     int OnTrack, int AtRisk, int Behind, decimal? OnTrackShare, int OpenActions,
-    int DelayedProjects = 0, decimal? AveragePerformance = null, string? Rating = null, IReadOnlyList<Guid>? ProjectIds = null);
+    int DelayedProjects = 0, decimal? AveragePerformance = null, string? Rating = null, IReadOnlyList<Guid>? ProjectIds = null,
+    decimal? ActualCost = null, decimal? EarnedValue = null, decimal? Cpi = null);
 
 public sealed record ProjectManagerEvaluationReportDto(DateOnly AsOf, IReadOnlyList<ProjectManagerEvaluationDto> Managers);
 
@@ -84,3 +86,18 @@ public sealed record AlignmentProjectRowDto(
 public sealed record StrategyAlignmentMatrixDto(
     IReadOnlyList<AlignmentStrategyColumnDto> Strategies, IReadOnlyList<AlignmentProjectRowDto> Projects,
     IReadOnlyList<Guid> UncoveredStrategyIds, IReadOnlyList<Guid> UnalignedProjectIds);
+
+
+/// <summary>One point of a money curve: the amount (in the project's own unit) as of a date.</summary>
+public sealed record MoneyPointDto(DateOnly Date, decimal Amount);
+
+/// <summary>
+/// The data behind a project's cost S-curve. PlannedValue prices the schedule's planned-progress curve with the budget
+/// (budget x planned %), EarnedValue prices each recorded progress snapshot (budget x actual %), and ActualCost is the
+/// running total of approved invoices on their invoice dates. PlannedValue and EarnedValue are empty without a budget;
+/// ActualCost is empty without Contracts. Current* are the figures as of Today.
+/// </summary>
+public sealed record CostCurveDto(
+    Guid ProjectId, decimal? BudgetAtCompletion, DateOnly ProjectStart, DateOnly ProjectFinish, DateOnly Today, int StepDays,
+    IReadOnlyList<MoneyPointDto> PlannedValue, IReadOnlyList<MoneyPointDto> EarnedValue, IReadOnlyList<MoneyPointDto> ActualCost,
+    decimal? CurrentPlannedValue, decimal? CurrentEarnedValue, decimal CurrentActualCost, bool ContractsAvailable);
