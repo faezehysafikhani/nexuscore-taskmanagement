@@ -2,12 +2,13 @@ using Nexus.Actions.Application;
 using Nexus.ProjectManagement.Core.Application;
 using Nexus.ProjectManagement.Deliverables.Application;
 using Nexus.ProjectManagement.Kpi.Application;
+using Nexus.ProjectManagement.Meetings.Application;
 using Nexus.ProjectManagement.Team.Application;
 
 namespace Nexus.Integrations.ProjectDeletion.Application;
 
 /// <summary>
-/// Deleting a project: deliverables, KPIs and actions that belong to it block the delete (they are work
+/// Deleting a project: deliverables, KPIs, actions and meetings that belong to it block the delete (they are work
 /// someone did); the team list and governance roles go with it (they mean nothing without the project).
 /// Every module is optional - one that is not installed is simply not asked.
 /// </summary>
@@ -15,6 +16,7 @@ public sealed class ProjectDataDeletionParticipant(
     IDeliverableRepository? deliverables = null,
     IKpiRepository? kpis = null,
     IActionItemRepository? actions = null,
+    IMeetingRepository? meetings = null,
     ITeamRepository? team = null,
     ITeamUnitOfWork? teamUnitOfWork = null) : IProjectDeletionParticipant
 {
@@ -38,6 +40,12 @@ public sealed class ProjectDataDeletionParticipant(
         {
             var count = (await actions.ListAsync(tenantId, projectId, cancellationToken)).Count;
             if (count > 0) found.Add($"{count} action(s)");
+        }
+
+        if (meetings is not null)
+        {
+            var count = (await meetings.ListByProjectAsync(projectId, null, cancellationToken)).Count;
+            if (count > 0) found.Add($"{count} meeting(s)");
         }
 
         return found.Count == 0 ? null : string.Join(", ", found);

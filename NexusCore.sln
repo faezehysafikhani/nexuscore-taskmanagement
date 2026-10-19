@@ -187,6 +187,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TejaratBank.Api", "TejaratB
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nexus.Integrations.TaskReporting", "Nexus.Integrations.TaskReporting\Nexus.Integrations.TaskReporting.csproj", "{BC069059-7350-4303-8D54-53CF19FA5C00}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nexus.ProjectManagement.Meetings", "Nexus.ProjectManagement.Meetings\Nexus.ProjectManagement.Meetings.csproj", "{BC184C5B-609A-4098-9CFA-2FAB59F48151}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nexus.ProjectManagement.Meetings.Infrastructure", "Nexus.ProjectManagement.Meetings.Infrastructure\Nexus.ProjectManagement.Meetings.Infrastructure.csproj", "{0812EA42-93EA-4D83-BB49-D9C0E3FAF44D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -517,6 +521,14 @@ Global
 		{BC069059-7350-4303-8D54-53CF19FA5C00}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{BC069059-7350-4303-8D54-53CF19FA5C00}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{BC069059-7350-4303-8D54-53CF19FA5C00}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BC184C5B-609A-4098-9CFA-2FAB59F48151}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BC184C5B-609A-4098-9CFA-2FAB59F48151}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BC184C5B-609A-4098-9CFA-2FAB59F48151}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BC184C5B-609A-4098-9CFA-2FAB59F48151}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0812EA42-93EA-4D83-BB49-D9C0E3FAF44D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0812EA42-93EA-4D83-BB49-D9C0E3FAF44D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0812EA42-93EA-4D83-BB49-D9C0E3FAF44D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0812EA42-93EA-4D83-BB49-D9C0E3FAF44D}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
