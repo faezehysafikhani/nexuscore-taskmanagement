@@ -17,6 +17,11 @@ public static class ChangeRequestEndpoints
                 (await service.ListAsync(projectId, cancellationToken)).ToApiResult())
             .RequireAuthorization(ContractPermissions.View);
 
+        // The project's changes at a glance: pending decisions, approved impact against the baseline, and changes made without approval.
+        group.MapGet("/dashboard", async (Guid projectId, IChangeDashboardService service, CancellationToken cancellationToken) =>
+                (await service.GetAsync(projectId, cancellationToken)).ToApiResult())
+            .RequireAuthorization(ContractPermissions.View);
+
         group.MapGet("/{id:guid}", async (Guid id, IChangeRequestService service, CancellationToken cancellationToken) =>
                 (await service.GetAsync(id, cancellationToken)).ToApiResult())
             .RequireAuthorization(ContractPermissions.View);

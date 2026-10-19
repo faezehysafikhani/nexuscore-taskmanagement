@@ -24,7 +24,8 @@ public sealed record ContractDto(
 public sealed record ContractAddendumDto(
     Guid Id, Guid ContractId, int Number, string Title, string? Description, DateOnly? AddendumDate, string? AddendumDateFa,
     decimal AmountChange, string AmountChangeFormatted, string AmountChangeInWords, int ExtensionDays, ApprovalStatus ApprovalStatus,
-    Guid? CreatedByUserId, DateOnly? StartDate = null, string? StartDateFa = null, DateOnly? EndDate = null, string? EndDateFa = null);
+    Guid? CreatedByUserId, DateOnly? StartDate = null, string? StartDateFa = null, DateOnly? EndDate = null, string? EndDateFa = null,
+    Guid? ChangeRequestId = null);
 
 public sealed record ContractInvoiceDto(
     Guid Id, Guid ContractId, string InvoiceNumber, string InvoiceNumberFa, DateOnly InvoiceDate, string InvoiceDateFa,
@@ -56,13 +57,15 @@ public sealed record UpdateContractRequest(
 public sealed record ChangeContractStatusRequest(ContractStatus Status);
 
 /// <summary>AmountChange is negative for a reduction; ExtensionDays is how many days the end date moves. At least one must be non-zero.</summary>
+/// <summary>ChangeRequestId: the approved (or implemented) change request of the same project that this addendum carries out.</summary>
 public sealed record CreateContractAddendumRequest(
     Guid TenantId, string Title, string? Description, DateOnly? AddendumDate, decimal AmountChange, int ExtensionDays,
-    DateOnly? StartDate = null, DateOnly? EndDate = null);
+    DateOnly? StartDate = null, DateOnly? EndDate = null, Guid? ChangeRequestId = null);
 
+/// <summary>ChangeRequestId: null keeps the link that is stored, the empty id removes it.</summary>
 public sealed record UpdateContractAddendumRequest(
     string Title, string? Description, DateOnly? AddendumDate, decimal AmountChange, int ExtensionDays,
-    DateOnly? StartDate = null, DateOnly? EndDate = null);
+    DateOnly? StartDate = null, DateOnly? EndDate = null, Guid? ChangeRequestId = null);
 
 public sealed record CreateContractInvoiceRequest(
     Guid TenantId, string InvoiceNumber, DateOnly InvoiceDate, decimal Amount, string? Description,

@@ -29,7 +29,8 @@ public sealed class ContractsSchemaTests
         ("ContractAddenda", "StartDate"), ("ContractAddenda", "EndDate"),
         ("ContractInvoices", "Title"), ("ContractInvoices", "PeriodStartDate"), ("ContractInvoices", "PeriodEndDate"),
         ("Contracts", "SupplierId"),
-        ("Contracts", "ScopeOfWork")
+        ("Contracts", "ScopeOfWork"),
+        ("ContractAddenda", "ChangeRequestId")
     ];
 
     [Fact]

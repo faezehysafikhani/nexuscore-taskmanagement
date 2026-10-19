@@ -152,6 +152,11 @@ public sealed class ContractAddendum : AuditableEntity<Guid>
     /// <summary>Calendar days added to the contract's end date.</summary>
     public int ExtensionDays { get; private set; }
 
+    /// <summary>The approved change request this addendum carries out, if any. One without is reported as a change made without approval.</summary>
+    public Guid? ChangeRequestId { get; private set; }
+
+    public void SetChangeRequest(Guid? changeRequestId) => ChangeRequestId = changeRequestId;
+
     public ApprovalStatus ApprovalStatus { get; private set; }
 
     public void SetPeriod(DateOnly? startDate, DateOnly? endDate)

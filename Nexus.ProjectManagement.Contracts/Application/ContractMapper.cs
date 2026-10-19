@@ -41,7 +41,7 @@ public static class ContractMapper
         a.AmountChange, PersianNumbers.FormatRials(a.AmountChange),
         Math.Abs(a.AmountChange) <= PersianNumbers.MaxValue ? PersianNumbers.RialsInWords(a.AmountChange) : string.Empty,
         a.ExtensionDays, a.ApprovalStatus, a.CreatedByUserId,
-        a.StartDate, PersianDates.Format(a.StartDate), a.EndDate, PersianDates.Format(a.EndDate));
+        a.StartDate, PersianDates.Format(a.StartDate), a.EndDate, PersianDates.Format(a.EndDate), a.ChangeRequestId);
 
     public static ContractInvoiceDto ToDto(ContractInvoice i) => new(
         i.Id, i.ContractId, i.InvoiceNumber, PersianNumbers.ToPersianDigits(i.InvoiceNumber), i.InvoiceDate, PersianDates.Format(i.InvoiceDate),

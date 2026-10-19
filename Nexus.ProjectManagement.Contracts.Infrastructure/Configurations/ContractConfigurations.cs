@@ -136,6 +136,7 @@ public sealed class ContractAddendumConfiguration : IEntityTypeConfiguration<Con
         builder.Property(x => x.AmountChange).HasColumnType("decimal(19,0)");
 
         builder.HasIndex(x => new { x.ContractId, x.Number }).IsUnique();
+        builder.HasIndex(x => x.ChangeRequestId);
     }
 }
 
