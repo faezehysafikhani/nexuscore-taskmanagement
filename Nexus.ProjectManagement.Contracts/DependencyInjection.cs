@@ -22,6 +22,13 @@ public static class DependencyInjection
         services.AddScoped<IProjectDeletionParticipant, ContractsProjectDeletionParticipant>();services.AddScoped<IContractService, ContractService>();
         services.AddScoped<IContractAddendumService, ContractAddendumService>();
         services.AddScoped<IContractInvoiceService, ContractInvoiceService>();
+        services.AddScoped<ISupplierService, SupplierService>();
+        services.AddScoped<IContractCommitmentService, ContractCommitmentService>();
+        services.AddScoped<IContractLinkService, ContractLinkService>();
+        services.AddScoped<ISupplierEvaluationService, SupplierEvaluationService>();
+        services.AddScoped<ISupplierDashboardService, SupplierDashboardService>();
+        services.AddScoped<IChangeRequestService, ChangeRequestService>();
+        services.AddScoped<IChangeDashboardService, ChangeDashboardService>();
 
         services.AddScoped<IValidator<CreateContractRequest>, CreateContractRequestValidator>();
         services.AddScoped<IValidator<UpdateContractRequest>, UpdateContractRequestValidator>();
@@ -29,6 +36,8 @@ public static class DependencyInjection
         services.AddScoped<IValidator<UpdateContractAddendumRequest>, UpdateContractAddendumRequestValidator>();
         services.AddScoped<IValidator<CreateContractInvoiceRequest>, CreateContractInvoiceRequestValidator>();
         services.AddScoped<IValidator<UpdateContractInvoiceRequest>, UpdateContractInvoiceRequestValidator>();
+        services.AddScoped<IValidator<CreateSupplierRequest>, CreateSupplierRequestValidator>();
+        services.AddScoped<IValidator<UpdateSupplierRequest>, UpdateSupplierRequestValidator>();
 
         services.AddSingleton<IPermissionCatalog, ContractPermissionCatalog>();
         services.AddScoped<IDomainEventHandler<ApprovalGranted>, ContractApprovalGrantedHandler>();

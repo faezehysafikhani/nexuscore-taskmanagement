@@ -182,6 +182,23 @@ public sealed class DiCompositionTests
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<IWorkflowUnitOfWork>());
     }
 
+    /// <summary>Rozet.Api adds Workflow before the infrastructure; the default must not win back the registration then.</summary>
+    [Fact]
+    public void Workflow_RegisteredBeforeInfrastructure_StillOwnsTheApprovalRequester()
+    {
+        var services = new ServiceCollection();
+        services.AddWorkflowApplication();
+        services.AddApplication();
+        services.AddInfrastructure(BuildConfiguration());
+        services.AddWorkflowInfrastructure(BuildConfiguration());
+
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        Assert.IsType<WorkflowApprovalRequester>(scope.ServiceProvider.GetRequiredService<IApprovalRequester>());
+        Assert.Single(services, d => d.ServiceType == typeof(IApprovalRequester));
+    }
+
     [Fact]
     public void ActionManagement_ComposesStandalone_WithoutProjectManagement()
     {

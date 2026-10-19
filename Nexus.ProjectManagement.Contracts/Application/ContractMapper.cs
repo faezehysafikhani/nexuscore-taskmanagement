@@ -34,14 +34,14 @@ public static class ContractMapper
         c.Id, c.TenantId, c.ProjectId, c.ContractNumber, PersianNumbers.ToPersianDigits(c.ContractNumber), c.Title, c.Counterparty,
         c.Description, c.SignDate, PersianDates.Format(c.SignDate), c.StartDate, PersianDates.Format(c.StartDate),
         c.EndDate, PersianDates.Format(c.EndDate), Money(c.OriginalAmount), c.Status, c.ApprovalStatus,
-        ToDto(summary), c.CreatedByUserId, c.SupervisorName, c.BeneficiaryName);
+        ToDto(summary), c.CreatedByUserId, c.SupervisorName, c.BeneficiaryName, c.SupplierId, c.ScopeOfWork);
 
     public static ContractAddendumDto ToDto(ContractAddendum a) => new(
         a.Id, a.ContractId, a.Number, a.Title, a.Description, a.AddendumDate, PersianDates.Format(a.AddendumDate),
         a.AmountChange, PersianNumbers.FormatRials(a.AmountChange),
         Math.Abs(a.AmountChange) <= PersianNumbers.MaxValue ? PersianNumbers.RialsInWords(a.AmountChange) : string.Empty,
         a.ExtensionDays, a.ApprovalStatus, a.CreatedByUserId,
-        a.StartDate, PersianDates.Format(a.StartDate), a.EndDate, PersianDates.Format(a.EndDate));
+        a.StartDate, PersianDates.Format(a.StartDate), a.EndDate, PersianDates.Format(a.EndDate), a.ChangeRequestId);
 
     public static ContractInvoiceDto ToDto(ContractInvoice i) => new(
         i.Id, i.ContractId, i.InvoiceNumber, PersianNumbers.ToPersianDigits(i.InvoiceNumber), i.InvoiceDate, PersianDates.Format(i.InvoiceDate),

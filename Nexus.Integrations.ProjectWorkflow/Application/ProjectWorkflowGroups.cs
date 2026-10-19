@@ -30,6 +30,9 @@ public static class ProjectWorkflowGroups
             [new("تایید اولیه", ApprovalParticipants.Manager), new("تایید نهایی", ApprovalParticipants.Owner)]),
         new("contracts", [ProjectManagementSubjectTypes.Contract, ProjectManagementSubjectTypes.ContractAddendum], FinalApprovalByManager),
         new("invoices", [ProjectManagementSubjectTypes.ContractInvoice], FinalApprovalByManager),
+        // A change to the project is reviewed by its manager and decided by its owner (the sponsor), as a change board would.
+        new("change_requests", [ProjectManagementSubjectTypes.ChangeRequest],
+            [new("بررسی مدیر پروژه", ApprovalParticipants.Manager), new("تصویب نهایی", ApprovalParticipants.Owner)]),
         // An action's status changes go through the approvers named on the action itself (up to three, in order).
         new("actions", [ProjectManagementSubjectTypes.Action, ProjectManagementSubjectTypes.ActionStatus],
             [new("تایید مسئول", ApprovalParticipants.Approver1),

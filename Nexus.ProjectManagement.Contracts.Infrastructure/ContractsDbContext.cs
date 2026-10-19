@@ -10,6 +10,12 @@ public sealed class ContractsDbContext(DbContextOptions<ContractsDbContext> opti
     public DbSet<Contract> Contracts => Set<Contract>();
     public DbSet<ContractAddendum> ContractAddenda => Set<ContractAddendum>();
     public DbSet<ContractInvoice> ContractInvoices => Set<ContractInvoice>();
+    public DbSet<Supplier> Suppliers => Set<Supplier>();
+    public DbSet<ContractMilestone> ContractMilestones => Set<ContractMilestone>();
+    public DbSet<ContractObligation> ContractObligations => Set<ContractObligation>();
+    public DbSet<ContractLink> ContractLinks => Set<ContractLink>();
+    public DbSet<SupplierEvaluation> SupplierEvaluations => Set<SupplierEvaluation>();
+    public DbSet<ChangeRequest> ChangeRequests => Set<ChangeRequest>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

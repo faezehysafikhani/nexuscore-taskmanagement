@@ -72,6 +72,8 @@ internal static class SchemaUpgradeVerifier
 
         var indexes = Regex.Matches(generated, $@"CREATE (?<unique>UNIQUE )?INDEX \[(?<name>\w+)\] ON \[{schema}\]\.\[(?<table>\w+)\] \((?<columns>[^)]*)\);")
             .Where(m => newTables.Contains(m.Groups["table"].Value))
+            // An index on a column a later script adds belongs to that later script.
+            .Where(m => addedLater?.Any(x => x.Table == m.Groups["table"].Value && m.Groups["columns"].Value.Contains($"[{x.Column}]")) != true)
             .ToList();
         foreach (var index in indexes)
         {

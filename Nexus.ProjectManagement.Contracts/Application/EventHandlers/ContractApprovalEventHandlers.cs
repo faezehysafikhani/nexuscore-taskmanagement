@@ -3,8 +3,8 @@ using NexusCore.SharedKernel.Domain;
 
 namespace Nexus.ProjectManagement.Contracts.Application.EventHandlers;
 
-/// <summary>Applies the Workflow decision to a contract, an addendum or an invoice, by SubjectType.</summary>
-public sealed class ContractApprovalGrantedHandler(IContractRepository repository, IContractsUnitOfWork unitOfWork)
+/// <summary>Applies the Workflow decision to a contract, an addendum, an invoice or a change request, by SubjectType.</summary>
+public sealed class ContractApprovalGrantedHandler(IContractRepository repository, IContractsUnitOfWork unitOfWork, IChangeRequestRepository? changes = null)
     : IDomainEventHandler<ApprovalGranted>
 {
     public async Task HandleAsync(ApprovalGranted domainEvent, CancellationToken cancellationToken)
@@ -20,6 +20,9 @@ public sealed class ContractApprovalGrantedHandler(IContractRepository repositor
             case ContractInvoiceService.SubjectType:
                 (await repository.GetInvoiceAsync(domainEvent.SubjectId, cancellationToken))?.Approve();
                 break;
+            case ChangeRequestService.SubjectType when changes is not null:
+                (await changes.GetAsync(domainEvent.SubjectId, cancellationToken))?.Approve(DateTimeOffset.UtcNow, domainEvent.Comment);
+                break;
             default:
                 return;
         }
@@ -28,7 +31,7 @@ public sealed class ContractApprovalGrantedHandler(IContractRepository repositor
     }
 }
 
-public sealed class ContractApprovalRejectedHandler(IContractRepository repository, IContractsUnitOfWork unitOfWork)
+public sealed class ContractApprovalRejectedHandler(IContractRepository repository, IContractsUnitOfWork unitOfWork, IChangeRequestRepository? changes = null)
     : IDomainEventHandler<ApprovalRejected>
 {
     public async Task HandleAsync(ApprovalRejected domainEvent, CancellationToken cancellationToken)
@@ -43,6 +46,9 @@ public sealed class ContractApprovalRejectedHandler(IContractRepository reposito
                 break;
             case ContractInvoiceService.SubjectType:
                 (await repository.GetInvoiceAsync(domainEvent.SubjectId, cancellationToken))?.Reject();
+                break;
+            case ChangeRequestService.SubjectType when changes is not null:
+                (await changes.GetAsync(domainEvent.SubjectId, cancellationToken))?.Reject(DateTimeOffset.UtcNow, domainEvent.Comment);
                 break;
             default:
                 return;

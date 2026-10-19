@@ -95,6 +95,10 @@ public static class ContractEndpoints
                 (await service.RecordPaymentAsync(contractId, invoiceId, request, cancellationToken)).ToApiResult())
             .RequireAuthorization(ContractPermissions.RecordPayments);
 
+        app.MapSupplierEndpoints();
+        app.MapCommitmentEndpoints();
+        app.MapChangeRequestEndpoints();
+
         return app;
     }
 }

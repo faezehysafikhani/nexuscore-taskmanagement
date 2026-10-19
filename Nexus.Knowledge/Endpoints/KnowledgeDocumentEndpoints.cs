@@ -16,14 +16,14 @@ public static class KnowledgeDocumentEndpoints
     {
         var group = app.MapGroup("/api/knowledge/documents").WithTags("Knowledge").RequireAuthorization();
 
-        group.MapGet("/", async (ICurrentUserContext currentUser, string? search, KnowledgeDocumentType? documentType, IKnowledgeDocumentService service, CancellationToken cancellationToken) =>
+        group.MapGet("/", async (ICurrentUserContext currentUser, string? search, KnowledgeDocumentType? documentType, IKnowledgeDocumentService service, string? subjectType, Guid? subjectId, CancellationToken cancellationToken) =>
             {
                 if (currentUser.TenantId is null)
                 {
                     return Results.Unauthorized();
                 }
 
-                return (await service.SearchAsync(currentUser.TenantId.Value, search, documentType, cancellationToken)).ToApiResult();
+                return (await service.SearchAsync(currentUser.TenantId.Value, search, documentType, subjectType, subjectId, cancellationToken)).ToApiResult();
             })
             .RequireAuthorization(KnowledgePermissions.View);
 
@@ -67,6 +67,27 @@ public static class KnowledgeDocumentEndpoints
         group.MapDelete("/{id:guid}", async (Guid id, IKnowledgeDocumentService service, CancellationToken cancellationToken) =>
                 (await service.DeleteAsync(id, cancellationToken)).ToApiResult())
             .RequireAuthorization(KnowledgePermissions.Delete);
+
+        group.MapPost("/{id:guid}/links", async (Guid id, CreateKnowledgeDocumentLinkRequest request, ICurrentUserContext currentUser, IKnowledgeDocumentService service, CancellationToken cancellationToken) =>
+        {
+            if (currentUser.TenantId is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            return (await service.AddLinkAsync(currentUser.TenantId.Value, id, request, cancellationToken)).ToApiResult();
+        }).RequireAuthorization(KnowledgePermissions.Edit);
+
+        group.MapDelete("/{id:guid}/links", async (Guid id, string subjectType, Guid subjectId, ICurrentUserContext currentUser, IKnowledgeDocumentService service, CancellationToken cancellationToken) =>
+        {
+            if (currentUser.TenantId is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            return (await service.RemoveLinkAsync(currentUser.TenantId.Value, id, subjectType, subjectId, cancellationToken)).ToApiResult();
+        })
+    .RequireAuthorization(KnowledgePermissions.Edit);
 
         return app;
     }

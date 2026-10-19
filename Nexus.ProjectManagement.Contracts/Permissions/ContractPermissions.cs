@@ -12,6 +12,9 @@ public static class ContractPermissions
     public const string ManageAddenda = "Contracts.ManageAddenda";
     public const string ManageInvoices = "Contracts.ManageInvoices";
     public const string RecordPayments = "Contracts.RecordPayments";
+    public const string ManageSuppliers = "Contracts.ManageSuppliers";
+    public const string EvaluateSuppliers = "Contracts.EvaluateSuppliers";
+    public const string ManageChanges = "Contracts.ManageChanges";
 
     public static IReadOnlyList<PermissionDefinition> All { get; } =
     [
@@ -22,7 +25,10 @@ public static class ContractPermissions
         new(Submit, "ContractManagement", "ارسال قرارداد، الحاقیه و صورتحساب برای تأیید"),
         new(ManageAddenda, "ContractManagement", "مدیریت الحاقیه‌های قرارداد"),
         new(ManageInvoices, "ContractManagement", "مدیریت صورتحساب‌های قرارداد"),
-        new(RecordPayments, "ContractManagement", "ثبت پرداخت صورتحساب")
+        new(RecordPayments, "ContractManagement", "ثبت پرداخت صورتحساب"),
+        new(ManageSuppliers, "ContractManagement", "مدیریت تأمین‌کنندگان (ثبت، ویرایش و حذف)"),
+        new(EvaluateSuppliers, "ContractManagement", "ارزیابی دوره‌ای عملکرد تأمین‌کنندگان"),
+        new(ManageChanges, "ContractManagement", "ثبت، ویرایش و ارسال درخواست‌های تغییر پروژه")
     ];
 }
 

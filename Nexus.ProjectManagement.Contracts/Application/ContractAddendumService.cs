@@ -8,7 +8,8 @@ namespace Nexus.ProjectManagement.Contracts.Application;
 public sealed class ContractAddendumService(
     IContractRepository repository,
     IContractsUnitOfWork unitOfWork,
-    IApprovalRequester approvalRequester) : IContractAddendumService
+    IApprovalRequester approvalRequester,
+    IChangeRequestRepository? changes = null) : IContractAddendumService
 {
     public const string SubjectType = "ContractAddendum";
 
@@ -31,7 +32,8 @@ public sealed class ContractAddendumService(
             return Result.Failure<ContractAddendumDto>(Error.NotFound("Contract not found."));
         }
 
-        var error = ContractIsOpen(contract) ?? Validate(request.Title, request.AmountChange, request.ExtensionDays);
+        var error = ContractIsOpen(contract) ?? Validate(request.Title, request.AmountChange, request.ExtensionDays)
+            ?? await ValidateChangeRequestAsync(contract, request.ChangeRequestId, cancellationToken);
         if (error is not null)
         {
             return Result.Failure<ContractAddendumDto>(error);
@@ -43,6 +45,7 @@ public sealed class ContractAddendumService(
             Guid.NewGuid(), request.TenantId, contractId, number, request.Title, request.Description,
             request.AddendumDate, request.AmountChange, request.ExtensionDays);
         addendum.SetPeriod(request.StartDate, request.EndDate);
+        addendum.SetChangeRequest(request.ChangeRequestId is { } changeId && changeId != Guid.Empty ? changeId : null);
 
         await repository.AddAddendumAsync(addendum, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -62,10 +65,18 @@ public sealed class ContractAddendumService(
             return Result.Failure<ContractAddendumDto>(Error.Conflict("An addendum that is pending approval or approved cannot be edited."));
         }
 
-        var error = Validate(request.Title, request.AmountChange, request.ExtensionDays);
+        var contract = (await repository.GetContractAsync(contractId, cancellationToken))!;
+        var error = Validate(request.Title, request.AmountChange, request.ExtensionDays)
+            ?? await ValidateChangeRequestAsync(contract, request.ChangeRequestId, cancellationToken);
         if (error is not null)
         {
             return Result.Failure<ContractAddendumDto>(error);
+        }
+
+        // Omitted keeps the stored link; the empty id removes it.
+        if (request.ChangeRequestId is { } linked)
+        {
+            addendum.SetChangeRequest(linked == Guid.Empty ? null : linked);
         }
 
         addendum.UpdateDetails(request.Title, request.Description, request.AddendumDate, request.AmountChange, request.ExtensionDays);
@@ -137,6 +148,21 @@ public sealed class ContractAddendumService(
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success(ContractMapper.ToDto(addendum));
+    }
+
+    /// <summary>A change request named by an addendum must be one of the contract's project, and approved (or already carried out).</summary>
+    private async Task<Error?> ValidateChangeRequestAsync(Contract contract, Guid? changeRequestId, CancellationToken cancellationToken)
+    {
+        if (changeRequestId is not { } id || id == Guid.Empty || changes is null)
+        {
+            return null;
+        }
+
+        var change = await changes.GetAsync(id, cancellationToken);
+        return change is not null && change.ProjectId == contract.ProjectId
+            && change.Status is ChangeRequestStatus.Approved or ChangeRequestStatus.Implemented
+            ? null
+            : Error.Validation("The change request must be an approved one of this project.");
     }
 
     private async Task<ContractAddendum?> GetOwnedAsync(Guid contractId, Guid addendumId, CancellationToken cancellationToken)

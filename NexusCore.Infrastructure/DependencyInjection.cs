@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using NexusCore.Application.Approvals;
 using NexusCore.Application.Common;
@@ -63,7 +64,9 @@ public static class DependencyInjection
         // An endpoint that names an unregistered policy gets the standard permission policy (403
         // for users without it) instead of an InvalidOperationException (500).
         services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
-        services.AddScoped<IApprovalRequester, NullApprovalRequester>();
+        // Only the default: Workflow (or any other approval backend) may have registered its own requester already,
+        // and must keep it whether it was added before or after this call.
+        services.TryAddScoped<IApprovalRequester, NullApprovalRequester>();
         services.AddScoped<IFileStorage, LocalDiskFileStorage>();
         services.AddScoped<IUserDirectory, UserDirectory>();
         // Used only by modules that keep users' titles (Nexus.OrgStructure); changes no table.

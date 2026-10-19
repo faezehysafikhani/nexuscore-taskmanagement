@@ -42,6 +42,10 @@ public sealed class Contract : AuditableEntity<Guid>
 
     public Guid TenantId { get; private set; }
     public Guid ProjectId { get; private set; }
+
+    /// <summary>The supplier this contract is with. Null for a contract that predates suppliers (or whose supplier was unlinked); <see cref="Counterparty"/> always holds the name.</summary>
+    public Guid? SupplierId { get; private set; }
+
     public string ContractNumber { get; private set; }
     public string Title { get; private set; }
 
@@ -53,6 +57,10 @@ public sealed class Contract : AuditableEntity<Guid>
     public string? BeneficiaryName { get; private set; }
 
     public string? Description { get; private set; }
+
+    /// <summary>What the contract covers (the scope of work), as text.</summary>
+    public string? ScopeOfWork { get; private set; }
+
     public DateOnly? SignDate { get; private set; }
     public DateOnly? StartDate { get; private set; }
     public DateOnly? EndDate { get; private set; }
@@ -77,11 +85,19 @@ public sealed class Contract : AuditableEntity<Guid>
         OriginalAmount = originalAmount;
     }
 
+    public void SetScopeOfWork(string? scopeOfWork) => ScopeOfWork = string.IsNullOrWhiteSpace(scopeOfWork) ? null : scopeOfWork.Trim();
+
     public void SetParties(string? supervisorName, string? beneficiaryName)
     {
         SupervisorName = string.IsNullOrWhiteSpace(supervisorName) ? null : supervisorName.Trim();
         BeneficiaryName = string.IsNullOrWhiteSpace(beneficiaryName) ? null : beneficiaryName.Trim();
     }
+
+    /// <summary>Links (or, with null, unlinks) the supplier. The name of the other party is set through UpdateDetails.</summary>
+    public void SetSupplier(Guid? supplierId) => SupplierId = supplierId;
+
+    /// <summary>Only the name of the other party, kept in step when its supplier is renamed.</summary>
+    public void SetCounterparty(string counterparty) => Counterparty = counterparty.Trim();
 
     public void ChangeStatus(ContractStatus status) => Status = status;
 
@@ -135,6 +151,11 @@ public sealed class ContractAddendum : AuditableEntity<Guid>
 
     /// <summary>Calendar days added to the contract's end date.</summary>
     public int ExtensionDays { get; private set; }
+
+    /// <summary>The approved change request this addendum carries out, if any. One without is reported as a change made without approval.</summary>
+    public Guid? ChangeRequestId { get; private set; }
+
+    public void SetChangeRequest(Guid? changeRequestId) => ChangeRequestId = changeRequestId;
 
     public ApprovalStatus ApprovalStatus { get; private set; }
 

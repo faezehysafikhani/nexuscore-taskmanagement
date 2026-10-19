@@ -13,17 +13,19 @@ public sealed record ContractSummaryDto(
     MoneyDto RemainingCommitment, MoneyDto OutstandingPayable,
     decimal InvoicedPercent, decimal PaidPercent, bool IsOverInvoiced);
 
-/// <summary>Dates are Gregorian; the ...Fa fields are the same dates in the Jalali calendar, in Persian digits.</summary>
+/// <summary>SupplierId is the supplier the contract is with (Counterparty is that supplier's name), or null for a contract that predates suppliers.
+/// Dates are Gregorian; the ...Fa fields are the same dates in the Jalali calendar, in Persian digits.</summary>
 public sealed record ContractDto(
     Guid Id, Guid TenantId, Guid ProjectId, string ContractNumber, string ContractNumberFa, string Title, string Counterparty,
     string? Description, DateOnly? SignDate, string? SignDateFa, DateOnly? StartDate, string? StartDateFa,
     DateOnly? EndDate, string? EndDateFa, MoneyDto OriginalAmount, ContractStatus Status, ApprovalStatus ApprovalStatus,
-    ContractSummaryDto Summary, Guid? CreatedByUserId, string? SupervisorName = null, string? BeneficiaryName = null);
+    ContractSummaryDto Summary, Guid? CreatedByUserId, string? SupervisorName = null, string? BeneficiaryName = null, Guid? SupplierId = null, string? ScopeOfWork = null);
 
 public sealed record ContractAddendumDto(
     Guid Id, Guid ContractId, int Number, string Title, string? Description, DateOnly? AddendumDate, string? AddendumDateFa,
     decimal AmountChange, string AmountChangeFormatted, string AmountChangeInWords, int ExtensionDays, ApprovalStatus ApprovalStatus,
-    Guid? CreatedByUserId, DateOnly? StartDate = null, string? StartDateFa = null, DateOnly? EndDate = null, string? EndDateFa = null);
+    Guid? CreatedByUserId, DateOnly? StartDate = null, string? StartDateFa = null, DateOnly? EndDate = null, string? EndDateFa = null,
+    Guid? ChangeRequestId = null);
 
 public sealed record ContractInvoiceDto(
     Guid Id, Guid ContractId, string InvoiceNumber, string InvoiceNumberFa, DateOnly InvoiceDate, string InvoiceDateFa,
@@ -45,23 +47,25 @@ public sealed record ProjectContractsSummaryDto(
 public sealed record CreateContractRequest(
     Guid TenantId, Guid ProjectId, string ContractNumber, string Title, string Counterparty, string? Description,
     DateOnly? SignDate, DateOnly? StartDate, DateOnly? EndDate, decimal OriginalAmount,
-    string? SupervisorName = null, string? BeneficiaryName = null);
+    string? SupervisorName = null, string? BeneficiaryName = null, Guid? SupplierId = null, string? ScopeOfWork = null);
 
 public sealed record UpdateContractRequest(
     string ContractNumber, string Title, string Counterparty, string? Description,
     DateOnly? SignDate, DateOnly? StartDate, DateOnly? EndDate, decimal OriginalAmount,
-    string? SupervisorName = null, string? BeneficiaryName = null);
+    string? SupervisorName = null, string? BeneficiaryName = null, Guid? SupplierId = null, string? ScopeOfWork = null);
 
 public sealed record ChangeContractStatusRequest(ContractStatus Status);
 
 /// <summary>AmountChange is negative for a reduction; ExtensionDays is how many days the end date moves. At least one must be non-zero.</summary>
+/// <summary>ChangeRequestId: the approved (or implemented) change request of the same project that this addendum carries out.</summary>
 public sealed record CreateContractAddendumRequest(
     Guid TenantId, string Title, string? Description, DateOnly? AddendumDate, decimal AmountChange, int ExtensionDays,
-    DateOnly? StartDate = null, DateOnly? EndDate = null);
+    DateOnly? StartDate = null, DateOnly? EndDate = null, Guid? ChangeRequestId = null);
 
+/// <summary>ChangeRequestId: null keeps the link that is stored, the empty id removes it.</summary>
 public sealed record UpdateContractAddendumRequest(
     string Title, string? Description, DateOnly? AddendumDate, decimal AmountChange, int ExtensionDays,
-    DateOnly? StartDate = null, DateOnly? EndDate = null);
+    DateOnly? StartDate = null, DateOnly? EndDate = null, Guid? ChangeRequestId = null);
 
 public sealed record CreateContractInvoiceRequest(
     Guid TenantId, string InvoiceNumber, DateOnly InvoiceDate, decimal Amount, string? Description,
