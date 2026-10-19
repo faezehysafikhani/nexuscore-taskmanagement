@@ -13,12 +13,13 @@ public sealed record ContractSummaryDto(
     MoneyDto RemainingCommitment, MoneyDto OutstandingPayable,
     decimal InvoicedPercent, decimal PaidPercent, bool IsOverInvoiced);
 
-/// <summary>Dates are Gregorian; the ...Fa fields are the same dates in the Jalali calendar, in Persian digits.</summary>
+/// <summary>SupplierId is the supplier the contract is with (Counterparty is that supplier's name), or null for a contract that predates suppliers.
+/// Dates are Gregorian; the ...Fa fields are the same dates in the Jalali calendar, in Persian digits.</summary>
 public sealed record ContractDto(
     Guid Id, Guid TenantId, Guid ProjectId, string ContractNumber, string ContractNumberFa, string Title, string Counterparty,
     string? Description, DateOnly? SignDate, string? SignDateFa, DateOnly? StartDate, string? StartDateFa,
     DateOnly? EndDate, string? EndDateFa, MoneyDto OriginalAmount, ContractStatus Status, ApprovalStatus ApprovalStatus,
-    ContractSummaryDto Summary, Guid? CreatedByUserId, string? SupervisorName = null, string? BeneficiaryName = null);
+    ContractSummaryDto Summary, Guid? CreatedByUserId, string? SupervisorName = null, string? BeneficiaryName = null, Guid? SupplierId = null);
 
 public sealed record ContractAddendumDto(
     Guid Id, Guid ContractId, int Number, string Title, string? Description, DateOnly? AddendumDate, string? AddendumDateFa,
@@ -45,12 +46,12 @@ public sealed record ProjectContractsSummaryDto(
 public sealed record CreateContractRequest(
     Guid TenantId, Guid ProjectId, string ContractNumber, string Title, string Counterparty, string? Description,
     DateOnly? SignDate, DateOnly? StartDate, DateOnly? EndDate, decimal OriginalAmount,
-    string? SupervisorName = null, string? BeneficiaryName = null);
+    string? SupervisorName = null, string? BeneficiaryName = null, Guid? SupplierId = null);
 
 public sealed record UpdateContractRequest(
     string ContractNumber, string Title, string Counterparty, string? Description,
     DateOnly? SignDate, DateOnly? StartDate, DateOnly? EndDate, decimal OriginalAmount,
-    string? SupervisorName = null, string? BeneficiaryName = null);
+    string? SupervisorName = null, string? BeneficiaryName = null, Guid? SupplierId = null);
 
 public sealed record ChangeContractStatusRequest(ContractStatus Status);
 

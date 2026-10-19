@@ -18,6 +18,7 @@ public static class DependencyInjection
 
         services.AddScoped<IContractsUnitOfWork>(provider => provider.GetRequiredService<ContractsDbContext>());
         services.AddScoped<IContractRepository, ContractRepository>();
+        services.AddScoped<ISupplierRepository, SupplierRepository>();
 
         return services;
     }

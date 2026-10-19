@@ -27,7 +27,8 @@ public sealed class ContractsSchemaTests
     [
         ("Contracts", "SupervisorName"), ("Contracts", "BeneficiaryName"),
         ("ContractAddenda", "StartDate"), ("ContractAddenda", "EndDate"),
-        ("ContractInvoices", "Title"), ("ContractInvoices", "PeriodStartDate"), ("ContractInvoices", "PeriodEndDate")
+        ("ContractInvoices", "Title"), ("ContractInvoices", "PeriodStartDate"), ("ContractInvoices", "PeriodEndDate"),
+        ("Contracts", "SupplierId")
     ];
 
     [Fact]

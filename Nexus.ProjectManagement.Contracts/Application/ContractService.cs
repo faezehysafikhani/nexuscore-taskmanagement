@@ -8,7 +8,8 @@ namespace Nexus.ProjectManagement.Contracts.Application;
 public sealed class ContractService(
     IContractRepository repository,
     IContractsUnitOfWork unitOfWork,
-    IApprovalRequester approvalRequester) : IContractService
+    IApprovalRequester approvalRequester,
+    ISupplierRepository? suppliers = null) : IContractService
 {
     public const int MaxNumberLength = 50;
     public const string SubjectType = "Contract";
@@ -95,7 +96,7 @@ public sealed class ContractService(
     public async Task<Result<ContractDto>> CreateAsync(CreateContractRequest request, CancellationToken cancellationToken)
     {
         var number = ContractMapper.NormalizeNumber(request.ContractNumber);
-        var error = Validate(number, request.Title, request.Counterparty, request.StartDate, request.EndDate, request.OriginalAmount);
+        var error = Validate(number, request.Title, request.SupplierId is { } chosen && chosen != Guid.Empty ? "-" : request.Counterparty, request.StartDate, request.EndDate, request.OriginalAmount);
         if (error is not null)
         {
             return Result.Failure<ContractDto>(error);
@@ -106,9 +107,16 @@ public sealed class ContractService(
             return Result.Failure<ContractDto>(Error.Conflict("The project already has a contract with this number."));
         }
 
-        var contract = new Contract(Guid.NewGuid(), request.TenantId, request.ProjectId, number, request.Title, request.Counterparty, request.OriginalAmount);
-        contract.UpdateDetails(number, request.Title, request.Counterparty, request.Description, request.SignDate, request.StartDate, request.EndDate, request.OriginalAmount);
+        var party = await ResolveSupplierAsync(request.TenantId, request.SupplierId, request.Counterparty, cancellationToken);
+        if (party.IsFailure)
+        {
+            return Result.Failure<ContractDto>(party.Error!);
+        }
+
+        var contract = new Contract(Guid.NewGuid(), request.TenantId, request.ProjectId, number, request.Title, party.Value!.Name, request.OriginalAmount);
+        contract.UpdateDetails(number, request.Title, party.Value!.Name, request.Description, request.SignDate, request.StartDate, request.EndDate, request.OriginalAmount);
         contract.SetParties(request.SupervisorName, request.BeneficiaryName);
+        contract.SetSupplier(party.Value!.SupplierId);
 
         await repository.AddContractAsync(contract, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -136,7 +144,8 @@ public sealed class ContractService(
         }
 
         var number = ContractMapper.NormalizeNumber(request.ContractNumber);
-        var error = Validate(number, request.Title, request.Counterparty, request.StartDate, request.EndDate, request.OriginalAmount);
+        var unlink = request.SupplierId == Guid.Empty;
+        var error = Validate(number, request.Title, request.SupplierId is { } chosen && chosen != Guid.Empty ? "-" : request.Counterparty, request.StartDate, request.EndDate, request.OriginalAmount);
         if (error is not null)
         {
             return Result.Failure<ContractDto>(error);
@@ -147,7 +156,17 @@ public sealed class ContractService(
             return Result.Failure<ContractDto>(Error.Conflict("The project already has a contract with this number."));
         }
 
-        contract.UpdateDetails(number, request.Title, request.Counterparty, request.Description, request.SignDate, request.StartDate, request.EndDate, request.OriginalAmount);
+        // A supplier id picks that supplier; the empty id unlinks (the typed name stays); no id follows the typed name.
+        var party = unlink
+            ? Result.Success(new Party(null, request.Counterparty.Trim()))
+            : await ResolveSupplierAsync(contract.TenantId, request.SupplierId, request.Counterparty, cancellationToken);
+        if (party.IsFailure)
+        {
+            return Result.Failure<ContractDto>(party.Error!);
+        }
+
+        contract.UpdateDetails(number, request.Title, party.Value!.Name, request.Description, request.SignDate, request.StartDate, request.EndDate, request.OriginalAmount);
+        contract.SetSupplier(party.Value!.SupplierId);
         // Omitted (null) keeps what is stored, so a client that predates these fields can still edit a contract; an empty text clears it.
         if (request.SupervisorName is not null || request.BeneficiaryName is not null)
         {
@@ -238,6 +257,44 @@ public sealed class ContractService(
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success(await ToDtoAsync(contract, cancellationToken));
+    }
+
+    private sealed record Party(Guid? SupplierId, string Name);
+
+    /// <summary>
+    /// Who the contract is with. A chosen supplier must exist in the tenant and be active, and its name becomes the contract's. Without one
+    /// the typed name is matched to the tenant's supplier of that name (so an older client that only sends a name still ends up linked),
+    /// and a supplier is created for a name nobody has used yet. With no supplier store registered the name is kept as it is, unlinked.
+    /// </summary>
+    private async Task<Result<Party>> ResolveSupplierAsync(Guid tenantId, Guid? supplierId, string counterparty, CancellationToken cancellationToken)
+    {
+        if (suppliers is null)
+        {
+            return Result.Success(new Party(null, counterparty.Trim()));
+        }
+
+        if (supplierId is { } id && id != Guid.Empty)
+        {
+            var chosen = await suppliers.GetAsync(id, cancellationToken);
+            if (chosen is null || chosen.TenantId != tenantId)
+            {
+                return Result.Failure<Party>(Error.NotFound("Supplier not found."));
+            }
+
+            return chosen.Status == SupplierStatus.Inactive
+                ? Result.Failure<Party>(Error.Conflict("The supplier is inactive."))
+                : Result.Success(new Party(chosen.Id, chosen.Name));
+        }
+
+        var existing = await suppliers.FindByNormalizedNameAsync(tenantId, SupplierNames.Normalize(counterparty), null, cancellationToken);
+        if (existing is not null)
+        {
+            return Result.Success(new Party(existing.Id, existing.Name));
+        }
+
+        var created = new Supplier(Guid.NewGuid(), tenantId, counterparty, SupplierCategory.Other);
+        await suppliers.AddAsync(created, cancellationToken);
+        return Result.Success(new Party(created.Id, created.Name));
     }
 
     private async Task<ContractDto> ToDtoAsync(Contract contract, CancellationToken cancellationToken) =>

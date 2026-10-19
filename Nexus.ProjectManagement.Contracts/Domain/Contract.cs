@@ -42,6 +42,10 @@ public sealed class Contract : AuditableEntity<Guid>
 
     public Guid TenantId { get; private set; }
     public Guid ProjectId { get; private set; }
+
+    /// <summary>The supplier this contract is with. Null for a contract that predates suppliers (or whose supplier was unlinked); <see cref="Counterparty"/> always holds the name.</summary>
+    public Guid? SupplierId { get; private set; }
+
     public string ContractNumber { get; private set; }
     public string Title { get; private set; }
 
@@ -82,6 +86,12 @@ public sealed class Contract : AuditableEntity<Guid>
         SupervisorName = string.IsNullOrWhiteSpace(supervisorName) ? null : supervisorName.Trim();
         BeneficiaryName = string.IsNullOrWhiteSpace(beneficiaryName) ? null : beneficiaryName.Trim();
     }
+
+    /// <summary>Links (or, with null, unlinks) the supplier. The name of the other party is set through UpdateDetails.</summary>
+    public void SetSupplier(Guid? supplierId) => SupplierId = supplierId;
+
+    /// <summary>Only the name of the other party, kept in step when its supplier is renamed.</summary>
+    public void SetCounterparty(string counterparty) => Counterparty = counterparty.Trim();
 
     public void ChangeStatus(ContractStatus status) => Status = status;
 

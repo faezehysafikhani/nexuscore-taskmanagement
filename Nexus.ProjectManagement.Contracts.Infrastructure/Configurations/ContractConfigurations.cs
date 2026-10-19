@@ -21,6 +21,28 @@ public sealed class ContractConfiguration : IEntityTypeConfiguration<Contract>
 
         // A project never has two contracts with the same number.
         builder.HasIndex(x => new { x.ProjectId, x.ContractNumber }).IsUnique();
+        builder.HasIndex(x => x.SupplierId);
+    }
+}
+
+public sealed class SupplierConfiguration : IEntityTypeConfiguration<Supplier>
+{
+    public void Configure(EntityTypeBuilder<Supplier> builder)
+    {
+        builder.ToTable("Suppliers", "project_contracts");
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.Property(x => x.Name).HasMaxLength(300).IsRequired();
+        builder.Property(x => x.NormalizedName).HasMaxLength(300).IsRequired();
+        builder.Property(x => x.NationalId).HasMaxLength(50);
+        builder.Property(x => x.ContactPerson).HasMaxLength(200);
+        builder.Property(x => x.Phone).HasMaxLength(50);
+        builder.Property(x => x.Email).HasMaxLength(200);
+        builder.Property(x => x.Address).HasMaxLength(1000);
+        builder.Property(x => x.Description).HasMaxLength(4000);
+
+        // One supplier per name (in its normalised form) within a tenant.
+        builder.HasIndex(x => new { x.TenantId, x.NormalizedName }).IsUnique();
     }
 }
 
