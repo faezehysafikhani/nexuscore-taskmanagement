@@ -2,10 +2,14 @@ using Nexus.ProjectManagement.Contracts.Domain;
 
 namespace Nexus.ProjectManagement.Contracts.Application.Dtos;
 
-/// <summary>What a supplier's contracts add up to. Only approved contracts count towards the money, as everywhere else.</summary>
+/// <summary>
+/// What a supplier's contracts add up to. Only approved contracts count towards the money, as everywhere else. The evaluation figures are
+/// the number of periodic evaluations, the overall score of the latest one (by the end of its period) and the average over all of them.
+/// </summary>
 public sealed record SupplierStatsDto(
     int ContractCount, int ActiveContractCount, MoneyDto ContractAmount, MoneyDto InvoicedAmount,
-    MoneyDto PaidAmount, MoneyDto OutstandingPayable);
+    MoneyDto PaidAmount, MoneyDto OutstandingPayable,
+    int EvaluationCount = 0, decimal? LatestScore = null, string? LatestPeriodEndFa = null, decimal? AverageScore = null);
 
 public sealed record SupplierDto(
     Guid Id, Guid TenantId, string Name, SupplierCategory Category, SupplierStatus Status, string? NationalId,

@@ -66,6 +66,20 @@ public sealed class ContractLinkConfiguration : IEntityTypeConfiguration<Contrac
     }
 }
 
+public sealed class SupplierEvaluationConfiguration : IEntityTypeConfiguration<SupplierEvaluation>
+{
+    public void Configure(EntityTypeBuilder<SupplierEvaluation> builder)
+    {
+        builder.ToTable("SupplierEvaluations", "project_contracts");
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.Property(x => x.OverallScore).HasColumnType("decimal(4,2)");
+        builder.Property(x => x.Notes).HasMaxLength(2000);
+        builder.HasIndex(x => x.SupplierId);
+        builder.HasIndex(x => x.TenantId);
+    }
+}
+
 public sealed class SupplierConfiguration : IEntityTypeConfiguration<Supplier>
 {
     public void Configure(EntityTypeBuilder<Supplier> builder)

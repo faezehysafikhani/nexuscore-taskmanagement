@@ -17,6 +17,15 @@ public interface ISupplierRepository
 
     /// <summary>Every contract of the tenant, or only those with this supplier.</summary>
     Task<IReadOnlyList<Contract>> ListContractsAsync(Guid tenantId, Guid? supplierId, CancellationToken cancellationToken);
+
+    Task<SupplierEvaluation?> GetEvaluationAsync(Guid id, CancellationToken cancellationToken);
+    Task<IReadOnlyList<SupplierEvaluation>> ListEvaluationsAsync(Guid supplierId, CancellationToken cancellationToken);
+
+    /// <summary>Every evaluation of the tenant's suppliers.</summary>
+    Task<IReadOnlyList<SupplierEvaluation>> ListTenantEvaluationsAsync(Guid tenantId, CancellationToken cancellationToken);
+
+    Task AddEvaluationAsync(SupplierEvaluation evaluation, CancellationToken cancellationToken);
+    Task RemoveEvaluationAsync(SupplierEvaluation evaluation, CancellationToken cancellationToken);
 }
 
 public interface ISupplierService

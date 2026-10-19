@@ -46,6 +46,41 @@ public static class SupplierEndpoints
                     : Results.Unauthorized())
             .RequireAuthorization(ContractPermissions.ManageSuppliers);
 
+        // Periodic evaluations of a supplier (reading needs Contracts.View, recording one Contracts.EvaluateSuppliers).
+        group.MapGet("/{supplierId:guid}/evaluations", async (Guid supplierId, ICurrentUserContext currentUser, ISupplierEvaluationService service, CancellationToken cancellationToken) =>
+                currentUser.TenantId is { } tenantId
+                    ? (await service.ListAsync(tenantId, supplierId, cancellationToken)).ToApiResult()
+                    : Results.Unauthorized())
+            .RequireAuthorization(ContractPermissions.View);
+
+        group.MapGet("/{supplierId:guid}/evaluation-metrics", async (
+                Guid supplierId, DateOnly from, DateOnly to, Guid? contractId, ICurrentUserContext currentUser, ISupplierEvaluationService service, CancellationToken cancellationToken) =>
+                currentUser.TenantId is { } tenantId
+                    ? (await service.GetMetricsAsync(tenantId, supplierId, from, to, contractId, cancellationToken)).ToApiResult()
+                    : Results.Unauthorized())
+            .RequireAuthorization(ContractPermissions.View);
+
+        group.MapPost("/{supplierId:guid}/evaluations", async (
+                Guid supplierId, SaveSupplierEvaluationRequest request, ICurrentUserContext currentUser, ISupplierEvaluationService service, CancellationToken cancellationToken) =>
+                currentUser.TenantId is { } tenantId
+                    ? (await service.CreateAsync(tenantId, supplierId, request, cancellationToken)).ToApiResult()
+                    : Results.Unauthorized())
+            .RequireAuthorization(ContractPermissions.EvaluateSuppliers);
+
+        group.MapPut("/{supplierId:guid}/evaluations/{id:guid}", async (
+                Guid supplierId, Guid id, SaveSupplierEvaluationRequest request, ICurrentUserContext currentUser, ISupplierEvaluationService service, CancellationToken cancellationToken) =>
+                currentUser.TenantId is { } tenantId
+                    ? (await service.UpdateAsync(tenantId, supplierId, id, request, cancellationToken)).ToApiResult()
+                    : Results.Unauthorized())
+            .RequireAuthorization(ContractPermissions.EvaluateSuppliers);
+
+        group.MapDelete("/{supplierId:guid}/evaluations/{id:guid}", async (
+                Guid supplierId, Guid id, ICurrentUserContext currentUser, ISupplierEvaluationService service, CancellationToken cancellationToken) =>
+                currentUser.TenantId is { } tenantId
+                    ? (await service.DeleteAsync(tenantId, supplierId, id, cancellationToken)).ToApiResult()
+                    : Results.Unauthorized())
+            .RequireAuthorization(ContractPermissions.EvaluateSuppliers);
+
         return app;
     }
 }

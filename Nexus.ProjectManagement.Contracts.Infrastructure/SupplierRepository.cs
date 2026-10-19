@@ -26,6 +26,24 @@ public sealed class SupplierRepository(ContractsDbContext dbContext) : ISupplier
         return Task.CompletedTask;
     }
 
+    public Task<SupplierEvaluation?> GetEvaluationAsync(Guid id, CancellationToken cancellationToken) =>
+        dbContext.SupplierEvaluations.SingleOrDefaultAsync(e => e.Id == id, cancellationToken);
+
+    public async Task<IReadOnlyList<SupplierEvaluation>> ListEvaluationsAsync(Guid supplierId, CancellationToken cancellationToken) =>
+        await dbContext.SupplierEvaluations.Where(e => e.SupplierId == supplierId).ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<SupplierEvaluation>> ListTenantEvaluationsAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        await dbContext.SupplierEvaluations.Where(e => e.TenantId == tenantId).ToListAsync(cancellationToken);
+
+    public async Task AddEvaluationAsync(SupplierEvaluation evaluation, CancellationToken cancellationToken) =>
+        await dbContext.SupplierEvaluations.AddAsync(evaluation, cancellationToken);
+
+    public Task RemoveEvaluationAsync(SupplierEvaluation evaluation, CancellationToken cancellationToken)
+    {
+        dbContext.SupplierEvaluations.Remove(evaluation);
+        return Task.CompletedTask;
+    }
+
     public async Task<IReadOnlyList<Contract>> ListContractsAsync(Guid tenantId, Guid? supplierId, CancellationToken cancellationToken) =>
         await dbContext.Contracts
             .Where(c => c.TenantId == tenantId && (supplierId == null || c.SupplierId == supplierId))

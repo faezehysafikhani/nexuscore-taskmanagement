@@ -1,4 +1,5 @@
 using Nexus.ProjectManagement.Contracts.Application.Dtos;
+using Nexus.ProjectManagement.Contracts.Application.Persian;
 using Nexus.ProjectManagement.Contracts.Domain;
 using NexusCore.Application.Approvals;
 using NexusCore.SharedKernel.Results;
@@ -15,10 +16,11 @@ public sealed class SupplierService(
         var all = await suppliers.ListAsync(tenantId, cancellationToken);
         var loaded = await LoadContractsAsync(tenantId, supplierId: null, cancellationToken);
         var bySupplier = loaded.Where(l => l.Contract.SupplierId is not null).ToLookup(l => l.Contract.SupplierId!.Value);
+        var evaluations = (await suppliers.ListTenantEvaluationsAsync(tenantId, cancellationToken)).ToLookup(e => e.SupplierId);
 
         return Result.Success<IReadOnlyList<SupplierDto>>(all
             .OrderBy(s => s.Name, StringComparer.CurrentCulture)
-            .Select(s => ToDto(s, bySupplier[s.Id].ToList()))
+            .Select(s => ToDto(s, bySupplier[s.Id].ToList(), evaluations[s.Id].ToList()))
             .ToList());
     }
 
@@ -32,7 +34,7 @@ public sealed class SupplierService(
 
         var loaded = await LoadContractsAsync(tenantId, id, cancellationToken);
         var dtos = loaded.Select(l => l.Dto).OrderBy(c => c.ProjectId).ThenBy(c => c.ContractNumber, StringComparer.Ordinal).ToList();
-        return Result.Success(new SupplierDetailDto(ToDto(supplier, loaded), dtos));
+        return Result.Success(new SupplierDetailDto(ToDto(supplier, loaded, await suppliers.ListEvaluationsAsync(id, cancellationToken)), dtos));
     }
 
     public async Task<Result<SupplierDto>> CreateAsync(Guid tenantId, CreateSupplierRequest request, CancellationToken cancellationToken)
@@ -89,7 +91,7 @@ public sealed class SupplierService(
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        return Result.Success(ToDto(supplier, await LoadContractsAsync(tenantId, id, cancellationToken)));
+        return Result.Success(ToDto(supplier, await LoadContractsAsync(tenantId, id, cancellationToken), await suppliers.ListEvaluationsAsync(id, cancellationToken)));
     }
 
     public async Task<Result> DeleteAsync(Guid tenantId, Guid id, CancellationToken cancellationToken)
@@ -103,6 +105,12 @@ public sealed class SupplierService(
         if ((await suppliers.ListContractsAsync(tenantId, id, cancellationToken)).Count > 0)
         {
             return Result.Failure(Error.Conflict("A supplier with contracts cannot be deleted."));
+        }
+
+        // Its evaluations are about it alone, so they go with it.
+        foreach (var evaluation in await suppliers.ListEvaluationsAsync(id, cancellationToken))
+        {
+            await suppliers.RemoveEvaluationAsync(evaluation, cancellationToken);
         }
 
         await suppliers.RemoveAsync(supplier, cancellationToken);
@@ -123,8 +131,11 @@ public sealed class SupplierService(
             .ToList();
     }
 
-    private static SupplierDto ToDto(Supplier s, IReadOnlyList<Loaded> own)
+    private static SupplierDto ToDto(Supplier s, IReadOnlyList<Loaded> own, IReadOnlyList<SupplierEvaluation>? evaluations = null)
     {
+        evaluations ??= [];
+        var latest = evaluations.OrderByDescending(e => e.PeriodEnd).ThenByDescending(e => e.CreatedAtUtc).FirstOrDefault();
+
         // Money is counted from approved contracts only (a draft or rejected one is not a commitment).
         var approved = own.Where(l => l.Dto.ApprovalStatus == ApprovalStatus.Approved).Select(l => l.Dto.Summary).ToList();
         var stats = new SupplierStatsDto(
@@ -133,7 +144,11 @@ public sealed class SupplierService(
             ContractMapper.Money(approved.Sum(x => x.CurrentAmount.Rials)),
             ContractMapper.Money(approved.Sum(x => x.InvoicedAmount.Rials)),
             ContractMapper.Money(approved.Sum(x => x.PaidAmount.Rials)),
-            ContractMapper.Money(approved.Sum(x => x.OutstandingPayable.Rials)));
+            ContractMapper.Money(approved.Sum(x => x.OutstandingPayable.Rials)),
+            evaluations.Count,
+            latest?.OverallScore,
+            latest is null ? null : PersianDates.Format(latest.PeriodEnd),
+            evaluations.Count == 0 ? null : Math.Round(evaluations.Average(e => e.OverallScore), 2, MidpointRounding.AwayFromZero));
 
         return new SupplierDto(
             s.Id, s.TenantId, s.Name, s.Category, s.Status, s.NationalId, s.ContactPerson, s.Phone, s.Email, s.Address, s.Description,

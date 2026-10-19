@@ -25,6 +25,7 @@ public static class DependencyInjection
         services.AddScoped<ISupplierService, SupplierService>();
         services.AddScoped<IContractCommitmentService, ContractCommitmentService>();
         services.AddScoped<IContractLinkService, ContractLinkService>();
+        services.AddScoped<ISupplierEvaluationService, SupplierEvaluationService>();
 
         services.AddScoped<IValidator<CreateContractRequest>, CreateContractRequestValidator>();
         services.AddScoped<IValidator<UpdateContractRequest>, UpdateContractRequestValidator>();

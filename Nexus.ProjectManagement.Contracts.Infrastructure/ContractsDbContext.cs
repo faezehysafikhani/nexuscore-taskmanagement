@@ -14,6 +14,7 @@ public sealed class ContractsDbContext(DbContextOptions<ContractsDbContext> opti
     public DbSet<ContractMilestone> ContractMilestones => Set<ContractMilestone>();
     public DbSet<ContractObligation> ContractObligations => Set<ContractObligation>();
     public DbSet<ContractLink> ContractLinks => Set<ContractLink>();
+    public DbSet<SupplierEvaluation> SupplierEvaluations => Set<SupplierEvaluation>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
