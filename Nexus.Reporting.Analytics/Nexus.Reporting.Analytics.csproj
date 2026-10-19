@@ -21,6 +21,8 @@
     <ProjectReference Include="..\Nexus.Strategy\Nexus.Strategy.csproj" />
     <ProjectReference Include="..\Nexus.Integrations.ProjectStrategyAlignment\Nexus.Integrations.ProjectStrategyAlignment.csproj" />
     <ProjectReference Include="..\Nexus.ProjectManagement.Contracts\Nexus.ProjectManagement.Contracts.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Risk\Nexus.ProjectManagement.Risk.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Kpi\Nexus.ProjectManagement.Kpi.csproj" />
     <ProjectReference Include="..\NexusCore.Application\NexusCore.Application.csproj" />
     <ProjectReference Include="..\NexusCore.SharedKernel\NexusCore.SharedKernel.csproj" />
   </ItemGroup>

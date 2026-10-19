@@ -8,6 +8,7 @@ public sealed class KpiDbContext(DbContextOptions<KpiDbContext> options)
     : DbContext(options), IKpiUnitOfWork
 {
     public DbSet<KpiDefinition> KpiDefinitions => Set<KpiDefinition>();
+    public DbSet<KpiMeasurement> KpiMeasurements => Set<KpiMeasurement>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -8,7 +8,8 @@ namespace Nexus.ProjectManagement.Kpi.Application;
 public sealed class KpiService(
     IKpiRepository repository,
     IDeliverableRepository deliverableRepository,
-    IKpiUnitOfWork unitOfWork) : IKpiService
+    IKpiUnitOfWork unitOfWork,
+    IKpiMeasurementRepository? measurements = null) : IKpiService
 {
     public async Task<Result<IReadOnlyList<KpiDefinitionDto>>> ListByProjectAsync(Guid projectId, Guid? deliverableId, CancellationToken cancellationToken)
     {
@@ -68,6 +69,11 @@ public sealed class KpiService(
         if (kpi is null)
         {
             return Result.Failure(Error.NotFound("KPI not found."));
+        }
+
+        if (measurements is not null)
+        {
+            await measurements.RemoveByKpiAsync(id, cancellationToken);
         }
 
         await repository.RemoveAsync(kpi, cancellationToken);

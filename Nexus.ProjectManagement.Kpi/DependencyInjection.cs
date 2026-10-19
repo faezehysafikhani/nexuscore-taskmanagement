@@ -15,6 +15,9 @@ public static class DependencyInjection
     public static IServiceCollection AddProjectKpi(this IServiceCollection services)
     {
         services.AddScoped<IKpiService, KpiService>();
+        services.AddScoped<IKpiMeasurementService, KpiMeasurementService>();
+        services.AddScoped<IValidator<RecordKpiMeasurementRequest>, RecordKpiMeasurementRequestValidator>();
+        services.AddScoped<IValidator<UpdateKpiMeasurementRequest>, UpdateKpiMeasurementRequestValidator>();
         services.AddScoped<IValidator<CreateKpiDefinitionRequest>, CreateKpiDefinitionRequestValidator>();
         services.AddScoped<IValidator<UpdateKpiDefinitionRequest>, UpdateKpiDefinitionRequestValidator>();
         services.AddSingleton<IPermissionCatalog, KpiPermissionCatalog>();

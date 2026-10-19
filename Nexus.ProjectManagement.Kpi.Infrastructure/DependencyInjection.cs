@@ -18,6 +18,7 @@ public static class DependencyInjection
 
         services.AddScoped<IKpiUnitOfWork>(provider => provider.GetRequiredService<KpiDbContext>());
         services.AddScoped<IKpiRepository, KpiRepository>();
+        services.AddScoped<IKpiMeasurementRepository, KpiMeasurementRepository>();
 
         return services;
     }

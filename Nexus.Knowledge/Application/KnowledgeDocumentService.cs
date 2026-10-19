@@ -35,9 +35,9 @@ public sealed class KnowledgeDocumentService(
             documents.Select(ToDto).ToList());
     }
 
-    public async Task<Result<KnowledgeDocumentDto>> GetAsync(Guid id, CancellationToken cancellationToken)
+    public async Task<Result<KnowledgeDocumentDto>> GetAsync(Guid tenantId, Guid id, CancellationToken cancellationToken)
     {
-        var document = await repository.GetByIdAsync(id, cancellationToken);
+        var document = await repository.GetByIdForTenantAsync(tenantId, id, cancellationToken);
         return document is null
             ? Result.Failure<KnowledgeDocumentDto>(Error.NotFound("Knowledge document not found."))
             : Result.Success(ToDto(document));
@@ -61,9 +61,9 @@ public sealed class KnowledgeDocumentService(
         return Result.Success(ToDto(document));
     }
 
-    public async Task<Result<KnowledgeDocumentDto>> UpdateAsync(Guid id, UpdateKnowledgeDocumentRequest request, CancellationToken cancellationToken)
+    public async Task<Result<KnowledgeDocumentDto>> UpdateAsync(Guid tenantId, Guid id, UpdateKnowledgeDocumentRequest request, CancellationToken cancellationToken)
     {
-        var document = await repository.GetByIdAsync(id, cancellationToken);
+        var document = await repository.GetByIdForTenantAsync(tenantId, id, cancellationToken);
         if (document is null)
         {
             return Result.Failure<KnowledgeDocumentDto>(Error.NotFound("Knowledge document not found."));
@@ -143,9 +143,9 @@ public sealed class KnowledgeDocumentService(
         return Result.Success();
     }
 
-    public async Task<Result<(Stream Content, string FileName, string ContentType)>> DownloadAsync(Guid id, CancellationToken cancellationToken)
+    public async Task<Result<(Stream Content, string FileName, string ContentType)>> DownloadAsync(Guid tenantId, Guid id, CancellationToken cancellationToken)
     {
-        var document = await repository.GetByIdAsync(id, cancellationToken);
+        var document = await repository.GetByIdForTenantAsync(tenantId, id, cancellationToken);
         if (document is null)
         {
             return Result.Failure<(Stream, string, string)>(Error.NotFound("Knowledge document not found."));
@@ -160,9 +160,9 @@ public sealed class KnowledgeDocumentService(
         return Result.Success<(Stream, string, string)>((content, document.FileName, document.ContentType));
     }
 
-    public async Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken)
+    public async Task<Result> DeleteAsync(Guid tenantId, Guid id, CancellationToken cancellationToken)
     {
-        var document = await repository.GetByIdAsync(id, cancellationToken);
+        var document = await repository.GetByIdForTenantAsync(tenantId, id, cancellationToken);
         if (document is null)
         {
             return Result.Failure(Error.NotFound("Knowledge document not found."));

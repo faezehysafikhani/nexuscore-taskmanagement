@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <OutputType>Library</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The only project that carries a spreadsheet library: nothing else needs it, so a host that does not want exports never references it.
+         This package has to be mirrored into the internal NuGet feed before an offline / bank deployment. -->
+    <PackageReference Include="ClosedXML" Version="0.104.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- An optional add-on to Nexus.Reporting.Analytics: it turns the analytics' own reports into files, so a file and the screen can never disagree.
+         It owns no data. Contracts is referenced only for its Persian date / digit helpers. -->
+    <ProjectReference Include="..\Nexus.Reporting\Nexus.Reporting.csproj" />
+    <ProjectReference Include="..\Nexus.Reporting.Analytics\Nexus.Reporting.Analytics.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Contracts\Nexus.ProjectManagement.Contracts.csproj" />
+    <ProjectReference Include="..\NexusCore.Application\NexusCore.Application.csproj" />
+    <ProjectReference Include="..\NexusCore.SharedKernel\NexusCore.SharedKernel.csproj" />
+  </ItemGroup>
+
+</Project>

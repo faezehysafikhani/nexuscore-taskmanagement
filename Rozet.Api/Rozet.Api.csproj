@@ -97,6 +97,7 @@
 		<ProjectReference Include="..\Nexus.Portfolio\Nexus.Portfolio.csproj" />
 		<ProjectReference Include="..\Nexus.Reporting\Nexus.Reporting.csproj" />
 		<ProjectReference Include="..\Nexus.Reporting.Analytics\Nexus.Reporting.Analytics.csproj" />
+                <ProjectReference Include="..\Nexus.Reporting.Export\Nexus.Reporting.Export.csproj" />
 	</ItemGroup>
 
 </Project>

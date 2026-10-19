@@ -101,6 +101,9 @@ using Ticketing.Api.Endpoints;
 using Ticketing.Application;
 using Ticketing.Infrastructure;
 
+using Nexus.Reporting.Export;
+using Nexus.Reporting.Export.Endpoints;
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Host.UseSerilog((context, configuration) =>
@@ -159,6 +162,8 @@ builder.Services.AddProjectStrategyAlignment();
 builder.Services.AddPortfolio();
 builder.Services.AddProjectReporting();
 builder.Services.AddReportingAnalytics(o => { o.ProgressFromProjectPlan = true; o.OnlyApprovedProjects = true; });
+
+builder.Services.AddReportingExport();
 
 // --- Infrastructure tier: one DbContext per module, all pointed at the same DefaultConnection
 // database (isolated by schema - see each module's own ToTable(name, schema) configuration). ---
@@ -333,6 +338,7 @@ app.MapProjectStrategyAlignmentEndpoints();
 app.MapPortfolioEndpoints();
 app.MapDashboardEndpoints();
 app.MapReportingAnalyticsEndpoints();
+app.MapReportingExportEndpoints();
 
 if (builder.Configuration.GetValue("Database:SeedOnStartup", true))
 {
@@ -373,6 +379,16 @@ if (builder.Configuration.GetValue("Database:SeedOnStartup", true))
     // In-app notifications' schema. Chat's own schema init/patch runs unconditionally below,
     // regardless of this flag - see the comment there for why.
     await ModuleSchemaInitializer.EnsureCreatedAsync(services.GetRequiredService<NotificationDbContext>(), cancellationToken);
+}
+
+// KPI schema patch: safe to run on every startup; no data is seeded or modified.
+{
+    using var kpiSchemaScope = app.Services.CreateScope();
+    var kpiDb = kpiSchemaScope.ServiceProvider.GetRequiredService<KpiDbContext>();
+    var kpiCancellationToken = CancellationToken.None;
+
+    await ModuleSchemaInitializer.EnsureCreatedAsync(kpiDb, kpiCancellationToken);
+    await KpiSchemaUpgrade.EnsureCurrentAsync(kpiDb, kpiCancellationToken);
 }
 
 // Chat's schema must stay current even when Database:SeedOnStartup is disabled - the setting
