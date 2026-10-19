@@ -16,6 +16,14 @@ public interface ICommitmentRepository
     Task AddObligationAsync(ContractObligation obligation, CancellationToken cancellationToken);
     Task RemoveObligationAsync(ContractObligation obligation, CancellationToken cancellationToken);
 
+    Task<ContractLink?> GetLinkAsync(Guid id, CancellationToken cancellationToken);
+    Task<IReadOnlyList<ContractLink>> ListLinksAsync(Guid contractId, CancellationToken cancellationToken);
+    Task AddLinkAsync(ContractLink link, CancellationToken cancellationToken);
+    Task RemoveLinkAsync(ContractLink link, CancellationToken cancellationToken);
+
+    /// <summary>The links hanging on one milestone or obligation, removed together with it.</summary>
+    Task RemoveLinksOfSubjectAsync(Guid subjectId, CancellationToken cancellationToken);
+
     /// <summary>Everything a contract holds, removed together with it.</summary>
     Task RemoveAllOfContractAsync(Guid contractId, CancellationToken cancellationToken);
 }

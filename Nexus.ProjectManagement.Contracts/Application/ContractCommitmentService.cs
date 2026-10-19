@@ -74,6 +74,7 @@ public sealed class ContractCommitmentService(
             return Result.Failure(Error.NotFound("Milestone not found."));
         }
 
+        await commitments.RemoveLinksOfSubjectAsync(id, cancellationToken);
         await commitments.RemoveMilestoneAsync(milestone, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success();
@@ -142,6 +143,7 @@ public sealed class ContractCommitmentService(
             return Result.Failure(Error.NotFound("Obligation not found."));
         }
 
+        await commitments.RemoveLinksOfSubjectAsync(id, cancellationToken);
         await commitments.RemoveObligationAsync(obligation, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success();

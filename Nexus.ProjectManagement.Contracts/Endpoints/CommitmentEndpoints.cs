@@ -50,6 +50,19 @@ public static class CommitmentEndpoints
                 (await service.DeleteObligationAsync(contractId, id, cancellationToken)).ToApiResult())
             .RequireAuthorization(ContractPermissions.Edit);
 
+        // Links to documents and actions: the contract's papers, and the evidence for a milestone or an obligation.
+        group.MapGet("/{contractId:guid}/links", async (Guid contractId, IContractLinkService service, CancellationToken cancellationToken) =>
+                (await service.ListAsync(contractId, cancellationToken)).ToApiResult())
+            .RequireAuthorization(ContractPermissions.View);
+
+        group.MapPost("/{contractId:guid}/links", async (Guid contractId, CreateContractLinkRequest request, IContractLinkService service, CancellationToken cancellationToken) =>
+                (await service.CreateAsync(contractId, request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(ContractPermissions.Edit);
+
+        group.MapDelete("/{contractId:guid}/links/{id:guid}", async (Guid contractId, Guid id, IContractLinkService service, CancellationToken cancellationToken) =>
+                (await service.DeleteAsync(contractId, id, cancellationToken)).ToApiResult())
+            .RequireAuthorization(ContractPermissions.Edit);
+
         return app;
     }
 }

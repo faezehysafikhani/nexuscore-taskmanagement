@@ -13,6 +13,7 @@ public sealed class ContractsDbContext(DbContextOptions<ContractsDbContext> opti
     public DbSet<Supplier> Suppliers => Set<Supplier>();
     public DbSet<ContractMilestone> ContractMilestones => Set<ContractMilestone>();
     public DbSet<ContractObligation> ContractObligations => Set<ContractObligation>();
+    public DbSet<ContractLink> ContractLinks => Set<ContractLink>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

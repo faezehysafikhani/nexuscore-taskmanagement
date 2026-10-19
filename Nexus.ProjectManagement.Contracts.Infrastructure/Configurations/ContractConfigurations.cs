@@ -52,6 +52,20 @@ public sealed class ContractObligationConfiguration : IEntityTypeConfiguration<C
     }
 }
 
+public sealed class ContractLinkConfiguration : IEntityTypeConfiguration<ContractLink>
+{
+    public void Configure(EntityTypeBuilder<ContractLink> builder)
+    {
+        builder.ToTable("ContractLinks", "project_contracts");
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.Property(x => x.Title).HasMaxLength(300).IsRequired();
+        builder.Property(x => x.Note).HasMaxLength(1000);
+        builder.HasIndex(x => x.ContractId);
+        builder.HasIndex(x => x.SubjectId);
+    }
+}
+
 public sealed class SupplierConfiguration : IEntityTypeConfiguration<Supplier>
 {
     public void Configure(EntityTypeBuilder<Supplier> builder)

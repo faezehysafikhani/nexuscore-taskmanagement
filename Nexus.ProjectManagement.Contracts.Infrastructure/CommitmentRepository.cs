@@ -36,8 +36,27 @@ public sealed class CommitmentRepository(ContractsDbContext dbContext) : ICommit
         return Task.CompletedTask;
     }
 
+    public Task<ContractLink?> GetLinkAsync(Guid id, CancellationToken cancellationToken) =>
+        dbContext.ContractLinks.SingleOrDefaultAsync(l => l.Id == id, cancellationToken);
+
+    public async Task<IReadOnlyList<ContractLink>> ListLinksAsync(Guid contractId, CancellationToken cancellationToken) =>
+        await dbContext.ContractLinks.Where(l => l.ContractId == contractId).ToListAsync(cancellationToken);
+
+    public async Task AddLinkAsync(ContractLink link, CancellationToken cancellationToken) =>
+        await dbContext.ContractLinks.AddAsync(link, cancellationToken);
+
+    public Task RemoveLinkAsync(ContractLink link, CancellationToken cancellationToken)
+    {
+        dbContext.ContractLinks.Remove(link);
+        return Task.CompletedTask;
+    }
+
+    public async Task RemoveLinksOfSubjectAsync(Guid subjectId, CancellationToken cancellationToken) =>
+        dbContext.ContractLinks.RemoveRange(await dbContext.ContractLinks.Where(l => l.SubjectId == subjectId).ToListAsync(cancellationToken));
+
     public async Task RemoveAllOfContractAsync(Guid contractId, CancellationToken cancellationToken)
     {
+        dbContext.ContractLinks.RemoveRange(await dbContext.ContractLinks.Where(l => l.ContractId == contractId).ToListAsync(cancellationToken));
         dbContext.ContractMilestones.RemoveRange(await dbContext.ContractMilestones.Where(m => m.ContractId == contractId).ToListAsync(cancellationToken));
         dbContext.ContractObligations.RemoveRange(await dbContext.ContractObligations.Where(o => o.ContractId == contractId).ToListAsync(cancellationToken));
     }
