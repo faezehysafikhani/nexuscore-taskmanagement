@@ -15,6 +15,10 @@
   one position are fine, e.g. three «کارشناس») or directly in the company (the head's, board
   members'). Each has a code, unique in its company (by default the company's next number).
   The head's post is the one directly in the company of its position with no superior.
+  A post may sit under another post of the same place (`parentPostId`, e.g. «کارشناس» under
+  «معاون»; any depth): the holder of the post above manages its holder (see below). Set it when
+  adding the post or with `PUT /unit-positions/{id}/parent`; a post with posts under it can't be
+  removed until they move.
 - **Tasks given to posts** (optional, `OrgStructure:AssignTasksToPosts`) — a task's creator,
   responsible people and access list are posts; their holders are the task's people. When a
   post's holder changes, its tasks move to the new holder (`org_structure.TaskPosts` keeps which
@@ -59,9 +63,13 @@ The tables are created in the `DefaultConnection` database under the `org_struct
 In order, the first that applies (and is not the user themselves):
 
 1. the manager set on the user's own assignment;
-2. the manager of the user's unit, or of the nearest unit above it — up to the unit linked to the
+2. the holder of the post above the user's main post (the nearest one someone else holds; a
+   vacant post above is passed over) — so the post above also gets the user's tasks in its
+   reports, may give them tasks with the assignment limit on, and sees their post in the
+   substitution inbox when it falls vacant; it gets no rights over the chart itself;
+3. the manager of the user's unit, or of the nearest unit above it — up to the unit linked to the
    company (units above that are not the company's);
-3. the company's head.
+4. the company's head.
 
 So a unit's head reports to the head of the unit above, and the head of a company's top unit
 reports to the company's head. Writes that would create a loop are rejected; reads are

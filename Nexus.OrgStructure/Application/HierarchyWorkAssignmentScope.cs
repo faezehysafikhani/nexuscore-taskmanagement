@@ -57,15 +57,18 @@ public sealed class HierarchyWorkAssignmentScope(
             return null;
         }
 
+        var seatList = await repository.ListUnitPositionsAsync(tenantId, cancellationToken);
+        var holdings = await repository.ListUserPositionsAsync(tenantId, cancellationToken);
+        var postSuperiors = PostSuperiors.Of(
+            assignments.Select(a => new PostSuperiors.Placement(a.UserId, a.CompanyId, a.UnitId, a.PositionId)), seatList, holdings);
         var resolver = new HierarchyResolver(
             (await units.ListAsync(tenantId, cancellationToken)).Select(unit => new UnitNode(unit.Id, null, unit.ManagerUserId)),
             (await repository.ListCompanyUnitsAsync(tenantId, cancellationToken)).ToDictionary(link => link.UnitId, link => link.CompanyId),
             companies.ToDictionary(company => company.Id, company => company.ManagerUserId),
-            assignments.Select(a => new AssignmentNode(a.UserId, a.CompanyId, a.UnitId, a.ManagerUserId)));
+            assignments.Select(a => new AssignmentNode(a.UserId, a.CompanyId, a.UnitId, a.ManagerUserId, postSuperiors.TryGetValue(a.UserId, out var superior) ? superior : null)));
 
         // A person's rank in their own deputy: the highest of the deputy's positions they hold.
-        var seats = (await repository.ListUnitPositionsAsync(tenantId, cancellationToken)).ToDictionary(seat => seat.Id);
-        var holdings = await repository.ListUserPositionsAsync(tenantId, cancellationToken);
+        var seats = seatList.ToDictionary(seat => seat.Id);
         var unitOf = assignments.ToDictionary(a => a.UserId, a => a.UnitId);
         int? RankOf(Guid userId) => unitOf.GetValueOrDefault(userId) is { } unitId
             ? holdings.Where(h => h.UserId == userId && seats.TryGetValue(h.UnitPositionId, out var seat) && seat.UnitId == unitId)

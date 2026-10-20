@@ -423,6 +423,83 @@ public sealed class OrgChartTeamsAndTitlesTests
         Assert.Empty((await world.Substitution(deputyHead).GetInboxAsync(Tenant, default)).Value!.Posts);
     }
 
+    [Fact]
+    public async Task APostUnderAPost_MakesItsHolderTheManager_AndAVacantOneIsPassedOver()
+    {
+        var world = new World();
+        var (deputyHead, deputy, expert) = (world.User("مدیر"), world.User("معاون"), world.User("کارشناس"));
+        var tech = world.Unit("معاونت فناوری", deputyHead);
+        var company = await world.CompanyAsync("C1");
+        await world.Service.LinkUnitAsync(Tenant, tech.Id, new LinkUnitRequest(company), default);
+        var deputyPost = await world.SeatAsync(tech.Id, "معاون");
+        var expertPost = (await world.Service.AddUnitPositionAsync(
+            Tenant, tech.Id, new AddUnitPositionRequest(await world.PositionAsync("کارشناس"), ParentPostId: deputyPost), default)).Value!;
+        Assert.Equal(deputyPost, expertPost.ParentPostId);
+        await world.Service.SetAssignmentAsync(Tenant, deputy, new SetUserAssignmentRequest(company, tech.Id, null, null, [deputyPost]), default);
+        await world.Service.SetAssignmentAsync(Tenant, expert, new SetUserAssignmentRequest(company, tech.Id, null, null, [expertPost.Id]), default);
+
+        // The deputy manages the expert; the deputy's head manages the deputy, and the expert through them.
+        var manager = (await world.Service.GetManagerAsync(Tenant, expert, default)).Value!;
+        Assert.Equal((deputy, "PostSuperior"), (manager.UserId, manager.Source));
+        Assert.Equal(deputyHead, (await world.Service.GetManagerAsync(Tenant, deputy, default)).Value!.UserId);
+        Assert.Equal([expert], (await world.Service.GetSubordinatesAsync(Tenant, deputy, true, default)).Value!.Select(s => s.UserId));
+        Assert.Equal(2, (await world.Service.GetSubordinatesAsync(Tenant, deputyHead, true, default)).Value!.Single(s => s.UserId == expert).Depth);
+
+        // With the limit on, the deputy gives tasks to the expert; the expert not to the deputy.
+        Assert.DoesNotContain(expert, (await world.AssignmentScope(deputy, true).GetLimitAsync(Tenant, deputy, default))!.BlockedUserIds);
+        Assert.Contains(deputy, (await world.AssignmentScope(expert, true).GetLimitAsync(Tenant, expert, default))!.BlockedUserIds);
+
+        // The expert's post falls vacant: its tasks are in the deputy's inbox (and the head's).
+        await world.Service.RemoveAssignmentAsync(Tenant, expert, default);
+        var task = Guid.NewGuid();
+        world.Updater.Summaries.Add(new TaskSummary(task, "کار باز", new DateOnly(2030, 1, 1), "Todo", false));
+        await world.TaskPosts.SetTaskPostsAsync(Tenant, task, null, [expertPost.Id], [], default);
+        Assert.Equal(expertPost.Id, Assert.Single((await world.Substitution(deputy).GetInboxAsync(Tenant, default)).Value!.Posts).PostId);
+        Assert.Single((await world.Substitution(deputyHead).GetInboxAsync(Tenant, default)).Value!.Posts);
+
+        // The deputy's post falls vacant: the expert's manager is the deputy's head again.
+        await world.Service.SetAssignmentAsync(Tenant, expert, new SetUserAssignmentRequest(company, tech.Id, null, null, [expertPost.Id]), default);
+        await world.Service.RemoveAssignmentAsync(Tenant, deputy, default);
+        manager = (await world.Service.GetManagerAsync(Tenant, expert, default)).Value!;
+        Assert.Equal((deputyHead, "UnitManager"), (manager.UserId, manager.Source));
+    }
+
+    [Fact]
+    public async Task APostGoesOnlyUnderAPostOfItsPlace_NeverUnderItselfOrBelow()
+    {
+        var world = new World();
+        var (deputy, expert) = (world.User("معاون"), world.User("کارشناس"));
+        var (tech, finance) = (world.Unit("معاونت فناوری"), world.Unit("معاونت مالی"));
+        var company = await world.CompanyAsync("C1");
+        await world.Service.LinkUnitAsync(Tenant, tech.Id, new LinkUnitRequest(company), default);
+        await world.Service.LinkUnitAsync(Tenant, finance.Id, new LinkUnitRequest(company), default);
+        var (deputyPost, expertPost, elsewhere) = (
+            await world.SeatAsync(tech.Id, "معاون"), await world.SeatAsync(tech.Id, "کارشناس"), await world.SeatAsync(finance.Id, "حسابدار"));
+
+        var parent = (Guid? id) => new SetPostParentRequest(id);
+        Assert.Equal("validation.error", (await world.Service.SetPostParentAsync(Tenant, expertPost, parent(elsewhere), default)).Error.Code);
+        Assert.Equal("validation.error", (await world.Service.SetPostParentAsync(Tenant, expertPost, parent(Guid.NewGuid()), default)).Error.Code);
+        Assert.Equal("validation.error", (await world.Service.AddUnitPositionAsync(
+            Tenant, tech.Id, new AddUnitPositionRequest(await world.PositionAsync("دستیار"), ParentPostId: elsewhere), default)).Error.Code);
+        Assert.Equal(deputyPost, (await world.Service.SetPostParentAsync(Tenant, expertPost, parent(deputyPost), default)).Value!.ParentPostId);
+        Assert.Equal("conflict", (await world.Service.SetPostParentAsync(Tenant, deputyPost, parent(expertPost), default)).Error.Code);
+        Assert.Equal("conflict", (await world.Service.SetPostParentAsync(Tenant, deputyPost, parent(deputyPost), default)).Error.Code);
+
+        // A post with posts under it stays until they move.
+        Assert.Equal("conflict", (await world.Service.RemoveUnitPositionAsync(Tenant, deputyPost, default)).Error.Code);
+
+        // No management loop through posts: the deputy can't be put under the expert below them.
+        await world.Service.SetAssignmentAsync(Tenant, deputy, new SetUserAssignmentRequest(company, tech.Id, null, null, [deputyPost]), default);
+        await world.Service.SetAssignmentAsync(Tenant, expert, new SetUserAssignmentRequest(company, tech.Id, null, null, [expertPost]), default);
+        Assert.Equal("conflict", (await world.Service.SetAssignmentAsync(
+            Tenant, deputy, new SetUserAssignmentRequest(company, tech.Id, null, expert, [deputyPost]), default)).Error.Code);
+
+        // Out from under it: the post can go.
+        Assert.Null((await world.Service.SetPostParentAsync(Tenant, expertPost, parent(null), default)).Value!.ParentPostId);
+        await world.Service.RemoveAssignmentAsync(Tenant, deputy, default);
+        Assert.True((await world.Service.RemoveUnitPositionAsync(Tenant, deputyPost, default)).IsSuccess);
+    }
+
     public sealed class RecordingUpdater : ITaskPeopleUpdater
     {
         public List<TaskPersonChange> Applied { get; } = [];

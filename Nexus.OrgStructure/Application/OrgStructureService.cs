@@ -28,6 +28,7 @@ public interface IOrgStructureService
     Task<Result<UnitPositionDto>> AddUnitPositionAsync(Guid tenantId, Guid unitId, AddUnitPositionRequest request, CancellationToken cancellationToken);
     Task<Result<UnitPositionDto>> AddCompanyPositionAsync(Guid tenantId, Guid companyId, AddUnitPositionRequest request, CancellationToken cancellationToken);
     Task<Result<UnitPositionDto>> UpdateUnitPositionAsync(Guid tenantId, Guid unitPositionId, UpdateUnitPositionRequest request, CancellationToken cancellationToken);
+    Task<Result<UnitPositionDto>> SetPostParentAsync(Guid tenantId, Guid unitPositionId, SetPostParentRequest request, CancellationToken cancellationToken);
     Task<Result<IReadOnlyList<UnitPositionDto>>> OrderUnitPositionsAsync(Guid tenantId, Guid unitId, OrderUnitPositionsRequest request, CancellationToken cancellationToken);
     Task<Result> RemoveUnitPositionAsync(Guid tenantId, Guid unitPositionId, CancellationToken cancellationToken);
 
@@ -562,7 +563,21 @@ public sealed class OrgStructureService(
             return Result.Failure<UnitPositionDto>(invalid);
         }
 
+        if (request.ParentPostId is { } parentId)
+        {
+            if (snapshot.Seats.FirstOrDefault(seat => seat.Id == parentId) is not { } parent)
+            {
+                return Result.Failure<UnitPositionDto>(Error.Validation("The post above was not found."));
+            }
+
+            if (parent.CompanyId != companyId || parent.UnitId != unitId)
+            {
+                return Result.Failure<UnitPositionDto>(Error.Validation("The post above must be in the same place (the same unit, or directly in the company)."));
+            }
+        }
+
         var added = new UnitPosition(Guid.NewGuid(), tenantId, companyId, unitId, request.PositionId, NextSortOrder(snapshot, companyId, unitId, request.PositionId), code);
+        added.PlaceUnder(request.ParentPostId);
         await repository.AddUnitPositionAsync(added, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success(ToDto(added, snapshot, new Dictionary<Guid, UserContact>()));
@@ -586,6 +601,55 @@ public sealed class OrgStructureService(
         }
 
         seat.ChangeCode(code);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        var people = await PeopleAsync(snapshot.Holdings.Where(h => h.UnitPositionId == seat.Id).Select(h => (Guid?)h.UserId), cancellationToken);
+        return Result.Success(ToDto(seat, snapshot, people));
+    }
+
+    /// <summary>
+    /// Puts a post under another of its place (same unit, or both directly in the company), or
+    /// under nobody: the holder of the post above manages its holder (a vacant one is passed over).
+    /// </summary>
+    public async Task<Result<UnitPositionDto>> SetPostParentAsync(
+        Guid tenantId, Guid unitPositionId, SetPostParentRequest request, CancellationToken cancellationToken)
+    {
+        var snapshot = await LoadAsync(tenantId, cancellationToken);
+        var seat = snapshot.Seats.FirstOrDefault(s => s.Id == unitPositionId);
+        if (seat is null)
+        {
+            return Result.Failure<UnitPositionDto>(Error.NotFound("Unit position was not found."));
+        }
+
+        if (request.ParentPostId is { } parentId)
+        {
+            if (snapshot.Seats.FirstOrDefault(s => s.Id == parentId) is not { } parent)
+            {
+                return Result.Failure<UnitPositionDto>(Error.Validation("The post above was not found."));
+            }
+
+            if (parent.CompanyId != seat.CompanyId || parent.UnitId != seat.UnitId)
+            {
+                return Result.Failure<UnitPositionDto>(Error.Validation("The post above must be in the same place (the same unit, or directly in the company)."));
+            }
+
+            // Not itself, nor a post below it.
+            var visited = new HashSet<Guid>();
+            for (Guid? current = parentId; current is { } id && visited.Add(id); current = snapshot.Seats.FirstOrDefault(s => s.Id == id)?.ParentPostId)
+            {
+                if (id == seat.Id)
+                {
+                    return Result.Failure<UnitPositionDto>(Error.Conflict("A post can't be put under itself or under a post below it."));
+                }
+            }
+        }
+
+        var after = snapshot.Resolver(parentOverride: (seat.Id, request.ParentPostId));
+        if (snapshot.Resolver().FindLoop() is null && after.FindLoop() is not null)
+        {
+            return Result.Failure<UnitPositionDto>(Error.Conflict("This change would create a management loop."));
+        }
+
+        seat.PlaceUnder(request.ParentPostId);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         var people = await PeopleAsync(snapshot.Holdings.Where(h => h.UnitPositionId == seat.Id).Select(h => (Guid?)h.UserId), cancellationToken);
         return Result.Success(ToDto(seat, snapshot, people));
@@ -628,6 +692,11 @@ public sealed class OrgStructureService(
         if (snapshot.Holdings.Any(h => h.UnitPositionId == unitPositionId))
         {
             return Result.Failure(Error.Conflict("People hold this position. Change their positions first."));
+        }
+
+        if (snapshot.Seats.Any(other => other.ParentPostId == unitPositionId))
+        {
+            return Result.Failure(Error.Conflict("Posts are under this one. Move them first."));
         }
 
         repository.RemoveUnitPosition(seat);
@@ -869,9 +938,10 @@ public sealed class OrgStructureService(
 
         var after = snapshot.Resolver(
             assignmentOverride: new AssignmentNode(userId, request.CompanyId, request.UnitId, request.ManagerUserId),
-            companyManagerOverrides: heads);
+            companyManagerOverrides: heads,
+            heldOverride: (mainPositionId, finalSeats));
         if ((after.ManagementChainOf(userId).Count > 0 && LoopsBackTo(after, userId))
-            || (heads.Count > 0 && snapshot.Resolver().FindLoop() is null && after.FindLoop() is not null))
+            || (snapshot.Resolver().FindLoop() is null && after.FindLoop() is not null))
         {
             return Result.Failure<UserAssignmentDto>(Error.Conflict("This change would create a management loop."));
         }
@@ -1055,7 +1125,8 @@ public sealed class OrgStructureService(
             snapshot.Positions[seat.PositionId].IsActive,
             snapshot.Holdings.Where(h => h.UnitPositionId == seat.Id).Select(h => MemberOf(h.UserId)).ToList(),
             seat.Code,
-            snapshot.IsHeadPost(seat));
+            snapshot.IsHeadPost(seat),
+            seat.ParentPostId);
 
         var chart = snapshot.Companies.Values
             .Where(company => companyId is null || company.Id == companyId)
@@ -1229,7 +1300,8 @@ public sealed class OrgStructureService(
                 .Select(h => Person(h.UserId, people)).OrderBy(person => person.DisplayName).ToList(),
             seat.Code,
             seat.CompanyId,
-            snapshot.Companies.GetValueOrDefault(seat.CompanyId)?.Name);
+            snapshot.Companies.GetValueOrDefault(seat.CompanyId)?.Name,
+            seat.ParentPostId);
     }
 
     private async Task<CompanyDto> ToDtoAsync(Guid tenantId, Company company, CancellationToken cancellationToken)
@@ -1350,17 +1422,50 @@ public sealed class OrgStructureService(
         public HashSet<Guid> CompaniesOf(Guid positionId) =>
             PositionCompanies.Where(link => link.PositionId == positionId).Select(link => link.CompanyId).ToHashSet();
 
+        /// <summary>
+        /// The reporting structure; the overrides show it as it would be after a change: a person's
+        /// new place (with the main position and posts they would hold), new company heads, or a
+        /// post's new parent.
+        /// </summary>
         public HierarchyResolver Resolver(
             AssignmentNode? assignmentOverride = null,
-            IReadOnlyDictionary<Guid, Guid?>? companyManagerOverrides = null)
+            IReadOnlyDictionary<Guid, Guid?>? companyManagerOverrides = null,
+            (Guid? PositionId, IReadOnlyList<UnitPosition> Posts)? heldOverride = null,
+            (Guid PostId, Guid? ParentPostId)? parentOverride = null)
         {
+            var placements = Assignments
+                .Where(a => assignmentOverride is null || a.UserId != assignmentOverride.UserId)
+                .Select(a => new PostSuperiors.Placement(a.UserId, a.CompanyId, a.UnitId, a.PositionId))
+                .ToList();
+            var seats = Seats.ToList();
+            var holdings = Holdings.ToList();
+            if (assignmentOverride is not null)
+            {
+                placements.Add(new PostSuperiors.Placement(
+                    assignmentOverride.UserId, assignmentOverride.CompanyId, assignmentOverride.UnitId,
+                    heldOverride?.PositionId ?? Assignments.FirstOrDefault(a => a.UserId == assignmentOverride.UserId)?.PositionId));
+                if (heldOverride is { } held)
+                {
+                    holdings = holdings.Where(h => h.UserId != assignmentOverride.UserId)
+                        .Concat(held.Posts.Select(post => new UserPosition(Guid.NewGuid(), Guid.Empty, assignmentOverride.UserId, post.Id)))
+                        .ToList();
+                    seats.AddRange(held.Posts.Where(post => seats.All(seat => seat.Id != post.Id)));
+                }
+            }
+
+            var superiors = PostSuperiors.Of(placements, seats, holdings,
+                parentOverride is { } moved ? seat => seat.Id == moved.PostId ? moved.ParentPostId : seat.ParentPostId : null);
             var assignments = Assignments
                 .Where(a => assignmentOverride is null || a.UserId != assignmentOverride.UserId)
-                .Select(a => new AssignmentNode(a.UserId, a.CompanyId, a.UnitId, a.ManagerUserId))
+                .Select(a => new AssignmentNode(a.UserId, a.CompanyId, a.UnitId, a.ManagerUserId,
+                    superiors.TryGetValue(a.UserId, out var superior) ? superior : null))
                 .ToList();
             if (assignmentOverride is not null)
             {
-                assignments.Add(assignmentOverride);
+                assignments.Add(assignmentOverride with
+                {
+                    PostSuperiorUserId = superiors.TryGetValue(assignmentOverride.UserId, out var superior) ? superior : null,
+                });
             }
 
             var companyManagers = Companies.Values.ToDictionary(

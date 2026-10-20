@@ -88,6 +88,10 @@ public static class OrgStructureEndpoints
                 InTenant(user, tenant => service.UpdateUnitPositionAsync(tenant, id, request, ct)))
             .RequireAuthorization(OrgStructurePermissions.ManagePositions);
 
+        group.MapPut("/unit-positions/{id:guid}/parent", (Guid id, SetPostParentRequest request, ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.SetPostParentAsync(tenant, id, request, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ManagePositions);
+
         group.MapPut("/units/{unitId:guid}/positions/order", (Guid unitId, OrderUnitPositionsRequest request, ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
                 InTenant(user, tenant => service.OrderUnitPositionsAsync(tenant, unitId, request, ct)))
             .RequireAuthorization(OrgStructurePermissions.ManagePositions);

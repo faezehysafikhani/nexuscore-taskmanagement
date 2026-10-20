@@ -182,11 +182,15 @@ public sealed class SubstitutionService(
         var seats = (await repository.ListUnitPositionsAsync(tenantId, cancellationToken)).ToDictionary(seat => seat.Id);
         var positions = (await repository.ListPositionsAsync(tenantId, cancellationToken)).ToDictionary(position => position.Id);
         var assignments = await repository.ListAssignmentsAsync(tenantId, cancellationToken);
+        var postSuperiors = PostSuperiors.Of(
+            assignments.Select(a => new PostSuperiors.Placement(a.UserId, a.CompanyId, a.UnitId, a.PositionId)),
+            seats.Values, await repository.ListUserPositionsAsync(tenantId, cancellationToken));
         var resolver = new HierarchyResolver(
             unitList.Select(unit => new UnitNode(unit.Id, null, unit.ManagerUserId)),
             (await repository.ListCompanyUnitsAsync(tenantId, cancellationToken)).ToDictionary(link => link.UnitId, link => link.CompanyId),
             companies.ToDictionary(company => company.Key, company => company.Value.ManagerUserId),
-            assignments.Select(a => new AssignmentNode(a.UserId, a.CompanyId, a.UnitId, a.ManagerUserId)));
+            assignments.Select(a => new AssignmentNode(a.UserId, a.CompanyId, a.UnitId, a.ManagerUserId,
+                postSuperiors.TryGetValue(a.UserId, out var superior) ? superior : null)));
         var posts = (await taskPosts.ListPostsAsync(tenantId, cancellationToken)).ToDictionary(post => post.PostId);
         return new State(
             posts,
@@ -212,15 +216,25 @@ public sealed class SubstitutionService(
         public Guid? CompanyOf(Guid postId) => Seats.GetValueOrDefault(postId)?.CompanyId;
 
         /// <summary>
-        /// The managers above a post: its unit's manager (for a post directly in the company, or a
-        /// unit with no manager: the company's head), and their managers in turn. The head's own
-        /// post has only those above the head.
+        /// The managers above a post: the holder of the nearest post above it that someone holds,
+        /// else its unit's manager (for a post directly in the company, or a unit with no manager:
+        /// the company's head), and their managers in turn. The head's own post has only those
+        /// above the head.
         /// </summary>
         public IReadOnlyList<Guid> SuperiorsOf(Guid postId)
         {
             if (Seats.GetValueOrDefault(postId) is not { } seat)
             {
                 return [];
+            }
+
+            var visited = new HashSet<Guid> { seat.Id };
+            for (var parent = seat.ParentPostId; parent is { } parentId && visited.Add(parentId) && Seats.TryGetValue(parentId, out var above); parent = above.ParentPostId)
+            {
+                if (Posts.GetValueOrDefault(parentId)?.HolderUserId is { } holder)
+                {
+                    return [holder, .. Resolver.ManagementChainOf(holder)];
+                }
             }
 
             var isHeadPost = seat.UnitId is null && Positions.GetValueOrDefault(seat.PositionId) is { ParentPositionId: null };
