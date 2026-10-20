@@ -240,6 +240,7 @@ public sealed class OrgStructureTests
         services.AddOrgStructure();
         services.AddOrgStructureInfrastructure(configuration);
 
+        services.AddSingleton<IConfiguration>(configuration);
         using var provider = services.BuildServiceProvider();
         using var scope = provider.CreateScope();
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<IOrgStructureService>());

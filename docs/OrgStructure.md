@@ -15,6 +15,11 @@
   one position are fine, e.g. three «کارشناس») or directly in the company (the head's, board
   members'). Each has a code, unique in its company (by default the company's next number).
   The head's post is the one directly in the company of its position with no superior.
+- **Tasks given to posts** (optional, `OrgStructure:AssignTasksToPosts`) — a task's creator,
+  responsible people and access list are posts; their holders are the task's people. When a
+  post's holder changes, its tasks move to the new holder (`org_structure.TaskPosts` keeps which
+  posts each task has). A vacant post can't be given a new task. On start-up, tasks that have no
+  posts yet are given to their people's main posts.
 - **Each user's place** — company, optional unit, optional position, optional direct manager.
 - **Manager / subordinates** — derived, see below.
 

@@ -77,6 +77,15 @@ public static class TaskManagementEndpoints
             .RequireAuthorization()
             .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi);
 
+        // Where tasks are given to posts: the posts to choose from (Enabled false: give them to people).
+        app.MapGet("/api/task-management/assignable-posts", async (ITaskService service, CancellationToken cancellationToken) =>
+                await service.ListAssignablePostsAsync(cancellationToken) is { IsSuccess: true } result
+                    ? Results.Ok(result.Value)
+                    : Results.Unauthorized())
+            .WithTags("Tasks")
+            .RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi);
+
         return app;
     }
 

@@ -15,6 +15,12 @@ public sealed class OrgStructureOptions
     /// (<see cref="HierarchyWorkAssignmentScope"/>). Off unless the product turns it on.
     /// </summary>
     public bool LimitTaskAssignment { get; set; }
+
+    /// <summary>
+    /// Whether tasks are given to posts instead of people (<see cref="TaskPostDirectory"/>): a task
+    /// moves with its posts to their new holders. Off unless the product turns it on.
+    /// </summary>
+    public bool AssignTasksToPosts { get; set; }
 }
 
 /// <summary>

@@ -118,7 +118,20 @@ public sealed record TaskDto(
     TimeOnly? DueTime = null,
     TimeOnly? CharterStartTime = null,
     TimeOnly? CharterEndTime = null,
-    IReadOnlyList<UserSummaryDto>? ResponsibleUsers = null);
+    IReadOnlyList<UserSummaryDto>? ResponsibleUsers = null,
+    IReadOnlyList<TaskPostDto>? Posts = null);
+
+/// <summary>
+/// A post the task is given to (where tasks are given to posts): Role "owner" (its creator's),
+/// "responsible" or "access"; HolderUserId null when the post is vacant.
+/// </summary>
+public sealed record TaskPostDto(Guid PostId, string Role, string Title, string Code, string Place, Guid? HolderUserId, string? HolderName);
+
+/// <summary>Posts one may give tasks to. Enabled false: tasks are given to people.</summary>
+public sealed record AssignablePostsDto(bool Enabled, IReadOnlyList<AssignablePostDto> Posts);
+
+/// <summary>Blocked: the signed-in user may not make its holder responsible (see IWorkAssignmentScope).</summary>
+public sealed record AssignablePostDto(Guid PostId, string Title, string Code, string Place, Guid? HolderUserId, string? HolderName, bool Blocked);
 
 /// <summary>Trimmed shape for list and board views - no subtasks, files or charter.</summary>
 public sealed record TaskListItemDto(
@@ -198,7 +211,9 @@ public sealed record CreateTaskRequest(
     TimeOnly? DueTime = null,
     TimeOnly? CharterStartTime = null,
     TimeOnly? CharterEndTime = null,
-    IReadOnlyList<Guid>? ResponsibleUserIds = null);
+    IReadOnlyList<Guid>? ResponsibleUserIds = null,
+    IReadOnlyList<Guid>? ResponsiblePostIds = null,
+    IReadOnlyList<Guid>? AccessPostIds = null);
 
 /// <summary>
 /// Replaces the task's details. Like every other field here, DueTime is replaced as sent: null
@@ -221,7 +236,9 @@ public sealed record UpdateTaskRequest(
     TimeOnly? DueTime = null,
     TimeOnly? CharterStartTime = null,
     TimeOnly? CharterEndTime = null,
-    IReadOnlyList<Guid>? ResponsibleUserIds = null);
+    IReadOnlyList<Guid>? ResponsibleUserIds = null,
+    IReadOnlyList<Guid>? ResponsiblePostIds = null,
+    IReadOnlyList<Guid>? AccessPostIds = null);
 
 public sealed record ChangeTaskStatusRequest(TaskItemStatus Status);
 
@@ -230,8 +247,15 @@ public sealed record ChangeTaskPriorityRequest(TaskPriority Priority);
 /// <summary>
 /// ResponsibleUserIds (one or more) replaces who is responsible; without it AssignedUserId is
 /// the single responsible person, as older clients send it. AssigneeUserIds is the access list.
+/// Where tasks are given to posts, ResponsiblePostIds / AccessPostIds give them to posts instead
+/// (people sent instead go by their posts).
 /// </summary>
-public sealed record AssignUserRequest(Guid? AssignedUserId, IReadOnlyList<Guid>? AssigneeUserIds = null, IReadOnlyList<Guid>? ResponsibleUserIds = null);
+public sealed record AssignUserRequest(
+    Guid? AssignedUserId,
+    IReadOnlyList<Guid>? AssigneeUserIds = null,
+    IReadOnlyList<Guid>? ResponsibleUserIds = null,
+    IReadOnlyList<Guid>? ResponsiblePostIds = null,
+    IReadOnlyList<Guid>? AccessPostIds = null);
 
 public sealed record AssignUserGroupRequest(Guid? AssignedUserGroupId);
 

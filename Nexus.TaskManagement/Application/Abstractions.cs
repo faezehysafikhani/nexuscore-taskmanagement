@@ -26,6 +26,9 @@ public interface ITaskRepository
 
     Task<int> CountSubTasksAsync(Guid tenantId, Guid taskId, CancellationToken cancellationToken);
 
+    /// <summary>Every task of the tenant with its owner, responsible people and access list (no other data).</summary>
+    Task<IReadOnlyList<NexusCore.Application.Identity.Interfaces.TaskPeopleSnapshot>> ListPeopleAsync(Guid tenantId, CancellationToken cancellationToken);
+
     Task AddAsync(TaskItem task, CancellationToken cancellationToken);
 
     void Remove(TaskItem task);
@@ -149,6 +152,7 @@ public interface ITaskService
     Task<Result<TaskDto>> ChangePriorityAsync(Guid id, ChangeTaskPriorityRequest request, CancellationToken cancellationToken);
     Task<Result<TaskDto>> AssignUserAsync(Guid id, AssignUserRequest request, CancellationToken cancellationToken);
     Task<Result<TaskDto>> AssignUserGroupAsync(Guid id, AssignUserGroupRequest request, CancellationToken cancellationToken);
+    Task<Result<AssignablePostsDto>> ListAssignablePostsAsync(CancellationToken cancellationToken);
 
     Task<Result<SubTaskDto>> CreateSubTaskAsync(Guid taskId, CreateSubTaskRequest request, CancellationToken cancellationToken);
     Task<Result<SubTaskDto>> UpdateSubTaskAsync(Guid subTaskId, UpdateSubTaskRequest request, CancellationToken cancellationToken);

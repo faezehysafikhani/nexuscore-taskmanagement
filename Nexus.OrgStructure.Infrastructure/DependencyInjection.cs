@@ -24,6 +24,7 @@ public static class DependencyInjection
 
         services.AddScoped<IOrgStructureUnitOfWork>(provider => provider.GetRequiredService<OrgStructureDbContext>());
         services.AddScoped<IOrgStructureRepository, OrgStructureRepository>();
+        services.AddHostedService<TaskPostsStartup>();
 
         return services;
     }

@@ -227,6 +227,38 @@ public sealed class UserPosition : AuditableEntity<Guid>
     public Guid UnitPositionId { get; private set; }
 }
 
+/// <summary>
+/// A post a task is given to (where tasks are given to posts): as its creator's (Role Owner),
+/// responsible or with access. HolderUserId: who stood in for the post on the task when last
+/// brought up to date - a holder change is put on the task, then recorded here.
+/// </summary>
+public sealed class TaskPost : AuditableEntity<Guid>
+{
+    private TaskPost() : base(Guid.Empty)
+    {
+    }
+
+    public TaskPost(Guid id, Guid tenantId, Guid taskId, Guid postId, int role, Guid? holderUserId) : base(id)
+    {
+        TenantId = tenantId;
+        TaskId = taskId;
+        PostId = postId;
+        Role = role;
+        HolderUserId = holderUserId;
+    }
+
+    public Guid TenantId { get; private set; }
+    public Guid TaskId { get; private set; }
+    public Guid PostId { get; private set; }
+
+    /// <summary>NexusCore's TaskPostRole: 0 owner, 1 responsible, 2 access.</summary>
+    public int Role { get; private set; }
+
+    public Guid? HolderUserId { get; private set; }
+
+    public void HeldBy(Guid? userId) => HolderUserId = userId;
+}
+
 /// <summary>A title put before people's names, such as «آقای»، «خانم» or «جناب مهندس».</summary>
 public sealed class Honorific : AuditableEntity<Guid>
 {

@@ -78,11 +78,12 @@ public sealed class CreateTaskRequestValidator : AbstractValidator<CreateTaskReq
 
         // Every new task has someone responsible for doing it (the creator may pick themselves) -
         // one or more in ResponsibleUserIds, or the single AssignedUserId older clients send.
-        // Existing tasks without one stay valid: this applies to creation only.
+        // Existing tasks without one stay valid: this applies to creation only. Where tasks are
+        // given to posts, ResponsiblePostIds names them instead (checked by the service).
         RuleFor(x => x.AssignedUserId)
             .NotNull().WithMessage("Choose who is responsible for the task.")
             .NotEqual(Guid.Empty).WithMessage("Choose who is responsible for the task.")
-            .When(x => x.ResponsibleUserIds is not { Count: > 0 });
+            .When(x => x.ResponsibleUserIds is not { Count: > 0 } && x.ResponsiblePostIds is not { Count: > 0 });
         RuleForEach(x => x.ResponsibleUserIds!).NotEqual(Guid.Empty).WithMessage("Choose who is responsible for the task.");
         RuleFor(x => x.ResponsibleUserIds!.Count).LessThanOrEqualTo(MaxResponsible)
             .When(x => x.ResponsibleUserIds is not null)

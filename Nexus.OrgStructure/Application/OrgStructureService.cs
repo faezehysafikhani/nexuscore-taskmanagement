@@ -50,7 +50,8 @@ public sealed class OrgStructureService(
     IOrgStructureUnitOfWork unitOfWork,
     IOrganizationUnitRepository units,
     IUserDirectory users,
-    IWorkTeamDirectory workTeams) : IOrgStructureService
+    IWorkTeamDirectory workTeams,
+    TaskPostDirectory? taskPosts = null) : IOrgStructureService
 {
     private const int MaxNameLength = 200;
     private const int MaxTitleLength = 120;
@@ -902,6 +903,12 @@ public sealed class OrgStructureService(
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
+        // Tasks given to the posts that changed hands move to their new holders.
+        if (taskPosts is not null)
+        {
+            await taskPosts.SyncHoldersAsync(tenantId, held.Except(wanted).Concat(wanted.Except(held)).ToList(), cancellationToken);
+        }
+
         return Result.Success(await ToDtoAsync(assignment, await LoadAsync(tenantId, cancellationToken), cancellationToken));
     }
 
@@ -919,12 +926,15 @@ public sealed class OrgStructureService(
             company.SetHead(null);
         }
 
-        foreach (var held in (await repository.ListUserPositionsAsync(tenantId, cancellationToken)).Where(h => h.UserId == userId))
-        {
-            repository.RemoveUserPosition(held);
-        }
+        var freed = (await repository.ListUserPositionsAsync(tenantId, cancellationToken)).Where(h => h.UserId == userId).ToList();
+        freed.ForEach(repository.RemoveUserPosition);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        if (taskPosts is not null)
+        {
+            await taskPosts.SyncHoldersAsync(tenantId, freed.Select(h => h.UnitPositionId).ToList(), cancellationToken);
+        }
+
         return Result.Success();
     }
 

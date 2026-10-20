@@ -370,6 +370,9 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
         /// <summary>Whom each user may not make responsible (nobody limited unless a test says so).</summary>
         public ProgrammableAssignmentScope AssignmentScope { get; } = new();
 
+        /// <summary>Tasks given to posts (off unless a test turns it on).</summary>
+        public ProgrammableTaskPosts TaskPosts { get; } = new();
+
         /// <summary>Chat's own database (a real relational engine, so its unique indexes are enforced), file per Host.</summary>
         private readonly string _chatDbFile = Path.Combine(Path.GetTempPath(), $"chat-tests-{Guid.NewGuid():N}.db");
 
@@ -402,6 +405,7 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
             builder.Services.AddTaskManagement();
             builder.Services.AddTaskManagementInfrastructure(builder.Configuration);
             builder.Services.AddSingleton<NexusCore.Application.Identity.Interfaces.IWorkAssignmentScope>(AssignmentScope);
+            builder.Services.AddSingleton<NexusCore.Application.Identity.Interfaces.ITaskPosts>(TaskPosts);
             // Task SMS through the platform's SMS panel, to a recording provider (never a real gateway).
             builder.Services.AddTaskNotificationsIntegration();
             builder.Services.AddSingleton<ISmsProvider>(Sms);

@@ -194,6 +194,9 @@ public sealed class TaskItem : AuditableEntity<Guid>
 
     public void SetDueTime(TimeOnly? dueTime) => DueTime = dueTime;
 
+    /// <summary>Hands the task's ownership over (e.g. to the new holder of its creator's post; null: nobody).</summary>
+    public void SetOwner(Guid? ownerUserId) => OwnerUserId = ownerUserId;
+
     /// <summary>
     /// After an edit, announces what the responsible people need to know: each newly responsible
     /// person that the task is now theirs, and - when the due date or time moved - those who

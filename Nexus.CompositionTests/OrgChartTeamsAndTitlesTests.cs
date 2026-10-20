@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
 using Nexus.Organization.Domain;
 using Nexus.Organization.Infrastructure;
@@ -352,6 +353,54 @@ public sealed class OrgChartTeamsAndTitlesTests
         Assert.Equal(boardPost.Id, Assert.Single((await world.Service.GetAssignmentAsync(Tenant, member, default)).Value!.Positions!).UnitPositionId);
     }
 
+    // ------------------------------------------------------------------ tasks given to posts
+
+    [Fact]
+    public async Task APostsTasks_MoveToItsNextHolder_AndOldTasksAreGivenToTheirPeoplesPosts()
+    {
+        var world = new World();
+        var (a, b) = (world.User("الف"), world.User("ب"));
+        var tech = world.Unit("معاونت فناوری");
+        var company = await world.CompanyAsync("C1");
+        await world.Service.LinkUnitAsync(Tenant, tech.Id, new LinkUnitRequest(company), default);
+        var post = await world.SeatAsync(tech.Id, "کارشناس");
+        await world.Service.SetAssignmentAsync(Tenant, a, new SetUserAssignmentRequest(company, tech.Id, null, null, [post]), default);
+        var task = Guid.NewGuid();
+        await world.TaskPosts.SetTaskPostsAsync(Tenant, task, null, [post], [], default);
+
+        // a leaves: the task loses them; b takes the post: the task gets b.
+        await world.Service.RemoveAssignmentAsync(Tenant, a, default);
+        await world.Service.SetAssignmentAsync(Tenant, b, new SetUserAssignmentRequest(company, tech.Id, null, null, [post]), default);
+        Assert.Equal(
+            [new TaskPersonChange(task, TaskPostRole.Responsible, a, null), new TaskPersonChange(task, TaskPostRole.Responsible, null, b)],
+            world.Updater.Applied);
+
+        // A task given to people before: to their main posts (someone with no post stays a person).
+        var old = Guid.NewGuid();
+        world.Updater.Tasks.Add(new TaskPeopleSnapshot(old, a, [b], [a]));
+        await world.TaskPosts.ConvertTasksAsync(Tenant, default);
+        var converted = (await world.TaskPosts.GetTaskPostsAsync(Tenant, [old], default))[old];
+        Assert.Null(converted.OwnerPostId);
+        Assert.Equal([post], converted.ResponsiblePostIds);
+        Assert.Empty(converted.AccessPostIds);
+        Assert.True((await world.TaskPosts.GetTaskPostsAsync(Tenant, [task], default)).ContainsKey(task)); // untouched
+    }
+
+    public sealed class RecordingUpdater : ITaskPeopleUpdater
+    {
+        public List<TaskPersonChange> Applied { get; } = [];
+        public List<TaskPeopleSnapshot> Tasks { get; } = [];
+
+        public Task ApplyAsync(Guid tenantId, IReadOnlyList<TaskPersonChange> changes, CancellationToken cancellationToken)
+        {
+            Applied.AddRange(changes);
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<TaskPeopleSnapshot>> ListAsync(Guid tenantId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<TaskPeopleSnapshot>>(Tasks);
+    }
+
     // ------------------------------------------------------------------ work teams in the chart
 
     [Fact]
@@ -533,12 +582,18 @@ public sealed class OrgChartTeamsAndTitlesTests
             _organization = new OrganizationDbContext(new DbContextOptionsBuilder<OrganizationDbContext>().UseInMemoryDatabase("org-" + name).Options);
             var structure = new OrgStructureDbContext(new DbContextOptionsBuilder<OrgStructureDbContext>().UseInMemoryDatabase("orgs-" + name).Options);
             var repository = _repository = new OrgStructureRepository(structure);
-            Service = new OrgStructureService(repository, structure, new OrganizationUnitRepository(_organization), _users, _teams);
+            var updaters = new ServiceCollection().AddSingleton<ITaskPeopleUpdater>(Updater).BuildServiceProvider();
+            TaskPosts = new TaskPostDirectory(
+                repository, structure, new OrganizationUnitRepository(_organization),
+                Microsoft.Extensions.Options.Options.Create(new OrgStructureOptions { AssignTasksToPosts = true }), updaters);
+            Service = new OrgStructureService(repository, structure, new OrganizationUnitRepository(_organization), _users, _teams, TaskPosts);
             Titles = new HonorificService(repository, structure, _users, _users);
         }
 
         public IOrgStructureService Service { get; }
         public IHonorificService Titles { get; }
+        public TaskPostDirectory TaskPosts { get; }
+        public RecordingUpdater Updater { get; } = new();
 
         public string NameOf(Guid userId) => _users.Names[userId];
 
