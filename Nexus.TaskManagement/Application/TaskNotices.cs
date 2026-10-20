@@ -68,7 +68,7 @@ public static class TaskPeople
 
     /// <summary>Those on the access list without being responsible.</summary>
     public static IReadOnlyList<Guid> AccessListOf(TaskItem task) =>
-        task.Assignees.Where(a => !task.IsResponsible(a.UserId)).Select(a => a.UserId).Distinct().ToList();
+        task.Assignees.Where(a => !a.IsActing && !task.IsResponsible(a.UserId)).Select(a => a.UserId).Distinct().ToList();
 
     /// <summary>
     /// Who to tell after the people of a task changed: newly responsible, no longer responsible,

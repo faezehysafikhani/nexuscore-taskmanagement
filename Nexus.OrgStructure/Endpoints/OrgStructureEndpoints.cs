@@ -71,13 +71,21 @@ public static class OrgStructureEndpoints
                 InTenant(user, tenant => service.DeletePositionAsync(tenant, id, ct)))
             .RequireAuthorization(OrgStructurePermissions.ManagePositions);
 
-        // --- the positions each unit (deputy) has, in its order, and who holds them
+        // --- posts: each unit's (deputy's) in its order, and those directly in a company; one holder each
         group.MapGet("/unit-positions", (Guid? unitId, ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
                 InTenant(user, tenant => service.ListUnitPositionsAsync(tenant, unitId, ct)))
             .RequireAuthorization(OrgStructurePermissions.ReadPolicy);
 
         group.MapPost("/units/{unitId:guid}/positions", (Guid unitId, AddUnitPositionRequest request, ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
                 InTenant(user, tenant => service.AddUnitPositionAsync(tenant, unitId, request, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ManagePositions);
+
+        group.MapPost("/companies/{companyId:guid}/positions", (Guid companyId, AddUnitPositionRequest request, ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.AddCompanyPositionAsync(tenant, companyId, request, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ManagePositions);
+
+        group.MapPut("/unit-positions/{id:guid}", (Guid id, UpdateUnitPositionRequest request, ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.UpdateUnitPositionAsync(tenant, id, request, ct)))
             .RequireAuthorization(OrgStructurePermissions.ManagePositions);
 
         group.MapPut("/units/{unitId:guid}/positions/order", (Guid unitId, OrderUnitPositionsRequest request, ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
@@ -87,6 +95,20 @@ public static class OrgStructureEndpoints
         group.MapDelete("/unit-positions/{id:guid}", (Guid id, ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
                 InTenant(user, tenant => service.RemoveUnitPositionAsync(tenant, id, ct)))
             .RequireAuthorization(OrgStructurePermissions.ManagePositions);
+
+        // --- the substitution inbox (tasks given to posts): vacant posts' tasks and who stands in for them.
+        // Signed-in users only; the service shows each post to the managers above it and to ManageSubstitution holders.
+        group.MapGet("/substitution", (ICurrentUserContext user, ISubstitutionService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.GetInboxAsync(tenant, ct)))
+            .RequireAuthorization();
+
+        group.MapPut("/substitution/{postId:guid}", (Guid postId, SetActingRequest request, ICurrentUserContext user, ISubstitutionService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.SetActingAsync(tenant, postId, request, ct)))
+            .RequireAuthorization();
+
+        group.MapDelete("/substitution/{postId:guid}", (Guid postId, ICurrentUserContext user, ISubstitutionService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.ClearActingAsync(tenant, postId, ct)))
+            .RequireAuthorization();
 
         // --- each user's company / unit / position / manager
         group.MapGet("/assignments", (Guid? companyId, Guid? unitId, ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>

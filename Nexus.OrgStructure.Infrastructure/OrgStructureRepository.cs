@@ -56,6 +56,47 @@ public sealed class OrgStructureRepository(OrgStructureDbContext dbContext) : IO
 
     public void RemoveAssignment(UserAssignment assignment) => dbContext.UserAssignments.Remove(assignment);
 
+    public async Task<IReadOnlyList<PositionCompany>> ListPositionCompaniesAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        await dbContext.PositionCompanies.Where(x => x.TenantId == tenantId).ToListAsync(cancellationToken);
+
+    public async Task AddPositionCompanyAsync(PositionCompany positionCompany, CancellationToken cancellationToken) =>
+        await dbContext.PositionCompanies.AddAsync(positionCompany, cancellationToken);
+
+    public void RemovePositionCompany(PositionCompany positionCompany) => dbContext.PositionCompanies.Remove(positionCompany);
+
+    public async Task<IReadOnlyList<TaskPost>> ListTaskPostsAsync(
+        Guid tenantId, IReadOnlyCollection<Guid>? taskIds, IReadOnlyCollection<Guid>? postIds, CancellationToken cancellationToken)
+    {
+        var query = dbContext.TaskPosts.Where(x => x.TenantId == tenantId);
+        if (taskIds is not null)
+        {
+            query = query.Where(x => taskIds.Contains(x.TaskId));
+        }
+
+        if (postIds is not null)
+        {
+            query = query.Where(x => postIds.Contains(x.PostId));
+        }
+
+        return await query.ToListAsync(cancellationToken);
+    }
+
+    public async Task AddTaskPostAsync(TaskPost taskPost, CancellationToken cancellationToken) =>
+        await dbContext.TaskPosts.AddAsync(taskPost, cancellationToken);
+
+    public void RemoveTaskPost(TaskPost taskPost) => dbContext.TaskPosts.Remove(taskPost);
+
+    public async Task<IReadOnlyList<PostActing>> ListPostActingsAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        await dbContext.PostActings.Where(x => x.TenantId == tenantId).ToListAsync(cancellationToken);
+
+    public async Task AddPostActingAsync(PostActing acting, CancellationToken cancellationToken) =>
+        await dbContext.PostActings.AddAsync(acting, cancellationToken);
+
+    public void RemovePostActing(PostActing acting) => dbContext.PostActings.Remove(acting);
+
+    public async Task<IReadOnlyList<Guid>> ListTenantIdsAsync(CancellationToken cancellationToken) =>
+        await dbContext.Companies.Select(x => x.TenantId).Distinct().ToListAsync(cancellationToken);
+
     public async Task<IReadOnlyList<UnitPosition>> ListUnitPositionsAsync(Guid tenantId, CancellationToken cancellationToken) =>
         await dbContext.UnitPositions.Where(x => x.TenantId == tenantId).OrderBy(x => x.SortOrder).ToListAsync(cancellationToken);
 

@@ -25,6 +25,10 @@ public static class DependencyInjection
         // Tasks only to one's own level and below - when OrgStructure:LimitTaskAssignment is on.
         services.AddOptions<OrgStructureOptions>().BindConfiguration(OrgStructureOptions.SectionName);
         services.AddScoped<IWorkAssignmentScope, HierarchyWorkAssignmentScope>();
+        // Tasks given to posts - when OrgStructure:AssignTasksToPosts is on (wins over the Core's default like the scopes above).
+        services.AddScoped<TaskPostDirectory>();
+        services.AddScoped<ITaskPosts>(provider => provider.GetRequiredService<TaskPostDirectory>());
+        services.AddScoped<ISubstitutionService, SubstitutionService>();
 
         services.AddAuthorization(options =>
         {

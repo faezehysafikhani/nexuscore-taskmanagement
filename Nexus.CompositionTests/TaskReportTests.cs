@@ -42,10 +42,11 @@ public sealed class TaskReportTests
         unitsDb.OrganizationUnits.Add(deputy);
         await unitsDb.SaveChangesAsync();
 
-        var company = (await structure.CreateCompanyAsync(Tenant, new CreateCompanyRequest("شرکت", "C1", null, _boss), default)).Value!.Id;
+        var company = (await structure.CreateCompanyAsync(Tenant, new CreateCompanyRequest("شرکت", "C1", null), default)).Value!.Id;
         await structure.LinkUnitAsync(Tenant, deputy.Id, new LinkUnitRequest(company), default);
-        _expertPosition = (await structure.CreatePositionAsync(Tenant, new CreatePositionRequest("کارشناس", null), default)).Value!.Id;
-        await structure.SetAssignmentAsync(Tenant, _boss, new SetUserAssignmentRequest(company, null, null, null), default);
+        var headPosition = (await structure.CreatePositionAsync(Tenant, new CreatePositionRequest("رئیس کل", null, [company]), default)).Value!.Id;
+        _expertPosition = (await structure.CreatePositionAsync(Tenant, new CreatePositionRequest("کارشناس", headPosition, [company]), default)).Value!.Id;
+        Assert.True((await structure.SetAssignmentAsync(Tenant, _boss, new SetUserAssignmentRequest(company, null, headPosition, null), default)).IsSuccess);
         await structure.SetAssignmentAsync(Tenant, _deputyHead, new SetUserAssignmentRequest(company, deputy.Id, null, null), default);
         Assert.True((await structure.SetAssignmentAsync(Tenant, _expert, new SetUserAssignmentRequest(company, deputy.Id, _expertPosition, null), default)).IsSuccess);
 
@@ -138,7 +139,8 @@ public sealed class TaskReportTests
         Assert.Equal([(_boss, "self"), (_deputyHead, "direct"), (_expert, "indirect")], scope.People.Select(p => (p.UserId, p.Relation)));
         Assert.Equal("کارشناس", scope.People.Single(p => p.UserId == _expert).PositionTitle);
         Assert.Equal(["مالی"], scope.Tags);
-        Assert.Single(scope.Positions);
+        // The head's position counts too: the boss holds it.
+        Assert.Equal(["رئیس کل", "کارشناس"], scope.Positions.Select(p => p.Title).Order());
     }
 
     [Fact]

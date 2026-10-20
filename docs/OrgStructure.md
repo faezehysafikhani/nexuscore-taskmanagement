@@ -3,10 +3,28 @@
 `Nexus.OrgStructure` adds, per tenant:
 
 - **Companies** — several companies can share one tenant (a holding and its subsidiaries). Each
-  can have a head (`ManagerUserId`).
+  can have a head («رئیس کل»), not chosen on the company: see positions.
 - **Which company each unit belongs to** — a top unit from `Nexus.Organization` (e.g. a deputy,
   «معاونت») is linked to a company; every unit below it belongs to the same company.
-- **Positions** («سِمَت») — job titles such as «کارشناس» or «معاون». Not permission roles.
+- **Positions** («سِمَت») — job titles such as «کارشناس» or «معاون». Not permission roles. Each
+  is for one or more companies (`companyIds`) and is given only there. Its superior
+  (`parentPositionId`) must be for the same companies. In each company exactly one position has
+  no superior: the head's. Whoever is placed directly in the company (no unit) with it is the
+  company's head — one person at a time.
+- **Posts** («پست سازمانی») — one place for one person: a position in a unit (several posts of
+  one position are fine, e.g. three «کارشناس») or directly in the company (the head's, board
+  members'). Each has a code, unique in its company (by default the company's next number).
+  The head's post is the one directly in the company of its position with no superior.
+- **Tasks given to posts** (optional, `OrgStructure:AssignTasksToPosts`) — a task's creator,
+  responsible people and access list are posts; their holders are the task's people. When a
+  post's holder changes, its tasks move to the new holder (`org_structure.TaskPosts` keeps which
+  posts each task has). A vacant post can't be given a new task. On start-up, tasks that have no
+  posts yet are given to their people's main posts.
+- **Substitution inbox** («کارتابل جانشینی», `GET/PUT/DELETE /substitution[/{postId}]`) — the open
+  tasks of vacant posts, shown (title, due date, status) to the managers above each post and to
+  holders of `org_structure.manage_substitution`. They may put another post of the company in
+  charge of a vacant one (سرپرستی): its holder sees the tasks and comments on them as a stand-in
+  («جانشین ...» next to their name), nothing more, until someone takes the vacant post.
 - **Each user's place** — company, optional unit, optional position, optional direct manager.
 - **Manager / subordinates** — derived, see below.
 
@@ -116,6 +134,7 @@ development default) and authorize with the access token. A typical first run:
 1. `POST /api/organization/units` — create a deputy (and units under it).
 2. `POST /api/org-structure/companies` — create the company.
 3. `PUT /api/org-structure/company-units/{deputyId}` — put the deputy in the company.
-4. `POST /api/org-structure/positions` — create positions.
+4. `POST /api/org-structure/positions` — create positions: first the head's (no superior), then
+   the rest under it, each with its `companyIds`.
 5. `PUT /api/org-structure/assignments/{userId}` — place users.
 6. `GET /api/org-structure/chart`, `/users/{id}/manager`, `/users/{id}/subordinates?all=true`.

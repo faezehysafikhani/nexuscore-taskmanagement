@@ -65,6 +65,42 @@ public sealed class UserAssignmentConfiguration : IEntityTypeConfiguration<UserA
     }
 }
 
+public sealed class PositionCompanyConfiguration : IEntityTypeConfiguration<PositionCompany>
+{
+    public void Configure(EntityTypeBuilder<PositionCompany> builder)
+    {
+        builder.ToTable("PositionCompanies", OrgStructureSchema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.HasIndex(x => new { x.TenantId, x.PositionId, x.CompanyId }).IsUnique();
+        builder.HasIndex(x => x.CompanyId);
+    }
+}
+
+public sealed class PostActingConfiguration : IEntityTypeConfiguration<PostActing>
+{
+    public void Configure(EntityTypeBuilder<PostActing> builder)
+    {
+        builder.ToTable("PostActings", OrgStructureSchema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.HasIndex(x => new { x.TenantId, x.VacantPostId }).IsUnique();
+        builder.HasIndex(x => x.ActingPostId);
+    }
+}
+
+public sealed class TaskPostConfiguration : IEntityTypeConfiguration<TaskPost>
+{
+    public void Configure(EntityTypeBuilder<TaskPost> builder)
+    {
+        builder.ToTable("TaskPosts", OrgStructureSchema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.HasIndex(x => new { x.TenantId, x.TaskId, x.PostId, x.Role }).IsUnique();
+        builder.HasIndex(x => x.PostId);
+    }
+}
+
 public sealed class UnitPositionConfiguration : IEntityTypeConfiguration<UnitPosition>
 {
     public void Configure(EntityTypeBuilder<UnitPosition> builder)
@@ -72,8 +108,10 @@ public sealed class UnitPositionConfiguration : IEntityTypeConfiguration<UnitPos
         builder.ToTable("UnitPositions", OrgStructureSchema.Name);
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).ValueGeneratedNever();
-        // A position appears once in a unit.
-        builder.HasIndex(x => new { x.TenantId, x.UnitId, x.PositionId }).IsUnique();
+        builder.Property(x => x.Code).HasMaxLength(40).IsRequired();
+        // A post's code is unique in its company.
+        builder.HasIndex(x => new { x.TenantId, x.CompanyId, x.Code }).IsUnique();
+        builder.HasIndex(x => x.UnitId);
         builder.HasIndex(x => x.PositionId);
     }
 }
@@ -85,9 +123,9 @@ public sealed class UserPositionConfiguration : IEntityTypeConfiguration<UserPos
         builder.ToTable("UserPositions", OrgStructureSchema.Name);
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).ValueGeneratedNever();
-        // A person holds a unit's position once.
-        builder.HasIndex(x => new { x.TenantId, x.UserId, x.UnitPositionId }).IsUnique();
-        builder.HasIndex(x => x.UnitPositionId);
+        // One person per post.
+        builder.HasIndex(x => new { x.TenantId, x.UnitPositionId }).IsUnique();
+        builder.HasIndex(x => x.UserId);
     }
 }
 

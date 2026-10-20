@@ -80,6 +80,12 @@ public sealed class TaskItem : AuditableEntity<Guid>
     public Guid? OwnerUserId { get; private set; }
     public User? OwnerUser { get; private set; }
 
+    /// <summary>
+    /// Owned through a post (tasks given to posts): while the post is vacant the task has no owner
+    /// but is still not open to everyone, as tasks without an owner otherwise are.
+    /// </summary>
+    public bool OwnerHeldByPost { get; private set; }
+
     public Guid? AssignedUserId { get; private set; }
     public User? AssignedUser { get; private set; }
 
@@ -194,6 +200,32 @@ public sealed class TaskItem : AuditableEntity<Guid>
 
     public void SetDueTime(TimeOnly? dueTime) => DueTime = dueTime;
 
+    /// <summary>Hands the task's ownership to the holder of its creator's post (null: the post is vacant).</summary>
+    public void SetOwnerByPost(Guid? ownerUserId)
+    {
+        OwnerUserId = ownerUserId;
+        OwnerHeldByPost = true;
+    }
+
+    /// <summary>
+    /// Someone standing in for a vacant post of the task (جانشین) in place of another: they see it
+    /// and comment, nothing more. Someone already on the task otherwise stays as they are.
+    /// </summary>
+    public void SetActing(Guid? fromUserId, Guid? toUserId, string? note)
+    {
+        if (fromUserId is { } from)
+        {
+            _assignees.RemoveAll(a => a.UserId == from && a.IsActing && !a.IsResponsible);
+        }
+
+        if (toUserId is { } to && to != OwnerUserId && _assignees.All(a => a.UserId != to))
+        {
+            var row = new TaskAssignee(Guid.NewGuid(), Id, to);
+            row.SetActing(note);
+            _assignees.Add(row);
+        }
+    }
+
     /// <summary>
     /// After an edit, announces what the responsible people need to know: each newly responsible
     /// person that the task is now theirs, and - when the due date or time moved - those who
@@ -258,7 +290,7 @@ public sealed class TaskItem : AuditableEntity<Guid>
     public void AssignUsers(IEnumerable<Guid> userIds)
     {
         var ids = userIds.Where(id => id != Guid.Empty).Distinct().ToList();
-        _assignees.RemoveAll(a => !a.IsResponsible && !ids.Contains(a.UserId));
+        _assignees.RemoveAll(a => !a.IsResponsible && !a.IsActing && !ids.Contains(a.UserId));
         foreach (var userId in ids.Where(id => _assignees.All(a => a.UserId != id)))
         {
             _assignees.Add(new TaskAssignee(Guid.NewGuid(), Id, userId));

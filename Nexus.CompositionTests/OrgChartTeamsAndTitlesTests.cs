@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
 using Nexus.Organization.Domain;
 using Nexus.Organization.Infrastructure;
@@ -29,7 +30,8 @@ public sealed class OrgChartTeamsAndTitlesTests
         var p = new[] { "head", "d1", "d2", "s1", "e2", "e3", "nowhere" }.ToDictionary(n => n, n => world.User(n));
         var tech = world.Unit("معاونت فناوری", p["d1"]);
         var finance = world.Unit("معاونت مالی", p["d2"]);
-        var company = (await world.Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("شرکت", "C1", null, p["head"]), default)).Value!.Id;
+        var company = await world.CompanyAsync("C1");
+        await world.HeadAsync(company, p["head"]);
         await world.Service.LinkUnitAsync(Tenant, tech.Id, new LinkUnitRequest(company), default);
         await world.Service.LinkUnitAsync(Tenant, finance.Id, new LinkUnitRequest(company), default);
         var senior = await world.SeatAsync(tech.Id, "کارشناس ارشد");
@@ -187,7 +189,6 @@ public sealed class OrgChartTeamsAndTitlesTests
         await world.Service.SetAssignmentAsync(Tenant, person, new SetUserAssignmentRequest(company, tech.Id, null, null, [seat]), default);
 
         Assert.Equal("conflict", (await world.Service.RemoveUnitPositionAsync(Tenant, seat, default)).Error.Code);
-        Assert.Equal("conflict", (await world.Service.AddUnitPositionAsync(Tenant, tech.Id, new AddUnitPositionRequest(positionId), default)).Error.Code);
         Assert.Equal("conflict", (await world.Service.DeletePositionAsync(Tenant, positionId, default)).Error.Code);
         Assert.Equal("validation.error", (await world.Service.OrderUnitPositionsAsync(Tenant, tech.Id, new OrderUnitPositionsRequest([]), default)).Error.Code);
         Assert.Equal("validation.error", (await world.Service.SetAssignmentAsync(
@@ -209,12 +210,237 @@ public sealed class OrgChartTeamsAndTitlesTests
         await world.Service.LinkUnitAsync(Tenant, tech.Id, new LinkUnitRequest(company), default);
         var seat = await world.SeatAsync(tech.Id, "کارشناس");
         var positionId = (await world.Service.ListUnitPositionsAsync(Tenant, tech.Id, default)).Value![0].PositionId;
-        await world.Service.UpdatePositionAsync(Tenant, positionId, new UpdatePositionRequest("کارشناس", false), default);
+        await world.Service.UpdatePositionAsync(Tenant, positionId, new UpdatePositionRequest("کارشناس", false, world.TopPosition), default);
 
         Assert.Equal("validation.error", (await world.Service.SetAssignmentAsync(
             Tenant, person, new SetUserAssignmentRequest(company, tech.Id, null, null, [seat]), default)).Error.Code);
         var other = world.Unit("معاونت عملیات");
         Assert.Equal("validation.error", (await world.Service.AddUnitPositionAsync(Tenant, other.Id, new AddUnitPositionRequest(positionId), default)).Error.Code);
+    }
+
+    // ------------------------------------------------------------------ positions per company; the head through a position
+
+    [Fact]
+    public async Task ACompanysHead_IsWhoeverHoldsItsPositionWithNoSuperior_DirectlyInIt()
+    {
+        var world = new World();
+        var (a, b) = (world.User("الف"), world.User("ب"));
+        var tech = world.Unit("معاونت فناوری");
+        var company = await world.CompanyAsync("C1");
+        await world.Service.LinkUnitAsync(Tenant, tech.Id, new LinkUnitRequest(company), default);
+        Assert.Null((await world.Service.GetCompanyAsync(Tenant, company, default)).Value!.Manager);
+
+        // Every position is for a company; one only with no superior in each company.
+        Assert.Equal("validation.error", (await world.Service.CreatePositionAsync(Tenant, new CreatePositionRequest("بی‌شرکت"), default)).Error.Code);
+        Assert.Equal("conflict", (await world.Service.CreatePositionAsync(Tenant, new CreatePositionRequest("رئیس دوم", null, [company]), default)).Error.Code);
+
+        await world.HeadAsync(company, a);
+        Assert.Equal(a, (await world.Service.GetCompanyAsync(Tenant, company, default)).Value!.Manager!.UserId);
+        var chart = Assert.Single((await world.Service.GetChartAsync(Tenant, null, default)).Value!);
+        Assert.Equal(a, chart.Manager!.UserId);
+        Assert.Empty(chart.Members); // shown as the head, not again among the company's people
+
+        // One head: another person can't take the position until the head leaves it.
+        Assert.Equal("conflict", (await world.Service.SetAssignmentAsync(
+            Tenant, b, new SetUserAssignmentRequest(company, null, world.TopPosition, null), default)).Error.Code);
+        // Nor can it get a superior while held as the head's.
+        var other = await world.PositionAsync("مشاور");
+        Assert.Equal("conflict", (await world.Service.UpdatePositionAsync(
+            Tenant, world.TopPosition, new UpdatePositionRequest("رئیس کل", true, other), default)).Error.Code);
+
+        // Moved into a deputy, a is no longer head; b can be, and stops being so when removed.
+        Assert.True((await world.Service.SetAssignmentAsync(Tenant, a, new SetUserAssignmentRequest(company, tech.Id, null, null), default)).IsSuccess);
+        Assert.Null((await world.Service.GetCompanyAsync(Tenant, company, default)).Value!.Manager);
+        await world.HeadAsync(company, b);
+        Assert.Equal(b, (await world.Service.GetManagerAsync(Tenant, a, default)).Value!.UserId);
+        Assert.True((await world.Service.RemoveAssignmentAsync(Tenant, b, default)).IsSuccess);
+        Assert.Null((await world.Service.GetCompanyAsync(Tenant, company, default)).Value!.Manager);
+    }
+
+    [Fact]
+    public async Task APosition_IsGivenOnlyInItsCompanies()
+    {
+        var world = new World();
+        var person = world.User("کارمند");
+        var (tech, ops, loose) = (world.Unit("معاونت فناوری"), world.Unit("معاونت عملیات"), world.Unit("بی‌شرکت"));
+        var c1 = await world.CompanyAsync("C1");
+        var c2 = await world.CompanyAsync("C2");
+        await world.Service.LinkUnitAsync(Tenant, tech.Id, new LinkUnitRequest(c1), default);
+        await world.Service.LinkUnitAsync(Tenant, ops.Id, new LinkUnitRequest(c2), default);
+        var onlyC1 = (await world.Service.CreatePositionAsync(Tenant, new CreatePositionRequest("کارشناس", world.TopPosition, [c1]), default)).Value!;
+        Assert.Equal([c1], onlyC1.CompanyIds);
+
+        // A superior must be for each of the position's companies.
+        Assert.Equal("validation.error", (await world.Service.CreatePositionAsync(
+            Tenant, new CreatePositionRequest("کارآموز", onlyC1.Id, [c1, c2]), default)).Error.Code);
+
+        Assert.Equal("validation.error", (await world.Service.SetAssignmentAsync(
+            Tenant, person, new SetUserAssignmentRequest(c2, ops.Id, onlyC1.Id, null), default)).Error.Code);
+        Assert.Equal("validation.error", (await world.Service.AddUnitPositionAsync(Tenant, ops.Id, new AddUnitPositionRequest(onlyC1.Id), default)).Error.Code);
+        Assert.Equal("validation.error", (await world.Service.AddUnitPositionAsync(Tenant, loose.Id, new AddUnitPositionRequest(onlyC1.Id), default)).Error.Code);
+
+        var seat = (await world.Service.AddUnitPositionAsync(Tenant, tech.Id, new AddUnitPositionRequest(onlyC1.Id), default)).Value!.Id;
+        Assert.True((await world.Service.SetAssignmentAsync(Tenant, person, new SetUserAssignmentRequest(c1, tech.Id, null, null, [seat]), default)).IsSuccess);
+
+        // In use in C1: C1 can't be taken from it, and its deputy can't move to C2.
+        Assert.Equal("conflict", (await world.Service.UpdatePositionAsync(
+            Tenant, onlyC1.Id, new UpdatePositionRequest("کارشناس", true, world.TopPosition, [c2]), default)).Error.Code);
+        await world.Service.RemoveAssignmentAsync(Tenant, person, default);
+        Assert.Equal("conflict", (await world.Service.LinkUnitAsync(Tenant, tech.Id, new LinkUnitRequest(c2), default)).Error.Code);
+
+        // Given C2 as well, it can.
+        Assert.True((await world.Service.UpdatePositionAsync(
+            Tenant, onlyC1.Id, new UpdatePositionRequest("کارشناس", true, world.TopPosition, [c1, c2]), default)).IsSuccess);
+        Assert.True((await world.Service.LinkUnitAsync(Tenant, tech.Id, new LinkUnitRequest(c2), default)).IsSuccess);
+    }
+
+    // ------------------------------------------------------------------ posts: a code each, one person each
+
+    [Fact]
+    public async Task APost_HasACodeOfItsCompany_AndOnePerson()
+    {
+        var world = new World();
+        var (a, b, c) = (world.User("الف"), world.User("ب"), world.User("ج"));
+        var tech = world.Unit("معاونت فناوری");
+        var company = await world.CompanyAsync("C1");
+        await world.Service.LinkUnitAsync(Tenant, tech.Id, new LinkUnitRequest(company), default);
+        var expert = await world.PositionAsync("کارشناس");
+
+        // A unit may have several posts of a position; each gets the company's next number.
+        var first = (await world.Service.AddUnitPositionAsync(Tenant, tech.Id, new AddUnitPositionRequest(expert), default)).Value!;
+        var second = (await world.Service.AddUnitPositionAsync(Tenant, tech.Id, new AddUnitPositionRequest(expert), default)).Value!;
+        Assert.Equal(("1", "2"), (first.Code, second.Code));
+        Assert.Equal("conflict", (await world.Service.AddUnitPositionAsync(Tenant, tech.Id, new AddUnitPositionRequest(expert, "1"), default)).Error.Code);
+        Assert.Equal("HR-7", (await world.Service.UpdateUnitPositionAsync(Tenant, second.Id, new UpdateUnitPositionRequest(" HR-7 "), default)).Value!.Code);
+        Assert.Equal("conflict", (await world.Service.UpdateUnitPositionAsync(Tenant, first.Id, new UpdateUnitPositionRequest("hr-7"), default)).Error.Code);
+
+        // One person per post.
+        Assert.True((await world.Service.SetAssignmentAsync(Tenant, a, new SetUserAssignmentRequest(company, tech.Id, null, null, [first.Id]), default)).IsSuccess);
+        Assert.Equal("conflict", (await world.Service.SetAssignmentAsync(
+            Tenant, b, new SetUserAssignmentRequest(company, tech.Id, null, null, [first.Id]), default)).Error.Code);
+
+        // Placed the older way (a position, no post): a vacant post of it, else a new one.
+        var placedB = (await world.Service.SetAssignmentAsync(Tenant, b, new SetUserAssignmentRequest(company, tech.Id, expert, null), default)).Value!;
+        Assert.Equal(second.Id, Assert.Single(placedB.Positions!).UnitPositionId);
+        var placedC = (await world.Service.SetAssignmentAsync(Tenant, c, new SetUserAssignmentRequest(company, tech.Id, expert, null), default)).Value!;
+        Assert.Equal("2", Assert.Single(placedC.Positions!).Code); // the number freed when "2" was renamed
+        var posts = (await world.Service.ListUnitPositionsAsync(Tenant, tech.Id, default)).Value!;
+        Assert.Equal(["1", "2", "HR-7"], posts.Select(p => p.Code).Order());
+        Assert.All(posts, p => Assert.Single(p.Holders));
+    }
+
+    [Fact]
+    public async Task TheHead_HoldsTheCompanysHeadPost_AndOtherPostsSitDirectlyInTheCompany()
+    {
+        var world = new World();
+        var (head, member) = (world.User("رئیس"), world.User("عضو"));
+        var company = await world.CompanyAsync("C1");
+        var board = await world.PositionAsync("عضو هیئت مدیره");
+
+        var headPost = (await world.Service.AddCompanyPositionAsync(Tenant, company, new AddUnitPositionRequest(world.TopPosition), default)).Value!;
+        Assert.Null(headPost.UnitId);
+        Assert.Equal("conflict", (await world.Service.AddCompanyPositionAsync(Tenant, company, new AddUnitPositionRequest(world.TopPosition), default)).Error.Code);
+        var boardPost = (await world.Service.AddCompanyPositionAsync(Tenant, company, new AddUnitPositionRequest(board), default)).Value!;
+
+        await world.Service.SetAssignmentAsync(Tenant, head, new SetUserAssignmentRequest(company, null, null, null, [headPost.Id]), default);
+        await world.Service.SetAssignmentAsync(Tenant, member, new SetUserAssignmentRequest(company, null, board, null), default);
+
+        var chart = Assert.Single((await world.Service.GetChartAsync(Tenant, null, default)).Value!);
+        Assert.Equal(head, chart.Manager!.UserId);
+        Assert.Equal([(true, head), (false, member)], chart.Positions!.Select(p => (p.IsHead, Assert.Single(p.Holders).UserId)));
+        Assert.Empty(chart.Members);
+        Assert.Equal(head, (await world.Service.GetManagerAsync(Tenant, member, default)).Value!.UserId);
+        Assert.Equal(boardPost.Id, Assert.Single((await world.Service.GetAssignmentAsync(Tenant, member, default)).Value!.Positions!).UnitPositionId);
+    }
+
+    // ------------------------------------------------------------------ tasks given to posts
+
+    [Fact]
+    public async Task APostsTasks_MoveToItsNextHolder_AndOldTasksAreGivenToTheirPeoplesPosts()
+    {
+        var world = new World();
+        var (a, b) = (world.User("الف"), world.User("ب"));
+        var tech = world.Unit("معاونت فناوری");
+        var company = await world.CompanyAsync("C1");
+        await world.Service.LinkUnitAsync(Tenant, tech.Id, new LinkUnitRequest(company), default);
+        var post = await world.SeatAsync(tech.Id, "کارشناس");
+        await world.Service.SetAssignmentAsync(Tenant, a, new SetUserAssignmentRequest(company, tech.Id, null, null, [post]), default);
+        var task = Guid.NewGuid();
+        await world.TaskPosts.SetTaskPostsAsync(Tenant, task, null, [post], [], default);
+
+        // a leaves: the task loses them; b takes the post: the task gets b.
+        await world.Service.RemoveAssignmentAsync(Tenant, a, default);
+        await world.Service.SetAssignmentAsync(Tenant, b, new SetUserAssignmentRequest(company, tech.Id, null, null, [post]), default);
+        Assert.Equal(
+            [new TaskPersonChange(task, TaskPostRole.Responsible, a, null), new TaskPersonChange(task, TaskPostRole.Responsible, null, b)],
+            world.Updater.Applied);
+
+        // A task given to people before: to their main posts (someone with no post stays a person).
+        var old = Guid.NewGuid();
+        world.Updater.Tasks.Add(new TaskPeopleSnapshot(old, a, [b], [a]));
+        await world.TaskPosts.ConvertTasksAsync(Tenant, default);
+        var converted = (await world.TaskPosts.GetTaskPostsAsync(Tenant, [old], default))[old];
+        Assert.Null(converted.OwnerPostId);
+        Assert.Equal([post], converted.ResponsiblePostIds);
+        Assert.Empty(converted.AccessPostIds);
+        Assert.True((await world.TaskPosts.GetTaskPostsAsync(Tenant, [task], default)).ContainsKey(task)); // untouched
+    }
+
+    [Fact]
+    public async Task AVacantPostsTasks_AreInTheInboxOfThoseAbove_WhoMayPutAStandInInCharge()
+    {
+        var world = new World();
+        var (deputyHead, a, b, outsider) = (world.User("معاون"), world.User("الف"), world.User("ب"), world.User("بیرونی"));
+        var tech = world.Unit("معاونت فناوری", deputyHead);
+        var company = await world.CompanyAsync("C1");
+        await world.Service.LinkUnitAsync(Tenant, tech.Id, new LinkUnitRequest(company), default);
+        var (post, other) = (await world.SeatAsync(tech.Id, "کارشناس"), await world.SeatAsync(tech.Id, "کارشناس ارشد"));
+        await world.Service.SetAssignmentAsync(Tenant, b, new SetUserAssignmentRequest(company, tech.Id, null, null, [other]), default);
+        var task = Guid.NewGuid();
+        world.Updater.Summaries.Add(new TaskSummary(task, "کار باز", new DateOnly(2030, 1, 1), "Todo", false));
+        await world.TaskPosts.SetTaskPostsAsync(Tenant, task, null, [post], [], default);
+
+        // The deputy's head sees the vacant post's task; someone else does not.
+        var inbox = (await world.Substitution(deputyHead).GetInboxAsync(Tenant, default)).Value!;
+        var vacant = Assert.Single(inbox.Posts);
+        Assert.Equal(("کار باز", null), (Assert.Single(vacant.Tasks).Title, vacant.Acting));
+        Assert.Contains(vacant.Candidates, c => c.PostId == other);
+        Assert.Empty((await world.Substitution(outsider).GetInboxAsync(Tenant, default)).Value!.Posts);
+        Assert.Equal("forbidden", (await world.Substitution(outsider).SetActingAsync(Tenant, post, new SetActingRequest(other), default)).Error.Code);
+        Assert.Single((await world.Substitution(outsider, OrgStructurePermissions.ManageSubstitution).GetInboxAsync(Tenant, default)).Value!.Posts);
+
+        // b's post is put in charge: b stands in; someone takes the post: the stand-in ends.
+        Assert.True((await world.Substitution(deputyHead).SetActingAsync(Tenant, post, new SetActingRequest(other), default)).IsSuccess);
+        Assert.Equal(b, (await world.Substitution(deputyHead).GetInboxAsync(Tenant, default)).Value!.Posts.Single().Acting!.HolderUserId);
+        await world.Service.SetAssignmentAsync(Tenant, a, new SetUserAssignmentRequest(company, tech.Id, null, null, [post]), default);
+        Assert.Equal(
+            [
+                new TaskPersonChange(task, TaskPostRole.Acting, null, b, "جانشین کارشناس · کد 1"),
+                new TaskPersonChange(task, TaskPostRole.Responsible, null, a),
+                new TaskPersonChange(task, TaskPostRole.Acting, b, null, "جانشین کارشناس · کد 1"),
+            ],
+            world.Updater.Applied);
+        Assert.Empty((await world.Substitution(deputyHead).GetInboxAsync(Tenant, default)).Value!.Posts);
+    }
+
+    public sealed class RecordingUpdater : ITaskPeopleUpdater
+    {
+        public List<TaskPersonChange> Applied { get; } = [];
+        public List<TaskPeopleSnapshot> Tasks { get; } = [];
+
+        public Task ApplyAsync(Guid tenantId, IReadOnlyList<TaskPersonChange> changes, CancellationToken cancellationToken)
+        {
+            Applied.AddRange(changes);
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<TaskPeopleSnapshot>> ListAsync(Guid tenantId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<TaskPeopleSnapshot>>(Tasks);
+
+        public List<TaskSummary> Summaries { get; } = [];
+
+        public Task<IReadOnlyList<TaskSummary>> GetSummariesAsync(Guid tenantId, IReadOnlyCollection<Guid> taskIds, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<TaskSummary>>(Summaries.Where(s => taskIds.Contains(s.TaskId)).ToList());
     }
 
     // ------------------------------------------------------------------ work teams in the chart
@@ -389,6 +615,7 @@ public sealed class OrgChartTeamsAndTitlesTests
     {
         private readonly OrganizationDbContext _organization;
         private readonly OrgStructureRepository _repository;
+        private readonly OrgStructureDbContext _structure;
         private readonly Directory _users = new();
         private readonly WorkTeams _teams = new();
 
@@ -396,16 +623,27 @@ public sealed class OrgChartTeamsAndTitlesTests
         {
             var name = Guid.NewGuid().ToString();
             _organization = new OrganizationDbContext(new DbContextOptionsBuilder<OrganizationDbContext>().UseInMemoryDatabase("org-" + name).Options);
-            var structure = new OrgStructureDbContext(new DbContextOptionsBuilder<OrgStructureDbContext>().UseInMemoryDatabase("orgs-" + name).Options);
+            var structure = _structure = new OrgStructureDbContext(new DbContextOptionsBuilder<OrgStructureDbContext>().UseInMemoryDatabase("orgs-" + name).Options);
             var repository = _repository = new OrgStructureRepository(structure);
-            Service = new OrgStructureService(repository, structure, new OrganizationUnitRepository(_organization), _users, _teams);
+            var updaters = new ServiceCollection().AddSingleton<ITaskPeopleUpdater>(Updater).BuildServiceProvider();
+            TaskPosts = new TaskPostDirectory(
+                repository, structure, new OrganizationUnitRepository(_organization),
+                Microsoft.Extensions.Options.Options.Create(new OrgStructureOptions { AssignTasksToPosts = true }), updaters);
+            Service = new OrgStructureService(repository, structure, new OrganizationUnitRepository(_organization), _users, _teams, TaskPosts);
             Titles = new HonorificService(repository, structure, _users, _users);
         }
 
         public IOrgStructureService Service { get; }
         public IHonorificService Titles { get; }
+        public TaskPostDirectory TaskPosts { get; }
+        public RecordingUpdater Updater { get; } = new();
 
         public string NameOf(Guid userId) => _users.Names[userId];
+
+        /// <summary>The substitution inbox as <paramref name="signedIn"/> sees it, holding <paramref name="permissions"/>.</summary>
+        public ISubstitutionService Substitution(Guid signedIn, params string[] permissions) =>
+            new SubstitutionService(_repository, _structure, new OrganizationUnitRepository(_organization), TaskPosts,
+                new SignedIn(signedIn, permissions), _users, new ServiceCollection().AddSingleton<ITaskPeopleUpdater>(Updater).BuildServiceProvider());
 
         /// <summary>Whom <paramref name="signedIn"/> may add to their work teams, holding <paramref name="permissions"/>.</summary>
         public IWorkTeamMemberScope MemberScope(Guid signedIn, params string[] permissions) =>
@@ -436,8 +674,36 @@ public sealed class OrgChartTeamsAndTitlesTests
             return unit;
         }
 
+
+        private readonly List<Guid> _companies = [];
+        private Guid? _top;
+
+        /// <summary>The head's position (no superior), for every company made so far.</summary>
+        public Guid TopPosition => _top!.Value;
+
+        /// <summary>A position under the head's, for every company made so far.</summary>
         public async Task<Guid> PositionAsync(string title) =>
-            (await Service.CreatePositionAsync(Tenant, new CreatePositionRequest(title), default)).Value!.Id;
+            (await Service.CreatePositionAsync(Tenant, new CreatePositionRequest(title, _top, _companies.ToList()), default)).Value!.Id;
+
+        /// <summary>Makes the user the company's head: placed directly in it with the head's position.</summary>
+        public async Task HeadAsync(Guid companyId, Guid userId) =>
+            Assert.True((await Service.SetAssignmentAsync(Tenant, userId, new SetUserAssignmentRequest(companyId, null, _top, null), default)).IsSuccess);
+
+        private async Task<Guid> AddCompanyAsync(string name, string code)
+        {
+            var id = (await Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest(name, code, null), default)).Value!.Id;
+            _companies.Add(id);
+            if (_top is null)
+            {
+                _top = (await Service.CreatePositionAsync(Tenant, new CreatePositionRequest("رئیس کل", null, [id]), default)).Value!.Id;
+            }
+            else
+            {
+                Assert.True((await Service.UpdatePositionAsync(Tenant, _top.Value, new UpdatePositionRequest("رئیس کل", true, null, _companies.ToList()), default)).IsSuccess);
+            }
+
+            return id;
+        }
 
         /// <summary>Gives the unit a position (created with this title) and returns the unit position's id.</summary>
         public async Task<Guid> SeatAsync(Guid unitId, string title) =>
@@ -446,8 +712,7 @@ public sealed class OrgChartTeamsAndTitlesTests
         public async Task<Guid> SeatOfAsync(Guid unitId, Guid positionId) =>
             (await Service.ListUnitPositionsAsync(Tenant, unitId, default)).Value!.Single(p => p.PositionId == positionId).Id;
 
-        public async Task<Guid> CompanyAsync(string code) =>
-            (await Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("شرکت " + code, code, null, null), default)).Value!.Id;
+        public Task<Guid> CompanyAsync(string code) => AddCompanyAsync("شرکت " + code, code);
     }
 
     private sealed class SignedIn(Guid userId, string[] permissions) : ICurrentUserContext

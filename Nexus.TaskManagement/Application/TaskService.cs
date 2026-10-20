@@ -16,7 +16,8 @@ public sealed class TaskService(
     IFileStorage fileStorage,
     ITaskAccessScope access,
     ITaskNoticePublisher notices,
-    IWorkAssignmentScope assignmentScope) : ITaskService
+    IWorkAssignmentScope assignmentScope,
+    ITaskPosts taskPosts) : ITaskService
 {
     /// <summary>
     /// Seeing a task (owner, assignee, collaborator, team) lets a user work on it; changing what
@@ -111,6 +112,20 @@ public sealed class TaskService(
             return Result.Failure<TaskDto>(Error.Validation("A project must have at least one subtask."));
         }
 
+        // Given to posts: their holders are the people.
+        var plan = await PlanPostsAsync(
+            tenantId, null, request.ResponsiblePostIds, request.AccessPostIds,
+            request.ResponsibleUserIds, request.AssignedUserId, request.AssigneeUserIds, cancellationToken);
+        if (plan.IsFailure)
+        {
+            return Result.Failure<TaskDto>(plan.Error);
+        }
+
+        if (plan.Value is { } createPlan)
+        {
+            request = request with { ResponsibleUserIds = createPlan.ResponsibleUsers, AssignedUserId = null, AssigneeUserIds = createPlan.AccessUsers };
+        }
+
         var referenceCheck = await ValidateReferencesAsync(
             tenantId, null, request.AssignedUserGroupId, request.AssigneeUserIds, cancellationToken);
         if (referenceCheck.IsFailure)
@@ -184,6 +199,15 @@ public sealed class TaskService(
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        if (plan.Value is { } createdPlan)
+        {
+            var ownerPost = currentUser.UserId is { } creator
+                && (await taskPosts.GetMainPostsAsync(tenantId, [creator], cancellationToken)).TryGetValue(creator, out var creatorPost)
+                    ? creatorPost
+                    : (Guid?)null;
+            await taskPosts.SetTaskPostsAsync(tenantId, task.Id, ownerPost, createdPlan.Responsible, createdPlan.Access ?? [], cancellationToken);
+        }
+
         await activity.RecordAsync(task.Id, "Task created", task.Title, cancellationToken);
 
         var created = await repository.GetByIdAsync(tenantId, task.Id, cancellationToken);
@@ -207,6 +231,24 @@ public sealed class TaskService(
         if (!access.CanManage(task))
         {
             return Result.Failure<TaskDto>(NotTaskOwner());
+        }
+
+        var plan = await PlanPostsAsync(
+            tenantId, task, request.ResponsiblePostIds, request.AccessPostIds,
+            request.ResponsibleUserIds, request.AssignedUserId, request.AssigneeUserIds, cancellationToken);
+        if (plan.IsFailure)
+        {
+            return Result.Failure<TaskDto>(plan.Error);
+        }
+
+        if (plan.Value is { } updatePlan)
+        {
+            request = request with
+            {
+                ResponsibleUserIds = updatePlan.ResponsibleUsers,
+                AssignedUserId = null,
+                AssigneeUserIds = updatePlan.AccessUsers ?? request.AssigneeUserIds,
+            };
         }
 
         var referenceCheck = await ValidateReferencesAsync(
@@ -258,6 +300,11 @@ public sealed class TaskService(
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        if (plan.Value is { } updatedPlan)
+        {
+            await taskPosts.SetTaskPostsAsync(tenantId, id, null, updatedPlan.Responsible, updatedPlan.Access, cancellationToken);
+        }
+
         await activity.RecordAsync(id, "Task updated", task.Title, cancellationToken);
         await PublishPeopleChangesAsync(task, previousResponsible, previousPeople, cancellationToken);
 
@@ -382,6 +429,24 @@ public sealed class TaskService(
             return Result.Failure<TaskDto>(NotTaskOwner());
         }
 
+        var plan = await PlanPostsAsync(
+            tenantId, task, request.ResponsiblePostIds, request.AccessPostIds,
+            request.ResponsibleUserIds, request.AssignedUserId, request.AssigneeUserIds, cancellationToken);
+        if (plan.IsFailure)
+        {
+            return Result.Failure<TaskDto>(plan.Error);
+        }
+
+        if (plan.Value is { } assignPlan)
+        {
+            request = request with
+            {
+                ResponsibleUserIds = assignPlan.ResponsibleUsers,
+                AssignedUserId = null,
+                AssigneeUserIds = assignPlan.AccessUsers ?? request.AssigneeUserIds,
+            };
+        }
+
         var referenceCheck = await ValidateReferencesAsync(
             tenantId, null, null, request.AssigneeUserIds, cancellationToken);
         if (referenceCheck.IsFailure)
@@ -407,6 +472,11 @@ public sealed class TaskService(
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        if (plan.Value is { } assignedPlan)
+        {
+            await taskPosts.SetTaskPostsAsync(tenantId, id, null, assignedPlan.Responsible, assignedPlan.Access, cancellationToken);
+        }
+
         // Names, not ids: this is read back as a human-facing activity/notification entry.
         var responsibleNames = await repository.GetUserSummariesAsync(task.ResponsibleUserIds, cancellationToken);
         var responsibleNamesText = string.Join("، ", task.ResponsibleUserIds
@@ -694,6 +764,133 @@ public sealed class TaskService(
     }
 
     /// <summary>
+    /// Where tasks are given to posts: the posts a request gives the task to and their holders as
+    /// its people. Posts are sent, or people (older clients) - each by their post on the task, else
+    /// their main post; someone with no post can't be given a task. A post newly given must have
+    /// a holder; one the task already has may be vacant (its tasks wait for the next holder).
+    /// Responsible: the full list after the request; Access: null when the request leaves it.
+    /// Null altogether when tasks are given to people.
+    /// </summary>
+    private async Task<Result<PostPlan?>> PlanPostsAsync(
+        Guid tenantId, TaskItem? task,
+        IReadOnlyList<Guid>? responsiblePostIds, IReadOnlyList<Guid>? accessPostIds,
+        IReadOnlyList<Guid>? responsibleUserIds, Guid? assignedUserId, IReadOnlyList<Guid>? accessUserIds,
+        CancellationToken cancellationToken)
+    {
+        if (!taskPosts.Enabled)
+        {
+            return Result.Success<PostPlan?>(null);
+        }
+
+        var existing = task is null ? null : (await taskPosts.GetTaskPostsAsync(tenantId, [task.Id], cancellationToken)).GetValueOrDefault(task.Id);
+        IReadOnlyList<Guid> existingResponsible = existing?.ResponsiblePostIds ?? [];
+        IReadOnlyList<Guid> existingAccess = existing?.AccessPostIds ?? [];
+        var noPost = Error.Validation("Tasks are given to posts: everyone made responsible or given access must hold a post.");
+
+        async Task<List<Guid>?> PostsOfPeopleAsync(IReadOnlyList<Guid> users, IReadOnlyList<Guid> current)
+        {
+            var currentPosts = await taskPosts.GetPostsAsync(tenantId, current, cancellationToken);
+            var main = await taskPosts.GetMainPostsAsync(tenantId, users, cancellationToken);
+            var posts = new List<Guid>();
+            foreach (var user in users.Distinct())
+            {
+                var onTask = current.Where(p => currentPosts.TryGetValue(p, out var post) && post.HolderUserId == user).ToList();
+                if (onTask.Count > 0)
+                {
+                    posts.AddRange(onTask);
+                }
+                else if (main.TryGetValue(user, out var mainPost))
+                {
+                    posts.Add(mainPost);
+                }
+                else
+                {
+                    return null;
+                }
+            }
+
+            return posts.Distinct().ToList();
+        }
+
+        var responsible = responsiblePostIds?.Where(id => id != Guid.Empty).Distinct().ToList();
+        if (responsible is null)
+        {
+            if (responsibleUserIds is not null || assignedUserId is not null || task is null)
+            {
+                responsible = await PostsOfPeopleAsync(FinalResponsible(task, responsibleUserIds, assignedUserId), existingResponsible);
+                if (responsible is null)
+                {
+                    return Result.Failure<PostPlan?>(noPost);
+                }
+            }
+            else
+            {
+                responsible = existingResponsible.ToList();
+            }
+        }
+
+        var accessPosts = accessPostIds?.Where(id => id != Guid.Empty).Distinct().ToList();
+        if (accessPosts is null && accessUserIds is not null)
+        {
+            // The access list may repeat the responsible people: they are in already.
+            var responsibleHolders = (await taskPosts.GetPostsAsync(tenantId, responsible, cancellationToken)).Values
+                .Select(post => post.HolderUserId).OfType<Guid>().ToHashSet();
+            accessPosts = await PostsOfPeopleAsync(accessUserIds.Where(id => !responsibleHolders.Contains(id)).ToList(), existingAccess);
+            if (accessPosts is null)
+            {
+                return Result.Failure<PostPlan?>(noPost);
+            }
+        }
+
+        var finalAccess = (accessPosts ?? existingAccess.ToList()).Where(id => !responsible.Contains(id)).ToList();
+        var posts = await taskPosts.GetPostsAsync(tenantId, responsible.Concat(finalAccess).ToList(), cancellationToken);
+        if (!responsible.Concat(finalAccess).All(posts.ContainsKey))
+        {
+            return Result.Failure<PostPlan?>(Error.Validation("Post was not found."));
+        }
+
+        var alreadyOnTask = existingResponsible.Concat(existingAccess).ToHashSet();
+        if (responsible.Concat(finalAccess).Any(id => !alreadyOnTask.Contains(id) && posts[id].HolderUserId is null))
+        {
+            return Result.Failure<PostPlan?>(Error.Validation("This post is vacant: tasks are given only to posts someone holds."));
+        }
+
+        var responsibleUsers = responsible.Select(id => posts[id].HolderUserId).OfType<Guid>().Distinct().ToList();
+        var accessUsers = finalAccess.Select(id => posts[id].HolderUserId).OfType<Guid>().Where(id => !responsibleUsers.Contains(id)).Distinct().ToList();
+        return Result.Success<PostPlan?>(new PostPlan(
+            responsible,
+            accessPosts is null ? null : finalAccess,
+            responsibleUsers,
+            accessPosts is null ? null : accessUsers));
+    }
+
+    private sealed record PostPlan(List<Guid> Responsible, List<Guid>? Access, List<Guid> ResponsibleUsers, List<Guid>? AccessUsers);
+
+    /// <summary>The posts one may give tasks to (filled ones), and whether tasks are given to posts at all.</summary>
+    public async Task<Result<AssignablePostsDto>> ListAssignablePostsAsync(CancellationToken cancellationToken)
+    {
+        if (currentUser.TenantId is not { } tenantId)
+        {
+            return Result.Failure<AssignablePostsDto>(Error.Unauthorized());
+        }
+
+        if (!taskPosts.Enabled)
+        {
+            return Result.Success(new AssignablePostsDto(false, []));
+        }
+
+        var posts = await taskPosts.ListPostsAsync(tenantId, cancellationToken);
+        var limit = currentUser.UserId is { } me ? await assignmentScope.GetLimitAsync(tenantId, me, cancellationToken) : null;
+        var holders = await repository.GetUserSummariesAsync(posts.Select(p => p.HolderUserId).OfType<Guid>().Distinct().ToList(), cancellationToken);
+        return Result.Success(new AssignablePostsDto(true, posts
+            .Select(post => new AssignablePostDto(
+                post.PostId, post.Title, post.Code, post.Place, post.HolderUserId,
+                post.HolderUserId is { } holder && holders.TryGetValue(holder, out var user) ? user.DisplayName : null,
+                post.HolderUserId is { } blocked && limit is not null && limit.BlockedUserIds.Contains(blocked)))
+            .ToList()));
+    }
+
+    /// <summary>
     /// Who is responsible after a request: its ResponsibleUserIds when sent; otherwise the single
     /// AssignedUserId older clients send - naming one of the current responsible people keeps
     /// them all (that one first), naming someone else makes them the only one, none clears it.
@@ -909,6 +1106,20 @@ public sealed class TaskService(
         userIds.AddRange(task.Assignees.Select(a => a.UserId));
         userIds.AddRange(task.SubTasks.SelectMany(s => s.Assignees.Select(a => a.UserId)));
 
+        var postsOfTask = taskPosts.Enabled
+            ? (await taskPosts.GetTaskPostsAsync(task.TenantId, [task.Id], cancellationToken)).GetValueOrDefault(task.Id)
+            : null;
+        var postRoles = postsOfTask is null
+            ? []
+            : (postsOfTask.OwnerPostId is { } ownerPost ? new[] { (Id: ownerPost, Role: "owner") } : [])
+                .Concat(postsOfTask.ResponsiblePostIds.Select(id => (Id: id, Role: "responsible")))
+                .Concat(postsOfTask.AccessPostIds.Select(id => (Id: id, Role: "access")))
+                .ToList();
+        var postInfo = postRoles.Count > 0
+            ? await taskPosts.GetPostsAsync(task.TenantId, postRoles.Select(p => p.Id).Distinct().ToList(), cancellationToken)
+            : new Dictionary<Guid, WorkPost>();
+        userIds.AddRange(postInfo.Values.Select(p => p.HolderUserId).OfType<Guid>());
+
         var users = await repository.GetUserSummariesAsync(userIds.Distinct().ToList(), cancellationToken);
         var groups = task.AssignedUserGroupId is { } groupId
             ? await repository.GetUserGroupSummariesAsync([groupId], cancellationToken)
@@ -928,6 +1139,7 @@ public sealed class TaskService(
             Lookup(users, task.AssignedUserId),
             Lookup(groups, task.AssignedUserGroupId),
             task.Assignees
+                .Where(a => !a.IsActing)
                 .Select(a => users.TryGetValue(a.UserId, out var u) ? u : null)
                 .Where(u => u is not null)
                 .Select(u => u!)
@@ -950,6 +1162,15 @@ public sealed class TaskService(
                 .Select(id => users.TryGetValue(id, out var u) ? u : null)
                 .Where(u => u is not null)
                 .Select(u => u!)
-                .ToList());
+                .ToList(),
+            postsOfTask is null
+                ? null
+                : postRoles.Where(p => postInfo.ContainsKey(p.Id)).Select(p =>
+                {
+                    var post = postInfo[p.Id];
+                    return new TaskPostDto(
+                        post.PostId, p.Role, post.Title, post.Code, post.Place, post.HolderUserId,
+                        post.HolderUserId is { } holder && users.TryGetValue(holder, out var u) ? u.DisplayName : null);
+                }).ToList());
     }
 }

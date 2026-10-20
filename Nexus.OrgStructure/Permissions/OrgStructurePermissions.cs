@@ -22,6 +22,13 @@ public static class OrgStructurePermissions
     public const string AssignTasksToAnyLevel = "org_structure.assign_tasks_any_level";
 
     /// <summary>
+    /// Where tasks are given to posts: sees every vacant post's tasks (the substitution inbox) and
+    /// puts another post in charge of them (سرپرست). Without it, only the posts below oneself.
+    /// Not one of <see cref="All"/> either.
+    /// </summary>
+    public const string ManageSubstitution = "org_structure.manage_substitution";
+
+    /// <summary>
     /// Policy for the read endpoints: any of the permissions above. A manager of companies,
     /// positions or assignments has to see them too, and this module cannot add entries to
     /// NexusCore's PermissionPrerequisites without changing NexusCore for every product.
@@ -54,7 +61,8 @@ public static class OrgStructurePermissions
     public static IReadOnlyList<PermissionDefinition> WorkTeams { get; } =
     [
         new(TeamMembersFromAnyUnit, "Organization", "افزودن اعضای سایر معاونت‌ها به تیم کاری"),
-        new(AssignTasksToAnyLevel, "Organization", "ارجاع فعالیت به همه‌ی سطوح سازمانی (حتی بالاتر از خود)")
+        new(AssignTasksToAnyLevel, "Organization", "ارجاع فعالیت به همه‌ی سطوح سازمانی (حتی بالاتر از خود)"),
+        new(ManageSubstitution, "Organization", "مدیریت کارتابل جانشینی (تعیین سرپرست برای همه‌ی پست‌های خالی)")
     ];
 }
 

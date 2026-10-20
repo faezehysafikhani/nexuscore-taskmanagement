@@ -186,9 +186,134 @@ namespace Nexus.OrgStructure.Infrastructure.Migrations.OrgStructure
                     b.ToTable("Positions", "org_structure");
                 });
 
+            modelBuilder.Entity("Nexus.OrgStructure.Domain.PositionCompany", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("ModifiedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("ModifiedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("PositionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId");
+
+                    b.HasIndex("TenantId", "PositionId", "CompanyId")
+                        .IsUnique();
+
+                    b.ToTable("PositionCompanies", "org_structure");
+                });
+
+            modelBuilder.Entity("Nexus.OrgStructure.Domain.PostActing", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ActingPostId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("AppliedUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("ModifiedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("ModifiedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("VacantPostId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActingPostId");
+
+                    b.HasIndex("TenantId", "VacantPostId")
+                        .IsUnique();
+
+                    b.ToTable("PostActings", "org_structure");
+                });
+
+            modelBuilder.Entity("Nexus.OrgStructure.Domain.TaskPost", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("HolderUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("ModifiedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("ModifiedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("PostId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Role")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("TaskId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PostId");
+
+                    b.HasIndex("TenantId", "TaskId", "PostId", "Role")
+                        .IsUnique();
+
+                    b.ToTable("TaskPosts", "org_structure");
+                });
+
             modelBuilder.Entity("Nexus.OrgStructure.Domain.UnitPosition", b =>
                 {
                     b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.Property<Guid>("CompanyId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<DateTimeOffset>("CreatedAtUtc")
@@ -212,14 +337,16 @@ namespace Nexus.OrgStructure.Infrastructure.Migrations.OrgStructure
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<Guid>("UnitId")
+                    b.Property<Guid?>("UnitId")
                         .HasColumnType("uniqueidentifier");
 
                     b.HasKey("Id");
 
                     b.HasIndex("PositionId");
 
-                    b.HasIndex("TenantId", "UnitId", "PositionId")
+                    b.HasIndex("UnitId");
+
+                    b.HasIndex("TenantId", "CompanyId", "Code")
                         .IsUnique();
 
                     b.ToTable("UnitPositions", "org_structure");
@@ -338,9 +465,9 @@ namespace Nexus.OrgStructure.Infrastructure.Migrations.OrgStructure
 
                     b.HasKey("Id");
 
-                    b.HasIndex("UnitPositionId");
+                    b.HasIndex("UserId");
 
-                    b.HasIndex("TenantId", "UserId", "UnitPositionId")
+                    b.HasIndex("TenantId", "UnitPositionId")
                         .IsUnique();
 
                     b.ToTable("UserPositions", "org_structure");

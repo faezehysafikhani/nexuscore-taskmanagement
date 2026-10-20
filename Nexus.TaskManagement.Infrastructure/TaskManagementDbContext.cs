@@ -56,7 +56,7 @@ public sealed class TaskManagementDbContext(
         // access list (Assignees), so taking one off the list really takes the task away.
         modelBuilder.Entity<TaskItem>().HasQueryFilter(task =>
             !AccessRestricted
-            || task.OwnerUserId == null
+            || (task.OwnerUserId == null && !task.OwnerHeldByPost)
             || task.OwnerUserId == AccessUserId
             || task.AssignedUserId == AccessUserId
             || task.Assignees.Any(assignee => assignee.UserId == AccessUserId));

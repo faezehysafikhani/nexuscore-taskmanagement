@@ -30,6 +30,10 @@ public static class DependencyInjection
         // Whom a user may make responsible: anyone, unless a product limits it (Nexus.OrgStructure).
         services.TryAddScoped<NexusCore.Application.Identity.Interfaces.IWorkAssignmentScope,
             NexusCore.Application.Identity.Interfaces.UnlimitedWorkAssignmentScope>();
+        // Tasks are given to people, unless a product gives them to posts (Nexus.OrgStructure).
+        services.TryAddScoped<NexusCore.Application.Identity.Interfaces.ITaskPosts,
+            NexusCore.Application.Identity.Interfaces.NoTaskPosts>();
+        services.AddScoped<NexusCore.Application.Identity.Interfaces.ITaskPeopleUpdater, TaskPeopleUpdater>();
 
         // In the users' time zone (TaskManagement:Recurrence:TimeZone, Asia/Tehran by default).
         services.AddSingleton<IRecurrenceCalculator>(provider => new RecurrenceCalculator(RecurrenceCalculator.ResolveTimeZone(

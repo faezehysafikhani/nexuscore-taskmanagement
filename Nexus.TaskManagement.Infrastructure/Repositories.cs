@@ -26,6 +26,39 @@ public sealed class TaskRepository(TaskManagementDbContext db) : ITaskRepository
     public Task<TaskItem?> GetForUpdateAsync(Guid tenantId, Guid id, CancellationToken cancellationToken) =>
         db.Tasks.FirstOrDefaultAsync(t => t.TenantId == tenantId && t.Id == id, cancellationToken);
 
+    public async Task<IReadOnlyList<NexusCore.Application.Identity.Interfaces.TaskSummary>> GetSummariesAsync(
+        Guid tenantId, IReadOnlyCollection<Guid> taskIds, CancellationToken cancellationToken)
+    {
+        var ids = taskIds.ToList();
+        var rows = await db.Tasks.IgnoreQueryFilters().AsNoTracking()
+            .Where(t => t.TenantId == tenantId && ids.Contains(t.Id))
+            .Select(t => new { t.Id, t.Title, t.DueDate, t.Status })
+            .ToListAsync(cancellationToken);
+        return rows.Select(t => new NexusCore.Application.Identity.Interfaces.TaskSummary(
+            t.Id, t.Title, t.DueDate, t.Status.ToString(), t.Status == Domain.TaskItemStatus.Completed)).ToList();
+    }
+
+    public async Task<IReadOnlyList<NexusCore.Application.Identity.Interfaces.TaskPeopleSnapshot>> ListPeopleAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        var tasks = await db.Tasks.AsNoTracking().Where(t => t.TenantId == tenantId)
+            .Select(t => new { t.Id, t.OwnerUserId, t.AssignedUserId }).ToListAsync(cancellationToken);
+        var assignees = (await db.TaskAssignees.AsNoTracking().Where(a => !a.IsActing && db.Tasks.Any(t => t.Id == a.TaskId && t.TenantId == tenantId))
+                .Select(a => new { a.TaskId, a.UserId, a.IsResponsible }).ToListAsync(cancellationToken))
+            .ToLookup(a => a.TaskId);
+        return tasks.Select(t =>
+        {
+            var responsible = new List<Guid>();
+            if (t.AssignedUserId is { } primary)
+            {
+                responsible.Add(primary);
+            }
+
+            responsible.AddRange(assignees[t.Id].Where(a => a.IsResponsible && !responsible.Contains(a.UserId)).Select(a => a.UserId));
+            var access = assignees[t.Id].Where(a => !responsible.Contains(a.UserId)).Select(a => a.UserId).Distinct().ToList();
+            return new NexusCore.Application.Identity.Interfaces.TaskPeopleSnapshot(t.Id, t.OwnerUserId, responsible, access);
+        }).ToList();
+    }
+
     public async Task<PagedResult<TaskItem>> ListAsync(ListTasksRequest request, CancellationToken cancellationToken)
     {
         var query = db.Tasks

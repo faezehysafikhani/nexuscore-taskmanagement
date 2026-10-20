@@ -35,6 +35,21 @@ public static class TaskManagementSchema
             CREATE INDEX [IX_PendingSms_SendAfterUtc] ON [task_management].[PendingSms] ([SendAfterUtc]);
         END
         """;
+
+    /// <summary>Tasks owned through a post, stand-ins for vacant posts (جانشین) and their comments.</summary>
+    public const string AddPostOwnershipAndActingSql = """
+        IF OBJECT_ID(N'[task_management].[Tasks]') IS NOT NULL AND COL_LENGTH(N'task_management.Tasks', N'OwnerHeldByPost') IS NULL
+            ALTER TABLE [task_management].[Tasks] ADD [OwnerHeldByPost] bit NOT NULL CONSTRAINT [DF_Tasks_OwnerHeldByPost] DEFAULT CAST(0 AS bit);
+        IF OBJECT_ID(N'[task_management].[TaskAssignees]') IS NOT NULL
+        BEGIN
+            IF COL_LENGTH(N'task_management.TaskAssignees', N'IsActing') IS NULL
+                ALTER TABLE [task_management].[TaskAssignees] ADD [IsActing] bit NOT NULL CONSTRAINT [DF_TaskAssignees_IsActing] DEFAULT CAST(0 AS bit);
+            IF COL_LENGTH(N'task_management.TaskAssignees', N'ActingNote') IS NULL
+                ALTER TABLE [task_management].[TaskAssignees] ADD [ActingNote] nvarchar(200) NULL;
+        END
+        IF OBJECT_ID(N'[task_management].[TaskComments]') IS NOT NULL AND COL_LENGTH(N'task_management.TaskComments', N'ActingNote') IS NULL
+            ALTER TABLE [task_management].[TaskComments] ADD [ActingNote] nvarchar(200) NULL;
+        """;
 }
 
 /// <summary>Applies <see cref="TaskManagementSchema"/> when the host starts (SQL Server only), before the module's jobs run.</summary>
@@ -49,6 +64,7 @@ public sealed class TaskManagementSchemaPatcher(IServiceScopeFactory scopes, ILo
             if (db.Database.IsSqlServer())
             {
                 await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddRemindersSql, cancellationToken);
+                await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddPostOwnershipAndActingSql, cancellationToken);
             }
         }
         catch (Exception ex)

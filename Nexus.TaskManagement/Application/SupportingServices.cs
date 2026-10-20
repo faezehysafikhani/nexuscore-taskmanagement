@@ -780,8 +780,13 @@ public sealed class TaskCommentService(
             return Result.Failure<TaskCommentDto>(Error.NotFound("Task not found."));
         }
 
+        // Someone only standing in for a vacant post of the task writes as its stand-in (جانشین).
+        var me = currentUser.UserId.Value;
+        var acting = task.OwnerUserId != me && !task.IsResponsible(me)
+            ? task.Assignees.FirstOrDefault(a => a.UserId == me && a.IsActing)?.ActingNote ?? (task.Assignees.Any(a => a.UserId == me && a.IsActing) ? "جانشین" : null)
+            : null;
         var comment = new TaskComment(
-            Guid.NewGuid(), tenantId, taskId, currentUser.UserId.Value, request.Text);
+            Guid.NewGuid(), tenantId, taskId, me, request.Text, acting);
 
         await repository.AddAsync(comment, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -862,5 +867,5 @@ public sealed class TaskCommentService(
 
     private static TaskCommentDto ToDto(TaskComment comment, string? displayName, IReadOnlyList<TaskFileDto> files) =>
         new(comment.Id, comment.TaskId, comment.UserId, displayName,
-            comment.Text, comment.CreatedAtUtc, comment.ModifiedAtUtc, files);
+            comment.Text, comment.CreatedAtUtc, comment.ModifiedAtUtc, files, comment.ActingNote);
 }

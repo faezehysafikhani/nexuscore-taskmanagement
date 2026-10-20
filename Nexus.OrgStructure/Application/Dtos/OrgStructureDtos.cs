@@ -12,20 +12,27 @@ public sealed record CompanyDto(
     bool IsActive,
     IReadOnlyList<Guid> LinkedUnitIds);
 
-public sealed record CreateCompanyRequest(string Name, string Code, string? Description, Guid? ManagerUserId);
+/// <summary>The head is not chosen here: see <see cref="PositionDto"/>.</summary>
+public sealed record CreateCompanyRequest(string Name, string Code, string? Description);
 
-public sealed record UpdateCompanyRequest(string Name, string Code, string? Description, Guid? ManagerUserId, bool IsActive);
+public sealed record UpdateCompanyRequest(string Name, string Code, string? Description, bool IsActive);
 
 /// <summary>A unit linked to a company: it and every unit below it belong to that company.</summary>
 public sealed record CompanyUnitDto(Guid UnitId, string UnitName, Guid CompanyId, string CompanyName);
 
 public sealed record LinkUnitRequest(Guid CompanyId);
 
-public sealed record PositionDto(Guid Id, string Title, Guid? ParentPositionId, bool IsActive);
+/// <summary>
+/// CompanyIds: the companies the position is for. In each of them, the one position with no
+/// superior (ParentPositionId) is the head's: whoever holds it directly in the company is the
+/// company's head (رئیس کل).
+/// </summary>
+public sealed record PositionDto(Guid Id, string Title, Guid? ParentPositionId, bool IsActive, IReadOnlyList<Guid>? CompanyIds = null);
 
-public sealed record CreatePositionRequest(string Title, Guid? ParentPositionId = null);
+/// <summary>CompanyIds: at least one. A superior must be for every one of them.</summary>
+public sealed record CreatePositionRequest(string Title, Guid? ParentPositionId = null, IReadOnlyList<Guid>? CompanyIds = null);
 
-public sealed record UpdatePositionRequest(string Title, bool IsActive, Guid? ParentPositionId = null);
+public sealed record UpdatePositionRequest(string Title, bool IsActive, Guid? ParentPositionId = null, IReadOnlyList<Guid>? CompanyIds = null);
 
 /// <summary>Source: "Explicit" (set on the assignment), "UnitManager" or "CompanyManager".</summary>
 public sealed record ManagerDto(Guid UserId, string DisplayName, bool IsActive, string Source);
@@ -58,21 +65,30 @@ public sealed record UserAssignmentDto(
 public sealed record SetUserAssignmentRequest(
     Guid CompanyId, Guid? UnitId, Guid? PositionId, Guid? ManagerUserId, IReadOnlyList<Guid>? UnitPositionIds = null);
 
-/// <summary>One of a unit's positions that someone holds.</summary>
-public sealed record HeldPositionDto(Guid UnitPositionId, Guid UnitId, string UnitName, Guid PositionId, string Title);
+/// <summary>A post someone holds. UnitId null: directly in the company (UnitName is then the company's).</summary>
+public sealed record HeldPositionDto(Guid UnitPositionId, Guid? UnitId, string UnitName, Guid PositionId, string Title, string? Code = null);
 
-/// <summary>A position a unit has, in the unit's order, with whoever holds it (none: vacant).</summary>
+/// <summary>
+/// A post, in its unit's order, with whoever holds it (none: vacant; never more than one).
+/// UnitId null: directly in the company.
+/// </summary>
 public sealed record UnitPositionDto(
     Guid Id,
-    Guid UnitId,
-    string UnitName,
+    Guid? UnitId,
+    string? UnitName,
     Guid PositionId,
     string Title,
     int SortOrder,
     bool IsPositionActive,
-    IReadOnlyList<PersonRef> Holders);
+    IReadOnlyList<PersonRef> Holders,
+    string Code = "",
+    Guid CompanyId = default,
+    string? CompanyName = null);
 
-public sealed record AddUnitPositionRequest(Guid PositionId);
+/// <summary>Code: optional; without it the next free number of the company.</summary>
+public sealed record AddUnitPositionRequest(Guid PositionId, string? Code = null);
+
+public sealed record UpdateUnitPositionRequest(string Code);
 
 /// <summary>Every position of the unit, in the new order.</summary>
 public sealed record OrderUnitPositionsRequest(IReadOnlyList<Guid> UnitPositionIds);
@@ -127,15 +143,21 @@ public sealed record OrgChartUnitDto(
     int PeopleCount = 0,
     IReadOnlyList<OrgChartPositionDto>? Positions = null);
 
-/// <summary>A unit's position in the chart; no holders means it is vacant.</summary>
+/// <summary>A post in the chart; no holder means it is vacant. IsHead: the company head's post.</summary>
 public sealed record OrgChartPositionDto(
     Guid UnitPositionId,
     Guid PositionId,
     string Title,
     int SortOrder,
     bool IsActive,
-    IReadOnlyList<OrgChartMemberDto> Holders);
+    IReadOnlyList<OrgChartMemberDto> Holders,
+    string Code = "",
+    bool IsHead = false);
 
+/// <summary>
+/// Members: the company's people in no unit who hold none of its own posts. Positions: the posts
+/// directly in the company (the head's first).
+/// </summary>
 public sealed record OrgChartCompanyDto(
     Guid CompanyId,
     string Name,
@@ -144,7 +166,8 @@ public sealed record OrgChartCompanyDto(
     PersonRef? Manager,
     IReadOnlyList<OrgChartMemberDto> Members,
     IReadOnlyList<OrgChartUnitDto> Units,
-    int PeopleCount = 0);
+    int PeopleCount = 0,
+    IReadOnlyList<OrgChartPositionDto>? Positions = null);
 
 /// <summary>Someone of the organization who has no place in the structure yet.</summary>
 public sealed record UnplacedUserDto(Guid UserId, string DisplayName, string? AvatarUrl);
