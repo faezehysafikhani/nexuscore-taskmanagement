@@ -109,6 +109,11 @@ public sealed class TaskService(
             return Result.Failure<TaskDto>(Error.Validation("A project must have at least one subtask."));
         }
 
+        if (request.IsProject && request.Recurrence is not null)
+        {
+            return Result.Failure<TaskDto>(Error.Validation("A task is either a project or recurring, not both."));
+        }
+
         var referenceCheck = await ValidateReferencesAsync(
             tenantId, null, request.AssignedUserGroupId, request.AssigneeUserIds, cancellationToken);
         if (referenceCheck.IsFailure)
