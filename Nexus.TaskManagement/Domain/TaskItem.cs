@@ -77,6 +77,11 @@ public sealed class TaskItem : AuditableEntity<Guid>
     /// <summary>The due moment the "overdue" notice was sent for; once per due moment.</summary>
     public DateTimeOffset? OverdueNotifiedFor { get; private set; }
 
+    /// <summary>The task this one was created under (a sub-activity); null for an ordinary task.</summary>
+    public Guid? ParentTaskId { get; private set; }
+
+    public void SetParentTask(Guid? parentTaskId) => ParentTaskId = parentTaskId;
+
     public Guid? OwnerUserId { get; private set; }
     public User? OwnerUser { get; private set; }
 

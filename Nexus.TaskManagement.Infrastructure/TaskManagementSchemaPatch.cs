@@ -18,6 +18,7 @@ public static class TaskManagementSchema
         BEGIN
             IF COL_LENGTH(N'task_management.Tasks', N'DueSoonNotifiedFor') IS NULL ALTER TABLE [task_management].[Tasks] ADD [DueSoonNotifiedFor] datetimeoffset NULL;
             IF COL_LENGTH(N'task_management.Tasks', N'OverdueNotifiedFor') IS NULL ALTER TABLE [task_management].[Tasks] ADD [OverdueNotifiedFor] datetimeoffset NULL;
+            IF COL_LENGTH(N'task_management.Tasks', N'ParentTaskId') IS NULL ALTER TABLE [task_management].[Tasks] ADD [ParentTaskId] uniqueidentifier NULL;
         END
         IF OBJECT_ID(N'[task_management].[RepetitiveTasks]') IS NOT NULL
             AND COL_LENGTH(N'task_management.RepetitiveTasks', N'UpcomingNotifiedFor') IS NULL

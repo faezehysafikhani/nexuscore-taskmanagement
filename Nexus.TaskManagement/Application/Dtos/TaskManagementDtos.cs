@@ -118,7 +118,8 @@ public sealed record TaskDto(
     TimeOnly? DueTime = null,
     TimeOnly? CharterStartTime = null,
     TimeOnly? CharterEndTime = null,
-    IReadOnlyList<UserSummaryDto>? ResponsibleUsers = null);
+    IReadOnlyList<UserSummaryDto>? ResponsibleUsers = null,
+    Guid? ParentTaskId = null);
 
 /// <summary>Trimmed shape for list and board views - no subtasks, files or charter.</summary>
 public sealed record TaskListItemDto(
@@ -198,7 +199,8 @@ public sealed record CreateTaskRequest(
     TimeOnly? DueTime = null,
     TimeOnly? CharterStartTime = null,
     TimeOnly? CharterEndTime = null,
-    IReadOnlyList<Guid>? ResponsibleUserIds = null);
+    IReadOnlyList<Guid>? ResponsibleUserIds = null,
+    Guid? ParentTaskId = null);
 
 /// <summary>
 /// Replaces the task's details. Like every other field here, DueTime is replaced as sent: null
