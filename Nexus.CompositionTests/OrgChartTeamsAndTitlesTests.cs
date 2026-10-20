@@ -188,7 +188,6 @@ public sealed class OrgChartTeamsAndTitlesTests
         await world.Service.SetAssignmentAsync(Tenant, person, new SetUserAssignmentRequest(company, tech.Id, null, null, [seat]), default);
 
         Assert.Equal("conflict", (await world.Service.RemoveUnitPositionAsync(Tenant, seat, default)).Error.Code);
-        Assert.Equal("conflict", (await world.Service.AddUnitPositionAsync(Tenant, tech.Id, new AddUnitPositionRequest(positionId), default)).Error.Code);
         Assert.Equal("conflict", (await world.Service.DeletePositionAsync(Tenant, positionId, default)).Error.Code);
         Assert.Equal("validation.error", (await world.Service.OrderUnitPositionsAsync(Tenant, tech.Id, new OrderUnitPositionsRequest([]), default)).Error.Code);
         Assert.Equal("validation.error", (await world.Service.SetAssignmentAsync(
@@ -292,6 +291,65 @@ public sealed class OrgChartTeamsAndTitlesTests
         Assert.True((await world.Service.UpdatePositionAsync(
             Tenant, onlyC1.Id, new UpdatePositionRequest("کارشناس", true, world.TopPosition, [c1, c2]), default)).IsSuccess);
         Assert.True((await world.Service.LinkUnitAsync(Tenant, tech.Id, new LinkUnitRequest(c2), default)).IsSuccess);
+    }
+
+    // ------------------------------------------------------------------ posts: a code each, one person each
+
+    [Fact]
+    public async Task APost_HasACodeOfItsCompany_AndOnePerson()
+    {
+        var world = new World();
+        var (a, b, c) = (world.User("الف"), world.User("ب"), world.User("ج"));
+        var tech = world.Unit("معاونت فناوری");
+        var company = await world.CompanyAsync("C1");
+        await world.Service.LinkUnitAsync(Tenant, tech.Id, new LinkUnitRequest(company), default);
+        var expert = await world.PositionAsync("کارشناس");
+
+        // A unit may have several posts of a position; each gets the company's next number.
+        var first = (await world.Service.AddUnitPositionAsync(Tenant, tech.Id, new AddUnitPositionRequest(expert), default)).Value!;
+        var second = (await world.Service.AddUnitPositionAsync(Tenant, tech.Id, new AddUnitPositionRequest(expert), default)).Value!;
+        Assert.Equal(("1", "2"), (first.Code, second.Code));
+        Assert.Equal("conflict", (await world.Service.AddUnitPositionAsync(Tenant, tech.Id, new AddUnitPositionRequest(expert, "1"), default)).Error.Code);
+        Assert.Equal("HR-7", (await world.Service.UpdateUnitPositionAsync(Tenant, second.Id, new UpdateUnitPositionRequest(" HR-7 "), default)).Value!.Code);
+        Assert.Equal("conflict", (await world.Service.UpdateUnitPositionAsync(Tenant, first.Id, new UpdateUnitPositionRequest("hr-7"), default)).Error.Code);
+
+        // One person per post.
+        Assert.True((await world.Service.SetAssignmentAsync(Tenant, a, new SetUserAssignmentRequest(company, tech.Id, null, null, [first.Id]), default)).IsSuccess);
+        Assert.Equal("conflict", (await world.Service.SetAssignmentAsync(
+            Tenant, b, new SetUserAssignmentRequest(company, tech.Id, null, null, [first.Id]), default)).Error.Code);
+
+        // Placed the older way (a position, no post): a vacant post of it, else a new one.
+        var placedB = (await world.Service.SetAssignmentAsync(Tenant, b, new SetUserAssignmentRequest(company, tech.Id, expert, null), default)).Value!;
+        Assert.Equal(second.Id, Assert.Single(placedB.Positions!).UnitPositionId);
+        var placedC = (await world.Service.SetAssignmentAsync(Tenant, c, new SetUserAssignmentRequest(company, tech.Id, expert, null), default)).Value!;
+        Assert.Equal("2", Assert.Single(placedC.Positions!).Code); // the number freed when "2" was renamed
+        var posts = (await world.Service.ListUnitPositionsAsync(Tenant, tech.Id, default)).Value!;
+        Assert.Equal(["1", "2", "HR-7"], posts.Select(p => p.Code).Order());
+        Assert.All(posts, p => Assert.Single(p.Holders));
+    }
+
+    [Fact]
+    public async Task TheHead_HoldsTheCompanysHeadPost_AndOtherPostsSitDirectlyInTheCompany()
+    {
+        var world = new World();
+        var (head, member) = (world.User("رئیس"), world.User("عضو"));
+        var company = await world.CompanyAsync("C1");
+        var board = await world.PositionAsync("عضو هیئت مدیره");
+
+        var headPost = (await world.Service.AddCompanyPositionAsync(Tenant, company, new AddUnitPositionRequest(world.TopPosition), default)).Value!;
+        Assert.Null(headPost.UnitId);
+        Assert.Equal("conflict", (await world.Service.AddCompanyPositionAsync(Tenant, company, new AddUnitPositionRequest(world.TopPosition), default)).Error.Code);
+        var boardPost = (await world.Service.AddCompanyPositionAsync(Tenant, company, new AddUnitPositionRequest(board), default)).Value!;
+
+        await world.Service.SetAssignmentAsync(Tenant, head, new SetUserAssignmentRequest(company, null, null, null, [headPost.Id]), default);
+        await world.Service.SetAssignmentAsync(Tenant, member, new SetUserAssignmentRequest(company, null, board, null), default);
+
+        var chart = Assert.Single((await world.Service.GetChartAsync(Tenant, null, default)).Value!);
+        Assert.Equal(head, chart.Manager!.UserId);
+        Assert.Equal([(true, head), (false, member)], chart.Positions!.Select(p => (p.IsHead, Assert.Single(p.Holders).UserId)));
+        Assert.Empty(chart.Members);
+        Assert.Equal(head, (await world.Service.GetManagerAsync(Tenant, member, default)).Value!.UserId);
+        Assert.Equal(boardPost.Id, Assert.Single((await world.Service.GetAssignmentAsync(Tenant, member, default)).Value!.Positions!).UnitPositionId);
     }
 
     // ------------------------------------------------------------------ work teams in the chart

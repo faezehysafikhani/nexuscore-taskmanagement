@@ -227,6 +227,14 @@ namespace Nexus.OrgStructure.Infrastructure.Migrations.OrgStructure
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("datetimeoffset");
 
@@ -248,14 +256,16 @@ namespace Nexus.OrgStructure.Infrastructure.Migrations.OrgStructure
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<Guid>("UnitId")
+                    b.Property<Guid?>("UnitId")
                         .HasColumnType("uniqueidentifier");
 
                     b.HasKey("Id");
 
                     b.HasIndex("PositionId");
 
-                    b.HasIndex("TenantId", "UnitId", "PositionId")
+                    b.HasIndex("UnitId");
+
+                    b.HasIndex("TenantId", "CompanyId", "Code")
                         .IsUnique();
 
                     b.ToTable("UnitPositions", "org_structure");
@@ -374,9 +384,9 @@ namespace Nexus.OrgStructure.Infrastructure.Migrations.OrgStructure
 
                     b.HasKey("Id");
 
-                    b.HasIndex("UnitPositionId");
+                    b.HasIndex("UserId");
 
-                    b.HasIndex("TenantId", "UserId", "UnitPositionId")
+                    b.HasIndex("TenantId", "UnitPositionId")
                         .IsUnique();
 
                     b.ToTable("UserPositions", "org_structure");

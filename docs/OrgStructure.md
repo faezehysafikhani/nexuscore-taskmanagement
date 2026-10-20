@@ -11,6 +11,10 @@
   (`parentPositionId`) must be for the same companies. In each company exactly one position has
   no superior: the head's. Whoever is placed directly in the company (no unit) with it is the
   company's head — one person at a time.
+- **Posts** («پست سازمانی») — one place for one person: a position in a unit (several posts of
+  one position are fine, e.g. three «کارشناس») or directly in the company (the head's, board
+  members'). Each has a code, unique in its company (by default the company's next number).
+  The head's post is the one directly in the company of its position with no superior.
 - **Each user's place** — company, optional unit, optional position, optional direct manager.
 - **Manager / subordinates** — derived, see below.
 

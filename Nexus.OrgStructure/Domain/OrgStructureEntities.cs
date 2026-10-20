@@ -163,34 +163,51 @@ public sealed class UserAssignment : AuditableEntity<Guid>
 }
 
 /// <summary>
-/// A position a unit (deputy) has, in the unit's own order. The chart shows it under the unit
-/// even while nobody holds it.
+/// A post (پُست سازمانی): one place for one person, such as «کارشناس (کد ۷) – معاونت فناوری».
+/// In a unit (deputy), in the unit's own order, or directly in the company (UnitId null: e.g. the
+/// head's post). Its code is unique in its company. The chart shows it even while vacant. A unit
+/// may have several posts of the same position.
 /// </summary>
 public sealed class UnitPosition : AuditableEntity<Guid>
 {
     private UnitPosition() : base(Guid.Empty)
     {
+        Code = string.Empty;
     }
 
-    public UnitPosition(Guid id, Guid tenantId, Guid unitId, Guid positionId, int sortOrder) : base(id)
+    public UnitPosition(Guid id, Guid tenantId, Guid companyId, Guid? unitId, Guid positionId, int sortOrder, string code) : base(id)
     {
         TenantId = tenantId;
+        CompanyId = companyId;
         UnitId = unitId;
         PositionId = positionId;
         SortOrder = sortOrder;
+        Code = code.Trim();
     }
 
     public Guid TenantId { get; private set; }
-    public Guid UnitId { get; private set; }
+
+    /// <summary>The company of the post: its unit's, or the one it is directly in.</summary>
+    public Guid CompanyId { get; private set; }
+
+    /// <summary>Null: directly in the company, in no unit.</summary>
+    public Guid? UnitId { get; private set; }
+
     public Guid PositionId { get; private set; }
     public int SortOrder { get; private set; }
+    public string Code { get; private set; }
 
     public void MoveTo(int sortOrder) => SortOrder = sortOrder;
+
+    /// <summary>Its unit moved to another company.</summary>
+    public void MoveToCompany(Guid companyId) => CompanyId = companyId;
+
+    public void ChangeCode(string code) => Code = code.Trim();
 }
 
 /// <summary>
-/// Someone holding one of a unit's positions. A person may hold several, in any unit; their
-/// <see cref="UserAssignment"/> stays their one place in the hierarchy (company, unit, manager).
+/// Someone holding a post: one person per post. A person may hold several posts, in any unit;
+/// their <see cref="UserAssignment"/> stays their one place in the hierarchy (company, unit, manager).
 /// </summary>
 public sealed class UserPosition : AuditableEntity<Guid>
 {
