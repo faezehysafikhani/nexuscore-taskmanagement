@@ -209,10 +209,11 @@ public sealed class SendDirectMessageCommandHandler(
                     $"The attached file is too large. The limit is {options.Value.MaxAttachmentBytes / (1024 * 1024)} MB."));
             }
 
-            if (!AllowedUploadTypes.IsAllowed(upload.FileName, upload.ContentType))
+            if (!AllowedUploadTypes.IsAllowed(upload.FileName, upload.ContentType)
+                && !AllowedUploadTypes.IsVoiceMessage(upload.FileName, upload.ContentType))
             {
                 return Result.Failure<DirectMessageDto>(Error.Validation(
-                    "This file type is not allowed. Only Excel, Word, PDF and image files can be uploaded."));
+                    "This file type is not allowed. Only Excel, Word, PDF, image and voice files can be uploaded."));
             }
 
             var maxConfiguredBytes = await uploadPolicy.GetMaxFileSizeKbAsync(currentUser.TenantId, cancellationToken) * 1024L;
