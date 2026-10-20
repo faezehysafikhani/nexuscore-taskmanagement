@@ -316,3 +316,6 @@ public sealed record CreateTaskActivityRequest(string Action, string? Details = 
 /// FileName is only ever kept for display.
 /// </summary>
 public sealed record UploadFileRequest(string FileName, string ContentType, byte[] Content);
+
+/// <summary>Limited: the product limits whom the user may make responsible; BlockedUserIds: who they may not.</summary>
+public sealed record AssignmentLimitDto(bool Limited, IReadOnlyList<Guid> BlockedUserIds);

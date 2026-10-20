@@ -27,6 +27,7 @@ public static class TaskManagementEndpoints
         app.MapTaskFileEndpoints();
         app.MapNoteEndpoints();
         app.MapReminderSettingsEndpoints();
+        app.MapAssignmentLimitEndpoint();
         app.MapHub<TaskManagementHub>(TaskManagementHub.Route)
             .RequireRateLimiting(NexusRateLimitPolicies.Realtime);
         return app;
@@ -51,6 +52,30 @@ public static class TaskManagementEndpoints
                 (await service.SaveAsync(request, cancellationToken)).ToApiResult())
             .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(NexusCore.Application.Identity.Permissions.IdentityPermissions.SmsSettingsUpdate);
+
+        return app;
+    }
+
+    /// <summary>
+    /// Whom the signed-in user may not make responsible for a task (where the product limits it -
+    /// see IWorkAssignmentScope), so the task screen offers only the others. The server checks again.
+    /// </summary>
+    private static IEndpointRouteBuilder MapAssignmentLimitEndpoint(this IEndpointRouteBuilder app)
+    {
+        app.MapGet("/api/task-management/assignment-limit", async (
+                ICurrentUserContext user, NexusCore.Application.Identity.Interfaces.IWorkAssignmentScope scope, CancellationToken cancellationToken) =>
+            {
+                if (user.TenantId is not { } tenantId || user.UserId is not { } userId)
+                {
+                    return Results.Unauthorized();
+                }
+
+                var limit = await scope.GetLimitAsync(tenantId, userId, cancellationToken);
+                return Results.Ok(new AssignmentLimitDto(limit is not null, limit?.BlockedUserIds.ToList() ?? []));
+            })
+            .WithTags("Tasks")
+            .RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi);
 
         return app;
     }

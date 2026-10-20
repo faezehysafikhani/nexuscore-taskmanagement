@@ -22,6 +22,9 @@ public static class DependencyInjection
         // Work-team builders add their own deputy's people (more with TeamMembersFromAnyUnit).
         // The Core registers its unlimited default with TryAdd, so this one wins whichever runs first.
         services.AddScoped<IWorkTeamMemberScope, DeputyWorkTeamMemberScope>();
+        // Tasks only to one's own level and below - when OrgStructure:LimitTaskAssignment is on.
+        services.AddOptions<OrgStructureOptions>().BindConfiguration(OrgStructureOptions.SectionName);
+        services.AddScoped<IWorkAssignmentScope, HierarchyWorkAssignmentScope>();
 
         services.AddAuthorization(options =>
         {

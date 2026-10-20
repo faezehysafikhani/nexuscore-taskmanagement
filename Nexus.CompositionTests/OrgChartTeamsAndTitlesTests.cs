@@ -17,6 +17,71 @@ public sealed class OrgChartTeamsAndTitlesTests
 {
     private static readonly Guid Tenant = Guid.NewGuid();
 
+    // ------------------------------------------------------------------ whom a user may give tasks to
+
+    /// <summary>
+    /// The company «C1»: head; deputies tech (head d1; senior s1 above expert e2) and finance (head d2;
+    /// expert e3 with no position); and someone with no place.
+    /// </summary>
+    private static async Task<(World World, Dictionary<string, Guid> People)> HierarchyAsync()
+    {
+        var world = new World();
+        var p = new[] { "head", "d1", "d2", "s1", "e2", "e3", "nowhere" }.ToDictionary(n => n, n => world.User(n));
+        var tech = world.Unit("معاونت فناوری", p["d1"]);
+        var finance = world.Unit("معاونت مالی", p["d2"]);
+        var company = (await world.Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("شرکت", "C1", null, p["head"]), default)).Value!.Id;
+        await world.Service.LinkUnitAsync(Tenant, tech.Id, new LinkUnitRequest(company), default);
+        await world.Service.LinkUnitAsync(Tenant, finance.Id, new LinkUnitRequest(company), default);
+        var senior = await world.SeatAsync(tech.Id, "کارشناس ارشد");
+        var expert = await world.SeatAsync(tech.Id, "کارشناس");
+        foreach (var (who, unit, seats) in new[]
+                 {
+                     ("d1", tech.Id, Array.Empty<Guid>()), ("s1", tech.Id, [senior]), ("e2", tech.Id, [expert]),
+                     ("d2", finance.Id, []), ("e3", finance.Id, []),
+                 })
+        {
+            Assert.True((await world.Service.SetAssignmentAsync(Tenant, p[who], new SetUserAssignmentRequest(company, unit, null, null, seats), default)).IsSuccess);
+        }
+
+        return (world, p);
+    }
+
+    private static async Task<string[]> BlockedForAsync(World world, Dictionary<string, Guid> people, string who, bool on = true, params string[] permissions)
+    {
+        var limit = await world.AssignmentScope(people[who], on, permissions).GetLimitAsync(Tenant, people[who], default);
+        return limit is null ? ["(not limited)"] : people.Where(x => limit.BlockedUserIds.Contains(x.Value)).Select(x => x.Key).OrderBy(x => x).ToArray();
+    }
+
+    [Fact]
+    public async Task TasksGoToOnesOwnLevelAndBelow_NeverAbove()
+    {
+        var (world, p) = await HierarchyAsync();
+
+        // The head: everyone is below.
+        Assert.Empty(await BlockedForAsync(world, p, "head"));
+        // A deputy's head: their own people and the other deputies' heads - not the head, not
+        // another deputy's experts.
+        Assert.Equal(["e3", "head"], await BlockedForAsync(world, p, "d1"));
+        // An expert: experts of other deputies, and the lower position of their own deputy.
+        Assert.Equal(["d1", "d2", "head"], await BlockedForAsync(world, p, "s1"));
+        // The lower position may not give work to the higher one of the same deputy.
+        Assert.Equal(["d1", "d2", "head", "s1"], await BlockedForAsync(world, p, "e2"));
+        // Nobody may be blocked from giving work to someone with no place yet.
+        Assert.DoesNotContain("nowhere", await BlockedForAsync(world, p, "e2"));
+    }
+
+    [Fact]
+    public async Task TheLimit_IsOffByDefault_AndNotForThePermission_OrSomeoneWithNoPlace()
+    {
+        var (world, p) = await HierarchyAsync();
+
+        Assert.Equal(["(not limited)"], await BlockedForAsync(world, p, "e2", on: false));
+        Assert.Equal(["(not limited)"], await BlockedForAsync(world, p, "e2", true, OrgStructurePermissions.AssignTasksToAnyLevel));
+        Assert.Equal(["(not limited)"], await BlockedForAsync(world, p, "nowhere"));
+        Assert.Contains(new OrgStructurePermissionCatalog().GetPermissions(), x => x.Name == OrgStructurePermissions.AssignTasksToAnyLevel);
+        Assert.DoesNotContain(OrgStructurePermissions.All, x => x.Name == OrgStructurePermissions.AssignTasksToAnyLevel);
+    }
+
     // ------------------------------------------------------------------ positions of a unit
 
     [Fact]
@@ -345,6 +410,12 @@ public sealed class OrgChartTeamsAndTitlesTests
         /// <summary>Whom <paramref name="signedIn"/> may add to their work teams, holding <paramref name="permissions"/>.</summary>
         public IWorkTeamMemberScope MemberScope(Guid signedIn, params string[] permissions) =>
             new DeputyWorkTeamMemberScope(_repository, new OrganizationUnitRepository(_organization), new SignedIn(signedIn, permissions));
+
+        /// <summary>Whom <paramref name="signedIn"/> may not give tasks to, with the limit turned <paramref name="on"/>.</summary>
+        public IWorkAssignmentScope AssignmentScope(Guid signedIn, bool on, params string[] permissions) =>
+            new HierarchyWorkAssignmentScope(
+                _repository, new OrganizationUnitRepository(_organization), new SignedIn(signedIn, permissions),
+                Microsoft.Extensions.Options.Options.Create(new OrgStructureOptions { LimitTaskAssignment = on }));
 
         public void Team(string name, Guid owner, params Guid[] members) =>
             _teams.Teams.Add(new WorkTeamInfo(Guid.NewGuid(), name, null, owner, members));

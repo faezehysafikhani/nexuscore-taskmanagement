@@ -16,6 +16,12 @@ public static class OrgStructurePermissions
     public const string TeamMembersFromAnyUnit = "org_structure.team_members_any_unit";
 
     /// <summary>
+    /// Where tasks are limited to the user's own level and below (OrgStructure:LimitTaskAssignment),
+    /// its holder may make anyone responsible. Not one of <see cref="All"/> either.
+    /// </summary>
+    public const string AssignTasksToAnyLevel = "org_structure.assign_tasks_any_level";
+
+    /// <summary>
     /// Policy for the read endpoints: any of the permissions above. A manager of companies,
     /// positions or assignments has to see them too, and this module cannot add entries to
     /// NexusCore's PermissionPrerequisites without changing NexusCore for every product.
@@ -47,7 +53,8 @@ public static class OrgStructurePermissions
     /// <summary>Permissions about work teams that only mean something with the organization structure.</summary>
     public static IReadOnlyList<PermissionDefinition> WorkTeams { get; } =
     [
-        new(TeamMembersFromAnyUnit, "Organization", "افزودن اعضای سایر معاونت‌ها به تیم کاری")
+        new(TeamMembersFromAnyUnit, "Organization", "افزودن اعضای سایر معاونت‌ها به تیم کاری"),
+        new(AssignTasksToAnyLevel, "Organization", "ارجاع فعالیت به همه‌ی سطوح سازمانی (حتی بالاتر از خود)")
     ];
 }
 

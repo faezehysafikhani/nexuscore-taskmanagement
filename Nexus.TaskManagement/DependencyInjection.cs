@@ -27,6 +27,9 @@ public static class DependencyInjection
         services.AddScoped<INoteService, NoteService>();
         services.AddScoped<ITaskCommentService, TaskCommentService>();
         services.AddScoped<ITaskAccessScope, TaskAccessScope>();
+        // Whom a user may make responsible: anyone, unless a product limits it (Nexus.OrgStructure).
+        services.TryAddScoped<NexusCore.Application.Identity.Interfaces.IWorkAssignmentScope,
+            NexusCore.Application.Identity.Interfaces.UnlimitedWorkAssignmentScope>();
 
         // In the users' time zone (TaskManagement:Recurrence:TimeZone, Asia/Tehran by default).
         services.AddSingleton<IRecurrenceCalculator>(provider => new RecurrenceCalculator(RecurrenceCalculator.ResolveTimeZone(
