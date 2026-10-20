@@ -39,7 +39,11 @@ public sealed record SubTaskDto(
     DateTimeOffset CreatedAtUtc,
     bool IsGeneratedOccurrence = false,
     TimeOnly? StartTime = null,
-    TimeOnly? EndTime = null);
+    TimeOnly? EndTime = null,
+    IReadOnlyList<UserSummaryDto>? Assignees = null,
+    SubTaskStatus Status = SubTaskStatus.NotStarted,
+    DateTimeOffset? ActualStartedAtUtc = null,
+    DateTimeOffset? ActualCompletedAtUtc = null);
 
 /// <summary>
 /// The recurrence schedule. Carries no title, priority or assignee - those belong to the task
@@ -164,7 +168,8 @@ public sealed record SubTaskInput(
     int SortOrder = 0,
     bool IsGeneratedOccurrence = false,
     TimeOnly? StartTime = null,
-    TimeOnly? EndTime = null);
+    TimeOnly? EndTime = null,
+    IReadOnlyList<Guid>? AssigneeUserIds = null);
 
 public sealed record RecurrenceInput(
     RecurrenceFrequency Frequency,
@@ -270,7 +275,8 @@ public sealed record CreateSubTaskRequest(
     int SortOrder = 0,
     bool IsGeneratedOccurrence = false,
     TimeOnly? StartTime = null,
-    TimeOnly? EndTime = null);
+    TimeOnly? EndTime = null,
+    IReadOnlyList<Guid>? AssigneeUserIds = null);
 
 public sealed record UpdateSubTaskRequest(
     string Title,
@@ -279,9 +285,10 @@ public sealed record UpdateSubTaskRequest(
     DateOnly? EndDate = null,
     int SortOrder = 0,
     TimeOnly? StartTime = null,
-    TimeOnly? EndTime = null);
+    TimeOnly? EndTime = null,
+    IReadOnlyList<Guid>? AssigneeUserIds = null);
 
-public sealed record ChangeSubTaskStatusRequest(bool IsCompleted);
+public sealed record ChangeSubTaskStatusRequest(SubTaskStatus Status);
 
 public sealed record CreateRepetitiveTaskRequest(Guid TaskId, RecurrenceInput Recurrence);
 

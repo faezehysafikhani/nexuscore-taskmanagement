@@ -128,6 +128,13 @@ public sealed class TaskService(
             return Result.Failure<TaskDto>(peopleCheck.Error);
         }
 
+        var subTaskAssigneeIds = (request.SubTasks ?? []).SelectMany(s => s.AssigneeUserIds ?? []).Distinct().ToList();
+        var subTaskPeopleCheck = await ValidateSubTaskAssigneesAsync(tenantId, subTaskAssigneeIds, cancellationToken);
+        if (subTaskPeopleCheck.IsFailure)
+        {
+            return Result.Failure<TaskDto>(subTaskPeopleCheck.Error);
+        }
+
         var task = new TaskItem(
             Guid.NewGuid(), tenantId, request.Title, request.DueDate, request.Priority,
             request.IsProject, currentUser.UserId, request.Description);
@@ -156,6 +163,7 @@ public sealed class TaskService(
             subTask.UpdateDetails(input.Title, input.Importance, input.StartDate, input.EndDate, subTask.SortOrder);
             subTask.SetTimes(input.StartTime, input.EndTime);
             subTask.MarkGeneratedOccurrence(input.IsGeneratedOccurrence);
+            subTask.SetAssignees(input.AssigneeUserIds ?? []);
         }
 
         if (request.Recurrence is { } recurrence)
@@ -479,6 +487,12 @@ public sealed class TaskService(
             return Result.Failure<SubTaskDto>(NotTaskOwner());
         }
 
+        var assigneeCheck = await ValidateSubTaskAssigneesAsync(tenantId, request.AssigneeUserIds ?? [], cancellationToken);
+        if (assigneeCheck.IsFailure)
+        {
+            return Result.Failure<SubTaskDto>(assigneeCheck.Error);
+        }
+
         var count = await repository.CountSubTasksAsync(tenantId, taskId, cancellationToken);
         var subTask = task.AddSubTask(
             Guid.NewGuid(), request.Title, request.Importance,
@@ -486,11 +500,12 @@ public sealed class TaskService(
         subTask.UpdateDetails(request.Title, request.Importance, request.StartDate, request.EndDate, subTask.SortOrder);
         subTask.SetTimes(request.StartTime, request.EndTime);
         subTask.MarkGeneratedOccurrence(request.IsGeneratedOccurrence);
+        subTask.SetAssignees(request.AssigneeUserIds ?? []);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await activity.RecordAsync(taskId, "Subtask added", request.Title, cancellationToken);
 
-        return Result.Success(ToDto(subTask));
+        return Result.Success(await ToDtoAsync(subTask, cancellationToken));
     }
 
     public async Task<Result<SubTaskDto>> UpdateSubTaskAsync(
@@ -519,12 +534,19 @@ public sealed class TaskService(
             return Result.Failure<SubTaskDto>(NotTaskOwner());
         }
 
+        var assigneeCheck = await ValidateSubTaskAssigneesAsync(tenantId, request.AssigneeUserIds ?? [], cancellationToken);
+        if (assigneeCheck.IsFailure)
+        {
+            return Result.Failure<SubTaskDto>(assigneeCheck.Error);
+        }
+
         subTask.UpdateDetails(request.Title, request.Importance, request.StartDate, request.EndDate, request.SortOrder);
         subTask.SetTimes(request.StartTime, request.EndTime);
+        subTask.SetAssignees(request.AssigneeUserIds ?? []);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await activity.RecordAsync(subTask.TaskId, "Subtask updated", request.Title, cancellationToken);
 
-        return Result.Success(ToDto(subTask));
+        return Result.Success(await ToDtoAsync(subTask, cancellationToken));
     }
 
     public async Task<Result<SubTaskDto>> ChangeSubTaskStatusAsync(
@@ -553,13 +575,17 @@ public sealed class TaskService(
             return Result.Failure<SubTaskDto>(NotTaskOwner());
         }
 
-        subTask.SetCompleted(request.IsCompleted);
+        subTask.SetStatus(request.Status);
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        await activity.RecordAsync(
-            subTask.TaskId, request.IsCompleted ? "Subtask completed" : "Subtask reopened",
-            subTask.Title, cancellationToken);
+        var activityLabel = request.Status switch
+        {
+            SubTaskStatus.Completed => "Subtask completed",
+            SubTaskStatus.InProgress => "Subtask started",
+            _ => "Subtask reopened"
+        };
+        await activity.RecordAsync(subTask.TaskId, activityLabel, subTask.Title, cancellationToken);
 
-        return Result.Success(ToDto(subTask));
+        return Result.Success(await ToDtoAsync(subTask, cancellationToken));
     }
 
     public async Task<Result<SubTaskDto>> GetSubTaskAsync(Guid subTaskId, CancellationToken cancellationToken)
@@ -572,7 +598,7 @@ public sealed class TaskService(
         var subTask = await repository.GetSubTaskAsync(currentUser.TenantId.Value, subTaskId, cancellationToken);
         return subTask is null
             ? Result.Failure<SubTaskDto>(Error.NotFound("Subtask not found."))
-            : Result.Success(ToDto(subTask));
+            : Result.Success(await ToDtoAsync(subTask, cancellationToken));
     }
 
     public async Task<Result<IReadOnlyList<SubTaskDto>>> GetSubTasksAsync(Guid taskId, CancellationToken cancellationToken)
@@ -583,7 +609,9 @@ public sealed class TaskService(
         }
 
         var subTasks = await repository.GetSubTasksAsync(currentUser.TenantId.Value, taskId, cancellationToken);
-        return Result.Success<IReadOnlyList<SubTaskDto>>(subTasks.Select(ToDto).ToList());
+        var users = await repository.GetUserSummariesAsync(
+            subTasks.SelectMany(s => s.Assignees.Select(a => a.UserId)).Distinct().ToList(), cancellationToken);
+        return Result.Success<IReadOnlyList<SubTaskDto>>(subTasks.Select(s => ToDto(s, users)).ToList());
     }
 
     public async Task<Result> DeleteSubTaskAsync(Guid subTaskId, CancellationToken cancellationToken)
@@ -710,6 +738,21 @@ public sealed class TaskService(
         return Result.Success();
     }
 
+    /// <summary>Every subtask assignee must be an active user of the subtask's organization.</summary>
+    private async Task<Result> ValidateSubTaskAssigneesAsync(
+        Guid tenantId, IReadOnlyList<Guid> assigneeUserIds, CancellationToken cancellationToken)
+    {
+        foreach (var id in assigneeUserIds.Distinct())
+        {
+            if (!await repository.ActiveUserExistsAsync(tenantId, id, cancellationToken))
+            {
+                return Result.Failure(Error.Validation("Only active users of this organization can be responsible for a subtask."));
+            }
+        }
+
+        return Result.Success();
+    }
+
     private async Task ApplyTagsAsync(
         Guid tenantId, Guid taskId, IReadOnlyList<string> tagNames, CancellationToken cancellationToken)
     {
@@ -798,7 +841,7 @@ public sealed class TaskService(
         link.File?.UploadedByUserId,
         link.File?.CreatedAtUtc ?? default);
 
-    internal static SubTaskDto ToDto(SubTask subTask) => new(
+    internal static SubTaskDto ToDto(SubTask subTask, IReadOnlyDictionary<Guid, UserSummaryDto>? users = null) => new(
         subTask.Id,
         subTask.TaskId,
         subTask.Title,
@@ -812,7 +855,22 @@ public sealed class TaskService(
         subTask.CreatedAtUtc,
         subTask.IsGeneratedOccurrence,
         subTask.StartTime,
-        subTask.EndTime);
+        subTask.EndTime,
+        subTask.Assignees
+            .Select(a => users is not null && users.TryGetValue(a.UserId, out var u) ? u : null)
+            .Where(u => u is not null)
+            .Select(u => u!)
+            .ToList(),
+        subTask.Status,
+        subTask.ActualStartedAtUtc,
+        subTask.ActualCompletedAtUtc);
+
+    private async Task<SubTaskDto> ToDtoAsync(SubTask subTask, CancellationToken cancellationToken)
+    {
+        var users = await repository.GetUserSummariesAsync(
+            subTask.Assignees.Select(a => a.UserId).Distinct().ToList(), cancellationToken);
+        return ToDto(subTask, users);
+    }
 
     internal static RepetitiveTaskDto ToDto(RepetitiveTask schedule) => new(
         schedule.Id,
@@ -837,6 +895,7 @@ public sealed class TaskService(
         if (task.OwnerUserId is { } owner) userIds.Add(owner);
         userIds.AddRange(task.ResponsibleUserIds);
         userIds.AddRange(task.Assignees.Select(a => a.UserId));
+        userIds.AddRange(task.SubTasks.SelectMany(s => s.Assignees.Select(a => a.UserId)));
 
         var users = await repository.GetUserSummariesAsync(userIds.Distinct().ToList(), cancellationToken);
         var groups = task.AssignedUserGroupId is { } groupId
@@ -866,7 +925,7 @@ public sealed class TaskService(
             task.CharterProjectManager,
             task.CharterStartDate,
             task.CharterEndDate,
-            task.SubTasks.OrderBy(s => s.SortOrder).Select(ToDto).ToList(),
+            task.SubTasks.OrderBy(s => s.SortOrder).Select(s => ToDto(s, users)).ToList(),
             task.Tags.Where(t => t.Tag is not null).Select(t => ToDto(t.Tag!)).ToList(),
             task.Files.Select(ToDto).ToList(),
             task.Recurrence is null ? null : ToDto(task.Recurrence),

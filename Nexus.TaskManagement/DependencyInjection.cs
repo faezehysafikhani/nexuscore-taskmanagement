@@ -54,6 +54,7 @@ public static class DependencyInjection
         services.AddScoped<IValidator<AssignUserGroupRequest>, AssignUserGroupRequestValidator>();
         services.AddScoped<IValidator<CreateSubTaskRequest>, CreateSubTaskRequestValidator>();
         services.AddScoped<IValidator<UpdateSubTaskRequest>, UpdateSubTaskRequestValidator>();
+        services.AddScoped<IValidator<ChangeSubTaskStatusRequest>, ChangeSubTaskStatusRequestValidator>();
         services.AddScoped<IValidator<CreateRepetitiveTaskRequest>, CreateRepetitiveTaskRequestValidator>();
         services.AddScoped<IValidator<UpdateRepetitiveTaskRequest>, UpdateRepetitiveTaskRequestValidator>();
         services.AddScoped<IValidator<CreateTagRequest>, CreateTagRequestValidator>();
