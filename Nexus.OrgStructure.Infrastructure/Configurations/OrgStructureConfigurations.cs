@@ -65,6 +65,32 @@ public sealed class UserAssignmentConfiguration : IEntityTypeConfiguration<UserA
     }
 }
 
+public sealed class UnitPositionConfiguration : IEntityTypeConfiguration<UnitPosition>
+{
+    public void Configure(EntityTypeBuilder<UnitPosition> builder)
+    {
+        builder.ToTable("UnitPositions", OrgStructureSchema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        // A position appears once in a unit.
+        builder.HasIndex(x => new { x.TenantId, x.UnitId, x.PositionId }).IsUnique();
+        builder.HasIndex(x => x.PositionId);
+    }
+}
+
+public sealed class UserPositionConfiguration : IEntityTypeConfiguration<UserPosition>
+{
+    public void Configure(EntityTypeBuilder<UserPosition> builder)
+    {
+        builder.ToTable("UserPositions", OrgStructureSchema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        // A person holds a unit's position once.
+        builder.HasIndex(x => new { x.TenantId, x.UserId, x.UnitPositionId }).IsUnique();
+        builder.HasIndex(x => x.UnitPositionId);
+    }
+}
+
 public sealed class HonorificConfiguration : IEntityTypeConfiguration<Honorific>
 {
     public void Configure(EntityTypeBuilder<Honorific> builder)

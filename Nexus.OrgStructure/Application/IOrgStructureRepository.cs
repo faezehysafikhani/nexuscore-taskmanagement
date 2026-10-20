@@ -30,6 +30,14 @@ public interface IOrgStructureRepository
     Task AddAssignmentAsync(UserAssignment assignment, CancellationToken cancellationToken);
     void RemoveAssignment(UserAssignment assignment);
 
+    Task<IReadOnlyList<UnitPosition>> ListUnitPositionsAsync(Guid tenantId, CancellationToken cancellationToken);
+    Task AddUnitPositionAsync(UnitPosition unitPosition, CancellationToken cancellationToken);
+    void RemoveUnitPosition(UnitPosition unitPosition);
+
+    Task<IReadOnlyList<UserPosition>> ListUserPositionsAsync(Guid tenantId, CancellationToken cancellationToken);
+    Task AddUserPositionAsync(UserPosition userPosition, CancellationToken cancellationToken);
+    void RemoveUserPosition(UserPosition userPosition);
+
     Task<IReadOnlyList<Honorific>> ListHonorificsAsync(Guid tenantId, CancellationToken cancellationToken);
     Task<Honorific?> GetHonorificAsync(Guid tenantId, Guid id, CancellationToken cancellationToken);
     Task<bool> HonorificTitleExistsAsync(Guid tenantId, string title, Guid? excludeId, CancellationToken cancellationToken);

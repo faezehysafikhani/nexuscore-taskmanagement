@@ -56,6 +56,22 @@ public sealed class OrgStructureRepository(OrgStructureDbContext dbContext) : IO
 
     public void RemoveAssignment(UserAssignment assignment) => dbContext.UserAssignments.Remove(assignment);
 
+    public async Task<IReadOnlyList<UnitPosition>> ListUnitPositionsAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        await dbContext.UnitPositions.Where(x => x.TenantId == tenantId).OrderBy(x => x.SortOrder).ToListAsync(cancellationToken);
+
+    public async Task AddUnitPositionAsync(UnitPosition unitPosition, CancellationToken cancellationToken) =>
+        await dbContext.UnitPositions.AddAsync(unitPosition, cancellationToken);
+
+    public void RemoveUnitPosition(UnitPosition unitPosition) => dbContext.UnitPositions.Remove(unitPosition);
+
+    public async Task<IReadOnlyList<UserPosition>> ListUserPositionsAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        await dbContext.UserPositions.Where(x => x.TenantId == tenantId).ToListAsync(cancellationToken);
+
+    public async Task AddUserPositionAsync(UserPosition userPosition, CancellationToken cancellationToken) =>
+        await dbContext.UserPositions.AddAsync(userPosition, cancellationToken);
+
+    public void RemoveUserPosition(UserPosition userPosition) => dbContext.UserPositions.Remove(userPosition);
+
     public async Task<IReadOnlyList<Honorific>> ListHonorificsAsync(Guid tenantId, CancellationToken cancellationToken) =>
         await dbContext.Honorifics.Where(x => x.TenantId == tenantId).OrderBy(x => x.SortOrder).ThenBy(x => x.Title).ToListAsync(cancellationToken);
 

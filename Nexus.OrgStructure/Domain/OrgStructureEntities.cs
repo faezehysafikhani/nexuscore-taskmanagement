@@ -134,6 +134,54 @@ public sealed class UserAssignment : AuditableEntity<Guid>
 
 }
 
+/// <summary>
+/// A position a unit (deputy) has, in the unit's own order. The chart shows it under the unit
+/// even while nobody holds it.
+/// </summary>
+public sealed class UnitPosition : AuditableEntity<Guid>
+{
+    private UnitPosition() : base(Guid.Empty)
+    {
+    }
+
+    public UnitPosition(Guid id, Guid tenantId, Guid unitId, Guid positionId, int sortOrder) : base(id)
+    {
+        TenantId = tenantId;
+        UnitId = unitId;
+        PositionId = positionId;
+        SortOrder = sortOrder;
+    }
+
+    public Guid TenantId { get; private set; }
+    public Guid UnitId { get; private set; }
+    public Guid PositionId { get; private set; }
+    public int SortOrder { get; private set; }
+
+    public void MoveTo(int sortOrder) => SortOrder = sortOrder;
+}
+
+/// <summary>
+/// Someone holding one of a unit's positions. A person may hold several, in any unit; their
+/// <see cref="UserAssignment"/> stays their one place in the hierarchy (company, unit, manager).
+/// </summary>
+public sealed class UserPosition : AuditableEntity<Guid>
+{
+    private UserPosition() : base(Guid.Empty)
+    {
+    }
+
+    public UserPosition(Guid id, Guid tenantId, Guid userId, Guid unitPositionId) : base(id)
+    {
+        TenantId = tenantId;
+        UserId = userId;
+        UnitPositionId = unitPositionId;
+    }
+
+    public Guid TenantId { get; private set; }
+    public Guid UserId { get; private set; }
+    public Guid UnitPositionId { get; private set; }
+}
+
 /// <summary>A title put before people's names, such as «آقای»، «خانم» or «جناب مهندس».</summary>
 public sealed class Honorific : AuditableEntity<Guid>
 {
