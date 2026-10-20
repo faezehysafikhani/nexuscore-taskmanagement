@@ -137,6 +137,16 @@ public sealed class TaskService(
             Guid.NewGuid(), tenantId, request.Title, request.DueDate, request.Priority,
             request.IsProject, currentUser.UserId, request.Description);
 
+        if (request.ParentTaskId is { } parentTaskId)
+        {
+            if (await repository.GetByIdAsync(tenantId, parentTaskId, cancellationToken) is null)
+            {
+                return Result.Failure<TaskDto>(Error.Validation("The parent task was not found."));
+            }
+
+            task.SetParentTask(parentTaskId);
+        }
+
         task.SetResponsibleUsers(responsible);
         task.UpdateDetails(
             request.Title, request.Description, request.DueDate, request.Priority,
@@ -884,6 +894,7 @@ public sealed class TaskService(
                 .Select(id => users.TryGetValue(id, out var u) ? u : null)
                 .Where(u => u is not null)
                 .Select(u => u!)
-                .ToList());
+                .ToList(),
+            task.ParentTaskId);
     }
 }
