@@ -20,6 +20,11 @@
   post's holder changes, its tasks move to the new holder (`org_structure.TaskPosts` keeps which
   posts each task has). A vacant post can't be given a new task. On start-up, tasks that have no
   posts yet are given to their people's main posts.
+- **Substitution inbox** («کارتابل جانشینی», `GET/PUT/DELETE /substitution[/{postId}]`) — the open
+  tasks of vacant posts, shown (title, due date, status) to the managers above each post and to
+  holders of `org_structure.manage_substitution`. They may put another post of the company in
+  charge of a vacant one (سرپرستی): its holder sees the tasks and comments on them as a stand-in
+  («جانشین ...» next to their name), nothing more, until someone takes the vacant post.
 - **Each user's place** — company, optional unit, optional position, optional direct manager.
 - **Manager / subordinates** — derived, see below.
 

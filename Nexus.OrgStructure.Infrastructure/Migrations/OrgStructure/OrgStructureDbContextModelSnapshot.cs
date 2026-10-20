@@ -222,6 +222,45 @@ namespace Nexus.OrgStructure.Infrastructure.Migrations.OrgStructure
                     b.ToTable("PositionCompanies", "org_structure");
                 });
 
+            modelBuilder.Entity("Nexus.OrgStructure.Domain.PostActing", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ActingPostId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("AppliedUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("ModifiedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("ModifiedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("VacantPostId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActingPostId");
+
+                    b.HasIndex("TenantId", "VacantPostId")
+                        .IsUnique();
+
+                    b.ToTable("PostActings", "org_structure");
+                });
+
             modelBuilder.Entity("Nexus.OrgStructure.Domain.TaskPost", b =>
                 {
                     b.Property<Guid>("Id")

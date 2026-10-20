@@ -39,6 +39,10 @@ public interface IOrgStructureRepository
     void RemoveTaskPost(TaskPost taskPost);
     Task<IReadOnlyList<Guid>> ListTenantIdsAsync(CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<PostActing>> ListPostActingsAsync(Guid tenantId, CancellationToken cancellationToken);
+    Task AddPostActingAsync(PostActing acting, CancellationToken cancellationToken);
+    void RemovePostActing(PostActing acting);
+
     Task<IReadOnlyList<UnitPosition>> ListUnitPositionsAsync(Guid tenantId, CancellationToken cancellationToken);
     Task AddUnitPositionAsync(UnitPosition unitPosition, CancellationToken cancellationToken);
     void RemoveUnitPosition(UnitPosition unitPosition);

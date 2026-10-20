@@ -35,7 +35,10 @@ public sealed class TaskPeopleUpdater(
                 switch (change.Role)
                 {
                     case TaskPostRole.Owner:
-                        task.SetOwner(change.ToUserId);
+                        task.SetOwnerByPost(change.ToUserId);
+                        break;
+                    case TaskPostRole.Acting:
+                        task.SetActing(change.FromUserId, change.ToUserId, change.Note);
                         break;
                     case TaskPostRole.Responsible:
                         Replace(responsible, change.FromUserId, change.ToUserId);
@@ -71,6 +74,9 @@ public sealed class TaskPeopleUpdater(
 
     public Task<IReadOnlyList<TaskPeopleSnapshot>> ListAsync(Guid tenantId, CancellationToken cancellationToken) =>
         repository.ListPeopleAsync(tenantId, cancellationToken);
+
+    public Task<IReadOnlyList<TaskSummary>> GetSummariesAsync(Guid tenantId, IReadOnlyCollection<Guid> taskIds, CancellationToken cancellationToken) =>
+        repository.GetSummariesAsync(tenantId, taskIds, cancellationToken);
 
     /// <summary>The new person in the old one's place (kept in order); without an old one, added; without a new one, removed.</summary>
     private static void Replace(List<Guid> people, Guid? from, Guid? to)

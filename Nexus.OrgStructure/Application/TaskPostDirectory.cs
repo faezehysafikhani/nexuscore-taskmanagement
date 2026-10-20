@@ -113,6 +113,12 @@ public sealed class TaskPostDirectory(
             return;
         }
 
+        await SyncTaskHoldersAsync(tenantId, postIds, cancellationToken);
+        await SyncActingAsync(tenantId, cancellationToken);
+    }
+
+    private async Task SyncTaskHoldersAsync(Guid tenantId, IReadOnlyCollection<Guid>? postIds, CancellationToken cancellationToken)
+    {
         var affected = await repository.ListTaskPostsAsync(tenantId, null, postIds?.ToList(), cancellationToken);
         if (affected.Count == 0)
         {
@@ -146,6 +152,55 @@ public sealed class TaskPostDirectory(
         }
 
         stale.ForEach(row => row.HeldBy(holders.GetValueOrDefault(row.PostId)));
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Brings stand-ins (سرپرستی) up to date: the acting post's holder sees the vacant post's tasks
+    /// as its stand-in (جانشین); a post that got a holder, or a vacant post that no longer exists,
+    /// ends its stand-in and takes the view back.
+    /// </summary>
+    public async Task SyncActingAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        if (!Enabled)
+        {
+            return;
+        }
+
+        var actings = await repository.ListPostActingsAsync(tenantId, cancellationToken);
+        if (actings.Count == 0)
+        {
+            return;
+        }
+
+        var posts = (await LoadAsync(tenantId, cancellationToken)).Posts.ToDictionary(post => post.PostId);
+        var taskPosts = await repository.ListTaskPostsAsync(tenantId, null, actings.Select(a => a.VacantPostId).ToList(), cancellationToken);
+        var changes = new List<TaskPersonChange>();
+        var ended = new List<PostActing>();
+        foreach (var acting in actings)
+        {
+            var stillVacant = posts.TryGetValue(acting.VacantPostId, out var vacant) && vacant.HolderUserId is null;
+            var desired = stillVacant ? posts.GetValueOrDefault(acting.ActingPostId)?.HolderUserId : null;
+            if (desired != acting.AppliedUserId)
+            {
+                var note = vacant is null ? "جانشین" : $"جانشین {vacant.Title} · کد {vacant.Code}";
+                changes.AddRange(taskPosts.Where(row => row.PostId == acting.VacantPostId).Select(row => row.TaskId).Distinct()
+                    .Select(taskId => new TaskPersonChange(taskId, TaskPostRole.Acting, acting.AppliedUserId, desired, note)));
+                acting.Applied(desired);
+            }
+
+            if (!stillVacant)
+            {
+                ended.Add(acting);
+            }
+        }
+
+        if (changes.Count > 0 && services.GetService<ITaskPeopleUpdater>() is { } updater)
+        {
+            await updater.ApplyAsync(tenantId, changes, cancellationToken);
+        }
+
+        ended.ForEach(repository.RemovePostActing);
         await unitOfWork.SaveChangesAsync(cancellationToken);
     }
 

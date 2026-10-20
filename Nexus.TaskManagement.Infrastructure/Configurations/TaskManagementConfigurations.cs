@@ -279,6 +279,7 @@ internal sealed class TaskAssigneeConfiguration : IEntityTypeConfiguration<TaskA
         builder.ToTable("TaskAssignees", Schema.Name);
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.Property(x => x.ActingNote).HasMaxLength(200);
 
         builder.HasOne(x => x.User)
             .WithMany()
@@ -314,6 +315,7 @@ internal sealed class TaskCommentConfiguration : IEntityTypeConfiguration<TaskCo
         builder.Property(x => x.Id).ValueGeneratedNever();
 
         builder.Property(x => x.Text).HasMaxLength(4000).IsRequired();
+        builder.Property(x => x.ActingNote).HasMaxLength(200);
         builder.Property(x => x.TaskId).IsRequired();
         builder.Property(x => x.UserId).IsRequired();
 

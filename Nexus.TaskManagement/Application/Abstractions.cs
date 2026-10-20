@@ -29,6 +29,9 @@ public interface ITaskRepository
     /// <summary>Every task of the tenant with its owner, responsible people and access list (no other data).</summary>
     Task<IReadOnlyList<NexusCore.Application.Identity.Interfaces.TaskPeopleSnapshot>> ListPeopleAsync(Guid tenantId, CancellationToken cancellationToken);
 
+    /// <summary>Title, due date and status of these tasks, whoever is signed in (no access check: callers decide what to show).</summary>
+    Task<IReadOnlyList<NexusCore.Application.Identity.Interfaces.TaskSummary>> GetSummariesAsync(Guid tenantId, IReadOnlyCollection<Guid> taskIds, CancellationToken cancellationToken);
+
     Task AddAsync(TaskItem task, CancellationToken cancellationToken);
 
     void Remove(TaskItem task);

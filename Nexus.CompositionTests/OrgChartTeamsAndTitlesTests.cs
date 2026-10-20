@@ -386,6 +386,43 @@ public sealed class OrgChartTeamsAndTitlesTests
         Assert.True((await world.TaskPosts.GetTaskPostsAsync(Tenant, [task], default)).ContainsKey(task)); // untouched
     }
 
+    [Fact]
+    public async Task AVacantPostsTasks_AreInTheInboxOfThoseAbove_WhoMayPutAStandInInCharge()
+    {
+        var world = new World();
+        var (deputyHead, a, b, outsider) = (world.User("معاون"), world.User("الف"), world.User("ب"), world.User("بیرونی"));
+        var tech = world.Unit("معاونت فناوری", deputyHead);
+        var company = await world.CompanyAsync("C1");
+        await world.Service.LinkUnitAsync(Tenant, tech.Id, new LinkUnitRequest(company), default);
+        var (post, other) = (await world.SeatAsync(tech.Id, "کارشناس"), await world.SeatAsync(tech.Id, "کارشناس ارشد"));
+        await world.Service.SetAssignmentAsync(Tenant, b, new SetUserAssignmentRequest(company, tech.Id, null, null, [other]), default);
+        var task = Guid.NewGuid();
+        world.Updater.Summaries.Add(new TaskSummary(task, "کار باز", new DateOnly(2030, 1, 1), "Todo", false));
+        await world.TaskPosts.SetTaskPostsAsync(Tenant, task, null, [post], [], default);
+
+        // The deputy's head sees the vacant post's task; someone else does not.
+        var inbox = (await world.Substitution(deputyHead).GetInboxAsync(Tenant, default)).Value!;
+        var vacant = Assert.Single(inbox.Posts);
+        Assert.Equal(("کار باز", null), (Assert.Single(vacant.Tasks).Title, vacant.Acting));
+        Assert.Contains(vacant.Candidates, c => c.PostId == other);
+        Assert.Empty((await world.Substitution(outsider).GetInboxAsync(Tenant, default)).Value!.Posts);
+        Assert.Equal("forbidden", (await world.Substitution(outsider).SetActingAsync(Tenant, post, new SetActingRequest(other), default)).Error.Code);
+        Assert.Single((await world.Substitution(outsider, OrgStructurePermissions.ManageSubstitution).GetInboxAsync(Tenant, default)).Value!.Posts);
+
+        // b's post is put in charge: b stands in; someone takes the post: the stand-in ends.
+        Assert.True((await world.Substitution(deputyHead).SetActingAsync(Tenant, post, new SetActingRequest(other), default)).IsSuccess);
+        Assert.Equal(b, (await world.Substitution(deputyHead).GetInboxAsync(Tenant, default)).Value!.Posts.Single().Acting!.HolderUserId);
+        await world.Service.SetAssignmentAsync(Tenant, a, new SetUserAssignmentRequest(company, tech.Id, null, null, [post]), default);
+        Assert.Equal(
+            [
+                new TaskPersonChange(task, TaskPostRole.Acting, null, b, "جانشین کارشناس · کد 1"),
+                new TaskPersonChange(task, TaskPostRole.Responsible, null, a),
+                new TaskPersonChange(task, TaskPostRole.Acting, b, null, "جانشین کارشناس · کد 1"),
+            ],
+            world.Updater.Applied);
+        Assert.Empty((await world.Substitution(deputyHead).GetInboxAsync(Tenant, default)).Value!.Posts);
+    }
+
     public sealed class RecordingUpdater : ITaskPeopleUpdater
     {
         public List<TaskPersonChange> Applied { get; } = [];
@@ -399,6 +436,11 @@ public sealed class OrgChartTeamsAndTitlesTests
 
         public Task<IReadOnlyList<TaskPeopleSnapshot>> ListAsync(Guid tenantId, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<TaskPeopleSnapshot>>(Tasks);
+
+        public List<TaskSummary> Summaries { get; } = [];
+
+        public Task<IReadOnlyList<TaskSummary>> GetSummariesAsync(Guid tenantId, IReadOnlyCollection<Guid> taskIds, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<TaskSummary>>(Summaries.Where(s => taskIds.Contains(s.TaskId)).ToList());
     }
 
     // ------------------------------------------------------------------ work teams in the chart
@@ -573,6 +615,7 @@ public sealed class OrgChartTeamsAndTitlesTests
     {
         private readonly OrganizationDbContext _organization;
         private readonly OrgStructureRepository _repository;
+        private readonly OrgStructureDbContext _structure;
         private readonly Directory _users = new();
         private readonly WorkTeams _teams = new();
 
@@ -580,7 +623,7 @@ public sealed class OrgChartTeamsAndTitlesTests
         {
             var name = Guid.NewGuid().ToString();
             _organization = new OrganizationDbContext(new DbContextOptionsBuilder<OrganizationDbContext>().UseInMemoryDatabase("org-" + name).Options);
-            var structure = new OrgStructureDbContext(new DbContextOptionsBuilder<OrgStructureDbContext>().UseInMemoryDatabase("orgs-" + name).Options);
+            var structure = _structure = new OrgStructureDbContext(new DbContextOptionsBuilder<OrgStructureDbContext>().UseInMemoryDatabase("orgs-" + name).Options);
             var repository = _repository = new OrgStructureRepository(structure);
             var updaters = new ServiceCollection().AddSingleton<ITaskPeopleUpdater>(Updater).BuildServiceProvider();
             TaskPosts = new TaskPostDirectory(
@@ -596,6 +639,11 @@ public sealed class OrgChartTeamsAndTitlesTests
         public RecordingUpdater Updater { get; } = new();
 
         public string NameOf(Guid userId) => _users.Names[userId];
+
+        /// <summary>The substitution inbox as <paramref name="signedIn"/> sees it, holding <paramref name="permissions"/>.</summary>
+        public ISubstitutionService Substitution(Guid signedIn, params string[] permissions) =>
+            new SubstitutionService(_repository, _structure, new OrganizationUnitRepository(_organization), TaskPosts,
+                new SignedIn(signedIn, permissions), _users, new ServiceCollection().AddSingleton<ITaskPeopleUpdater>(Updater).BuildServiceProvider());
 
         /// <summary>Whom <paramref name="signedIn"/> may add to their work teams, holding <paramref name="permissions"/>.</summary>
         public IWorkTeamMemberScope MemberScope(Guid signedIn, params string[] permissions) =>

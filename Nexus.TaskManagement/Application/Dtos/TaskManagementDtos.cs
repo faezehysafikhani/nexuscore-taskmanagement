@@ -70,7 +70,8 @@ public sealed record TaskCommentDto(
     string Text,
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset? ModifiedAtUtc,
-    IReadOnlyList<TaskFileDto>? Files = null);
+    IReadOnlyList<TaskFileDto>? Files = null,
+    string? ActingNote = null);
 
 /// <summary>
 /// One entry of a task's history. Read back out of the shared AuditLog rather than a table of

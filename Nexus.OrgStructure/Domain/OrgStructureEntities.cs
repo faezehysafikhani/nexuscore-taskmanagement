@@ -259,6 +259,34 @@ public sealed class TaskPost : AuditableEntity<Guid>
     public void HeldBy(Guid? userId) => HolderUserId = userId;
 }
 
+/// <summary>
+/// A post standing in for a vacant one (سرپرستی): its holder sees the vacant post's tasks and
+/// comments on them as its stand-in (جانشین), nothing more, until someone takes the vacant post.
+/// AppliedUserId: who was last given that view of the tasks.
+/// </summary>
+public sealed class PostActing : AuditableEntity<Guid>
+{
+    private PostActing() : base(Guid.Empty)
+    {
+    }
+
+    public PostActing(Guid id, Guid tenantId, Guid vacantPostId, Guid actingPostId) : base(id)
+    {
+        TenantId = tenantId;
+        VacantPostId = vacantPostId;
+        ActingPostId = actingPostId;
+    }
+
+    public Guid TenantId { get; private set; }
+    public Guid VacantPostId { get; private set; }
+    public Guid ActingPostId { get; private set; }
+    public Guid? AppliedUserId { get; private set; }
+
+    public void ActBy(Guid actingPostId) => ActingPostId = actingPostId;
+
+    public void Applied(Guid? userId) => AppliedUserId = userId;
+}
+
 /// <summary>A title put before people's names, such as «آقای»، «خانم» or «جناب مهندس».</summary>
 public sealed class Honorific : AuditableEntity<Guid>
 {

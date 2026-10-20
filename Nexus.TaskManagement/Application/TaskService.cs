@@ -1080,6 +1080,7 @@ public sealed class TaskService(
             Lookup(users, task.AssignedUserId),
             Lookup(groups, task.AssignedUserGroupId),
             task.Assignees
+                .Where(a => !a.IsActing)
                 .Select(a => users.TryGetValue(a.UserId, out var u) ? u : null)
                 .Where(u => u is not null)
                 .Select(u => u!)

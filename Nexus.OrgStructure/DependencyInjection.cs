@@ -28,6 +28,7 @@ public static class DependencyInjection
         // Tasks given to posts - when OrgStructure:AssignTasksToPosts is on (wins over the Core's default like the scopes above).
         services.AddScoped<TaskPostDirectory>();
         services.AddScoped<ITaskPosts>(provider => provider.GetRequiredService<TaskPostDirectory>());
+        services.AddScoped<ISubstitutionService, SubstitutionService>();
 
         services.AddAuthorization(options =>
         {

@@ -77,6 +77,18 @@ public sealed class PositionCompanyConfiguration : IEntityTypeConfiguration<Posi
     }
 }
 
+public sealed class PostActingConfiguration : IEntityTypeConfiguration<PostActing>
+{
+    public void Configure(EntityTypeBuilder<PostActing> builder)
+    {
+        builder.ToTable("PostActings", OrgStructureSchema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.HasIndex(x => new { x.TenantId, x.VacantPostId }).IsUnique();
+        builder.HasIndex(x => x.ActingPostId);
+    }
+}
+
 public sealed class TaskPostConfiguration : IEntityTypeConfiguration<TaskPost>
 {
     public void Configure(EntityTypeBuilder<TaskPost> builder)

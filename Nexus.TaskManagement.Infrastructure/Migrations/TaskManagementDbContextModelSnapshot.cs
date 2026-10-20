@@ -288,6 +288,13 @@ namespace Nexus.TaskManagement.Infrastructure.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("ActingNote")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<bool>("IsActing")
+                        .HasColumnType("bit");
+
                     b.Property<bool>("IsResponsible")
                         .HasColumnType("bit");
 
@@ -311,6 +318,10 @@ namespace Nexus.TaskManagement.Infrastructure.Migrations
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ActingNote")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
 
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("datetimeoffset");
@@ -518,6 +529,9 @@ namespace Nexus.TaskManagement.Infrastructure.Migrations
 
                     b.Property<DateTimeOffset?>("OverdueNotifiedFor")
                         .HasColumnType("datetimeoffset");
+
+                    b.Property<bool>("OwnerHeldByPost")
+                        .HasColumnType("bit");
 
                     b.Property<Guid?>("OwnerUserId")
                         .HasColumnType("uniqueidentifier");

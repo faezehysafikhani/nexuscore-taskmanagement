@@ -41,11 +41,17 @@ public enum TaskPostRole
 {
     Owner = 0,
     Responsible = 1,
-    Access = 2
+    Access = 2,
+
+    /// <summary>Standing in for a vacant post of the task (جانشین): sees it and comments, nothing more.</summary>
+    Acting = 3
 }
 
-/// <summary>On a task: the person standing in for one of its posts changed (null: none).</summary>
-public sealed record TaskPersonChange(Guid TaskId, TaskPostRole Role, Guid? FromUserId, Guid? ToUserId);
+/// <summary>
+/// On a task: the person standing in for one of its posts changed (null: none). Note: for Acting,
+/// which post they stand in for («جانشین کارشناس · کد ۷»), shown with their comments.
+/// </summary>
+public sealed record TaskPersonChange(Guid TaskId, TaskPostRole Role, Guid? FromUserId, Guid? ToUserId, string? Note = null);
 
 /// <summary>
 /// Implemented by the task module: puts a post's new holder on its tasks in place of the old one
@@ -57,7 +63,15 @@ public interface ITaskPeopleUpdater
 
     /// <summary>Every task of the tenant with its creator, responsible people and access list.</summary>
     Task<IReadOnlyList<TaskPeopleSnapshot>> ListAsync(Guid tenantId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// What a list of these tasks may show to someone who need not see the tasks themselves (the
+    /// substitution inbox): title, due date and status.
+    /// </summary>
+    Task<IReadOnlyList<TaskSummary>> GetSummariesAsync(Guid tenantId, IReadOnlyCollection<Guid> taskIds, CancellationToken cancellationToken);
 }
+
+public sealed record TaskSummary(Guid TaskId, string Title, DateOnly DueDate, string Status, bool IsDone);
 
 public sealed record TaskPeopleSnapshot(Guid TaskId, Guid? OwnerUserId, IReadOnlyList<Guid> ResponsibleUserIds, IReadOnlyList<Guid> AccessUserIds);
 

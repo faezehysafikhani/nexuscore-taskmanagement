@@ -96,6 +96,20 @@ public static class OrgStructureEndpoints
                 InTenant(user, tenant => service.RemoveUnitPositionAsync(tenant, id, ct)))
             .RequireAuthorization(OrgStructurePermissions.ManagePositions);
 
+        // --- the substitution inbox (tasks given to posts): vacant posts' tasks and who stands in for them.
+        // Signed-in users only; the service shows each post to the managers above it and to ManageSubstitution holders.
+        group.MapGet("/substitution", (ICurrentUserContext user, ISubstitutionService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.GetInboxAsync(tenant, ct)))
+            .RequireAuthorization();
+
+        group.MapPut("/substitution/{postId:guid}", (Guid postId, SetActingRequest request, ICurrentUserContext user, ISubstitutionService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.SetActingAsync(tenant, postId, request, ct)))
+            .RequireAuthorization();
+
+        group.MapDelete("/substitution/{postId:guid}", (Guid postId, ICurrentUserContext user, ISubstitutionService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.ClearActingAsync(tenant, postId, ct)))
+            .RequireAuthorization();
+
         // --- each user's company / unit / position / manager
         group.MapGet("/assignments", (Guid? companyId, Guid? unitId, ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
                 InTenant(user, tenant => service.ListAssignmentsAsync(tenant, companyId, unitId, ct)))
