@@ -436,10 +436,11 @@ public sealed class TaskFileService(
                 $"File is too large. The maximum size is {TaskFileAsset.MaxFileSizeBytes} bytes."));
         }
 
-        if (!AllowedUploadTypes.IsAllowed(request.FileName, request.ContentType))
+        if (!AllowedUploadTypes.IsAllowed(request.FileName, request.ContentType)
+            && !AllowedUploadTypes.IsVoiceMessage(request.FileName, request.ContentType))
         {
             return Result.Failure<TaskFileDto>(Error.Validation(
-                "This file type is not allowed. Only Excel, Word, PDF and image files can be uploaded."));
+                "This file type is not allowed. Only Excel, Word, PDF, image and voice files can be uploaded."));
         }
 
         var maxConfiguredBytes = await uploadPolicy.GetMaxFileSizeKbAsync(tenantId, cancellationToken) * 1024L;
