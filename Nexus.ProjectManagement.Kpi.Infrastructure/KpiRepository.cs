@@ -21,6 +21,9 @@ public sealed class KpiRepository(KpiDbContext dbContext) : IKpiRepository
         return await query.ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<KpiDefinition>> ListByProjectsAsync(IReadOnlyCollection<Guid> projectIds, CancellationToken cancellationToken) =>
+        await dbContext.KpiDefinitions.Where(kpi => projectIds.Contains(kpi.ProjectId)).ToListAsync(cancellationToken);
+
     public async Task AddAsync(KpiDefinition kpi, CancellationToken cancellationToken)
     {
         await dbContext.KpiDefinitions.AddAsync(kpi, cancellationToken);

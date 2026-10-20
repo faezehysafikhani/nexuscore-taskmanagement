@@ -64,11 +64,29 @@ public sealed class AnalyticsService(
 
         var date = asOf ?? Today;
         var latest = await ProgressOfAsync(project, date, cancellationToken);
+        return Result.Success(await PerformanceOfAsync(project, latest, date, cancellationToken));
+    }
 
+    /// <summary>The performance of every project the reports cover (archived ones are left out, and so are unapproved ones when
+    /// <see cref="AnalyticsOptions.OnlyApprovedProjects"/> is on) - the same figures as the single-project report, in one read.</summary>
+    public async Task<Result<IReadOnlyList<ProjectPerformanceDto>>> GetProjectsPerformanceAsync(Guid tenantId, DateOnly? asOf, CancellationToken cancellationToken)
+    {
+        var date = asOf ?? Today;
+        var rows = new List<ProjectPerformanceDto>();
+        foreach (var figure in await LoadFiguresAsync(tenantId, date, cancellationToken))
+        {
+            rows.Add(await PerformanceOfAsync(figure.Project, figure.Latest, date, cancellationToken));
+        }
+
+        return Result.Success<IReadOnlyList<ProjectPerformanceDto>>(rows);
+    }
+
+    private async Task<ProjectPerformanceDto> PerformanceOfAsync(Project project, ProgressPoint? latest, DateOnly date, CancellationToken cancellationToken)
+    {
         decimal? contracted = null, invoiced = null, paid = null;
         if (contractService is not null)
         {
-            var summary = await contractService.GetProjectSummaryAsync(projectId, cancellationToken);
+            var summary = await contractService.GetProjectSummaryAsync(project.Id, cancellationToken);
             if (summary.IsSuccess && summary.Value!.ContractCount > 0)
             {
                 contracted = summary.Value.TotalContractAmount.Rials;
@@ -80,14 +98,14 @@ public sealed class AnalyticsService(
         var ev = EarnedValueCalculator.Calculate(
             project.Cost, latest?.PlannedProgress, latest?.ActualProgress, invoiced, project.StartDate, project.EndDate, date);
 
-        return Result.Success(new ProjectPerformanceDto(
+        return new ProjectPerformanceDto(
             project.Id, project.Name, project.Code, project.Status.ToString(), project.OrganizationUnitId, project.ManagerUserId,
             project.StartDate, project.EndDate, date,
             latest?.PlannedProgress, latest?.ActualProgress, latest?.RegisterDate,
             ev.BudgetAtCompletion, ev.PlannedValue, ev.EarnedValueAmount, ev.ScheduleVariance, ev.Spi,
             ev.ActualCost, ev.CostVariance, ev.Cpi, ev.EstimateAtCompletion, ev.EstimateToComplete, ev.VarianceAtCompletion,
             ev.ForecastEnd, ev.ForecastDelayDays, ev.IsOverdue, ev.Health,
-            contracted, invoiced, paid, contractService is not null, progressService is not null || UsesPlan));
+            contracted, invoiced, paid, contractService is not null, progressService is not null || UsesPlan);
     }
 
     // ----------------------------------------------------------- cost curve

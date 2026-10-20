@@ -33,6 +33,22 @@ public static class KpiEndpoints
                 (await service.DeleteAsync(id, cancellationToken)).ToApiResult())
             .RequireAuthorization(KpiPermissions.Delete);
 
+        group.MapGet("/{kpiId:guid}/measurements", async (Guid kpiId, IKpiMeasurementService service, CancellationToken cancellationToken) =>
+                (await service.ListAsync(kpiId, cancellationToken)).ToApiResult())
+            .RequireAuthorization(KpiPermissions.View);
+
+        group.MapPost("/{kpiId:guid}/measurements", async (Guid kpiId, RecordKpiMeasurementRequest request, IKpiMeasurementService service, CancellationToken cancellationToken) =>
+                (await service.RecordAsync(kpiId, request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(KpiPermissions.Record);
+
+        group.MapPut("/{kpiId:guid}/measurements/{id:guid}", async (Guid kpiId, Guid id, UpdateKpiMeasurementRequest request, IKpiMeasurementService service, CancellationToken cancellationToken) =>
+                (await service.UpdateAsync(kpiId, id, request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(KpiPermissions.Record);
+
+        group.MapDelete("/{kpiId:guid}/measurements/{id:guid}", async (Guid kpiId, Guid id, IKpiMeasurementService service, CancellationToken cancellationToken) =>
+                (await service.DeleteAsync(kpiId, id, cancellationToken)).ToApiResult())
+            .RequireAuthorization(KpiPermissions.Record);
+
         return app;
     }
 }

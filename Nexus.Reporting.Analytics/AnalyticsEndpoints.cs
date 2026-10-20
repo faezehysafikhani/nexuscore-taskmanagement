@@ -56,6 +56,32 @@ public static class AnalyticsEndpoints
             Run(currentUser, authorization, httpContext, async tenantId =>
                 (await service.GetStrategyAlignmentMatrixAsync(tenantId, cancellationToken)).ToApiResult()));
 
+        // The management boards cover the running projects. Risk management and KPIs are optional, so their boards
+        // answer 409 where the module is not installed.
+        group.MapGet("/health", (
+                DateOnly? asOf, ICurrentUserContext currentUser, IAuthorizationService authorization,
+                HttpContext httpContext, IManagementBoardService service, CancellationToken cancellationToken) =>
+            Run(currentUser, authorization, httpContext, async tenantId =>
+                (await service.GetHealthBoardAsync(tenantId, asOf, cancellationToken)).ToApiResult()));
+
+        group.MapGet("/attention", (
+                DateOnly? asOf, ICurrentUserContext currentUser, IAuthorizationService authorization,
+                HttpContext httpContext, IManagementBoardService service, CancellationToken cancellationToken) =>
+            Run(currentUser, authorization, httpContext, async tenantId =>
+                (await service.GetAttentionBoardAsync(tenantId, asOf, cancellationToken)).ToApiResult()));
+
+        group.MapGet("/risks/overview", (
+                DateOnly? asOf, ICurrentUserContext currentUser, IAuthorizationService authorization,
+                HttpContext httpContext, IManagementBoardService service, CancellationToken cancellationToken) =>
+            Run(currentUser, authorization, httpContext, async tenantId =>
+                (await service.GetRiskOverviewAsync(tenantId, asOf, cancellationToken)).ToApiResult()));
+
+        group.MapGet("/kpis/overview", (
+                DateOnly? asOf, ICurrentUserContext currentUser, IAuthorizationService authorization,
+                HttpContext httpContext, IManagementBoardService service, CancellationToken cancellationToken) =>
+            Run(currentUser, authorization, httpContext, async tenantId =>
+                (await service.GetKpiOverviewAsync(tenantId, asOf, cancellationToken)).ToApiResult()));
+
         return app;
     }
 
