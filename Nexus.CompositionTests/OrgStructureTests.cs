@@ -172,7 +172,12 @@ public sealed class OrgStructureTests
         var chart = Assert.Single((await world.Service.GetChartAsync(Tenant, null, default)).Value!);
         Assert.Equal(head, chart.Manager!.UserId);
         var unit = Assert.Single(chart.Units);
-        Assert.Equal(2, unit.Members.Count);
+        // The expert shows under their position; the deputy's head, with no position, as a member.
+        Assert.Equal(deputyHead, Assert.Single(unit.Members).UserId);
+        var held = Assert.Single(unit.Positions!);
+        Assert.Equal("کارشناس ارشد", held.Title);
+        Assert.Equal(expert, Assert.Single(held.Holders).UserId);
+        Assert.Equal(2, unit.PeopleCount);
 
         Assert.Equal("conflict", (await world.Service.DeletePositionAsync(Tenant, position.Id, default)).Error.Code);
     }

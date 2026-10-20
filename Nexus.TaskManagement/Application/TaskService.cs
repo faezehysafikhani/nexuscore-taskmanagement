@@ -1,6 +1,7 @@
 using Nexus.TaskManagement.Application.Dtos;
 using Nexus.TaskManagement.Domain;
 using NexusCore.Application.Files;
+using NexusCore.Application.Identity.Interfaces;
 using NexusCore.SharedKernel.Interfaces;
 using NexusCore.SharedKernel.Results;
 
@@ -14,7 +15,8 @@ public sealed class TaskService(
     ITaskActivityService activity,
     IFileStorage fileStorage,
     ITaskAccessScope access,
-    ITaskNoticePublisher notices) : ITaskService
+    ITaskNoticePublisher notices,
+    IWorkAssignmentScope assignmentScope) : ITaskService
 {
     /// <summary>
     /// Seeing a task (owner, assignee, collaborator, team) lets a user work on it; changing what
@@ -714,17 +716,27 @@ public sealed class TaskService(
 
     /// <summary>
     /// Someone newly made responsible for the task, or newly given access to it, must be an
-    /// active user of the task's organization. People already on the task may stay as they are.
+    /// active user of the task's organization - and, where the product limits it (see
+    /// IWorkAssignmentScope), someone the signed-in user may give work to. People already on the
+    /// task may stay as they are.
     /// </summary>
     private async Task<Result> ValidateNewPeopleAsync(
         Guid tenantId, TaskItem? task, IReadOnlyList<Guid> responsible, IReadOnlyList<Guid>? accessList, CancellationToken cancellationToken)
     {
-        foreach (var id in responsible.Where(id => task is null || !task.IsResponsible(id)))
+        var newlyResponsible = responsible.Where(id => task is null || !task.IsResponsible(id)).ToList();
+        foreach (var id in newlyResponsible)
         {
             if (!await repository.ActiveUserExistsAsync(tenantId, id, cancellationToken))
             {
                 return Result.Failure(Error.Validation("The responsible user is not an active user of this organization."));
             }
+        }
+
+        if (newlyResponsible.Count > 0 && currentUser.UserId is { } assigner
+            && await assignmentScope.GetLimitAsync(tenantId, assigner, cancellationToken) is { } limit
+            && newlyResponsible.Any(limit.BlockedUserIds.Contains))
+        {
+            return Result.Failure(Error.Validation("You can give tasks only to people at your own level or below in the organization."));
         }
 
         foreach (var id in (accessList ?? []).Distinct().Where(id => task is null || task.Assignees.All(a => a.UserId != id)))

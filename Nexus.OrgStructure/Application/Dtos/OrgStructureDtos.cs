@@ -30,6 +30,10 @@ public sealed record UpdatePositionRequest(string Title, bool IsActive, Guid? Pa
 /// <summary>Source: "Explicit" (set on the assignment), "UnitManager" or "CompanyManager".</summary>
 public sealed record ManagerDto(Guid UserId, string DisplayName, bool IsActive, string Source);
 
+/// <summary>
+/// PositionId / PositionTitle: the person's main position. Positions: every unit position they
+/// hold (the main one first), which may be in other units too.
+/// </summary>
 public sealed record UserAssignmentDto(
     Guid UserId,
     string DisplayName,
@@ -41,9 +45,37 @@ public sealed record UserAssignmentDto(
     Guid? PositionId,
     string? PositionTitle,
     Guid? ExplicitManagerUserId,
-    ManagerDto? Manager);
+    ManagerDto? Manager,
+    IReadOnlyList<HeldPositionDto>? Positions = null);
 
-public sealed record SetUserAssignmentRequest(Guid CompanyId, Guid? UnitId, Guid? PositionId, Guid? ManagerUserId);
+/// <summary>
+/// UnitPositionIds, when sent, is every unit position the person holds (replacing the list); the
+/// main position is PositionId if it is one of them, else the first in UnitId, else the first.
+/// Without it, PositionId in
+/// UnitId is their main position, added to the unit's positions when the unit lacks it, and
+/// their other positions stay as they are.
+/// </summary>
+public sealed record SetUserAssignmentRequest(
+    Guid CompanyId, Guid? UnitId, Guid? PositionId, Guid? ManagerUserId, IReadOnlyList<Guid>? UnitPositionIds = null);
+
+/// <summary>One of a unit's positions that someone holds.</summary>
+public sealed record HeldPositionDto(Guid UnitPositionId, Guid UnitId, string UnitName, Guid PositionId, string Title);
+
+/// <summary>A position a unit has, in the unit's order, with whoever holds it (none: vacant).</summary>
+public sealed record UnitPositionDto(
+    Guid Id,
+    Guid UnitId,
+    string UnitName,
+    Guid PositionId,
+    string Title,
+    int SortOrder,
+    bool IsPositionActive,
+    IReadOnlyList<PersonRef> Holders);
+
+public sealed record AddUnitPositionRequest(Guid PositionId);
+
+/// <summary>Every position of the unit, in the new order.</summary>
+public sealed record OrderUnitPositionsRequest(IReadOnlyList<Guid> UnitPositionIds);
 
 /// <summary>Someone below a manager. Depth 1 = a direct report.</summary>
 public sealed record SubordinateDto(
@@ -80,8 +112,9 @@ public sealed record OrgChartTeamDto(
     IReadOnlyList<OrgChartMemberDto> Members);
 
 /// <summary>
-/// Members: the unit's people who are in no work team. Teams: the work teams built by the unit's
-/// people (a person can be in several, so may appear more than once).
+/// Positions: the unit's positions in its order, each with its holders (vacant ones too).
+/// Members: the unit's people who hold none of its positions. Teams: the work teams built by the
+/// unit's people (no longer drawn in the chart; kept for older clients).
 /// </summary>
 public sealed record OrgChartUnitDto(
     Guid UnitId,
@@ -91,7 +124,17 @@ public sealed record OrgChartUnitDto(
     IReadOnlyList<OrgChartUnitDto> Children,
     IReadOnlyList<OrgChartTeamDto> Teams,
     bool IsActive = true,
-    int PeopleCount = 0);
+    int PeopleCount = 0,
+    IReadOnlyList<OrgChartPositionDto>? Positions = null);
+
+/// <summary>A unit's position in the chart; no holders means it is vacant.</summary>
+public sealed record OrgChartPositionDto(
+    Guid UnitPositionId,
+    Guid PositionId,
+    string Title,
+    int SortOrder,
+    bool IsActive,
+    IReadOnlyList<OrgChartMemberDto> Holders);
 
 public sealed record OrgChartCompanyDto(
     Guid CompanyId,

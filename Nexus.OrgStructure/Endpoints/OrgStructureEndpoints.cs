@@ -71,6 +71,23 @@ public static class OrgStructureEndpoints
                 InTenant(user, tenant => service.DeletePositionAsync(tenant, id, ct)))
             .RequireAuthorization(OrgStructurePermissions.ManagePositions);
 
+        // --- the positions each unit (deputy) has, in its order, and who holds them
+        group.MapGet("/unit-positions", (Guid? unitId, ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.ListUnitPositionsAsync(tenant, unitId, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ReadPolicy);
+
+        group.MapPost("/units/{unitId:guid}/positions", (Guid unitId, AddUnitPositionRequest request, ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.AddUnitPositionAsync(tenant, unitId, request, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ManagePositions);
+
+        group.MapPut("/units/{unitId:guid}/positions/order", (Guid unitId, OrderUnitPositionsRequest request, ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.OrderUnitPositionsAsync(tenant, unitId, request, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ManagePositions);
+
+        group.MapDelete("/unit-positions/{id:guid}", (Guid id, ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.RemoveUnitPositionAsync(tenant, id, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ManagePositions);
+
         // --- each user's company / unit / position / manager
         group.MapGet("/assignments", (Guid? companyId, Guid? unitId, ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
                 InTenant(user, tenant => service.ListAssignmentsAsync(tenant, companyId, unitId, ct)))
