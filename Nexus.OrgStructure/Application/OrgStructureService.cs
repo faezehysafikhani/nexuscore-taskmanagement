@@ -77,13 +77,14 @@ public sealed class OrgStructureService(
 
     public async Task<Result<CompanyDto>> CreateCompanyAsync(Guid tenantId, CreateCompanyRequest request, CancellationToken cancellationToken)
     {
-        var invalid = await ValidateCompanyAsync(tenantId, null, request.Name, request.Code, request.Description, request.ManagerUserId, cancellationToken);
+        var invalid = await ValidateCompanyAsync(tenantId, null, request.Name, request.Code, request.Description, cancellationToken);
         if (invalid is not null)
         {
             return Result.Failure<CompanyDto>(invalid);
         }
 
-        var company = new Company(Guid.NewGuid(), tenantId, request.Name, request.Code, request.Description, request.ManagerUserId);
+        // No head yet: whoever is given the company's position with no superior becomes it.
+        var company = new Company(Guid.NewGuid(), tenantId, request.Name, request.Code, request.Description, managerUserId: null);
         await repository.AddCompanyAsync(company, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success(await ToDtoAsync(tenantId, company, cancellationToken));
@@ -97,24 +98,13 @@ public sealed class OrgStructureService(
             return Result.Failure<CompanyDto>(Error.NotFound("Company was not found."));
         }
 
-        var invalid = await ValidateCompanyAsync(tenantId, id, request.Name, request.Code, request.Description, request.ManagerUserId, cancellationToken);
+        var invalid = await ValidateCompanyAsync(tenantId, id, request.Name, request.Code, request.Description, cancellationToken);
         if (invalid is not null)
         {
             return Result.Failure<CompanyDto>(invalid);
         }
 
-        if (company.ManagerUserId != request.ManagerUserId)
-        {
-            var snapshot = await LoadAsync(tenantId, cancellationToken);
-            var before = snapshot.Resolver();
-            var after = snapshot.Resolver(companyManagerOverride: (id, request.ManagerUserId));
-            if (before.FindLoop() is null && after.FindLoop() is not null)
-            {
-                return Result.Failure<CompanyDto>(Error.Conflict("This change would create a management loop."));
-            }
-        }
-
-        company.Update(request.Name, request.Code, request.Description, request.ManagerUserId, request.IsActive);
+        company.Update(request.Name, request.Code, request.Description, request.IsActive);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success(await ToDtoAsync(tenantId, company, cancellationToken));
     }
@@ -135,12 +125,17 @@ public sealed class OrgStructureService(
         }
 
         repository.RemoveCompany(company);
+        foreach (var link in (await repository.ListPositionCompaniesAsync(tenantId, cancellationToken)).Where(link => link.CompanyId == id))
+        {
+            repository.RemovePositionCompany(link);
+        }
+
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }
 
     private async Task<Error?> ValidateCompanyAsync(
-        Guid tenantId, Guid? id, string? name, string? code, string? description, Guid? managerUserId, CancellationToken cancellationToken)
+        Guid tenantId, Guid? id, string? name, string? code, string? description, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(code))
         {
@@ -155,11 +150,6 @@ public sealed class OrgStructureService(
         if (await repository.CompanyCodeExistsAsync(tenantId, code.Trim(), id, cancellationToken))
         {
             return Error.Conflict("A company with this code already exists.");
-        }
-
-        if (managerUserId is { } managerId && !await IsUserOfTenantAsync(tenantId, managerId, cancellationToken))
-        {
-            return Error.Validation("The company manager was not found in this organization.");
         }
 
         return null;
@@ -209,6 +199,12 @@ public sealed class OrgStructureService(
                 "People of another company are assigned to this unit or a unit below it. Move them first."));
         }
 
+        if (snapshot.Seats.Any(seat => subtree.Contains(seat.UnitId) && !snapshot.IsFor(seat.PositionId, request.CompanyId)))
+        {
+            return Result.Failure<CompanyUnitDto>(Error.Conflict(
+                "Positions of this unit are not for that company. Add the company to those positions first."));
+        }
+
         var existing = snapshot.Links.FirstOrDefault(link => link.UnitId == unitId);
         if (existing is null)
         {
@@ -246,8 +242,12 @@ public sealed class OrgStructureService(
 
     // ---------------------------------------------------------------- positions
 
-    public async Task<Result<IReadOnlyList<PositionDto>>> ListPositionsAsync(Guid tenantId, CancellationToken cancellationToken) =>
-        Result.Success<IReadOnlyList<PositionDto>>((await repository.ListPositionsAsync(tenantId, cancellationToken)).Select(ToDto).ToList());
+    public async Task<Result<IReadOnlyList<PositionDto>>> ListPositionsAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        var links = await repository.ListPositionCompaniesAsync(tenantId, cancellationToken);
+        return Result.Success<IReadOnlyList<PositionDto>>(
+            (await repository.ListPositionsAsync(tenantId, cancellationToken)).Select(position => ToDto(position, links)).ToList());
+    }
 
     public async Task<Result<PositionDto>> CreatePositionAsync(Guid tenantId, CreatePositionRequest request, CancellationToken cancellationToken)
     {
@@ -263,10 +263,22 @@ public sealed class OrgStructureService(
             return Result.Failure<PositionDto>(Error.Validation("Parent position was not found."));
         }
 
+        var companyIds = (request.CompanyIds ?? []).Distinct().ToList();
         var position = new Position(Guid.NewGuid(), tenantId, request.Title, request.ParentPositionId);
+        var wrong = ValidatePositionCompanies(snapshot, position.Id, request.ParentPositionId, companyIds, companyIds);
+        if (wrong is not null)
+        {
+            return Result.Failure<PositionDto>(wrong);
+        }
+
         await repository.AddPositionAsync(position, cancellationToken);
+        foreach (var companyId in companyIds)
+        {
+            await repository.AddPositionCompanyAsync(new PositionCompany(Guid.NewGuid(), tenantId, position.Id, companyId), cancellationToken);
+        }
+
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        return Result.Success(ToDto(position));
+        return Result.Success(ToDto(position, await repository.ListPositionCompaniesAsync(tenantId, cancellationToken)));
     }
 
     public async Task<Result<PositionDto>> UpdatePositionAsync(Guid tenantId, Guid id, UpdatePositionRequest request, CancellationToken cancellationToken)
@@ -313,9 +325,91 @@ public sealed class OrgStructureService(
             }
         }
 
+        // Without a list (older clients) the position keeps its companies.
+        var currentCompanies = snapshot.CompaniesOf(id);
+        var companyIds = request.CompanyIds is null ? currentCompanies.ToList() : request.CompanyIds.Distinct().ToList();
+        var parentChanged = request.ParentPositionId != position.ParentPositionId;
+        var companiesChanged = !currentCompanies.SetEquals(companyIds);
+
+        // What is already so stays valid; only a change is checked against the rules.
+        if (parentChanged || companiesChanged)
+        {
+            var newlyRoot = request.ParentPositionId is null && position.ParentPositionId is not null;
+            var toCheckForRoot = newlyRoot ? companyIds : companyIds.Where(c => !currentCompanies.Contains(c)).ToList();
+            var wrong = ValidatePositionCompanies(snapshot, id, request.ParentPositionId, companyIds, toCheckForRoot);
+            if (wrong is not null)
+            {
+                return Result.Failure<PositionDto>(wrong);
+            }
+        }
+
+        foreach (var removed in currentCompanies.Where(c => !companyIds.Contains(c)))
+        {
+            var resolver = snapshot.Resolver();
+            var inUse = snapshot.Assignments.Any(a => a.CompanyId == removed && a.PositionId == id)
+                || snapshot.Seats.Any(seat => seat.PositionId == id && resolver.CompanyOfUnit(seat.UnitId) == removed)
+                || snapshot.Positions.Values.Any(p => p.ParentPositionId == id && snapshot.IsFor(p.Id, removed));
+            if (inUse)
+            {
+                return Result.Failure<PositionDto>(Error.Conflict(
+                    "The position is in use in a company being taken from it (its people, deputies or the positions under it). Change those first."));
+            }
+        }
+
+        // The head's position stays without a superior while someone is head through it.
+        if (request.ParentPositionId is not null && position.ParentPositionId is null
+            && snapshot.Companies.Values.Any(company => company.ManagerUserId is { } head
+                && snapshot.Assignments.Any(a => a.UserId == head && a.CompanyId == company.Id && a.UnitId is null && a.PositionId == id)))
+        {
+            return Result.Failure<PositionDto>(Error.Conflict(
+                "Someone holds this position as their company's head. Take it from them first."));
+        }
+
         position.Update(request.Title, request.ParentPositionId, request.IsActive);
+        foreach (var link in snapshot.PositionCompanies.Where(link => link.PositionId == id && !companyIds.Contains(link.CompanyId)))
+        {
+            repository.RemovePositionCompany(link);
+        }
+
+        foreach (var companyId in companyIds.Where(c => !currentCompanies.Contains(c)))
+        {
+            await repository.AddPositionCompanyAsync(new PositionCompany(Guid.NewGuid(), tenantId, id, companyId), cancellationToken);
+        }
+
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        return Result.Success(ToDto(position));
+        return Result.Success(ToDto(position, await repository.ListPositionCompaniesAsync(tenantId, cancellationToken)));
+    }
+
+    /// <summary>
+    /// A position is for at least one existing company; its superior is for every one of them;
+    /// and in each of <paramref name="checkRootIn"/>, a position with no superior must be the only one.
+    /// </summary>
+    private static Error? ValidatePositionCompanies(
+        Snapshot snapshot, Guid positionId, Guid? parentId, IReadOnlyList<Guid> companyIds, IReadOnlyList<Guid> checkRootIn)
+    {
+        if (companyIds.Count == 0)
+        {
+            return Error.Validation("Choose at least one company for the position.");
+        }
+
+        if (!companyIds.All(snapshot.Companies.ContainsKey))
+        {
+            return Error.Validation("Company was not found.");
+        }
+
+        if (parentId is { } parent && !companyIds.All(companyId => snapshot.IsFor(parent, companyId)))
+        {
+            return Error.Validation("The superior position must be for every company of this position.");
+        }
+
+        if (parentId is null && checkRootIn.Any(companyId => snapshot.PositionCompanies.Any(link =>
+                link.CompanyId == companyId && link.PositionId != positionId
+                && snapshot.Positions.GetValueOrDefault(link.PositionId) is { ParentPositionId: null })))
+        {
+            return Error.Conflict("This company already has a position with no superior (its head's). Choose a superior for this position.");
+        }
+
+        return null;
     }
 
     public async Task<Result> DeletePositionAsync(Guid tenantId, Guid id, CancellationToken cancellationToken)
@@ -343,6 +437,11 @@ public sealed class OrgStructureService(
         }
 
         repository.RemovePosition(position);
+        foreach (var link in snapshot.PositionCompanies.Where(link => link.PositionId == id))
+        {
+            repository.RemovePositionCompany(link);
+        }
+
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }
@@ -396,6 +495,16 @@ public sealed class OrgStructureService(
         if (snapshot.Positions.GetValueOrDefault(request.PositionId) is not { IsActive: true })
         {
             return Result.Failure<UnitPositionDto>(Error.Validation("Position was not found or is inactive."));
+        }
+
+        if (snapshot.Resolver().CompanyOfUnit(unitId) is not { } unitCompany)
+        {
+            return Result.Failure<UnitPositionDto>(Error.Validation("Link the unit to a company first."));
+        }
+
+        if (!snapshot.IsFor(request.PositionId, unitCompany))
+        {
+            return Result.Failure<UnitPositionDto>(Error.Validation("This position is not for the unit's company."));
         }
 
         if (snapshot.Seats.Any(seat => seat.UnitId == unitId && seat.PositionId == request.PositionId))
@@ -520,10 +629,19 @@ public sealed class OrgStructureService(
             }
         }
 
-        if (request.PositionId is { } positionId
-            && (snapshot.Positions.GetValueOrDefault(positionId) is not { } position || !position.IsActive))
+        var current = snapshot.Assignments.FirstOrDefault(a => a.UserId == userId);
+        var positionKept = current is not null && current.PositionId == request.PositionId && current.CompanyId == request.CompanyId;
+        if (request.PositionId is { } positionId && !positionKept)
         {
-            return Result.Failure<UserAssignmentDto>(Error.Validation("Position was not found or is inactive."));
+            if (snapshot.Positions.GetValueOrDefault(positionId) is not { } position || !position.IsActive)
+            {
+                return Result.Failure<UserAssignmentDto>(Error.Validation("Position was not found or is inactive."));
+            }
+
+            if (!snapshot.IsFor(positionId, request.CompanyId))
+            {
+                return Result.Failure<UserAssignmentDto>(Error.Validation("This position is not for the person's company."));
+            }
         }
 
         if (request.ManagerUserId is { } managerId)
@@ -537,12 +655,6 @@ public sealed class OrgStructureService(
             {
                 return Result.Failure<UserAssignmentDto>(Error.Validation("The manager was not found in this organization."));
             }
-        }
-
-        var after = snapshot.Resolver(assignmentOverride: new AssignmentNode(userId, request.CompanyId, request.UnitId, request.ManagerUserId));
-        if (after.ManagementChainOf(userId).Count > 0 && LoopsBackTo(after, userId))
-        {
-            return Result.Failure<UserAssignmentDto>(Error.Conflict("This change would create a management loop."));
         }
 
         var holdings = snapshot.Holdings.Where(h => h.UserId == userId).ToList();
@@ -572,9 +684,40 @@ public sealed class OrgStructureService(
 
         // The main position: the one asked for, or with a list of positions, the first held in
         // the person's unit (else the first held).
-        var mainPositionId = seats is null || seats.Any(seat => seat.PositionId == request.PositionId)
+        // Directly in the company (no unit), the main position is the one asked for.
+        var mainPositionId = seats is null || (request.UnitId is null && request.PositionId is not null)
+            || seats.Any(seat => seat.PositionId == request.PositionId)
             ? request.PositionId
             : (seats.FirstOrDefault(seat => seat.UnitId == request.UnitId) ?? seats.FirstOrDefault())?.PositionId;
+
+        // The company's head: whoever sits directly in it with its position that has no superior.
+        // One per company; anyone no longer so stops being head.
+        var headOf = request.UnitId is null && mainPositionId is { } main
+            && snapshot.Positions.GetValueOrDefault(main) is { ParentPositionId: null } && snapshot.IsFor(main, request.CompanyId)
+            ? request.CompanyId
+            : (Guid?)null;
+        if (headOf is not null && company.ManagerUserId is { } otherHead && otherHead != userId)
+        {
+            return Result.Failure<UserAssignmentDto>(Error.Conflict(
+                "This company already has a head. Take the head's position from them first."));
+        }
+
+        var heads = snapshot.Companies.Values
+            .Where(c => c.ManagerUserId == userId && c.Id != headOf)
+            .ToDictionary(c => c.Id, _ => (Guid?)null);
+        if (headOf is { } becomesHeadOf && company.ManagerUserId != userId)
+        {
+            heads[becomesHeadOf] = userId;
+        }
+
+        var after = snapshot.Resolver(
+            assignmentOverride: new AssignmentNode(userId, request.CompanyId, request.UnitId, request.ManagerUserId),
+            companyManagerOverrides: heads);
+        if ((after.ManagementChainOf(userId).Count > 0 && LoopsBackTo(after, userId))
+            || (heads.Count > 0 && snapshot.Resolver().FindLoop() is null && after.FindLoop() is not null))
+        {
+            return Result.Failure<UserAssignmentDto>(Error.Conflict("This change would create a management loop."));
+        }
 
         var assignment = await repository.GetAssignmentAsync(tenantId, userId, cancellationToken);
         var previousMainSeat = assignment is { UnitId: { } previousUnit, PositionId: { } previousPosition }
@@ -587,6 +730,10 @@ public sealed class OrgStructureService(
         }
 
         assignment.Set(request.CompanyId, request.UnitId, mainPositionId, request.ManagerUserId);
+        foreach (var (companyId, head) in heads)
+        {
+            snapshot.Companies[companyId].SetHead(head);
+        }
 
         if (seats is not null)
         {
@@ -637,6 +784,11 @@ public sealed class OrgStructureService(
         }
 
         repository.RemoveAssignment(assignment);
+        foreach (var company in (await repository.ListCompaniesAsync(tenantId, cancellationToken)).Where(c => c.ManagerUserId == userId))
+        {
+            company.SetHead(null);
+        }
+
         foreach (var held in (await repository.ListUserPositionsAsync(tenantId, cancellationToken)).Where(h => h.UserId == userId))
         {
             repository.RemoveUserPosition(held);
@@ -778,7 +930,8 @@ public sealed class OrgStructureService(
                 // People directly under the company, plus anyone whose unit no longer belongs to
                 // it (e.g. the unit was moved in Nexus.Organization), so nobody drops off the chart.
                 var companyMembers = snapshot.Assignments
-                    .Where(a => a.CompanyId == company.Id && (a.UnitId is null || resolver.CompanyOfUnit(a.UnitId.Value) != company.Id))
+                    .Where(a => a.CompanyId == company.Id && a.UserId != company.ManagerUserId
+                        && (a.UnitId is null || resolver.CompanyOfUnit(a.UnitId.Value) != company.Id))
                     .Select(Member)
                     .OrderBy(x => x.DisplayName)
                     .ToList();
@@ -945,7 +1098,12 @@ public sealed class OrgStructureService(
         link.CompanyId,
         snapshot.Companies.GetValueOrDefault(link.CompanyId)?.Name ?? string.Empty);
 
-    private static PositionDto ToDto(Position position) => new(position.Id, position.Title, position.ParentPositionId, position.IsActive);
+    private static PositionDto ToDto(Position position, IReadOnlyList<PositionCompany> links) => new(
+        position.Id,
+        position.Title,
+        position.ParentPositionId,
+        position.IsActive,
+        links.Where(link => link.PositionId == position.Id).Select(link => link.CompanyId).ToList());
 
     private async Task<UserAssignmentDto> ToDtoAsync(UserAssignment assignment, Snapshot snapshot, CancellationToken cancellationToken)
     {
@@ -984,11 +1142,12 @@ public sealed class OrgStructureService(
         (await repository.ListPositionsAsync(tenantId, cancellationToken)).ToDictionary(position => position.Id),
         await repository.ListAssignmentsAsync(tenantId, cancellationToken),
         await repository.ListUnitPositionsAsync(tenantId, cancellationToken),
-        await repository.ListUserPositionsAsync(tenantId, cancellationToken));
+        await repository.ListUserPositionsAsync(tenantId, cancellationToken),
+        await repository.ListPositionCompaniesAsync(tenantId, cancellationToken));
 
     /// <summary>
     /// One tenant's structure, read once per request. Seats: the positions units have;
-    /// Holdings: who holds which of them.
+    /// Holdings: who holds which of them; PositionCompanies: which companies each position is for.
     /// </summary>
     private sealed record Snapshot(
         IReadOnlyDictionary<Guid, OrganizationUnit> Units,
@@ -997,11 +1156,18 @@ public sealed class OrgStructureService(
         IReadOnlyDictionary<Guid, Position> Positions,
         IReadOnlyList<UserAssignment> Assignments,
         IReadOnlyList<UnitPosition> Seats,
-        IReadOnlyList<UserPosition> Holdings)
+        IReadOnlyList<UserPosition> Holdings,
+        IReadOnlyList<PositionCompany> PositionCompanies)
     {
+        public bool IsFor(Guid positionId, Guid companyId) =>
+            PositionCompanies.Any(link => link.PositionId == positionId && link.CompanyId == companyId);
+
+        public HashSet<Guid> CompaniesOf(Guid positionId) =>
+            PositionCompanies.Where(link => link.PositionId == positionId).Select(link => link.CompanyId).ToHashSet();
+
         public HierarchyResolver Resolver(
             AssignmentNode? assignmentOverride = null,
-            (Guid CompanyId, Guid? ManagerUserId)? companyManagerOverride = null)
+            IReadOnlyDictionary<Guid, Guid?>? companyManagerOverrides = null)
         {
             var assignments = Assignments
                 .Where(a => assignmentOverride is null || a.UserId != assignmentOverride.UserId)
@@ -1014,7 +1180,9 @@ public sealed class OrgStructureService(
 
             var companyManagers = Companies.Values.ToDictionary(
                 company => company.Id,
-                company => companyManagerOverride is { } o && o.CompanyId == company.Id ? o.ManagerUserId : company.ManagerUserId);
+                company => companyManagerOverrides is not null && companyManagerOverrides.TryGetValue(company.Id, out var head)
+                    ? head
+                    : company.ManagerUserId);
 
             return new HierarchyResolver(
                 Units.Values.Select(unit => new UnitNode(unit.Id, null, unit.ManagerUserId)),

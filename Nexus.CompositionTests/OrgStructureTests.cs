@@ -99,14 +99,14 @@ public sealed class OrgStructureTests
     public async Task Companies_AreCreatedPerTenant_WithUniqueCodes()
     {
         var world = new World();
-        var created = (await world.Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest(" بانک تجارت ", "TJ", null, null), default)).Value!;
+        var created = (await world.Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest(" بانک تجارت ", "TJ", null), default)).Value!;
         Assert.Equal("بانک تجارت", created.Name);
 
-        var duplicate = await world.Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("دیگر", "TJ", null, null), default);
+        var duplicate = await world.Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("دیگر", "TJ", null), default);
         Assert.Equal("conflict", duplicate.Error.Code);
 
         // Same code in another tenant is fine, and neither tenant sees the other's companies.
-        Assert.True((await world.Service.CreateCompanyAsync(OtherTenant, new CreateCompanyRequest("X", "TJ", null, null), default)).IsSuccess);
+        Assert.True((await world.Service.CreateCompanyAsync(OtherTenant, new CreateCompanyRequest("X", "TJ", null), default)).IsSuccess);
         Assert.Single((await world.Service.ListCompaniesAsync(Tenant, default)).Value!);
         Assert.Equal("not_found", (await world.Service.GetCompanyAsync(OtherTenant, created.Id, default)).Error.Code);
     }
@@ -150,7 +150,7 @@ public sealed class OrgStructureTests
         var deputy = world.Unit("معاونت", managerUserId: deputyHead);
         var expert = world.User("کارشناس");
         await world.Service.LinkUnitAsync(Tenant, deputy.Id, new LinkUnitRequest(company), default);
-        var position = (await world.Service.CreatePositionAsync(Tenant, new CreatePositionRequest("کارشناس ارشد"), default)).Value!;
+        var position = (await world.Service.CreatePositionAsync(Tenant, new CreatePositionRequest("کارشناس ارشد", world.TopPosition, [company]), default)).Value!;
 
         await world.Service.SetAssignmentAsync(Tenant, deputyHead, new SetUserAssignmentRequest(company, deputy.Id, null, null), default);
         var placed = (await world.Service.SetAssignmentAsync(Tenant, expert, new SetUserAssignmentRequest(company, deputy.Id, position.Id, null), default)).Value!;
@@ -205,9 +205,10 @@ public sealed class OrgStructureTests
         Assert.Equal("conflict", (await world2.Service.SetAssignmentAsync(Tenant, boss, new SetUserAssignmentRequest(company2, null, null, c), default)).Error.Code);
 
         // Same through the company head: boss sits at company level (reporting to its head), and
-        // making c - who reports to boss through the unit - the head would close the loop.
+        // making d - who reports to boss - the head would close the loop.
         Assert.True((await world2.Service.SetAssignmentAsync(Tenant, boss, new SetUserAssignmentRequest(company2, null, null, null), default)).IsSuccess);
-        Assert.Equal("conflict", (await world2.Service.UpdateCompanyAsync(Tenant, company2, new UpdateCompanyRequest("TJ", "TJ", null, c, true), default)).Error.Code);
+        var d = world2.User("د");
+        Assert.Equal("conflict", (await world2.Service.SetAssignmentAsync(Tenant, d, new SetUserAssignmentRequest(company2, null, world2.TopPosition, boss), default)).Error.Code);
     }
 
     [Fact]
@@ -220,7 +221,6 @@ public sealed class OrgStructureTests
 
         Assert.Equal("not_found", (await world.Service.SetAssignmentAsync(Tenant, foreign, new SetUserAssignmentRequest(company, null, null, null), default)).Error.Code);
         Assert.Equal("validation.error", (await world.Service.SetAssignmentAsync(Tenant, local, new SetUserAssignmentRequest(company, null, null, foreign), default)).Error.Code);
-        Assert.Equal("validation.error", (await world.Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("Y", "Y", null, foreign), default)).Error.Code);
     }
 
     // ------------------------------------------------------------------ optional by design
@@ -301,8 +301,47 @@ public sealed class OrgStructureTests
             return unit;
         }
 
-        public async Task<Guid> CompanyAsync(string code, Guid? managerUserId = null) =>
-            (await Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("شرکت " + code, code, null, managerUserId), default)).Value!.Id;
+        public async Task<Guid> CompanyAsync(string code, Guid? headUserId = null)
+        {
+            var id = await AddCompanyAsync("شرکت " + code, code);
+            if (headUserId is { } head)
+            {
+                await HeadAsync(id, head);
+            }
+
+            return id;
+        }
+
+        private readonly List<Guid> _companies = [];
+        private Guid? _top;
+
+        /// <summary>The head's position (no superior), for every company made so far.</summary>
+        public Guid TopPosition => _top!.Value;
+
+        /// <summary>A position under the head's, for every company made so far.</summary>
+        public async Task<Guid> PositionAsync(string title) =>
+            (await Service.CreatePositionAsync(Tenant, new CreatePositionRequest(title, _top, _companies.ToList()), default)).Value!.Id;
+
+        /// <summary>Makes the user the company's head: placed directly in it with the head's position.</summary>
+        public async Task HeadAsync(Guid companyId, Guid userId) =>
+            Assert.True((await Service.SetAssignmentAsync(Tenant, userId, new SetUserAssignmentRequest(companyId, null, _top, null), default)).IsSuccess);
+
+        private async Task<Guid> AddCompanyAsync(string name, string code)
+        {
+            var id = (await Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest(name, code, null), default)).Value!.Id;
+            _companies.Add(id);
+            if (_top is null)
+            {
+                _top = (await Service.CreatePositionAsync(Tenant, new CreatePositionRequest("رئیس کل", null, [id]), default)).Value!.Id;
+            }
+            else
+            {
+                Assert.True((await Service.UpdatePositionAsync(Tenant, _top.Value, new UpdatePositionRequest("رئیس کل", true, null, _companies.ToList()), default)).IsSuccess);
+            }
+
+            return id;
+        }
+
     }
 
     private sealed class FakeUserDirectory : IUserDirectory

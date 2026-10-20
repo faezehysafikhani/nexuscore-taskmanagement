@@ -3,10 +3,14 @@
 `Nexus.OrgStructure` adds, per tenant:
 
 - **Companies** — several companies can share one tenant (a holding and its subsidiaries). Each
-  can have a head (`ManagerUserId`).
+  can have a head («رئیس کل»), not chosen on the company: see positions.
 - **Which company each unit belongs to** — a top unit from `Nexus.Organization` (e.g. a deputy,
   «معاونت») is linked to a company; every unit below it belongs to the same company.
-- **Positions** («سِمَت») — job titles such as «کارشناس» or «معاون». Not permission roles.
+- **Positions** («سِمَت») — job titles such as «کارشناس» or «معاون». Not permission roles. Each
+  is for one or more companies (`companyIds`) and is given only there. Its superior
+  (`parentPositionId`) must be for the same companies. In each company exactly one position has
+  no superior: the head's. Whoever is placed directly in the company (no unit) with it is the
+  company's head — one person at a time.
 - **Each user's place** — company, optional unit, optional position, optional direct manager.
 - **Manager / subordinates** — derived, see below.
 
@@ -116,6 +120,7 @@ development default) and authorize with the access token. A typical first run:
 1. `POST /api/organization/units` — create a deputy (and units under it).
 2. `POST /api/org-structure/companies` — create the company.
 3. `PUT /api/org-structure/company-units/{deputyId}` — put the deputy in the company.
-4. `POST /api/org-structure/positions` — create positions.
+4. `POST /api/org-structure/positions` — create positions: first the head's (no superior), then
+   the rest under it, each with its `companyIds`.
 5. `PUT /api/org-structure/assignments/{userId}` — place users.
 6. `GET /api/org-structure/chart`, `/users/{id}/manager`, `/users/{id}/subordinates?all=true`.

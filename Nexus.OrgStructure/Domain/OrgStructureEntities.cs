@@ -29,19 +29,24 @@ public sealed class Company : AuditableEntity<Guid>
     public string Code { get; private set; }
     public string? Description { get; private set; }
 
-    /// <summary>The company's head (e.g. its CEO): the manager of whoever has no other manager in it.</summary>
+    /// <summary>
+    /// The company's head (e.g. its CEO): the manager of whoever has no other manager in it. Not
+    /// chosen on the company: whoever is placed directly in the company with its position that has
+    /// no superior becomes it (see OrgStructureService).
+    /// </summary>
     public Guid? ManagerUserId { get; private set; }
 
     public bool IsActive { get; private set; }
 
-    public void Update(string name, string code, string? description, Guid? managerUserId, bool isActive)
+    public void Update(string name, string code, string? description, bool isActive)
     {
         Name = name.Trim();
         Code = code.Trim();
         Description = Normalize(description);
-        ManagerUserId = managerUserId;
         IsActive = isActive;
     }
+
+    public void SetHead(Guid? userId) => ManagerUserId = userId;
 
     private static string? Normalize(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }
@@ -98,6 +103,29 @@ public sealed class Position : AuditableEntity<Guid>
         ParentPositionId = parentPositionId;
         IsActive = isActive;
     }
+}
+
+/// <summary>
+/// A company a position is for. A position may be for several companies; it is given only to
+/// people of those companies and to their deputies. In each company, the one position with no
+/// superior is the head's.
+/// </summary>
+public sealed class PositionCompany : AuditableEntity<Guid>
+{
+    private PositionCompany() : base(Guid.Empty)
+    {
+    }
+
+    public PositionCompany(Guid id, Guid tenantId, Guid positionId, Guid companyId) : base(id)
+    {
+        TenantId = tenantId;
+        PositionId = positionId;
+        CompanyId = companyId;
+    }
+
+    public Guid TenantId { get; private set; }
+    public Guid PositionId { get; private set; }
+    public Guid CompanyId { get; private set; }
 }
 
 /// <summary>

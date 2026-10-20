@@ -56,6 +56,14 @@ public sealed class OrgStructureRepository(OrgStructureDbContext dbContext) : IO
 
     public void RemoveAssignment(UserAssignment assignment) => dbContext.UserAssignments.Remove(assignment);
 
+    public async Task<IReadOnlyList<PositionCompany>> ListPositionCompaniesAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        await dbContext.PositionCompanies.Where(x => x.TenantId == tenantId).ToListAsync(cancellationToken);
+
+    public async Task AddPositionCompanyAsync(PositionCompany positionCompany, CancellationToken cancellationToken) =>
+        await dbContext.PositionCompanies.AddAsync(positionCompany, cancellationToken);
+
+    public void RemovePositionCompany(PositionCompany positionCompany) => dbContext.PositionCompanies.Remove(positionCompany);
+
     public async Task<IReadOnlyList<UnitPosition>> ListUnitPositionsAsync(Guid tenantId, CancellationToken cancellationToken) =>
         await dbContext.UnitPositions.Where(x => x.TenantId == tenantId).OrderBy(x => x.SortOrder).ToListAsync(cancellationToken);
 

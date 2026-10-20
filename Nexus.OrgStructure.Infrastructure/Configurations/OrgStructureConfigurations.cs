@@ -65,6 +65,18 @@ public sealed class UserAssignmentConfiguration : IEntityTypeConfiguration<UserA
     }
 }
 
+public sealed class PositionCompanyConfiguration : IEntityTypeConfiguration<PositionCompany>
+{
+    public void Configure(EntityTypeBuilder<PositionCompany> builder)
+    {
+        builder.ToTable("PositionCompanies", OrgStructureSchema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.HasIndex(x => new { x.TenantId, x.PositionId, x.CompanyId }).IsUnique();
+        builder.HasIndex(x => x.CompanyId);
+    }
+}
+
 public sealed class UnitPositionConfiguration : IEntityTypeConfiguration<UnitPosition>
 {
     public void Configure(EntityTypeBuilder<UnitPosition> builder)
