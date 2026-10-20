@@ -112,6 +112,11 @@ public sealed class TaskService(
             return Result.Failure<TaskDto>(Error.Validation("A project must have at least one subtask."));
         }
 
+        if (request.IsProject && request.Recurrence is not null)
+        {
+            return Result.Failure<TaskDto>(Error.Validation("A task is either a project or recurring, not both."));
+        }
+
         // Given to posts: their holders are the people.
         var plan = await PlanPostsAsync(
             tenantId, null, request.ResponsiblePostIds, request.AccessPostIds,
@@ -155,6 +160,16 @@ public sealed class TaskService(
         var task = new TaskItem(
             Guid.NewGuid(), tenantId, request.Title, request.DueDate, request.Priority,
             request.IsProject, currentUser.UserId, request.Description);
+
+        if (request.ParentTaskId is { } parentTaskId)
+        {
+            if (await repository.GetByIdAsync(tenantId, parentTaskId, cancellationToken) is null)
+            {
+                return Result.Failure<TaskDto>(Error.Validation("The parent task was not found."));
+            }
+
+            task.SetParentTask(parentTaskId);
+        }
 
         task.SetResponsibleUsers(responsible);
         task.UpdateDetails(
@@ -1171,6 +1186,7 @@ public sealed class TaskService(
                     return new TaskPostDto(
                         post.PostId, p.Role, post.Title, post.Code, post.Place, post.HolderUserId,
                         post.HolderUserId is { } holder && users.TryGetValue(holder, out var u) ? u.DisplayName : null);
-                }).ToList());
+                }).ToList(),
+            task.ParentTaskId);
     }
 }

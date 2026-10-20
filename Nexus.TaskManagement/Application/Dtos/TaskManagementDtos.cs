@@ -124,7 +124,8 @@ public sealed record TaskDto(
     TimeOnly? CharterStartTime = null,
     TimeOnly? CharterEndTime = null,
     IReadOnlyList<UserSummaryDto>? ResponsibleUsers = null,
-    IReadOnlyList<TaskPostDto>? Posts = null);
+    IReadOnlyList<TaskPostDto>? Posts = null,
+    Guid? ParentTaskId = null);
 
 /// <summary>
 /// A post the task is given to (where tasks are given to posts): Role "owner" (its creator's),
@@ -219,7 +220,8 @@ public sealed record CreateTaskRequest(
     TimeOnly? CharterEndTime = null,
     IReadOnlyList<Guid>? ResponsibleUserIds = null,
     IReadOnlyList<Guid>? ResponsiblePostIds = null,
-    IReadOnlyList<Guid>? AccessPostIds = null);
+    IReadOnlyList<Guid>? AccessPostIds = null,
+    Guid? ParentTaskId = null);
 
 /// <summary>
 /// Replaces the task's details. Like every other field here, DueTime is replaced as sent: null
