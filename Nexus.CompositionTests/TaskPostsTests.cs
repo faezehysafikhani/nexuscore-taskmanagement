@@ -1,3 +1,6 @@
+using Microsoft.AspNetCore.Http;
+using System.Security.Claims;
+using System.IdentityModel.Tokens.Jwt;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Text.Json;
@@ -123,6 +126,39 @@ public sealed class TaskPostsTests(AccessControlTests.Host host) : IClassFixture
         Assert.False((await host.SendAsync(stranger, HttpMethod.Get, $"/api/task-management/tasks/{taskId}")).IsSuccessStatusCode);
         Assert.False((await host.SendAsync(creator, HttpMethod.Get, $"/api/task-management/tasks/{taskId}")).IsSuccessStatusCode);
         Assert.True((await host.SendAsync(standIn, HttpMethod.Get, $"/api/task-management/tasks/{taskId}")).IsSuccessStatusCode);
+    }
+
+    [Fact]
+    public async Task PeopleChanges_ReachTasks_TheSignedInUserIsNotPartOf()
+    {
+        host.TaskPosts.Enabled = true;
+        var (creator, worker, standIn, manager) = (await UserAsync(), await UserAsync(), await UserAsync(), await UserAsync());
+        host.TaskPosts.Post("مدیر", creator.Id);
+        var post = host.TaskPosts.Post("کارشناس", worker.Id);
+        using var created = JsonDocument.Parse(await (await CreateAsync(creator, new { responsiblePostIds = new[] { post } })).Content.ReadAsStringAsync());
+        var taskId = created.RootElement.GetProperty("id").GetGuid();
+
+        // A manager above the vacant post (not on the task, no Tasks.ManageAll) puts a stand-in in charge.
+        using (var scope = host.Services.CreateScope())
+        {
+            scope.ServiceProvider.GetRequiredService<IHttpContextAccessor>().HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity(
+                [
+                    new Claim(JwtRegisteredClaimNames.Sub, manager.Id.ToString()),
+                    new Claim("tenant_id", host.TenantA.ToString()),
+                    new Claim("permission", "Tasks.View"),
+                ], "test")),
+            };
+            await scope.ServiceProvider.GetRequiredService<ITaskPeopleUpdater>().ApplyAsync(host.TenantA,
+            [
+                new TaskPersonChange(taskId, TaskPostRole.Responsible, worker.Id, null),
+                new TaskPersonChange(taskId, TaskPostRole.Acting, null, standIn.Id, "جانشین کارشناس · کد ۲"),
+            ], default);
+        }
+
+        Assert.True((await host.SendAsync(standIn, HttpMethod.Get, $"/api/task-management/tasks/{taskId}")).IsSuccessStatusCode);
+        Assert.False((await host.SendAsync(worker, HttpMethod.Get, $"/api/task-management/tasks/{taskId}")).IsSuccessStatusCode);
     }
 
     private Task<AccessControlTests.Caller> UserAsync() => host.UserAsync(host.TenantA, Permissions);

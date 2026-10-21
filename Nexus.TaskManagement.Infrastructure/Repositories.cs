@@ -22,6 +22,11 @@ public sealed class TaskRepository(TaskManagementDbContext db) : ITaskRepository
             .AsSplitQuery()
             .FirstOrDefaultAsync(t => t.TenantId == tenantId && t.Id == id, cancellationToken);
 
+    public Task<TaskItem?> GetPeopleOfAsync(Guid tenantId, Guid id, CancellationToken cancellationToken) =>
+        db.Tasks.IgnoreQueryFilters()
+            .Include(t => t.Assignees)
+            .FirstOrDefaultAsync(t => t.TenantId == tenantId && t.Id == id, cancellationToken);
+
     public Task<TaskItem?> GetForUpdateAsync(Guid tenantId, Guid id, CancellationToken cancellationToken) =>
         db.Tasks.FirstOrDefaultAsync(t => t.TenantId == tenantId && t.Id == id, cancellationToken);
 

@@ -25,7 +25,9 @@ public sealed class TaskPeopleUpdater(
         var changed = new List<(TaskItem Task, IReadOnlyList<Guid> ResponsibleBefore, IReadOnlyList<Guid> PeopleBefore)>();
         foreach (var group in changes.GroupBy(change => change.TaskId))
         {
-            var task = await repository.GetByIdAsync(tenantId, group.Key, cancellationToken);
+            // Not limited to the tasks the signed-in user may see: a manager puts a stand-in in
+            // charge of a vacant post, or an admin moves someone, for tasks they are not part of.
+            var task = await repository.GetPeopleOfAsync(tenantId, group.Key, cancellationToken);
             if (task is null)
             {
                 continue;
