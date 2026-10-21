@@ -26,7 +26,7 @@ public sealed class OrgStructureOptions
 /// <summary>
 /// With <see cref="OrgStructureOptions.LimitTaskAssignment"/> on, a user makes responsible for a
 /// task only: themselves, the people below them (their subordinates, at any depth), and the people
-/// at their own level - as many managers above them as they have - except, in their own deputy,
+/// of their own company at their own level - as many managers above them as they have - except, in their own deputy,
 /// someone in a position above theirs (the deputy's positions are in rank order). Never anyone
 /// above them.
 ///
@@ -80,6 +80,20 @@ public sealed class HierarchyWorkAssignmentScope(
         var assignerUnit = unitOf.GetValueOrDefault(assignerUserId);
         var assignerRank = RankOf(assignerUserId);
 
+        // The companies a person is in: where they are placed, and those they head.
+        var companiesOf = assignments.GroupBy(a => a.UserId).ToDictionary(g => g.Key, g => g.Select(a => a.CompanyId).ToHashSet());
+        foreach (var company in companies.Where(c => c.ManagerUserId is not null))
+        {
+            if (!companiesOf.TryGetValue(company.ManagerUserId!.Value, out var set))
+            {
+                companiesOf[company.ManagerUserId.Value] = set = [];
+            }
+
+            set.Add(company.Id);
+        }
+
+        var assignerCompanies = companiesOf.GetValueOrDefault(assignerUserId) ?? [];
+
         bool Allowed(Guid userId)
         {
             if (userId == assignerUserId || below.Contains(userId))
@@ -87,7 +101,9 @@ public sealed class HierarchyWorkAssignmentScope(
                 return true;
             }
 
-            if (resolver.ManagementChainOf(userId).Count != level)
+            // At one's own level only within one's own company: other companies' people are not peers.
+            if (resolver.ManagementChainOf(userId).Count != level
+                || !(companiesOf.GetValueOrDefault(userId)?.Overlaps(assignerCompanies) ?? false))
             {
                 return false;
             }

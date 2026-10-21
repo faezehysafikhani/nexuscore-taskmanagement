@@ -61,7 +61,17 @@ public sealed class TaskReportService(
                     pair.Value)));
         }
 
-        var positions = await orgStructure.ListPositionsAsync(tenantId, cancellationToken);
+        var positions = (await orgStructure.ListPositionsAsync(tenantId, cancellationToken)).Value ?? [];
+        if (access.IsRestricted)
+        {
+            // Only the positions of the companies of the people in the report (not other companies').
+            var inScope = people.Select(person => person.UserId).ToHashSet();
+            var companies = ((await orgStructure.ListAssignmentsAsync(tenantId, null, null, cancellationToken)).Value ?? [])
+                .Where(a => inScope.Contains(a.UserId))
+                .Select(a => a.CompanyId)
+                .ToHashSet();
+            positions = positions.Where(p => p.CompanyIds is { Count: > 0 } ids ? ids.Any(companies.Contains) : companies.Count > 0).ToList();
+        }
         var tags = await db.Tags.AsNoTracking()
             .Where(tag => tag.TenantId == tenantId)
             .OrderBy(tag => tag.Name)
@@ -71,7 +81,7 @@ public sealed class TaskReportService(
         return Result.Success(new TaskReportScopeDto(
             !access.IsRestricted,
             people,
-            (positions.Value ?? []).Where(p => p.IsActive).Select(p => new ReportPosition(p.Id, p.Title)).ToList(),
+            positions.Where(p => p.IsActive).Select(p => new ReportPosition(p.Id, p.Title)).ToList(),
             tags));
     }
 

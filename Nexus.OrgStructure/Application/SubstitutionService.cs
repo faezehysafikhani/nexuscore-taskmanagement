@@ -12,7 +12,8 @@ public sealed record SubstitutionInboxDto(bool Enabled, bool CanManageAll, IRead
 
 /// <summary>
 /// A vacant post with open tasks: what the inbox shows of them (title, due date, status), who
-/// stands in for it (Acting, null: nobody) and the posts that may (filled ones of its company).
+/// stands in for it (Acting, null: nobody) and the posts that may (filled ones of its company,
+/// but not those of the managers above it).
 /// </summary>
 public sealed record VacantPostDto(
     Guid PostId,
@@ -82,8 +83,10 @@ public sealed class SubstitutionService(
                     .ToList();
                 var acting = state.Actings.FirstOrDefault(a => a.VacantPostId == post.PostId);
                 var company = state.CompanyOf(post.PostId);
+                var above = state.SuperiorsOf(post.PostId).ToHashSet();
                 var candidates = state.Posts.Values
-                    .Where(other => other.HolderUserId is not null && other.PostId != post.PostId && state.CompanyOf(other.PostId) == company)
+                    .Where(other => other.HolderUserId is { } holder && !above.Contains(holder)
+                        && other.PostId != post.PostId && state.CompanyOf(other.PostId) == company)
                     .OrderBy(other => other.Place).ThenBy(other => other.Title)
                     .Select(Ref)
                     .ToList();
@@ -106,10 +109,16 @@ public sealed class SubstitutionService(
             return refused;
         }
 
-        if (!state.Posts.TryGetValue(request.ActingPostId, out var acting) || acting.HolderUserId is null
+        if (!state.Posts.TryGetValue(request.ActingPostId, out var acting) || acting.HolderUserId is not { } actingHolder
             || request.ActingPostId == vacantPostId || state.CompanyOf(request.ActingPostId) != state.CompanyOf(vacantPostId))
         {
             return Result.Failure(Error.Validation("The post put in charge must be another post of the company that someone holds."));
+        }
+
+        // Not one of the managers above the vacant post: a stand-in is someone at its level or below.
+        if (state.SuperiorsOf(vacantPostId).Contains(actingHolder))
+        {
+            return Result.Failure(Error.Validation("A manager above the vacant post can't be put in charge of it."));
         }
 
         var current = state.Actings.FirstOrDefault(a => a.VacantPostId == vacantPostId);

@@ -73,6 +73,30 @@ public sealed class OrgChartTeamsAndTitlesTests
     }
 
     [Fact]
+    public async Task PeopleOfAnotherCompany_AreNotPeers()
+    {
+        var (world, p) = await HierarchyAsync();
+        // A second company, with a head and a deputy head at the same levels as C1's.
+        foreach (var name in new[] { "head2", "d3" })
+        {
+            p[name] = world.User(name);
+        }
+
+        var other = await world.CompanyAsync("C2");
+        var hr = world.Unit("معاونت منابع انسانی", p["d3"]);
+        await world.Service.LinkUnitAsync(Tenant, hr.Id, new LinkUnitRequest(other), default);
+        await world.HeadAsync(other, p["head2"]);
+        Assert.True((await world.Service.SetAssignmentAsync(Tenant, p["d3"], new SetUserAssignmentRequest(other, hr.Id, null, null), default)).IsSuccess);
+
+        // C1's deputy head: C2's people are blocked although d3 is at the same level.
+        Assert.Equal(["d3", "e3", "head", "head2"], await BlockedForAsync(world, p, "d1"));
+        // C1's head: everyone of C1 below, nobody of C2 (head2 is at the same level).
+        Assert.Equal(["d3", "head2"], await BlockedForAsync(world, p, "head"));
+        // C2's deputy head: C1's people are not theirs.
+        Assert.Equal(["d1", "d2", "e2", "e3", "head", "head2", "s1"], await BlockedForAsync(world, p, "d3"));
+    }
+
+    [Fact]
     public async Task TheLimit_IsOffByDefault_AndNotForThePermission_OrSomeoneWithNoPlace()
     {
         var (world, p) = await HierarchyAsync();
@@ -455,6 +479,9 @@ public sealed class OrgChartTeamsAndTitlesTests
         world.Updater.Summaries.Add(new TaskSummary(task, "کار باز", new DateOnly(2030, 1, 1), "Todo", false));
         await world.TaskPosts.SetTaskPostsAsync(Tenant, task, null, [expertPost.Id], [], default);
         Assert.Equal(expertPost.Id, Assert.Single((await world.Substitution(deputy).GetInboxAsync(Tenant, default)).Value!.Posts).PostId);
+        // The deputy is above the vacant post: not a stand-in for it.
+        Assert.DoesNotContain(Assert.Single((await world.Substitution(deputy).GetInboxAsync(Tenant, default)).Value!.Posts).Candidates, c => c.PostId == deputyPost);
+        Assert.Equal("validation.error", (await world.Substitution(deputy).SetActingAsync(Tenant, expertPost.Id, new SetActingRequest(deputyPost), default)).Error.Code);
         Assert.Single((await world.Substitution(deputyHead).GetInboxAsync(Tenant, default)).Value!.Posts);
 
         // The deputy's post falls vacant: the expert's manager is the deputy's head again.
