@@ -30,6 +30,7 @@ public sealed class TaskManagementDbContext(
     public DbSet<TaskTag> TaskTags => Set<TaskTag>();
     public DbSet<Note> Notes => Set<Note>();
     public DbSet<TaskAssignee> TaskAssignees => Set<TaskAssignee>();
+    public DbSet<SubTaskAssignee> SubTaskAssignees => Set<SubTaskAssignee>();
     public DbSet<TaskComment> TaskComments => Set<TaskComment>();
     public DbSet<PendingTaskSms> PendingSms => Set<PendingTaskSms>();
 

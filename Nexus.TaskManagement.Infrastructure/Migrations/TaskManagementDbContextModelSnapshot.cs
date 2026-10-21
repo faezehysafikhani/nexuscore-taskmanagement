@@ -183,6 +183,12 @@ namespace Nexus.TaskManagement.Infrastructure.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<DateTimeOffset?>("ActualCompletedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset?>("ActualStartedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("datetimeoffset");
 
@@ -221,6 +227,11 @@ namespace Nexus.TaskManagement.Infrastructure.Migrations
                     b.Property<TimeOnly?>("StartTime")
                         .HasColumnType("time");
 
+                    b.Property<int>("Status")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
                     b.Property<Guid>("TaskId")
                         .HasColumnType("uniqueidentifier");
 
@@ -239,6 +250,27 @@ namespace Nexus.TaskManagement.Infrastructure.Migrations
                     b.HasIndex("TenantId", "IsCompleted");
 
                     b.ToTable("SubTasks", "task_management");
+                });
+
+            modelBuilder.Entity("Nexus.TaskManagement.Domain.SubTaskAssignee", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("SubTaskId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("SubTaskId", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("SubTaskAssignees", "task_management");
                 });
 
             modelBuilder.Entity("Nexus.TaskManagement.Domain.Tag", b =>
@@ -536,6 +568,9 @@ namespace Nexus.TaskManagement.Infrastructure.Migrations
                     b.Property<Guid?>("OwnerUserId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid?>("ParentTaskId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<int>("Priority")
                         .HasColumnType("int");
 
@@ -758,6 +793,25 @@ namespace Nexus.TaskManagement.Infrastructure.Migrations
                     b.Navigation("Task");
                 });
 
+            modelBuilder.Entity("Nexus.TaskManagement.Domain.SubTaskAssignee", b =>
+                {
+                    b.HasOne("Nexus.TaskManagement.Domain.SubTask", "SubTask")
+                        .WithMany("Assignees")
+                        .HasForeignKey("SubTaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("NexusCore.Domain.Identity.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("SubTask");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Nexus.TaskManagement.Domain.TaskAssignee", b =>
                 {
                     b.HasOne("Nexus.TaskManagement.Domain.TaskItem", "Task")
@@ -889,6 +943,8 @@ namespace Nexus.TaskManagement.Infrastructure.Migrations
 
             modelBuilder.Entity("Nexus.TaskManagement.Domain.SubTask", b =>
                 {
+                    b.Navigation("Assignees");
+
                     b.Navigation("Files");
 
                     b.Navigation("Tags");

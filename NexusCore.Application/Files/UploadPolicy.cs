@@ -59,6 +59,23 @@ public static class AllowedUploadTypes
         var extension = string.IsNullOrWhiteSpace(fileName) ? null : Path.GetExtension(fileName);
         return !string.IsNullOrEmpty(extension) && ExtensionSet.Contains(extension);
     }
+
+    /// <summary>Voice recordings sent in team chat; still subject to the configured size limit.</summary>
+    public static bool IsVoiceMessage(string? fileName, string? contentType)
+    {
+        if (!string.IsNullOrWhiteSpace(contentType) && contentType.StartsWith("audio/", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var extension = string.IsNullOrWhiteSpace(fileName) ? null : Path.GetExtension(fileName);
+        return extension is not null && VoiceExtensions.Contains(extension);
+    }
+
+    private static readonly HashSet<string> VoiceExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".webm", ".ogg", ".m4a", ".mp4", ".wav", ".mp3",
+    };
 }
 
 public interface IUploadPolicyReader

@@ -141,15 +141,15 @@ public sealed class TaskManagementCompletionTests(SqlServerFixture fixture)
             {
                 SubTasks =
                 [
-                    new SubTaskInput("Written by a person"),
-                    new SubTaskInput("Occurrence 1", IsGeneratedOccurrence: true)
+                    new SubTaskInput("Written by a person", AssigneeUserIds: [fixture.OwnerUserId]),
+                    new SubTaskInput("Occurrence 1", IsGeneratedOccurrence: true, AssigneeUserIds: [fixture.OwnerUserId])
                 ]
             }, default));
         Assert.True(created.IsSuccess);
         Assert.Equal([false, true], created.Value!.SubTasks.OrderBy(s => s.SortOrder).Select(s => s.IsGeneratedOccurrence));
 
         var added = await fixture.ScopedAsync(sp => sp.GetRequiredService<ITaskService>()
-            .CreateSubTaskAsync(created.Value!.Id, new CreateSubTaskRequest("Occurrence 2", IsGeneratedOccurrence: true), default));
+            .CreateSubTaskAsync(created.Value!.Id, new CreateSubTaskRequest("Occurrence 2", IsGeneratedOccurrence: true, AssigneeUserIds: [fixture.OwnerUserId]), default));
         Assert.True(added.Value!.IsGeneratedOccurrence);
     }
 

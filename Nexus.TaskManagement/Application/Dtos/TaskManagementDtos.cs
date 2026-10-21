@@ -39,7 +39,11 @@ public sealed record SubTaskDto(
     DateTimeOffset CreatedAtUtc,
     bool IsGeneratedOccurrence = false,
     TimeOnly? StartTime = null,
-    TimeOnly? EndTime = null);
+    TimeOnly? EndTime = null,
+    IReadOnlyList<UserSummaryDto>? Assignees = null,
+    SubTaskStatus Status = SubTaskStatus.NotStarted,
+    DateTimeOffset? ActualStartedAtUtc = null,
+    DateTimeOffset? ActualCompletedAtUtc = null);
 
 /// <summary>
 /// The recurrence schedule. Carries no title, priority or assignee - those belong to the task
@@ -121,7 +125,8 @@ public sealed record TaskDto(
     TimeOnly? CharterEndTime = null,
     IReadOnlyList<UserSummaryDto>? ResponsibleUsers = null,
     IReadOnlyList<TaskPostDto>? Posts = null,
-    IReadOnlyList<TaskStandInDto>? StandIns = null);
+    IReadOnlyList<TaskStandInDto>? StandIns = null,
+    Guid? ParentTaskId = null);
 
 /// <summary>
 /// Someone standing in for a vacant post of the task (جانشین): sees it and comments, nothing more.
@@ -185,7 +190,8 @@ public sealed record SubTaskInput(
     int SortOrder = 0,
     bool IsGeneratedOccurrence = false,
     TimeOnly? StartTime = null,
-    TimeOnly? EndTime = null);
+    TimeOnly? EndTime = null,
+    IReadOnlyList<Guid>? AssigneeUserIds = null);
 
 public sealed record RecurrenceInput(
     RecurrenceFrequency Frequency,
@@ -221,7 +227,8 @@ public sealed record CreateTaskRequest(
     TimeOnly? CharterEndTime = null,
     IReadOnlyList<Guid>? ResponsibleUserIds = null,
     IReadOnlyList<Guid>? ResponsiblePostIds = null,
-    IReadOnlyList<Guid>? AccessPostIds = null);
+    IReadOnlyList<Guid>? AccessPostIds = null,
+    Guid? ParentTaskId = null);
 
 /// <summary>
 /// Replaces the task's details. Like every other field here, DueTime is replaced as sent: null
@@ -302,7 +309,8 @@ public sealed record CreateSubTaskRequest(
     int SortOrder = 0,
     bool IsGeneratedOccurrence = false,
     TimeOnly? StartTime = null,
-    TimeOnly? EndTime = null);
+    TimeOnly? EndTime = null,
+    IReadOnlyList<Guid>? AssigneeUserIds = null);
 
 public sealed record UpdateSubTaskRequest(
     string Title,
@@ -311,9 +319,10 @@ public sealed record UpdateSubTaskRequest(
     DateOnly? EndDate = null,
     int SortOrder = 0,
     TimeOnly? StartTime = null,
-    TimeOnly? EndTime = null);
+    TimeOnly? EndTime = null,
+    IReadOnlyList<Guid>? AssigneeUserIds = null);
 
-public sealed record ChangeSubTaskStatusRequest(bool IsCompleted);
+public sealed record ChangeSubTaskStatusRequest(SubTaskStatus Status);
 
 public sealed record CreateRepetitiveTaskRequest(Guid TaskId, RecurrenceInput Recurrence);
 

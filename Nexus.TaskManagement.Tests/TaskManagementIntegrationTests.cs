@@ -22,9 +22,9 @@ public sealed class TaskManagementIntegrationTests(SqlServerFixture fixture)
     private static CreateTaskRequest PlainTask(string title = "Write the report") =>
         new(title, new DateOnly(2026, 6, 1));
 
-    private static CreateTaskRequest Project(string title, params string[] subTaskTitles) =>
+    private CreateTaskRequest Project(string title, params string[] subTaskTitles) =>
         new(title, new DateOnly(2026, 6, 1), IsProject: true,
-            SubTasks: subTaskTitles.Select(t => new SubTaskInput(t)).ToList());
+            SubTasks: subTaskTitles.Select(t => new SubTaskInput(t, AssigneeUserIds: [fixture.OwnerUserId])).ToList());
 
     // -----------------------------------------------------------------------
     // Task and project rules
@@ -123,7 +123,7 @@ public sealed class TaskManagementIntegrationTests(SqlServerFixture fixture)
 
         var subTask = await fixture.ScopedAsync(sp =>
             sp.GetRequiredService<ITaskService>()
-                .CreateSubTaskAsync(task.Value.Id, new CreateSubTaskRequest("Step"), default));
+                .CreateSubTaskAsync(task.Value.Id, new CreateSubTaskRequest("Step", AssigneeUserIds: [fixture.OwnerUserId]), default));
 
         var result = await fixture.ScopedAsync(sp =>
             sp.GetRequiredService<ITaskService>().DeleteSubTaskAsync(subTask.Value.Id, default));
@@ -149,7 +149,7 @@ public sealed class TaskManagementIntegrationTests(SqlServerFixture fixture)
 
         await fixture.ScopedAsync(sp =>
             sp.GetRequiredService<ITaskService>()
-                .CreateSubTaskAsync(task.Value.Id, new CreateSubTaskRequest("Now it has one"), default));
+                .CreateSubTaskAsync(task.Value.Id, new CreateSubTaskRequest("Now it has one", AssigneeUserIds: [fixture.OwnerUserId]), default));
 
         var accepted = await fixture.ScopedAsync(sp =>
             sp.GetRequiredService<ITaskService>().UpdateAsync(
