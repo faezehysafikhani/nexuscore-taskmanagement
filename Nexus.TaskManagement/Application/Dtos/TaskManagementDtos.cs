@@ -120,7 +120,14 @@ public sealed record TaskDto(
     TimeOnly? CharterStartTime = null,
     TimeOnly? CharterEndTime = null,
     IReadOnlyList<UserSummaryDto>? ResponsibleUsers = null,
-    IReadOnlyList<TaskPostDto>? Posts = null);
+    IReadOnlyList<TaskPostDto>? Posts = null,
+    IReadOnlyList<TaskStandInDto>? StandIns = null);
+
+/// <summary>
+/// Someone standing in for a vacant post of the task (جانشین): sees it and comments, nothing more.
+/// Note: which post («جانشین کارشناس · کد ۹»).
+/// </summary>
+public sealed record TaskStandInDto(Guid Id, string DisplayName, string? Note);
 
 /// <summary>
 /// A post the task is given to (where tasks are given to posts): Role "owner" (its creator's),

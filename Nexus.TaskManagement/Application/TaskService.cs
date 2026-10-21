@@ -1112,6 +1112,10 @@ public sealed class TaskService(
                     return new TaskPostDto(
                         post.PostId, p.Role, post.Title, post.Code, post.Place, post.HolderUserId,
                         post.HolderUserId is { } holder && users.TryGetValue(holder, out var u) ? u.DisplayName : null);
-                }).ToList());
+                }).ToList(),
+            task.Assignees
+                .Where(a => a.IsActing && users.ContainsKey(a.UserId))
+                .Select(a => new TaskStandInDto(a.UserId, users[a.UserId].DisplayName, a.ActingNote))
+                .ToList());
     }
 }

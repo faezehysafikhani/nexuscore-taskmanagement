@@ -109,6 +109,9 @@ public sealed class TaskPostsTests(AccessControlTests.Host host) : IClassFixture
         // Not part of the access list the task's screen edits.
         using var task = JsonDocument.Parse(await (await host.SendAsync(creator, HttpMethod.Get, $"/api/task-management/tasks/{taskId}")).Content.ReadAsStringAsync());
         Assert.DoesNotContain(task.RootElement.GetProperty("assignees").EnumerateArray(), a => a.GetProperty("id").GetGuid() == standIn.Id);
+        // Shown as the stand-in, with the post they stand in for.
+        var shown = Assert.Single(task.RootElement.GetProperty("standIns").EnumerateArray());
+        Assert.Equal((standIn.Id, "جانشین کارشناس · کد ۲"), (shown.GetProperty("id").GetGuid(), shown.GetProperty("note").GetString()));
 
         // The creator's post falls vacant too: the task has no owner now, and is still nobody else's to see.
         using (var scope = host.Services.CreateScope())
