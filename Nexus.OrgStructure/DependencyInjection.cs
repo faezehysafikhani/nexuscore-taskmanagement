@@ -29,6 +29,8 @@ public static class DependencyInjection
         services.AddScoped<TaskPostDirectory>();
         services.AddScoped<ITaskPosts>(provider => provider.GetRequiredService<TaskPostDirectory>());
         services.AddScoped<ISubstitutionService, SubstitutionService>();
+        // A disabled account leaves its posts.
+        services.AddScoped<IUserDeactivationListener, PostReleaseOnDeactivation>();
 
         services.AddAuthorization(options =>
         {

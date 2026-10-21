@@ -500,6 +500,33 @@ public sealed class OrgChartTeamsAndTitlesTests
         Assert.True((await world.Service.RemoveUnitPositionAsync(Tenant, deputyPost, default)).IsSuccess);
     }
 
+    [Fact]
+    public async Task ADisabledAccount_LeavesItsPosts_AndTheirTasksGoToTheInbox()
+    {
+        var world = new World();
+        var (deputyHead, a) = (world.User("معاون"), world.User("الف"));
+        var tech = world.Unit("معاونت فناوری", deputyHead);
+        var company = await world.CompanyAsync("C1");
+        await world.Service.LinkUnitAsync(Tenant, tech.Id, new LinkUnitRequest(company), default);
+        var post = await world.SeatAsync(tech.Id, "کارشناس");
+        await world.Service.SetAssignmentAsync(Tenant, a, new SetUserAssignmentRequest(company, tech.Id, null, null, [post]), default);
+        var task = Guid.NewGuid();
+        world.Updater.Summaries.Add(new TaskSummary(task, "کار باز", new DateOnly(2030, 1, 1), "Todo", false));
+        await world.TaskPosts.SetTaskPostsAsync(Tenant, task, null, [post], [], default);
+
+        await world.DeactivatedAsync(a);
+
+        Assert.Equal([new TaskPersonChange(task, TaskPostRole.Responsible, a, null)], world.Updater.Applied);
+        var placed = (await world.Service.GetAssignmentAsync(Tenant, a, default)).Value!;
+        Assert.Equal((tech.Id, (Guid?)null), (placed.UnitId!.Value, placed.PositionId));
+        Assert.Empty(placed.Positions!);
+        Assert.Equal(post, Assert.Single((await world.Substitution(deputyHead).GetInboxAsync(Tenant, default)).Value!.Posts).PostId);
+
+        // Nothing more to release the second time.
+        await world.DeactivatedAsync(a);
+        Assert.Single(world.Updater.Applied);
+    }
+
     public sealed class RecordingUpdater : ITaskPeopleUpdater
     {
         public List<TaskPersonChange> Applied { get; } = [];
@@ -721,6 +748,10 @@ public sealed class OrgChartTeamsAndTitlesTests
         public ISubstitutionService Substitution(Guid signedIn, params string[] permissions) =>
             new SubstitutionService(_repository, _structure, new OrganizationUnitRepository(_organization), TaskPosts,
                 new SignedIn(signedIn, permissions), _users, new ServiceCollection().AddSingleton<ITaskPeopleUpdater>(Updater).BuildServiceProvider());
+
+        /// <summary>The account was disabled.</summary>
+        public Task DeactivatedAsync(Guid userId) =>
+            new PostReleaseOnDeactivation(_repository, _structure, TaskPosts).UserDeactivatedAsync(Tenant, userId, default);
 
         /// <summary>Whom <paramref name="signedIn"/> may add to their work teams, holding <paramref name="permissions"/>.</summary>
         public IWorkTeamMemberScope MemberScope(Guid signedIn, params string[] permissions) =>
