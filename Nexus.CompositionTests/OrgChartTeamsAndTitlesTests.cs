@@ -21,8 +21,10 @@ public sealed class OrgChartTeamsAndTitlesTests
     // ------------------------------------------------------------------ whom a user may give tasks to
 
     /// <summary>
-    /// The company «C1»: head; deputies tech (head d1; senior s1 above expert e2) and finance (head d2;
-    /// expert e3 with no position); and someone with no place.
+    /// The company «C1»: head; deputies tech (head d1; senior s1, and expert e2 in a post under
+    /// s1's) and finance (head d2; expert e3 directly under d2); and someone with no place. The
+    /// positions: رئیس کل ← مدیر معاونت ← کارشناس ارشد ← کارشناس. e2 has three managers above them
+    /// in the chart and e3 two, but both are experts: the same level.
     /// </summary>
     private static async Task<(World World, Dictionary<string, Guid> People)> HierarchyAsync()
     {
@@ -34,15 +36,20 @@ public sealed class OrgChartTeamsAndTitlesTests
         await world.HeadAsync(company, p["head"]);
         await world.Service.LinkUnitAsync(Tenant, tech.Id, new LinkUnitRequest(company), default);
         await world.Service.LinkUnitAsync(Tenant, finance.Id, new LinkUnitRequest(company), default);
-        var senior = await world.SeatAsync(tech.Id, "کارشناس ارشد");
-        var expert = await world.SeatAsync(tech.Id, "کارشناس");
-        foreach (var (who, unit, seats) in new[]
+        async Task<Guid> PositionUnder(string title, Guid parent) =>
+            (await world.Service.CreatePositionAsync(Tenant, new CreatePositionRequest(title, parent, [company]), default)).Value!.Id;
+        var manager = await PositionUnder("مدیر معاونت", world.TopPosition);
+        var seniorPosition = await PositionUnder("کارشناس ارشد", manager);
+        var expertPosition = await PositionUnder("کارشناس", seniorPosition);
+        var senior = (await world.Service.AddUnitPositionAsync(Tenant, tech.Id, new AddUnitPositionRequest(seniorPosition), default)).Value!.Id;
+        var expert = (await world.Service.AddUnitPositionAsync(Tenant, tech.Id, new AddUnitPositionRequest(expertPosition, null, senior), default)).Value!.Id;
+        foreach (var (who, unit, position, seats) in new[]
                  {
-                     ("d1", tech.Id, Array.Empty<Guid>()), ("s1", tech.Id, [senior]), ("e2", tech.Id, [expert]),
-                     ("d2", finance.Id, []), ("e3", finance.Id, []),
+                     ("d1", tech.Id, (Guid?)manager, (Guid[]?)null), ("s1", tech.Id, null, [senior]), ("e2", tech.Id, null, [expert]),
+                     ("d2", finance.Id, manager, null), ("e3", finance.Id, expertPosition, null),
                  })
         {
-            Assert.True((await world.Service.SetAssignmentAsync(Tenant, p[who], new SetUserAssignmentRequest(company, unit, null, null, seats), default)).IsSuccess);
+            Assert.True((await world.Service.SetAssignmentAsync(Tenant, p[who], new SetUserAssignmentRequest(company, unit, position, null, seats), default)).IsSuccess);
         }
 
         return (world, p);
@@ -64,10 +71,12 @@ public sealed class OrgChartTeamsAndTitlesTests
         // A deputy's head: their own people and the other deputies' heads - not the head, not
         // another deputy's experts.
         Assert.Equal(["e3", "head"], await BlockedForAsync(world, p, "d1"));
-        // An expert: experts of other deputies, and the lower position of their own deputy.
-        Assert.Equal(["d1", "d2", "head"], await BlockedForAsync(world, p, "s1"));
-        // The lower position may not give work to the higher one of the same deputy.
+        // A senior expert: the lower position of their own deputy - not another deputy's lower people.
+        Assert.Equal(["d1", "d2", "e3", "head"], await BlockedForAsync(world, p, "s1"));
+        // An expert: the expert of another deputy (the same position level, though not as many
+        // managers above), never the higher position of their own deputy.
         Assert.Equal(["d1", "d2", "head", "s1"], await BlockedForAsync(world, p, "e2"));
+        Assert.Equal(["d1", "d2", "head", "s1"], await BlockedForAsync(world, p, "e3"));
         // Nobody may be blocked from giving work to someone with no place yet.
         Assert.DoesNotContain("nowhere", await BlockedForAsync(world, p, "e2"));
     }
