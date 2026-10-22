@@ -21,6 +21,13 @@ public sealed class OrgStructureOptions
     /// moves with its posts to their new holders. Off unless the product turns it on.
     /// </summary>
     public bool AssignTasksToPosts { get; set; }
+
+    /// <summary>
+    /// Whether everyone is kept to their own company (<see cref="CompanyReachScope"/>): they see,
+    /// message, add to teams and give tasks only to its people, and see only its structure.
+    /// Holders of OrgStructurePermissions.AllCompanies are not limited. Off unless the product turns it on.
+    /// </summary>
+    public bool LimitToOwnCompany { get; set; }
 }
 
 /// <summary>

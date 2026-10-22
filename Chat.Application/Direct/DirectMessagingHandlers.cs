@@ -19,7 +19,8 @@ namespace Chat.Application.Direct;
 public sealed class DirectConversationService(
     IChatDbContext db,
     ICurrentUserContext currentUser,
-    IUserDirectory userDirectory)
+    IUserDirectory userDirectory,
+    IUserReachScope? reachScope = null)
 {
     public const int MaxTextLength = 4000;
 
@@ -45,8 +46,20 @@ public sealed class DirectConversationService(
             return Result.Failure<(UserContact, UserContact)>(Error.NotFound("User was not found."));
         }
 
+        // Kept to one's own company (see IUserReachScope): its people only - whatever their rank.
+        if (!await CanReachAsync([otherUserId], cancellationToken))
+        {
+            return Result.Failure<(UserContact, UserContact)>(Error.NotFound("User was not found."));
+        }
+
         return Result.Success((me, other));
     }
+
+    /// <summary>Whether the signed-in user may reach all of these people (see IUserReachScope).</summary>
+    public async Task<bool> CanReachAsync(IEnumerable<Guid> userIds, CancellationToken cancellationToken) =>
+        reachScope is null || currentUser.UserId is not { } meId || currentUser.TenantId is not { } tenantId
+        || await reachScope.GetReachAsync(tenantId, meId, cancellationToken) is not { } reach
+        || userIds.All(reach.Contains);
 
     public Task<Conversation?> FindAsync(Guid meId, Guid otherUserId, CancellationToken cancellationToken)
     {
@@ -107,7 +120,8 @@ public sealed class DirectConversationService(
 /// </summary>
 public sealed class GetChatDirectoryQueryHandler(
     ICurrentUserContext currentUser,
-    IUserDirectory userDirectory)
+    IUserDirectory userDirectory,
+    IUserReachScope? reachScope = null)
     : IRequestHandler<GetChatDirectoryQuery, Result<List<ChatContactDto>>>
 {
     public async Task<Result<List<ChatContactDto>>> Handle(GetChatDirectoryQuery request, CancellationToken cancellationToken)
@@ -118,8 +132,10 @@ public sealed class GetChatDirectoryQueryHandler(
         }
 
         var users = await userDirectory.GetActiveUsersInTenantAsync(tenantId, cancellationToken);
+        // Kept to one's own company: only its people are listed.
+        var reach = reachScope is null ? null : await reachScope.GetReachAsync(tenantId, meId, cancellationToken);
         return Result.Success(users
-            .Where(user => user.Id != meId)
+            .Where(user => user.Id != meId && (reach is null || reach.Contains(user.Id)))
             .Select(user => new ChatContactDto(user.Id, user.DisplayName, user.AvatarUrl))
             .ToList());
     }

@@ -30,7 +30,8 @@ public sealed class IdentityService(
     ICurrentUserContext currentUser,
     IUserGroupPermissionProvider groupPermissions,
     IOptions<ManagedPermissionOptions> managedPermissionOptions,
-    IEnumerable<IUserDeactivationListener> deactivationListeners) : IIdentityService
+    IEnumerable<IUserDeactivationListener> deactivationListeners,
+    IUserReachScope? reachScope = null) : IIdentityService
 {
     private readonly ManagedPermissionOptions _managed = managedPermissionOptions.Value;
 
@@ -154,12 +155,19 @@ public sealed class IdentityService(
 
     public async Task<Result<PagedResult<UserDto>>> ListUsersAsync(Guid? tenantId, int? pageNumber, int? pageSize, string? search, CancellationToken cancellationToken)
     {
+        // Kept to one's own company (see IUserReachScope): other companies' people are not listed.
+        // Those with no place yet still are, so that whoever may place them finds them.
+        var resolvedTenant = currentUser.ResolveTenant(tenantId);
+        var reach = reachScope is not null && resolvedTenant is { } reachTenant && currentUser.UserId is { } me
+            ? await reachScope.GetReachAsync(reachTenant, me, cancellationToken)
+            : null;
         var users = await repository.ListUsersAsync(
-    currentUser.ResolveTenant(tenantId),
+    resolvedTenant,
     pageNumber,
     pageSize,
     search,
-    cancellationToken);
+    cancellationToken,
+    reach?.PlacedElsewhere.ToList());
 
         return Result.Success(new PagedResult<UserDto>(
             users.Items.Select(ToUserDto).ToList(),

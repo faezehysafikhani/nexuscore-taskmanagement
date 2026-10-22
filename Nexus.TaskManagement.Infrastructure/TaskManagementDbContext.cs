@@ -42,6 +42,8 @@ public sealed class TaskManagementDbContext(
     // serves every user. See ITaskAccessScope for the rule.
     private bool AccessRestricted => access?.IsRestricted ?? false;
     private Guid? AccessUserId => access?.UserId;
+    private bool AccessReachLimited => access?.ReachUserIds is not null;
+    private List<Guid> AccessReach => access?.ReachUserIds?.ToList() ?? [];
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -54,8 +56,14 @@ public sealed class TaskManagementDbContext(
         //
         // A task's team is its context, not a grant: the members who may see it are on its
         // access list (Assignees), so taking one off the list really takes the task away.
+        //
+        // A Tasks.ManageAll holder kept to their own company sees the tasks of its people.
         modelBuilder.Entity<TaskItem>().HasQueryFilter(task =>
-            !AccessRestricted
+            (!AccessRestricted
+                && (!AccessReachLimited
+                    || (task.OwnerUserId != null && AccessReach.Contains(task.OwnerUserId.Value))
+                    || (task.AssignedUserId != null && AccessReach.Contains(task.AssignedUserId.Value))
+                    || task.Assignees.Any(assignee => AccessReach.Contains(assignee.UserId))))
             || (task.OwnerUserId == null && !task.OwnerHeldByPost)
             || task.OwnerUserId == AccessUserId
             || task.AssignedUserId == AccessUserId

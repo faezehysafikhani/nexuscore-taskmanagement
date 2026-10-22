@@ -17,7 +17,8 @@ public sealed class TaskService(
     ITaskAccessScope access,
     ITaskNoticePublisher notices,
     IWorkAssignmentScope assignmentScope,
-    ITaskPosts taskPosts) : ITaskService
+    ITaskPosts taskPosts,
+    IUserReachScope reachScope) : ITaskService
 {
     /// <summary>
     /// Seeing a task (owner, assignee, collaborator, team) lets a user work on it; changing what
@@ -621,7 +622,8 @@ public sealed class TaskService(
             return Result.Failure<SubTaskDto>(NotTaskOwner());
         }
 
-        var assigneeCheck = await ValidateSubTaskAssigneesAsync(tenantId, request.AssigneeUserIds ?? [], cancellationToken);
+        var assigneeCheck = await ValidateSubTaskAssigneesAsync(
+            tenantId, request.AssigneeUserIds ?? [], cancellationToken, subTask.Assignees.Select(a => a.UserId).ToList());
         if (assigneeCheck.IsFailure)
         {
             return Result.Failure<SubTaskDto>(assigneeCheck.Error);
@@ -896,12 +898,14 @@ public sealed class TaskService(
 
         var posts = await taskPosts.ListPostsAsync(tenantId, cancellationToken);
         var limit = currentUser.UserId is { } me ? await assignmentScope.GetLimitAsync(tenantId, me, cancellationToken) : null;
+        var reach = currentUser.UserId is { } self ? await reachScope.GetReachAsync(tenantId, self, cancellationToken) : null;
         var holders = await repository.GetUserSummariesAsync(posts.Select(p => p.HolderUserId).OfType<Guid>().Distinct().ToList(), cancellationToken);
         return Result.Success(new AssignablePostsDto(true, posts
             .Select(post => new AssignablePostDto(
                 post.PostId, post.Title, post.Code, post.Place, post.HolderUserId,
                 post.HolderUserId is { } holder && holders.TryGetValue(holder, out var user) ? user.DisplayName : null,
-                post.HolderUserId is { } blocked && limit is not null && limit.BlockedUserIds.Contains(blocked)))
+                post.HolderUserId is { } blocked
+                    && ((limit is not null && limit.BlockedUserIds.Contains(blocked)) || (reach is not null && !reach.Contains(blocked)))))
             .ToList()));
     }
 
@@ -944,6 +948,13 @@ public sealed class TaskService(
             }
         }
 
+        // Where everyone is kept to their own company (see IUserReachScope): its people only.
+        var reach = currentUser.UserId is { } me ? await reachScope.GetReachAsync(tenantId, me, cancellationToken) : null;
+        if (reach is not null && newlyResponsible.Any(id => !reach.Contains(id)))
+        {
+            return Result.Failure(Error.Validation("You can give tasks only to people of your own company."));
+        }
+
         if (newlyResponsible.Count > 0 && currentUser.UserId is { } assigner
             && await assignmentScope.GetLimitAsync(tenantId, assigner, cancellationToken) is { } limit
             && newlyResponsible.Any(limit.BlockedUserIds.Contains))
@@ -957,14 +968,22 @@ public sealed class TaskService(
             {
                 return Result.Failure(Error.Validation("Only active users of this organization can be given access to the task."));
             }
+
+            if (reach is not null && !reach.Contains(id))
+            {
+                return Result.Failure(Error.Validation("Only people of your own company can be given access to the task."));
+            }
         }
 
         return Result.Success();
     }
 
-    /// <summary>Every subtask assignee must be an active user of the subtask's organization.</summary>
+    /// <summary>
+    /// Every subtask assignee must be an active user of the subtask's organization - and, where
+    /// everyone is kept to their own company, each one newly added must be of the user's company.
+    /// </summary>
     private async Task<Result> ValidateSubTaskAssigneesAsync(
-        Guid tenantId, IReadOnlyList<Guid> assigneeUserIds, CancellationToken cancellationToken)
+        Guid tenantId, IReadOnlyList<Guid> assigneeUserIds, CancellationToken cancellationToken, IReadOnlyCollection<Guid>? current = null)
     {
         foreach (var id in assigneeUserIds.Distinct())
         {
@@ -972,6 +991,14 @@ public sealed class TaskService(
             {
                 return Result.Failure(Error.Validation("Only active users of this organization can be responsible for a subtask."));
             }
+        }
+
+        var added = assigneeUserIds.Distinct().Where(id => current is null || !current.Contains(id)).ToList();
+        if (added.Count > 0 && currentUser.UserId is { } me
+            && await reachScope.GetReachAsync(tenantId, me, cancellationToken) is { } reach
+            && added.Any(id => !reach.Contains(id)))
+        {
+            return Result.Failure(Error.Validation("You can give tasks only to people of your own company."));
         }
 
         return Result.Success();

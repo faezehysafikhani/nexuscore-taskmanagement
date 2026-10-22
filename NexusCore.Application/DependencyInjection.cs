@@ -28,6 +28,9 @@ public static class DependencyInjection
         services.AddScoped<IValidator<UpdateMyProfileRequest>, UpdateMyProfileRequestValidator>();
         services.AddScoped<AuthSessionIssuer>();
         services.AddScoped<IIdentityService, IdentityService>();
+        // Everyone in the tenant may be reached unless a module limits it (Nexus.OrgStructure can,
+        // to one's own company); TryAdd so that module's registration wins whichever runs first.
+        services.TryAddScoped<IUserReachScope, UnlimitedUserReachScope>();
         services.AddScoped<IAccountService, AccountService>();
         services.AddScoped<INotificationChannelSettingsReader, NotificationChannelSettingsReader>();
         services.AddScoped<INotificationChannelService, NotificationChannelService>();

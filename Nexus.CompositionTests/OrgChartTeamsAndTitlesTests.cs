@@ -108,6 +108,111 @@ public sealed class OrgChartTeamsAndTitlesTests
         Assert.DoesNotContain(OrgStructurePermissions.All, x => x.Name == OrgStructurePermissions.AssignTasksToAnyLevel);
     }
 
+    // ------------------------------------------------------------------ kept to one's own company
+
+    /// <summary>The hierarchy above, plus a second company «C2»: head2 and the deputy head d3 of its HR deputy.</summary>
+    private static async Task<(World World, Dictionary<string, Guid> People, Guid C1, Guid C2, Guid Hr)> TwoCompaniesAsync()
+    {
+        var (world, p) = await HierarchyAsync();
+        foreach (var name in new[] { "head2", "d3" })
+        {
+            p[name] = world.User(name);
+        }
+
+        var c1 = (await world.Service.ListCompaniesAsync(Tenant, default)).Value!.Single().Id;
+        var c2 = await world.CompanyAsync("C2");
+        var hr = world.Unit("معاونت منابع انسانی", p["d3"]);
+        await world.Service.LinkUnitAsync(Tenant, hr.Id, new LinkUnitRequest(c2), default);
+        await world.HeadAsync(c2, p["head2"]);
+        Assert.True((await world.Service.SetAssignmentAsync(Tenant, p["d3"], new SetUserAssignmentRequest(c2, hr.Id, null, null), default)).IsSuccess);
+        var hrExpert = (await world.Service.CreatePositionAsync(Tenant, new CreatePositionRequest("کارشناس منابع انسانی", world.TopPosition, [c2]), default)).Value!.Id;
+        Assert.True((await world.Service.AddUnitPositionAsync(Tenant, hr.Id, new AddUnitPositionRequest(hrExpert), default)).IsSuccess);
+        return (world, p, c1, c2, hr.Id);
+    }
+
+    private static async Task<(string[] Reach, string[] Elsewhere)?> ReachOfAsync(
+        World world, Dictionary<string, Guid> people, string who, bool on = true, params string[] permissions)
+    {
+        var reach = await world.Reach(people[who], on, permissions).GetReachAsync(Tenant, people[who], default);
+        string[] Names(IReadOnlySet<Guid> ids) => people.Where(x => ids.Contains(x.Value)).Select(x => x.Key).OrderBy(x => x).ToArray();
+        return reach is null ? null : (Names(reach.UserIds), Names(reach.PlacedElsewhere));
+    }
+
+    [Fact]
+    public async Task EveryoneReaches_TheirOwnCompanyOnly_WhenTurnedOn()
+    {
+        var (world, p, _, _, _) = await TwoCompaniesAsync();
+
+        // An expert reaches all of their company - every deputy, the managers above too (to message them).
+        Assert.Equal((["d1", "d2", "e2", "e3", "head", "s1"], ["d3", "head2"]), await ReachOfAsync(world, p, "e2"));
+        // The other company's head: only their own company (headed, not placed in a unit).
+        Assert.Equal((["d3", "head2"], ["d1", "d2", "e2", "e3", "head", "s1"]), await ReachOfAsync(world, p, "head2"));
+        // Someone with no place reaches no one but themselves.
+        Assert.Equal((["nowhere"], ["d1", "d2", "d3", "e2", "e3", "head", "head2", "s1"]), await ReachOfAsync(world, p, "nowhere"));
+
+        // Off by default, and not for the permission's holders.
+        Assert.Null(await ReachOfAsync(world, p, "e2", on: false));
+        Assert.Null(await ReachOfAsync(world, p, "e2", true, OrgStructurePermissions.AllCompanies));
+        Assert.Contains(new OrgStructurePermissionCatalog().GetPermissions(), x => x.Name == OrgStructurePermissions.AllCompanies);
+        Assert.DoesNotContain(OrgStructurePermissions.All, x => x.Name == OrgStructurePermissions.AllCompanies);
+    }
+
+    [Fact]
+    public async Task TheStructure_ShowsAndChangesOnlyOnesOwnCompany()
+    {
+        var (world, p, c1, c2, hr) = await TwoCompaniesAsync();
+        var mine = world.ServiceAs(p["d1"]);
+
+        Assert.Equal([c1], (await mine.ListCompaniesAsync(Tenant, default)).Value!.Select(c => c.Id));
+        Assert.Equal([c1], (await mine.GetChartAsync(Tenant, null, default)).Value!.Select(c => c.CompanyId));
+        Assert.True((await mine.GetCompanyAsync(Tenant, c2, default)).IsFailure);
+        Assert.DoesNotContain((await mine.ListAssignmentsAsync(Tenant, null, null, default)).Value!, a => a.UserId == p["d3"] || a.UserId == p["head2"]);
+        Assert.DoesNotContain((await mine.ListCompanyUnitsAsync(Tenant, default)).Value!, link => link.CompanyId == c2);
+        Assert.DoesNotContain((await mine.ListUnitPositionsAsync(Tenant, null, default)).Value!, post => post.CompanyId == c2);
+        Assert.DoesNotContain((await mine.ListPositionsAsync(Tenant, default)).Value!, position => position.Title == "کارشناس منابع انسانی");
+        Assert.Equal([hr], (await mine.ListOtherCompaniesUnitsAsync(Tenant, default)).Value!);
+        Assert.True((await mine.GetSubordinatesAsync(Tenant, p["head2"], true, default)).IsFailure);
+
+        // Nothing of the other company changes, and no new company is made.
+        Assert.True((await mine.SetAssignmentAsync(Tenant, p["d3"], new SetUserAssignmentRequest(c1, null, null, null), default)).IsFailure);
+        Assert.True((await mine.SetAssignmentAsync(Tenant, p["nowhere"], new SetUserAssignmentRequest(c2, hr, null, null), default)).IsFailure);
+        Assert.True((await mine.UpdateCompanyAsync(Tenant, c2, new UpdateCompanyRequest("x", "C2", null, true), default)).IsFailure);
+        Assert.True((await mine.RemoveAssignmentAsync(Tenant, p["d3"], default)).IsFailure);
+        Assert.True((await mine.CreateCompanyAsync(Tenant, new CreateCompanyRequest("C3", "C3", null), default)).IsFailure);
+        Assert.True((await mine.AddUnitPositionAsync(Tenant, hr, new AddUnitPositionRequest(world.TopPosition), default)).IsFailure);
+
+        // Someone with no place yet can be placed in one's own company.
+        Assert.True((await mine.SetAssignmentAsync(Tenant, p["nowhere"], new SetUserAssignmentRequest(c1, null, null, null), default)).IsSuccess);
+
+        // The permission's holder sees and changes both.
+        var all = world.ServiceAs(p["d1"], OrgStructurePermissions.AllCompanies);
+        Assert.Equal(2, (await all.ListCompaniesAsync(Tenant, default)).Value!.Count);
+        Assert.Empty((await all.ListOtherCompaniesUnitsAsync(Tenant, default)).Value!);
+    }
+
+    [Fact]
+    public async Task WorkTeamsAndPosts_AreOfOnesOwnCompanyOnly()
+    {
+        var (world, p, _, _, _) = await TwoCompaniesAsync();
+
+        // From any deputy - but only of one's own company.
+        var any = (await world.KeptMemberScope(p["e2"], OrgStructurePermissions.TeamMembersFromAnyUnit).GetLimitAsync(Tenant, p["e2"], default))!;
+        Assert.True(any.IsCompany);
+        Assert.Equal("شرکت C1", any.ScopeName);
+        Assert.Contains(p["e3"], any.AllowedUserIds);
+        Assert.DoesNotContain(p["d3"], any.AllowedUserIds);
+        // Without it: one's own deputy, as before.
+        var own = (await world.KeptMemberScope(p["e2"]).GetLimitAsync(Tenant, p["e2"], default))!;
+        Assert.False(own.IsCompany);
+        Assert.DoesNotContain(p["e3"], own.AllowedUserIds);
+
+        // Posts to give tasks to: only one's own company's.
+        var posts = await world.PostsAsSeenByAsync(p["e2"]);
+        Assert.NotEmpty(posts);
+        Assert.DoesNotContain(posts, post => post.Place.Contains("C2"));
+        Assert.Contains(await world.PostsAsSeenByAsync(p["d3"]), post => post.Place.Contains("C2"));
+    }
+
     // ------------------------------------------------------------------ positions of a unit
 
     [Fact]
@@ -783,6 +888,34 @@ public sealed class OrgChartTeamsAndTitlesTests
         /// <summary>Whom <paramref name="signedIn"/> may add to their work teams, holding <paramref name="permissions"/>.</summary>
         public IWorkTeamMemberScope MemberScope(Guid signedIn, params string[] permissions) =>
             new DeputyWorkTeamMemberScope(_repository, new OrganizationUnitRepository(_organization), new SignedIn(signedIn, permissions));
+
+        /// <summary>Whom <paramref name="signedIn"/> reaches, with the company limit turned <paramref name="on"/>.</summary>
+        public CompanyReachScope Reach(Guid signedIn, bool on = true, params string[] permissions) =>
+            new(_repository, new SignedIn(signedIn, permissions),
+                Microsoft.Extensions.Options.Options.Create(new OrgStructureOptions { LimitToOwnCompany = on }));
+
+        /// <summary>The structure as <paramref name="signedIn"/> sees and changes it, kept to their own company.</summary>
+        public IOrgStructureService ServiceAs(Guid signedIn, params string[] permissions) =>
+            new OrgStructureService(_repository, _structure, new OrganizationUnitRepository(_organization), _users, _teams, TaskPosts,
+                Reach(signedIn, true, permissions), new SignedIn(signedIn, permissions));
+
+        /// <summary>Whom <paramref name="signedIn"/> may add to their work teams, kept to their own company.</summary>
+        public IWorkTeamMemberScope KeptMemberScope(Guid signedIn, params string[] permissions) =>
+            new DeputyWorkTeamMemberScope(_repository, new OrganizationUnitRepository(_organization), new SignedIn(signedIn, permissions),
+                Reach(signedIn, true, permissions));
+
+        /// <summary>The posts tasks may be given to, as <paramref name="signedIn"/> (kept to their own company) sees them.</summary>
+        public Task<IReadOnlyList<WorkPost>> PostsAsSeenByAsync(Guid signedIn)
+        {
+            var who = new SignedIn(signedIn, []);
+            var provider = new ServiceCollection()
+                .AddSingleton<ICurrentUserContext>(who)
+                .AddSingleton(new CompanyReachScope(_repository, who,
+                    Microsoft.Extensions.Options.Options.Create(new OrgStructureOptions { LimitToOwnCompany = true })))
+                .BuildServiceProvider();
+            return new TaskPostDirectory(_repository, _structure, new OrganizationUnitRepository(_organization),
+                Microsoft.Extensions.Options.Options.Create(new OrgStructureOptions { AssignTasksToPosts = true }), provider).ListPostsAsync(Tenant, default);
+        }
 
         /// <summary>Whom <paramref name="signedIn"/> may not give tasks to, with the limit turned <paramref name="on"/>.</summary>
         public IWorkAssignmentScope AssignmentScope(Guid signedIn, bool on, params string[] permissions) =>

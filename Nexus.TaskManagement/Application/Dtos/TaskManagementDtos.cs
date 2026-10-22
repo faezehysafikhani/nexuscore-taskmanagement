@@ -358,5 +358,9 @@ public sealed record CreateTaskActivityRequest(string Action, string? Details = 
 /// </summary>
 public sealed record UploadFileRequest(string FileName, string ContentType, byte[] Content);
 
-/// <summary>Limited: the product limits whom the user may make responsible; BlockedUserIds: who they may not.</summary>
-public sealed record AssignmentLimitDto(bool Limited, IReadOnlyList<Guid> BlockedUserIds);
+/// <summary>
+/// Limited: the product limits whom the user may make responsible by level; BlockedUserIds: who they
+/// may not. AllowedUserIds: where everyone is kept to their own company, the only people they may
+/// (null: not kept) - other companies' people are in BlockedUserIds too.
+/// </summary>
+public sealed record AssignmentLimitDto(bool Limited, IReadOnlyList<Guid> BlockedUserIds, IReadOnlyList<Guid>? AllowedUserIds = null);
