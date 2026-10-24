@@ -49,7 +49,8 @@ if ($existingBuildNumbers.Count -eq 0) {
     $buildNumber = 1
 }
 else {
-    $buildNumber = ($existingBuildNumbers | Measure-Object -Maximum).Maximum + 1
+    # Measure-Object returns a double, which "{0:D2}" cannot format.
+    $buildNumber = [int](($existingBuildNumbers | Measure-Object -Maximum).Maximum) + 1
 }
 
 if ($buildNumber -gt 99) {
