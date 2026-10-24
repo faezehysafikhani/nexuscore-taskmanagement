@@ -50,10 +50,18 @@ public sealed class PlatformService(
         return Result.Success(await repository.ListAuditLogsAsync(safe, cancellationToken));
     }
 
+    // Settings that have a screen and a permission of their own (SMS channels and quiet hours,
+    // LDAP, reminders) hold secrets or drive outgoing traffic. They are changed and read only
+    // through those endpoints; the generic settings API must not be a way around them.
+    private static readonly string[] ReservedKeyPrefixes = ["Notifications.", "Identity.", "TaskManagement."];
+
+    private static bool IsReserved(string key) =>
+        ReservedKeyPrefixes.Any(prefix => key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+
     public async Task<Result<IReadOnlyList<SettingDto>>> ListSettingsAsync(Guid? tenantId, CancellationToken cancellationToken)
     {
         var settings = await repository.ListSettingsAsync(currentUserContext.ResolveTenant(tenantId), cancellationToken);
-        return Result.Success<IReadOnlyList<SettingDto>>(settings.Select(ToSettingDto).ToList());
+        return Result.Success<IReadOnlyList<SettingDto>>(settings.Where(setting => !IsReserved(setting.Key)).Select(ToSettingDto).ToList());
     }
 
     public async Task<Result<SettingDto>> UpsertSettingAsync(UpsertSettingRequest request, CancellationToken cancellationToken)
@@ -61,6 +69,11 @@ public sealed class PlatformService(
         if (string.IsNullOrWhiteSpace(request.Key))
         {
             return Result.Failure<SettingDto>(Error.Validation("Setting key is required."));
+        }
+
+        if (IsReserved(request.Key.Trim()))
+        {
+            return Result.Failure<SettingDto>(Error.Forbidden("This setting is managed on its own screen and cannot be changed here."));
         }
 
         // A system-wide setting (no tenant) or another organization's needs tenants.manage_all.

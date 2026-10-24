@@ -67,9 +67,10 @@ public sealed class DefaultDataSeeder(
         if (builtInAdmin is null)
         {
             var configuredPassword = seedOptions.Value.AdminPassword;
-            if (environment.IsProduction() && (string.IsNullOrWhiteSpace(configuredPassword) || configuredPassword.Length < 12 || configuredPassword == "Admin@12345"))
+            // Every environment but local development: Staging/UAT boxes hold real data too.
+            if (!environment.IsDevelopment() && (string.IsNullOrWhiteSpace(configuredPassword) || configuredPassword.Length < 12 || configuredPassword == "Admin@12345"))
             {
-                throw new InvalidOperationException("Identity:AdminPassword must be a unique password of at least 12 characters before creating the administrator in production.");
+                throw new InvalidOperationException("Identity:AdminPassword must be a unique password of at least 12 characters before creating the administrator outside local development.");
             }
             var initialPassword = string.IsNullOrWhiteSpace(configuredPassword) ? "Admin@12345" : configuredPassword;
             var admin = new User(AdminUserId, DefaultTenantId, "admin@nexus.local", "System Administrator", passwordHasher.HashPassword(initialPassword), true);

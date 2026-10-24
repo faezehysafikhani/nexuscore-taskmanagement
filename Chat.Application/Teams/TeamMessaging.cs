@@ -275,6 +275,12 @@ public sealed class SendTeamMessageCommandHandler(
                 "This file type is not allowed. Only Excel, Word, PDF, image and voice files can be uploaded."));
         }
 
+        if (request.Attachment is { } headCheck
+            && !await AllowedUploadTypes.StreamMatchesAsync(headCheck.FileName, headCheck.Content, cancellationToken))
+        {
+            return Result.Failure<TeamMessageDto>(Error.Validation("The file content does not match its type. Upload a genuine Excel, Word, PDF, image or voice file."));
+        }
+
         if (request.Attachment is { } sizeCheck)
         {
             var maxConfiguredBytes = await uploadPolicy.GetMaxFileSizeKbAsync(currentUser.TenantId, cancellationToken) * 1024L;
@@ -303,7 +309,7 @@ public sealed class SendTeamMessageCommandHandler(
                 fileName = "attachment";
             }
 
-            var contentType = string.IsNullOrWhiteSpace(attachment.ContentType) ? "application/octet-stream" : attachment.ContentType;
+            var contentType = AllowedUploadTypes.ContentTypeFor(fileName);
             var stored = await fileStorage.SaveAsync(fileName, contentType, attachment.Content, cancellationToken);
             message.AttachFile(fileName.Length > 260 ? fileName[..260] : fileName, contentType, stored.SizeBytes, stored.StorageKey);
         }

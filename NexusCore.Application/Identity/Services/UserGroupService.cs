@@ -175,6 +175,25 @@ public sealed class UserGroupService(
         }
 
         var previousMemberIds = group.Members.Select(member => member.UserId).ToList();
+
+        // A group hands its permissions to its members, so adding someone is granting those
+        // permissions: nobody adds a person - themselves included - to a group whose permissions
+        // they do not hold themselves (same rule as for roles and direct permissions).
+        var newMemberIds = request.UserIds.Distinct().Except(previousMemberIds).ToList();
+        if (newMemberIds.Count > 0 && group.Permissions.Count > 0 && currentUser.UserId is not null)
+        {
+            var permissionsById = (await identityRepository.ListPermissionsAsync(cancellationToken)).ToDictionary(permission => permission.Id);
+            var notHeld = group.Permissions
+                .Select(grant => permissionsById.GetValueOrDefault(grant.PermissionId))
+                .Where(permission => permission is not null && _managed.IsManaged(permission) && !currentUser.HasPermission(permission.Name))
+                .Select(permission => permission!.Name)
+                .ToList();
+            if (notHeld.Count > 0)
+            {
+                return Result.Failure(Error.Forbidden("You can only add members to a group whose permissions you have yourself: " + string.Join(", ", notHeld)));
+            }
+        }
+
         group.SetMembers(request.UserIds);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await platformService.AuditAsync("groups.manage_members", nameof(UserGroup), group.Id.ToString(), string.Join(",", request.UserIds), cancellationToken);
