@@ -28,6 +28,8 @@ public sealed class TaskNoticeNotifications(
     public const string DueSoon = "task.due_soon";
     public const string Overdue = "task.overdue";
     public const string RecurringSoon = "task.recurring_soon";
+    /// <summary>The status of a past-due, unfinished task changed (told in the app when it is not texted).</summary>
+    public const string OverdueChanged = "task.overdue_changed";
 
     /// <summary>The history entry the task screen records itself for a new task (with its people).</summary>
     public const string AppCreationEntry = "ثبت و ایجاد فعالیت جدید";

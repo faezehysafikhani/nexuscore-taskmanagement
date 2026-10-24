@@ -7,6 +7,7 @@ using NexusCore.Application.Identity.Interfaces;
 using NexusCore.Application.Messaging;
 using NexusCore.SharedKernel.Domain;
 using NexusCore.SharedKernel.Results;
+using Notifications.Application.Abstractions;
 
 namespace Nexus.Integrations.TaskNotifications;
 
@@ -186,7 +187,8 @@ public sealed class TaskChangeSmsNotifier(IServiceScopeFactory scopeFactory)
 /// When the status of a past-due, unfinished task changes, tells its creator and the people
 /// responsible for it by SMS ("task_overdue_changed") - never the one who made the change. Only
 /// when the SMS panel is on and that template is not turned off; in the organization's quiet
-/// hours it is kept and sent when they end. Runs in the background, best-effort.
+/// hours it is kept and sent when they end. Whoever cannot be texted (the panel is off, no number,
+/// SMS switched off) is told in the app instead. Runs in the background, best-effort.
 /// </summary>
 public sealed class TaskOverdueChangeSmsNotifier(IServiceScopeFactory scopeFactory) : IDomainEventHandler<TaskItemOverdueStatusChanged>
 {
@@ -213,12 +215,6 @@ public sealed class TaskOverdueChangeSmsNotifier(IServiceScopeFactory scopeFacto
 
         try
         {
-            var sms = services.GetRequiredService<ITaskSmsSender>();
-            if (!await sms.IsEnabledAsync(change.TenantId, CancellationToken.None))
-            {
-                return;
-            }
-
             var task = await services.GetRequiredService<ITaskRepository>().GetByIdAsync(change.TenantId, change.TaskId, CancellationToken.None);
             if (task is null)
             {
@@ -232,13 +228,6 @@ public sealed class TaskOverdueChangeSmsNotifier(IServiceScopeFactory scopeFacto
                 .Where(id => id != change.ChangedByUserId)
                 .ToList();
             if (userIds.Count == 0)
-            {
-                return;
-            }
-
-            var phones = await services.GetRequiredService<IUserContactResolver>()
-                .GetPhoneNumbersAsync(change.TenantId, userIds, CancellationToken.None);
-            if (phones.Count == 0)
             {
                 return;
             }
@@ -261,20 +250,57 @@ public sealed class TaskOverdueChangeSmsNotifier(IServiceScopeFactory scopeFacto
             {
                 ["TaskTitle"] = task.Title, ["DueDate"] = due, ["StatusTitle"] = status, ["ActorName"] = actor,
             };
-            var fallback = $"وضعیت فعالیت موعدگذشته‌ی «{task.Title}» توسط {actor} به «{status}» تغییر کرد.\nموعد: {due}";
+            var text = $"وضعیت فعالیت موعدگذشته‌ی «{task.Title}» توسط {actor} به «{status}» تغییر کرد.\nموعد: {due}";
 
-            foreach (var phone in phones.Values.Distinct(StringComparer.Ordinal))
+            // By SMS when the SMS panel is on (and the person has a number and SMS on, and the
+            // template is not turned off); everybody else - and everybody when the panel is off -
+            // is told in the app instead, so nobody who cares is left out.
+            var told = new HashSet<Guid>();
+            var sms = services.GetRequiredService<ITaskSmsSender>();
+            if (await sms.IsEnabledAsync(change.TenantId, CancellationToken.None))
             {
-                var sent = await sms.SendTemplateAsync(change.TenantId, phone, TaskSmsTemplateKeys.TaskOverdueChanged, values, fallback, CancellationToken.None);
-                if (sent.IsFailure)
+                var phones = await services.GetRequiredService<IUserContactResolver>()
+                    .GetPhoneNumbersAsync(change.TenantId, userIds, CancellationToken.None);
+                var texted = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var (userId, phone) in phones)
                 {
-                    logger.LogWarning("Task {TaskId}: overdue-change SMS not sent: {Error}", task.Id, sent.Error.Message);
+                    if (!texted.Add(phone))
+                    {
+                        told.Add(userId);
+                        continue;
+                    }
+
+                    var sent = await sms.SendTemplateAsync(change.TenantId, phone, TaskSmsTemplateKeys.TaskOverdueChanged, values, text, CancellationToken.None);
+                    if (sent.IsSuccess)
+                    {
+                        told.Add(userId);
+                    }
+                    else
+                    {
+                        logger.LogWarning("Task {TaskId}: overdue-change SMS not sent: {Error}", task.Id, sent.Error.Message);
+                    }
+                }
+            }
+
+            foreach (var userId in userIds.Where(id => !told.Contains(id)))
+            {
+                try
+                {
+                    await using var notifyScope = scopeFactory.CreateAsyncScope();
+                    await notifyScope.ServiceProvider.GetRequiredService<INotificationService>().NotifyAsync(
+                        new NotificationRequest(userId, task.Title, text, "Info", change.TenantId, TaskNoticeNotifications.OverdueChanged,
+                            task.Id, change.ChangedByUserId, actor),
+                        CancellationToken.None);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Task {TaskId}: overdue-change notification for user {UserId} was not stored.", task.Id, userId);
                 }
             }
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Overdue-change SMS for task {TaskId} failed.", change.TaskId);
+            logger.LogError(ex, "Overdue-change message for task {TaskId} failed.", change.TaskId);
         }
     }
 }
