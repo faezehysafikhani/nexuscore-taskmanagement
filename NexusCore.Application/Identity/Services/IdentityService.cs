@@ -29,7 +29,9 @@ public sealed class IdentityService(
     AuthSessionIssuer sessionIssuer,
     ICurrentUserContext currentUser,
     IUserGroupPermissionProvider groupPermissions,
-    IOptions<ManagedPermissionOptions> managedPermissionOptions) : IIdentityService
+    IOptions<ManagedPermissionOptions> managedPermissionOptions,
+    IEnumerable<IUserDeactivationListener> deactivationListeners,
+    IUserReachScope? reachScope = null) : IIdentityService
 {
     private readonly ManagedPermissionOptions _managed = managedPermissionOptions.Value;
 
@@ -153,12 +155,19 @@ public sealed class IdentityService(
 
     public async Task<Result<PagedResult<UserDto>>> ListUsersAsync(Guid? tenantId, int? pageNumber, int? pageSize, string? search, CancellationToken cancellationToken)
     {
+        // Kept to one's own company (see IUserReachScope): other companies' people are not listed.
+        // Those with no place yet still are, so that whoever may place them finds them.
+        var resolvedTenant = currentUser.ResolveTenant(tenantId);
+        var reach = reachScope is not null && resolvedTenant is { } reachTenant && currentUser.UserId is { } me
+            ? await reachScope.GetReachAsync(reachTenant, me, cancellationToken)
+            : null;
         var users = await repository.ListUsersAsync(
-    currentUser.ResolveTenant(tenantId),
+    resolvedTenant,
     pageNumber,
     pageSize,
     search,
-    cancellationToken);
+    cancellationToken,
+    reach?.PlacedElsewhere.ToList());
 
         return Result.Success(new PagedResult<UserDto>(
             users.Items.Select(ToUserDto).ToList(),
@@ -291,6 +300,10 @@ public sealed class IdentityService(
         if (statusChanges)
         {
             await platformService.AuditAsync(user.IsActive ? "users.enable" : "users.disable", nameof(User), user.Id.ToString(), user.Username, cancellationToken);
+            if (!user.IsActive)
+            {
+                await TellDeactivatedAsync(user, cancellationToken);
+            }
         }
 
         return Result.Success(ToUserDto(user));
@@ -315,6 +328,7 @@ public sealed class IdentityService(
             return Result.Failure<UserDto>(Error.Validation("You cannot disable your own account."));
         }
 
+        var wasActive = user.IsActive;
         user.SetActive(request.IsActive);
         if (!request.IsActive)
         {
@@ -324,7 +338,21 @@ public sealed class IdentityService(
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await platformService.AuditAsync(request.IsActive ? "users.enable" : "users.disable", nameof(User), user.Id.ToString(), user.Username, cancellationToken);
+        if (wasActive && !request.IsActive)
+        {
+            await TellDeactivatedAsync(user, cancellationToken);
+        }
+
         return Result.Success(ToUserDto(user));
+    }
+
+    /// <summary>The optional modules release what a disabled person held (their posts...).</summary>
+    private async Task TellDeactivatedAsync(User user, CancellationToken cancellationToken)
+    {
+        foreach (var listener in deactivationListeners)
+        {
+            await listener.UserDeactivatedAsync(user.TenantId, user.Id, cancellationToken);
+        }
     }
 
     public async Task<Result> DeleteUserAsync(Guid userId, CancellationToken cancellationToken)

@@ -74,7 +74,7 @@ public sealed class TaskDueTimeTests(SqlServerFixture fixture)
             new CreateTaskRequest("Chartered", new DateOnly(2026, 11, 30), IsProject: true,
                 CharterStartDate: new DateOnly(2026, 11, 1), CharterEndDate: new DateOnly(2026, 11, 30),
                 CharterStartTime: new TimeOnly(8, 15), CharterEndTime: new TimeOnly(17, 45),
-                SubTasks: [new SubTaskInput("Design", SubTaskImportance.Medium)], AssignedUserId: fixture.OwnerUserId), default));
+                SubTasks: [new SubTaskInput("Design", SubTaskImportance.Medium, AssigneeUserIds: [fixture.OwnerUserId])], AssignedUserId: fixture.OwnerUserId), default));
         Assert.True(project.IsSuccess, project.IsFailure ? project.Error.Message : null);
 
         var read = await fixture.ScopedAsync(sp => sp.GetRequiredService<ITaskService>().GetAsync(project.Value!.Id, default));
@@ -99,7 +99,7 @@ public sealed class TaskDueTimeTests(SqlServerFixture fixture)
             new CreateTaskRequest("Project", new DateOnly(2026, 10, 5), IsProject: true, SubTasks:
             [
                 new SubTaskInput("Design", StartDate: new DateOnly(2026, 10, 1), EndDate: new DateOnly(2026, 10, 2),
-                    StartTime: new TimeOnly(9, 0), EndTime: new TimeOnly(17, 45)),
+                    StartTime: new TimeOnly(9, 0), EndTime: new TimeOnly(17, 45), AssigneeUserIds: [fixture.OwnerUserId]),
             ], AssignedUserId: fixture.OwnerUserId), default));
         Assert.True(project.IsSuccess, project.IsFailure ? project.Error.Message : null);
         var design = Assert.Single(project.Value!.SubTasks);
@@ -108,12 +108,12 @@ public sealed class TaskDueTimeTests(SqlServerFixture fixture)
 
         var updated = await fixture.ScopedAsync(sp => sp.GetRequiredService<ITaskService>().UpdateSubTaskAsync(design.Id,
             new UpdateSubTaskRequest("Design", SubTaskImportance.Medium, new DateOnly(2026, 10, 1), null, 0,
-                StartTime: new TimeOnly(10, 15), EndTime: new TimeOnly(18, 0)), default));
+                StartTime: new TimeOnly(10, 15), EndTime: new TimeOnly(18, 0), AssigneeUserIds: [fixture.OwnerUserId]), default));
         Assert.Equal(new TimeOnly(10, 15), updated.Value!.StartTime);
         Assert.Null(updated.Value.EndTime); // no end date, so no end time
 
         var added = await fixture.ScopedAsync(sp => sp.GetRequiredService<ITaskService>().CreateSubTaskAsync(project.Value!.Id,
-            new CreateSubTaskRequest("Build", StartDate: new DateOnly(2026, 10, 3), StartTime: new TimeOnly(0, 0)), default));
+            new CreateSubTaskRequest("Build", StartDate: new DateOnly(2026, 10, 3), StartTime: new TimeOnly(0, 0), AssigneeUserIds: [fixture.OwnerUserId]), default));
         Assert.Equal(TimeOnly.MinValue, added.Value!.StartTime);
 
         var reread = await fixture.ScopedAsync(sp => sp.GetRequiredService<ITaskService>().GetSubTaskAsync(design.Id, default));

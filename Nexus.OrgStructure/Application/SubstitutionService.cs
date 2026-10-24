@@ -12,7 +12,8 @@ public sealed record SubstitutionInboxDto(bool Enabled, bool CanManageAll, IRead
 
 /// <summary>
 /// A vacant post with open tasks: what the inbox shows of them (title, due date, status), who
-/// stands in for it (Acting, null: nobody) and the posts that may (filled ones of its company).
+/// stands in for it (Acting, null: nobody) and the posts that may (filled ones of its company,
+/// but not those of the managers above it).
 /// </summary>
 public sealed record VacantPostDto(
     Guid PostId,
@@ -82,8 +83,10 @@ public sealed class SubstitutionService(
                     .ToList();
                 var acting = state.Actings.FirstOrDefault(a => a.VacantPostId == post.PostId);
                 var company = state.CompanyOf(post.PostId);
+                var above = state.SuperiorsOf(post.PostId).ToHashSet();
                 var candidates = state.Posts.Values
-                    .Where(other => other.HolderUserId is not null && other.PostId != post.PostId && state.CompanyOf(other.PostId) == company)
+                    .Where(other => other.HolderUserId is { } holder && !above.Contains(holder)
+                        && other.PostId != post.PostId && state.CompanyOf(other.PostId) == company)
                     .OrderBy(other => other.Place).ThenBy(other => other.Title)
                     .Select(Ref)
                     .ToList();
@@ -106,10 +109,16 @@ public sealed class SubstitutionService(
             return refused;
         }
 
-        if (!state.Posts.TryGetValue(request.ActingPostId, out var acting) || acting.HolderUserId is null
+        if (!state.Posts.TryGetValue(request.ActingPostId, out var acting) || acting.HolderUserId is not { } actingHolder
             || request.ActingPostId == vacantPostId || state.CompanyOf(request.ActingPostId) != state.CompanyOf(vacantPostId))
         {
             return Result.Failure(Error.Validation("The post put in charge must be another post of the company that someone holds."));
+        }
+
+        // Not one of the managers above the vacant post: a stand-in is someone at its level or below.
+        if (state.SuperiorsOf(vacantPostId).Contains(actingHolder))
+        {
+            return Result.Failure(Error.Validation("A manager above the vacant post can't be put in charge of it."));
         }
 
         var current = state.Actings.FirstOrDefault(a => a.VacantPostId == vacantPostId);
@@ -182,11 +191,15 @@ public sealed class SubstitutionService(
         var seats = (await repository.ListUnitPositionsAsync(tenantId, cancellationToken)).ToDictionary(seat => seat.Id);
         var positions = (await repository.ListPositionsAsync(tenantId, cancellationToken)).ToDictionary(position => position.Id);
         var assignments = await repository.ListAssignmentsAsync(tenantId, cancellationToken);
+        var postSuperiors = PostSuperiors.Of(
+            assignments.Select(a => new PostSuperiors.Placement(a.UserId, a.CompanyId, a.UnitId, a.PositionId)),
+            seats.Values, await repository.ListUserPositionsAsync(tenantId, cancellationToken));
         var resolver = new HierarchyResolver(
             unitList.Select(unit => new UnitNode(unit.Id, null, unit.ManagerUserId)),
             (await repository.ListCompanyUnitsAsync(tenantId, cancellationToken)).ToDictionary(link => link.UnitId, link => link.CompanyId),
             companies.ToDictionary(company => company.Key, company => company.Value.ManagerUserId),
-            assignments.Select(a => new AssignmentNode(a.UserId, a.CompanyId, a.UnitId, a.ManagerUserId)));
+            assignments.Select(a => new AssignmentNode(a.UserId, a.CompanyId, a.UnitId, a.ManagerUserId,
+                postSuperiors.TryGetValue(a.UserId, out var superior) ? superior : null)));
         var posts = (await taskPosts.ListPostsAsync(tenantId, cancellationToken)).ToDictionary(post => post.PostId);
         return new State(
             posts,
@@ -212,15 +225,25 @@ public sealed class SubstitutionService(
         public Guid? CompanyOf(Guid postId) => Seats.GetValueOrDefault(postId)?.CompanyId;
 
         /// <summary>
-        /// The managers above a post: its unit's manager (for a post directly in the company, or a
-        /// unit with no manager: the company's head), and their managers in turn. The head's own
-        /// post has only those above the head.
+        /// The managers above a post: the holder of the nearest post above it that someone holds,
+        /// else its unit's manager (for a post directly in the company, or a unit with no manager:
+        /// the company's head), and their managers in turn. The head's own post has only those
+        /// above the head.
         /// </summary>
         public IReadOnlyList<Guid> SuperiorsOf(Guid postId)
         {
             if (Seats.GetValueOrDefault(postId) is not { } seat)
             {
                 return [];
+            }
+
+            var visited = new HashSet<Guid> { seat.Id };
+            for (var parent = seat.ParentPostId; parent is { } parentId && visited.Add(parentId) && Seats.TryGetValue(parentId, out var above); parent = above.ParentPostId)
+            {
+                if (Posts.GetValueOrDefault(parentId)?.HolderUserId is { } holder)
+                {
+                    return [holder, .. Resolver.ManagementChainOf(holder)];
+                }
             }
 
             var isHeadPost = seat.UnitId is null && Positions.GetValueOrDefault(seat.PositionId) is { ParentPositionId: null };

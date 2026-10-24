@@ -328,6 +328,9 @@ namespace Nexus.OrgStructure.Infrastructure.Migrations.OrgStructure
                     b.Property<Guid?>("ModifiedByUserId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid?>("ParentPostId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<Guid>("PositionId")
                         .HasColumnType("uniqueidentifier");
 
@@ -341,6 +344,8 @@ namespace Nexus.OrgStructure.Infrastructure.Migrations.OrgStructure
                         .HasColumnType("uniqueidentifier");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ParentPostId");
 
                     b.HasIndex("PositionId");
 

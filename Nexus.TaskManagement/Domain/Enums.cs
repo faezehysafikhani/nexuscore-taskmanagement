@@ -28,6 +28,17 @@ public enum SubTaskImportance
     High = 2
 }
 
+/// <summary>
+/// A subtask's own lifecycle, independent of its parent task's. Advances one step at a time -
+/// see <see cref="SubTask.Advance"/> - recording when it actually started and finished.
+/// </summary>
+public enum SubTaskStatus
+{
+    NotStarted = 0,
+    InProgress = 1,
+    Completed = 2
+}
+
 /// <summary>Mirrors the UI's RecurringFrequency union.</summary>
 public enum RecurrenceFrequency
 {

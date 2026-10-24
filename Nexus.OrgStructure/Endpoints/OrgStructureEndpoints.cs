@@ -88,6 +88,10 @@ public static class OrgStructureEndpoints
                 InTenant(user, tenant => service.UpdateUnitPositionAsync(tenant, id, request, ct)))
             .RequireAuthorization(OrgStructurePermissions.ManagePositions);
 
+        group.MapPut("/unit-positions/{id:guid}/parent", (Guid id, SetPostParentRequest request, ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.SetPostParentAsync(tenant, id, request, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ManagePositions);
+
         group.MapPut("/units/{unitId:guid}/positions/order", (Guid unitId, OrderUnitPositionsRequest request, ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
                 InTenant(user, tenant => service.OrderUnitPositionsAsync(tenant, unitId, request, ct)))
             .RequireAuthorization(OrgStructurePermissions.ManagePositions);
@@ -148,6 +152,11 @@ public static class OrgStructureEndpoints
         group.MapGet("/unplaced-users", (ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
                 InTenant(user, tenant => service.ListUnplacedUsersAsync(tenant, ct)))
             .RequireAuthorization(OrgStructurePermissions.ReadPolicy);
+
+        // Units of other companies, which someone kept to their own company does not see (just
+        // their ids, so a list of units can leave them out; empty when not kept).
+        group.MapGet("/other-companies-units", (ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
+            InTenant(user, tenant => service.ListOtherCompaniesUnitsAsync(tenant, ct)));
 
         // Work teams whose builder is in no unit of a company (the chart shows the rest under units).
         group.MapGet("/teams-outside-units", (ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>

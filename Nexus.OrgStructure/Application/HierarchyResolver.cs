@@ -10,12 +10,67 @@ public enum ManagerSource
     UnitManager = 1,
 
     /// <summary>The head of the user's company.</summary>
-    CompanyManager = 2
+    CompanyManager = 2,
+
+    /// <summary>The holder of the post above the user's own (the nearest one someone holds).</summary>
+    PostSuperior = 3
 }
 
 public sealed record UnitNode(Guid Id, Guid? ParentId, Guid? ManagerUserId);
 
-public sealed record AssignmentNode(Guid UserId, Guid CompanyId, Guid? UnitId, Guid? ManagerUserId);
+/// <summary>PostSuperiorUserId: who holds the post above the user's own (see <see cref="PostSuperiors"/>).</summary>
+public sealed record AssignmentNode(Guid UserId, Guid CompanyId, Guid? UnitId, Guid? ManagerUserId, Guid? PostSuperiorUserId = null);
+
+/// <summary>
+/// Posts under posts (معاون above کارشناس, a head of office above its staff...): a placed person's
+/// superior through their post is the holder of the nearest post above their main post that
+/// someone else holds; a vacant post above is passed over. The main post: the one of their main
+/// position in their own place (unit, or directly in the company), else the first they hold there.
+/// </summary>
+public static class PostSuperiors
+{
+    public sealed record Placement(Guid UserId, Guid CompanyId, Guid? UnitId, Guid? PositionId);
+
+    public static IReadOnlyDictionary<Guid, Guid> Of(
+        IEnumerable<Placement> placements,
+        IEnumerable<Domain.UnitPosition> seats,
+        IEnumerable<Domain.UserPosition> holdings,
+        Func<Domain.UnitPosition, Guid?>? parentOf = null)
+    {
+        parentOf ??= seat => seat.ParentPostId;
+        var byId = seats.ToDictionary(seat => seat.Id);
+        var holdingList = holdings.ToList();
+        var holderOf = holdingList.GroupBy(h => h.UnitPositionId).ToDictionary(group => group.Key, group => group.First().UserId);
+        var heldBy = holdingList.ToLookup(h => h.UserId, h => h.UnitPositionId);
+        var result = new Dictionary<Guid, Guid>();
+        foreach (var placement in placements)
+        {
+            var own = heldBy[placement.UserId].Select(id => byId.GetValueOrDefault(id)).OfType<Domain.UnitPosition>()
+                .Where(seat => seat.CompanyId == placement.CompanyId && seat.UnitId == placement.UnitId)
+                .ToList();
+            var main = own.FirstOrDefault(seat => seat.PositionId == placement.PositionId) ?? own.OrderBy(seat => seat.SortOrder).FirstOrDefault();
+            if (main is null)
+            {
+                continue;
+            }
+
+            var visited = new HashSet<Guid> { main.Id };
+            var parent = parentOf(main);
+            while (parent is { } postId && visited.Add(postId) && byId.TryGetValue(postId, out var above))
+            {
+                if (holderOf.TryGetValue(postId, out var holder) && holder != placement.UserId)
+                {
+                    result[placement.UserId] = holder;
+                    break;
+                }
+
+                parent = parentOf(above);
+            }
+        }
+
+        return result;
+    }
+}
 
 public sealed record ResolvedManager(Guid ManagerUserId, ManagerSource Source);
 
@@ -183,6 +238,11 @@ public sealed class HierarchyResolver
         if (assignment.ManagerUserId is { } explicitManager && explicitManager != assignment.UserId)
         {
             return new ResolvedManager(explicitManager, ManagerSource.Explicit);
+        }
+
+        if (assignment.PostSuperiorUserId is { } superior && superior != assignment.UserId)
+        {
+            return new ResolvedManager(superior, ManagerSource.PostSuperior);
         }
 
         var visited = new HashSet<Guid>();

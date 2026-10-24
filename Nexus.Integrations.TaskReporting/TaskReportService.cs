@@ -18,7 +18,8 @@ public interface ITaskReportService
 /// Which tasks a report covers: every task the caller can already see (owner, responsible, on
 /// its access list, or ownerless), plus every task created by or assigned to anyone below them in
 /// the organization structure, at any depth and whatever their position - even tasks the caller
-/// is not otherwise on. Tasks.ManageAll holders cover the whole organization.
+/// is not otherwise on. Tasks.ManageAll holders cover the whole organization - or, where everyone
+/// is kept to their own company (see IUserReachScope), the tasks of that company's people.
 ///
 /// The subordinates' tasks are why this reads with IgnoreQueryFilters: Task Management's own
 /// query filter would hide them. The tenant and the rule above are then applied here explicitly,
@@ -28,7 +29,8 @@ public sealed class TaskReportService(
     TaskManagementDbContext db,
     ITaskAccessScope access,
     IOrgStructureService orgStructure,
-    IUserDirectory users) : ITaskReportService
+    IUserDirectory users,
+    IUserReachScope? reachScope = null) : ITaskReportService
 {
     /// <summary>Rows returned at most; the summary always counts every matching task.</summary>
     public const int MaxRows = 5000;
@@ -38,10 +40,12 @@ public sealed class TaskReportService(
     public async Task<Result<TaskReportScopeDto>> GetScopeAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken)
     {
         var positionsByUser = await PositionTitlesAsync(tenantId, cancellationToken);
+        var reach = await ReachAsync(tenantId, userId, cancellationToken);
         List<ReportScopePerson> people;
         if (!access.IsRestricted)
         {
             people = (await users.GetActiveUsersInTenantAsync(tenantId, cancellationToken))
+                .Where(user => reach is null || reach.Contains(user.Id))
                 .OrderBy(user => user.DisplayName)
                 .Select(user => new ReportScopePerson(user.Id, user.DisplayName, positionsByUser.GetValueOrDefault(user.Id), user.Id == userId ? "self" : "all", user.Id == userId ? 0 : 1))
                 .ToList();
@@ -61,7 +65,17 @@ public sealed class TaskReportService(
                     pair.Value)));
         }
 
-        var positions = await orgStructure.ListPositionsAsync(tenantId, cancellationToken);
+        var positions = (await orgStructure.ListPositionsAsync(tenantId, cancellationToken)).Value ?? [];
+        if (access.IsRestricted || reach is not null)
+        {
+            // Only the positions of the companies of the people in the report (not other companies').
+            var inScope = people.Select(person => person.UserId).ToHashSet();
+            var companies = ((await orgStructure.ListAssignmentsAsync(tenantId, null, null, cancellationToken)).Value ?? [])
+                .Where(a => inScope.Contains(a.UserId))
+                .Select(a => a.CompanyId)
+                .ToHashSet();
+            positions = positions.Where(p => p.CompanyIds is { Count: > 0 } ids ? ids.Any(companies.Contains) : companies.Count > 0).ToList();
+        }
         var tags = await db.Tags.AsNoTracking()
             .Where(tag => tag.TenantId == tenantId)
             .OrderBy(tag => tag.Name)
@@ -71,7 +85,7 @@ public sealed class TaskReportService(
         return Result.Success(new TaskReportScopeDto(
             !access.IsRestricted,
             people,
-            (positions.Value ?? []).Where(p => p.IsActive).Select(p => new ReportPosition(p.Id, p.Title)).ToList(),
+            positions.Where(p => p.IsActive).Select(p => new ReportPosition(p.Id, p.Title)).ToList(),
             tags));
     }
 
@@ -107,6 +121,17 @@ public sealed class TaskReportService(
 
         // --- whose tasks
         var tasks = db.Tasks.IgnoreQueryFilters().AsNoTracking().Where(task => task.TenantId == tenantId);
+        if (!access.IsRestricted && await ReachAsync(tenantId, userId, cancellationToken) is { } reach)
+        {
+            // Kept to one's own company: the tasks of its people (as on the task board).
+            var people = reach.UserIds.ToList();
+            tasks = tasks.Where(task =>
+                (task.OwnerUserId == null && !task.OwnerHeldByPost)
+                || (task.OwnerUserId != null && people.Contains(task.OwnerUserId.Value))
+                || (task.AssignedUserId != null && people.Contains(task.AssignedUserId.Value))
+                || task.Assignees.Any(a => people.Contains(a.UserId)));
+        }
+
         if (access.IsRestricted)
         {
             var subordinates = (await SubordinatesAsync(tenantId, userId, cancellationToken)).Keys.ToList();
@@ -244,6 +269,9 @@ public sealed class TaskReportService(
 
         return Result.Success(new TaskReportDto(summary, rows, truncated));
     }
+
+    private async Task<UserReach?> ReachAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken) =>
+        reachScope is null ? null : await reachScope.GetReachAsync(tenantId, userId, cancellationToken);
 
     /// <summary>Everyone below the user, with their depth (1 = direct). Empty without a place in the structure.</summary>
     private async Task<Dictionary<Guid, int>> SubordinatesAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken)

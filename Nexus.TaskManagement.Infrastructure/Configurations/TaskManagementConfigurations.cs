@@ -78,9 +78,33 @@ internal sealed class SubTaskConfiguration : IEntityTypeConfiguration<SubTask>
         builder.Property(x => x.Title).HasMaxLength(200).IsRequired();
         builder.Property(x => x.TaskId).IsRequired();
 
+        builder.HasMany(x => x.Assignees)
+            .WithOne(x => x.SubTask!)
+            .HasForeignKey(x => x.SubTaskId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         builder.HasIndex(x => new { x.TaskId, x.SortOrder });
         builder.HasIndex(x => new { x.TenantId, x.IsCompleted });
         builder.Property(x => x.IsGeneratedOccurrence).HasDefaultValue(false);
+        builder.Property(x => x.Status).HasDefaultValue(SubTaskStatus.NotStarted);
+    }
+}
+
+internal sealed class SubTaskAssigneeConfiguration : IEntityTypeConfiguration<SubTaskAssignee>
+{
+    public void Configure(EntityTypeBuilder<SubTaskAssignee> builder)
+    {
+        builder.ToTable("SubTaskAssignees", Schema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+
+        builder.HasOne(x => x.User)
+            .WithMany()
+            .HasForeignKey(x => x.UserId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasIndex(x => new { x.SubTaskId, x.UserId }).IsUnique();
+        builder.HasIndex(x => x.UserId);
     }
 }
 

@@ -15,11 +15,17 @@ public sealed class TaskRepository(TaskManagementDbContext db) : ITaskRepository
         db.Tasks
             .Include(t => t.SubTasks).ThenInclude(s => s.Tags).ThenInclude(tt => tt.Tag)
             .Include(t => t.SubTasks).ThenInclude(s => s.Files).ThenInclude(tf => tf.File)
+            .Include(t => t.SubTasks).ThenInclude(s => s.Assignees)
             .Include(t => t.Tags).ThenInclude(tt => tt.Tag)
             .Include(t => t.Files).ThenInclude(tf => tf.File)
             .Include(t => t.Assignees)
             .Include(t => t.Recurrence)
             .AsSplitQuery()
+            .FirstOrDefaultAsync(t => t.TenantId == tenantId && t.Id == id, cancellationToken);
+
+    public Task<TaskItem?> GetPeopleOfAsync(Guid tenantId, Guid id, CancellationToken cancellationToken) =>
+        db.Tasks.IgnoreQueryFilters()
+            .Include(t => t.Assignees)
             .FirstOrDefaultAsync(t => t.TenantId == tenantId && t.Id == id, cancellationToken);
 
     public Task<TaskItem?> GetForUpdateAsync(Guid tenantId, Guid id, CancellationToken cancellationToken) =>
@@ -124,6 +130,7 @@ public sealed class TaskRepository(TaskManagementDbContext db) : ITaskRepository
         db.SubTasks
             .Include(s => s.Tags).ThenInclude(tt => tt.Tag)
             .Include(s => s.Files).ThenInclude(tf => tf.File)
+            .Include(s => s.Assignees)
             .FirstOrDefaultAsync(s => s.TenantId == tenantId && s.Id == subTaskId, cancellationToken);
 
     public async Task<IReadOnlyList<SubTask>> GetSubTasksAsync(
@@ -131,6 +138,7 @@ public sealed class TaskRepository(TaskManagementDbContext db) : ITaskRepository
         await db.SubTasks
             .Include(s => s.Tags).ThenInclude(tt => tt.Tag)
             .Include(s => s.Files).ThenInclude(tf => tf.File)
+            .Include(s => s.Assignees)
             .Where(s => s.TenantId == tenantId && s.TaskId == taskId)
             .OrderBy(s => s.SortOrder)
             .ToListAsync(cancellationToken);

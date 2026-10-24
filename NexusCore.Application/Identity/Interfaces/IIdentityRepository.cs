@@ -31,7 +31,8 @@ public interface IIdentityRepository
     int? pageNumber,
     int? pageSize,
     string? search,
-    CancellationToken cancellationToken);
+    CancellationToken cancellationToken,
+    IReadOnlyCollection<Guid>? excludeUserIds = null);
     Task<bool> UserEmailExistsAsync(Guid tenantId, string email, Guid? exceptUserId, CancellationToken cancellationToken);
     Task AddUserAsync(User user, CancellationToken cancellationToken);
     Task RemoveUserAsync(User user, CancellationToken cancellationToken);

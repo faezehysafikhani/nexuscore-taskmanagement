@@ -21,8 +21,10 @@ public sealed class OrgChartTeamsAndTitlesTests
     // ------------------------------------------------------------------ whom a user may give tasks to
 
     /// <summary>
-    /// The company «C1»: head; deputies tech (head d1; senior s1 above expert e2) and finance (head d2;
-    /// expert e3 with no position); and someone with no place.
+    /// The company «C1»: head; deputies tech (head d1; senior s1, and expert e2 in a post under
+    /// s1's) and finance (head d2; expert e3 directly under d2); and someone with no place. The
+    /// positions: رئیس کل ← مدیر معاونت ← کارشناس ارشد ← کارشناس. e2 has three managers above them
+    /// in the chart and e3 two, but both are experts: the same level.
     /// </summary>
     private static async Task<(World World, Dictionary<string, Guid> People)> HierarchyAsync()
     {
@@ -34,15 +36,20 @@ public sealed class OrgChartTeamsAndTitlesTests
         await world.HeadAsync(company, p["head"]);
         await world.Service.LinkUnitAsync(Tenant, tech.Id, new LinkUnitRequest(company), default);
         await world.Service.LinkUnitAsync(Tenant, finance.Id, new LinkUnitRequest(company), default);
-        var senior = await world.SeatAsync(tech.Id, "کارشناس ارشد");
-        var expert = await world.SeatAsync(tech.Id, "کارشناس");
-        foreach (var (who, unit, seats) in new[]
+        async Task<Guid> PositionUnder(string title, Guid parent) =>
+            (await world.Service.CreatePositionAsync(Tenant, new CreatePositionRequest(title, parent, [company]), default)).Value!.Id;
+        var manager = await PositionUnder("مدیر معاونت", world.TopPosition);
+        var seniorPosition = await PositionUnder("کارشناس ارشد", manager);
+        var expertPosition = await PositionUnder("کارشناس", seniorPosition);
+        var senior = (await world.Service.AddUnitPositionAsync(Tenant, tech.Id, new AddUnitPositionRequest(seniorPosition), default)).Value!.Id;
+        var expert = (await world.Service.AddUnitPositionAsync(Tenant, tech.Id, new AddUnitPositionRequest(expertPosition, null, senior), default)).Value!.Id;
+        foreach (var (who, unit, position, seats) in new[]
                  {
-                     ("d1", tech.Id, Array.Empty<Guid>()), ("s1", tech.Id, [senior]), ("e2", tech.Id, [expert]),
-                     ("d2", finance.Id, []), ("e3", finance.Id, []),
+                     ("d1", tech.Id, (Guid?)manager, (Guid[]?)null), ("s1", tech.Id, null, [senior]), ("e2", tech.Id, null, [expert]),
+                     ("d2", finance.Id, manager, null), ("e3", finance.Id, expertPosition, null),
                  })
         {
-            Assert.True((await world.Service.SetAssignmentAsync(Tenant, p[who], new SetUserAssignmentRequest(company, unit, null, null, seats), default)).IsSuccess);
+            Assert.True((await world.Service.SetAssignmentAsync(Tenant, p[who], new SetUserAssignmentRequest(company, unit, position, null, seats), default)).IsSuccess);
         }
 
         return (world, p);
@@ -64,12 +71,38 @@ public sealed class OrgChartTeamsAndTitlesTests
         // A deputy's head: their own people and the other deputies' heads - not the head, not
         // another deputy's experts.
         Assert.Equal(["e3", "head"], await BlockedForAsync(world, p, "d1"));
-        // An expert: experts of other deputies, and the lower position of their own deputy.
-        Assert.Equal(["d1", "d2", "head"], await BlockedForAsync(world, p, "s1"));
-        // The lower position may not give work to the higher one of the same deputy.
+        // A senior expert: the lower position of their own deputy - not another deputy's lower people.
+        Assert.Equal(["d1", "d2", "e3", "head"], await BlockedForAsync(world, p, "s1"));
+        // An expert: the expert of another deputy (the same position level, though not as many
+        // managers above), never the higher position of their own deputy.
         Assert.Equal(["d1", "d2", "head", "s1"], await BlockedForAsync(world, p, "e2"));
+        Assert.Equal(["d1", "d2", "head", "s1"], await BlockedForAsync(world, p, "e3"));
         // Nobody may be blocked from giving work to someone with no place yet.
         Assert.DoesNotContain("nowhere", await BlockedForAsync(world, p, "e2"));
+    }
+
+    [Fact]
+    public async Task PeopleOfAnotherCompany_AreNotPeers()
+    {
+        var (world, p) = await HierarchyAsync();
+        // A second company, with a head and a deputy head at the same levels as C1's.
+        foreach (var name in new[] { "head2", "d3" })
+        {
+            p[name] = world.User(name);
+        }
+
+        var other = await world.CompanyAsync("C2");
+        var hr = world.Unit("معاونت منابع انسانی", p["d3"]);
+        await world.Service.LinkUnitAsync(Tenant, hr.Id, new LinkUnitRequest(other), default);
+        await world.HeadAsync(other, p["head2"]);
+        Assert.True((await world.Service.SetAssignmentAsync(Tenant, p["d3"], new SetUserAssignmentRequest(other, hr.Id, null, null), default)).IsSuccess);
+
+        // C1's deputy head: C2's people are blocked although d3 is at the same level.
+        Assert.Equal(["d3", "e3", "head", "head2"], await BlockedForAsync(world, p, "d1"));
+        // C1's head: everyone of C1 below, nobody of C2 (head2 is at the same level).
+        Assert.Equal(["d3", "head2"], await BlockedForAsync(world, p, "head"));
+        // C2's deputy head: C1's people are not theirs.
+        Assert.Equal(["d1", "d2", "e2", "e3", "head", "head2", "s1"], await BlockedForAsync(world, p, "d3"));
     }
 
     [Fact]
@@ -82,6 +115,111 @@ public sealed class OrgChartTeamsAndTitlesTests
         Assert.Equal(["(not limited)"], await BlockedForAsync(world, p, "nowhere"));
         Assert.Contains(new OrgStructurePermissionCatalog().GetPermissions(), x => x.Name == OrgStructurePermissions.AssignTasksToAnyLevel);
         Assert.DoesNotContain(OrgStructurePermissions.All, x => x.Name == OrgStructurePermissions.AssignTasksToAnyLevel);
+    }
+
+    // ------------------------------------------------------------------ kept to one's own company
+
+    /// <summary>The hierarchy above, plus a second company «C2»: head2 and the deputy head d3 of its HR deputy.</summary>
+    private static async Task<(World World, Dictionary<string, Guid> People, Guid C1, Guid C2, Guid Hr)> TwoCompaniesAsync()
+    {
+        var (world, p) = await HierarchyAsync();
+        foreach (var name in new[] { "head2", "d3" })
+        {
+            p[name] = world.User(name);
+        }
+
+        var c1 = (await world.Service.ListCompaniesAsync(Tenant, default)).Value!.Single().Id;
+        var c2 = await world.CompanyAsync("C2");
+        var hr = world.Unit("معاونت منابع انسانی", p["d3"]);
+        await world.Service.LinkUnitAsync(Tenant, hr.Id, new LinkUnitRequest(c2), default);
+        await world.HeadAsync(c2, p["head2"]);
+        Assert.True((await world.Service.SetAssignmentAsync(Tenant, p["d3"], new SetUserAssignmentRequest(c2, hr.Id, null, null), default)).IsSuccess);
+        var hrExpert = (await world.Service.CreatePositionAsync(Tenant, new CreatePositionRequest("کارشناس منابع انسانی", world.TopPosition, [c2]), default)).Value!.Id;
+        Assert.True((await world.Service.AddUnitPositionAsync(Tenant, hr.Id, new AddUnitPositionRequest(hrExpert), default)).IsSuccess);
+        return (world, p, c1, c2, hr.Id);
+    }
+
+    private static async Task<(string[] Reach, string[] Elsewhere)?> ReachOfAsync(
+        World world, Dictionary<string, Guid> people, string who, bool on = true, params string[] permissions)
+    {
+        var reach = await world.Reach(people[who], on, permissions).GetReachAsync(Tenant, people[who], default);
+        string[] Names(IReadOnlySet<Guid> ids) => people.Where(x => ids.Contains(x.Value)).Select(x => x.Key).OrderBy(x => x).ToArray();
+        return reach is null ? null : (Names(reach.UserIds), Names(reach.PlacedElsewhere));
+    }
+
+    [Fact]
+    public async Task EveryoneReaches_TheirOwnCompanyOnly_WhenTurnedOn()
+    {
+        var (world, p, _, _, _) = await TwoCompaniesAsync();
+
+        // An expert reaches all of their company - every deputy, the managers above too (to message them).
+        Assert.Equal((["d1", "d2", "e2", "e3", "head", "s1"], ["d3", "head2"]), await ReachOfAsync(world, p, "e2"));
+        // The other company's head: only their own company (headed, not placed in a unit).
+        Assert.Equal((["d3", "head2"], ["d1", "d2", "e2", "e3", "head", "s1"]), await ReachOfAsync(world, p, "head2"));
+        // Someone with no place reaches no one but themselves.
+        Assert.Equal((["nowhere"], ["d1", "d2", "d3", "e2", "e3", "head", "head2", "s1"]), await ReachOfAsync(world, p, "nowhere"));
+
+        // Off by default, and not for the permission's holders.
+        Assert.Null(await ReachOfAsync(world, p, "e2", on: false));
+        Assert.Null(await ReachOfAsync(world, p, "e2", true, OrgStructurePermissions.AllCompanies));
+        Assert.Contains(new OrgStructurePermissionCatalog().GetPermissions(), x => x.Name == OrgStructurePermissions.AllCompanies);
+        Assert.DoesNotContain(OrgStructurePermissions.All, x => x.Name == OrgStructurePermissions.AllCompanies);
+    }
+
+    [Fact]
+    public async Task TheStructure_ShowsAndChangesOnlyOnesOwnCompany()
+    {
+        var (world, p, c1, c2, hr) = await TwoCompaniesAsync();
+        var mine = world.ServiceAs(p["d1"]);
+
+        Assert.Equal([c1], (await mine.ListCompaniesAsync(Tenant, default)).Value!.Select(c => c.Id));
+        Assert.Equal([c1], (await mine.GetChartAsync(Tenant, null, default)).Value!.Select(c => c.CompanyId));
+        Assert.True((await mine.GetCompanyAsync(Tenant, c2, default)).IsFailure);
+        Assert.DoesNotContain((await mine.ListAssignmentsAsync(Tenant, null, null, default)).Value!, a => a.UserId == p["d3"] || a.UserId == p["head2"]);
+        Assert.DoesNotContain((await mine.ListCompanyUnitsAsync(Tenant, default)).Value!, link => link.CompanyId == c2);
+        Assert.DoesNotContain((await mine.ListUnitPositionsAsync(Tenant, null, default)).Value!, post => post.CompanyId == c2);
+        Assert.DoesNotContain((await mine.ListPositionsAsync(Tenant, default)).Value!, position => position.Title == "کارشناس منابع انسانی");
+        Assert.Equal([hr], (await mine.ListOtherCompaniesUnitsAsync(Tenant, default)).Value!);
+        Assert.True((await mine.GetSubordinatesAsync(Tenant, p["head2"], true, default)).IsFailure);
+
+        // Nothing of the other company changes, and no new company is made.
+        Assert.True((await mine.SetAssignmentAsync(Tenant, p["d3"], new SetUserAssignmentRequest(c1, null, null, null), default)).IsFailure);
+        Assert.True((await mine.SetAssignmentAsync(Tenant, p["nowhere"], new SetUserAssignmentRequest(c2, hr, null, null), default)).IsFailure);
+        Assert.True((await mine.UpdateCompanyAsync(Tenant, c2, new UpdateCompanyRequest("x", "C2", null, true), default)).IsFailure);
+        Assert.True((await mine.RemoveAssignmentAsync(Tenant, p["d3"], default)).IsFailure);
+        Assert.True((await mine.CreateCompanyAsync(Tenant, new CreateCompanyRequest("C3", "C3", null), default)).IsFailure);
+        Assert.True((await mine.AddUnitPositionAsync(Tenant, hr, new AddUnitPositionRequest(world.TopPosition), default)).IsFailure);
+
+        // Someone with no place yet can be placed in one's own company.
+        Assert.True((await mine.SetAssignmentAsync(Tenant, p["nowhere"], new SetUserAssignmentRequest(c1, null, null, null), default)).IsSuccess);
+
+        // The permission's holder sees and changes both.
+        var all = world.ServiceAs(p["d1"], OrgStructurePermissions.AllCompanies);
+        Assert.Equal(2, (await all.ListCompaniesAsync(Tenant, default)).Value!.Count);
+        Assert.Empty((await all.ListOtherCompaniesUnitsAsync(Tenant, default)).Value!);
+    }
+
+    [Fact]
+    public async Task WorkTeamsAndPosts_AreOfOnesOwnCompanyOnly()
+    {
+        var (world, p, _, _, _) = await TwoCompaniesAsync();
+
+        // From any deputy - but only of one's own company.
+        var any = (await world.KeptMemberScope(p["e2"], OrgStructurePermissions.TeamMembersFromAnyUnit).GetLimitAsync(Tenant, p["e2"], default))!;
+        Assert.True(any.IsCompany);
+        Assert.Equal("شرکت C1", any.ScopeName);
+        Assert.Contains(p["e3"], any.AllowedUserIds);
+        Assert.DoesNotContain(p["d3"], any.AllowedUserIds);
+        // Without it: one's own deputy, as before.
+        var own = (await world.KeptMemberScope(p["e2"]).GetLimitAsync(Tenant, p["e2"], default))!;
+        Assert.False(own.IsCompany);
+        Assert.DoesNotContain(p["e3"], own.AllowedUserIds);
+
+        // Posts to give tasks to: only one's own company's.
+        var posts = await world.PostsAsSeenByAsync(p["e2"]);
+        Assert.NotEmpty(posts);
+        Assert.DoesNotContain(posts, post => post.Place.Contains("C2"));
+        Assert.Contains(await world.PostsAsSeenByAsync(p["d3"]), post => post.Place.Contains("C2"));
     }
 
     // ------------------------------------------------------------------ positions of a unit
@@ -423,6 +561,113 @@ public sealed class OrgChartTeamsAndTitlesTests
         Assert.Empty((await world.Substitution(deputyHead).GetInboxAsync(Tenant, default)).Value!.Posts);
     }
 
+    [Fact]
+    public async Task APostUnderAPost_MakesItsHolderTheManager_AndAVacantOneIsPassedOver()
+    {
+        var world = new World();
+        var (deputyHead, deputy, expert) = (world.User("مدیر"), world.User("معاون"), world.User("کارشناس"));
+        var tech = world.Unit("معاونت فناوری", deputyHead);
+        var company = await world.CompanyAsync("C1");
+        await world.Service.LinkUnitAsync(Tenant, tech.Id, new LinkUnitRequest(company), default);
+        var deputyPost = await world.SeatAsync(tech.Id, "معاون");
+        var expertPost = (await world.Service.AddUnitPositionAsync(
+            Tenant, tech.Id, new AddUnitPositionRequest(await world.PositionAsync("کارشناس"), ParentPostId: deputyPost), default)).Value!;
+        Assert.Equal(deputyPost, expertPost.ParentPostId);
+        await world.Service.SetAssignmentAsync(Tenant, deputy, new SetUserAssignmentRequest(company, tech.Id, null, null, [deputyPost]), default);
+        await world.Service.SetAssignmentAsync(Tenant, expert, new SetUserAssignmentRequest(company, tech.Id, null, null, [expertPost.Id]), default);
+
+        // The deputy manages the expert; the deputy's head manages the deputy, and the expert through them.
+        var manager = (await world.Service.GetManagerAsync(Tenant, expert, default)).Value!;
+        Assert.Equal((deputy, "PostSuperior"), (manager.UserId, manager.Source));
+        Assert.Equal(deputyHead, (await world.Service.GetManagerAsync(Tenant, deputy, default)).Value!.UserId);
+        Assert.Equal([expert], (await world.Service.GetSubordinatesAsync(Tenant, deputy, true, default)).Value!.Select(s => s.UserId));
+        Assert.Equal(2, (await world.Service.GetSubordinatesAsync(Tenant, deputyHead, true, default)).Value!.Single(s => s.UserId == expert).Depth);
+
+        // With the limit on, the deputy gives tasks to the expert; the expert not to the deputy.
+        Assert.DoesNotContain(expert, (await world.AssignmentScope(deputy, true).GetLimitAsync(Tenant, deputy, default))!.BlockedUserIds);
+        Assert.Contains(deputy, (await world.AssignmentScope(expert, true).GetLimitAsync(Tenant, expert, default))!.BlockedUserIds);
+
+        // The expert's post falls vacant: its tasks are in the deputy's inbox (and the head's).
+        await world.Service.RemoveAssignmentAsync(Tenant, expert, default);
+        var task = Guid.NewGuid();
+        world.Updater.Summaries.Add(new TaskSummary(task, "کار باز", new DateOnly(2030, 1, 1), "Todo", false));
+        await world.TaskPosts.SetTaskPostsAsync(Tenant, task, null, [expertPost.Id], [], default);
+        Assert.Equal(expertPost.Id, Assert.Single((await world.Substitution(deputy).GetInboxAsync(Tenant, default)).Value!.Posts).PostId);
+        // The deputy is above the vacant post: not a stand-in for it.
+        Assert.DoesNotContain(Assert.Single((await world.Substitution(deputy).GetInboxAsync(Tenant, default)).Value!.Posts).Candidates, c => c.PostId == deputyPost);
+        Assert.Equal("validation.error", (await world.Substitution(deputy).SetActingAsync(Tenant, expertPost.Id, new SetActingRequest(deputyPost), default)).Error.Code);
+        Assert.Single((await world.Substitution(deputyHead).GetInboxAsync(Tenant, default)).Value!.Posts);
+
+        // The deputy's post falls vacant: the expert's manager is the deputy's head again.
+        await world.Service.SetAssignmentAsync(Tenant, expert, new SetUserAssignmentRequest(company, tech.Id, null, null, [expertPost.Id]), default);
+        await world.Service.RemoveAssignmentAsync(Tenant, deputy, default);
+        manager = (await world.Service.GetManagerAsync(Tenant, expert, default)).Value!;
+        Assert.Equal((deputyHead, "UnitManager"), (manager.UserId, manager.Source));
+    }
+
+    [Fact]
+    public async Task APostGoesOnlyUnderAPostOfItsPlace_NeverUnderItselfOrBelow()
+    {
+        var world = new World();
+        var (deputy, expert) = (world.User("معاون"), world.User("کارشناس"));
+        var (tech, finance) = (world.Unit("معاونت فناوری"), world.Unit("معاونت مالی"));
+        var company = await world.CompanyAsync("C1");
+        await world.Service.LinkUnitAsync(Tenant, tech.Id, new LinkUnitRequest(company), default);
+        await world.Service.LinkUnitAsync(Tenant, finance.Id, new LinkUnitRequest(company), default);
+        var (deputyPost, expertPost, elsewhere) = (
+            await world.SeatAsync(tech.Id, "معاون"), await world.SeatAsync(tech.Id, "کارشناس"), await world.SeatAsync(finance.Id, "حسابدار"));
+
+        var parent = (Guid? id) => new SetPostParentRequest(id);
+        Assert.Equal("validation.error", (await world.Service.SetPostParentAsync(Tenant, expertPost, parent(elsewhere), default)).Error.Code);
+        Assert.Equal("validation.error", (await world.Service.SetPostParentAsync(Tenant, expertPost, parent(Guid.NewGuid()), default)).Error.Code);
+        Assert.Equal("validation.error", (await world.Service.AddUnitPositionAsync(
+            Tenant, tech.Id, new AddUnitPositionRequest(await world.PositionAsync("دستیار"), ParentPostId: elsewhere), default)).Error.Code);
+        Assert.Equal(deputyPost, (await world.Service.SetPostParentAsync(Tenant, expertPost, parent(deputyPost), default)).Value!.ParentPostId);
+        Assert.Equal("conflict", (await world.Service.SetPostParentAsync(Tenant, deputyPost, parent(expertPost), default)).Error.Code);
+        Assert.Equal("conflict", (await world.Service.SetPostParentAsync(Tenant, deputyPost, parent(deputyPost), default)).Error.Code);
+
+        // A post with posts under it stays until they move.
+        Assert.Equal("conflict", (await world.Service.RemoveUnitPositionAsync(Tenant, deputyPost, default)).Error.Code);
+
+        // No management loop through posts: the deputy can't be put under the expert below them.
+        await world.Service.SetAssignmentAsync(Tenant, deputy, new SetUserAssignmentRequest(company, tech.Id, null, null, [deputyPost]), default);
+        await world.Service.SetAssignmentAsync(Tenant, expert, new SetUserAssignmentRequest(company, tech.Id, null, null, [expertPost]), default);
+        Assert.Equal("conflict", (await world.Service.SetAssignmentAsync(
+            Tenant, deputy, new SetUserAssignmentRequest(company, tech.Id, null, expert, [deputyPost]), default)).Error.Code);
+
+        // Out from under it: the post can go.
+        Assert.Null((await world.Service.SetPostParentAsync(Tenant, expertPost, parent(null), default)).Value!.ParentPostId);
+        await world.Service.RemoveAssignmentAsync(Tenant, deputy, default);
+        Assert.True((await world.Service.RemoveUnitPositionAsync(Tenant, deputyPost, default)).IsSuccess);
+    }
+
+    [Fact]
+    public async Task ADisabledAccount_LeavesItsPosts_AndTheirTasksGoToTheInbox()
+    {
+        var world = new World();
+        var (deputyHead, a) = (world.User("معاون"), world.User("الف"));
+        var tech = world.Unit("معاونت فناوری", deputyHead);
+        var company = await world.CompanyAsync("C1");
+        await world.Service.LinkUnitAsync(Tenant, tech.Id, new LinkUnitRequest(company), default);
+        var post = await world.SeatAsync(tech.Id, "کارشناس");
+        await world.Service.SetAssignmentAsync(Tenant, a, new SetUserAssignmentRequest(company, tech.Id, null, null, [post]), default);
+        var task = Guid.NewGuid();
+        world.Updater.Summaries.Add(new TaskSummary(task, "کار باز", new DateOnly(2030, 1, 1), "Todo", false));
+        await world.TaskPosts.SetTaskPostsAsync(Tenant, task, null, [post], [], default);
+
+        await world.DeactivatedAsync(a);
+
+        Assert.Equal([new TaskPersonChange(task, TaskPostRole.Responsible, a, null)], world.Updater.Applied);
+        var placed = (await world.Service.GetAssignmentAsync(Tenant, a, default)).Value!;
+        Assert.Equal((tech.Id, (Guid?)null), (placed.UnitId!.Value, placed.PositionId));
+        Assert.Empty(placed.Positions!);
+        Assert.Equal(post, Assert.Single((await world.Substitution(deputyHead).GetInboxAsync(Tenant, default)).Value!.Posts).PostId);
+
+        // Nothing more to release the second time.
+        await world.DeactivatedAsync(a);
+        Assert.Single(world.Updater.Applied);
+    }
+
     public sealed class RecordingUpdater : ITaskPeopleUpdater
     {
         public List<TaskPersonChange> Applied { get; } = [];
@@ -645,9 +890,41 @@ public sealed class OrgChartTeamsAndTitlesTests
             new SubstitutionService(_repository, _structure, new OrganizationUnitRepository(_organization), TaskPosts,
                 new SignedIn(signedIn, permissions), _users, new ServiceCollection().AddSingleton<ITaskPeopleUpdater>(Updater).BuildServiceProvider());
 
+        /// <summary>The account was disabled.</summary>
+        public Task DeactivatedAsync(Guid userId) =>
+            new PostReleaseOnDeactivation(_repository, _structure, TaskPosts).UserDeactivatedAsync(Tenant, userId, default);
+
         /// <summary>Whom <paramref name="signedIn"/> may add to their work teams, holding <paramref name="permissions"/>.</summary>
         public IWorkTeamMemberScope MemberScope(Guid signedIn, params string[] permissions) =>
             new DeputyWorkTeamMemberScope(_repository, new OrganizationUnitRepository(_organization), new SignedIn(signedIn, permissions));
+
+        /// <summary>Whom <paramref name="signedIn"/> reaches, with the company limit turned <paramref name="on"/>.</summary>
+        public CompanyReachScope Reach(Guid signedIn, bool on = true, params string[] permissions) =>
+            new(_repository, new SignedIn(signedIn, permissions),
+                Microsoft.Extensions.Options.Options.Create(new OrgStructureOptions { LimitToOwnCompany = on }));
+
+        /// <summary>The structure as <paramref name="signedIn"/> sees and changes it, kept to their own company.</summary>
+        public IOrgStructureService ServiceAs(Guid signedIn, params string[] permissions) =>
+            new OrgStructureService(_repository, _structure, new OrganizationUnitRepository(_organization), _users, _teams, TaskPosts,
+                Reach(signedIn, true, permissions), new SignedIn(signedIn, permissions));
+
+        /// <summary>Whom <paramref name="signedIn"/> may add to their work teams, kept to their own company.</summary>
+        public IWorkTeamMemberScope KeptMemberScope(Guid signedIn, params string[] permissions) =>
+            new DeputyWorkTeamMemberScope(_repository, new OrganizationUnitRepository(_organization), new SignedIn(signedIn, permissions),
+                Reach(signedIn, true, permissions));
+
+        /// <summary>The posts tasks may be given to, as <paramref name="signedIn"/> (kept to their own company) sees them.</summary>
+        public Task<IReadOnlyList<WorkPost>> PostsAsSeenByAsync(Guid signedIn)
+        {
+            var who = new SignedIn(signedIn, []);
+            var provider = new ServiceCollection()
+                .AddSingleton<ICurrentUserContext>(who)
+                .AddSingleton(new CompanyReachScope(_repository, who,
+                    Microsoft.Extensions.Options.Options.Create(new OrgStructureOptions { LimitToOwnCompany = true })))
+                .BuildServiceProvider();
+            return new TaskPostDirectory(_repository, _structure, new OrganizationUnitRepository(_organization),
+                Microsoft.Extensions.Options.Options.Create(new OrgStructureOptions { AssignTasksToPosts = true }), provider).ListPostsAsync(Tenant, default);
+        }
 
         /// <summary>Whom <paramref name="signedIn"/> may not give tasks to, with the limit turned <paramref name="on"/>.</summary>
         public IWorkAssignmentScope AssignmentScope(Guid signedIn, bool on, params string[] permissions) =>

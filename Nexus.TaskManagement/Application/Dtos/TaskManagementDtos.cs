@@ -39,7 +39,11 @@ public sealed record SubTaskDto(
     DateTimeOffset CreatedAtUtc,
     bool IsGeneratedOccurrence = false,
     TimeOnly? StartTime = null,
-    TimeOnly? EndTime = null);
+    TimeOnly? EndTime = null,
+    IReadOnlyList<UserSummaryDto>? Assignees = null,
+    SubTaskStatus Status = SubTaskStatus.NotStarted,
+    DateTimeOffset? ActualStartedAtUtc = null,
+    DateTimeOffset? ActualCompletedAtUtc = null);
 
 /// <summary>
 /// The recurrence schedule. Carries no title, priority or assignee - those belong to the task
@@ -120,7 +124,15 @@ public sealed record TaskDto(
     TimeOnly? CharterStartTime = null,
     TimeOnly? CharterEndTime = null,
     IReadOnlyList<UserSummaryDto>? ResponsibleUsers = null,
-    IReadOnlyList<TaskPostDto>? Posts = null);
+    IReadOnlyList<TaskPostDto>? Posts = null,
+    IReadOnlyList<TaskStandInDto>? StandIns = null,
+    Guid? ParentTaskId = null);
+
+/// <summary>
+/// Someone standing in for a vacant post of the task (جانشین): sees it and comments, nothing more.
+/// Note: which post («جانشین کارشناس · کد ۹»).
+/// </summary>
+public sealed record TaskStandInDto(Guid Id, string DisplayName, string? Note);
 
 /// <summary>
 /// A post the task is given to (where tasks are given to posts): Role "owner" (its creator's),
@@ -178,7 +190,8 @@ public sealed record SubTaskInput(
     int SortOrder = 0,
     bool IsGeneratedOccurrence = false,
     TimeOnly? StartTime = null,
-    TimeOnly? EndTime = null);
+    TimeOnly? EndTime = null,
+    IReadOnlyList<Guid>? AssigneeUserIds = null);
 
 public sealed record RecurrenceInput(
     RecurrenceFrequency Frequency,
@@ -214,7 +227,8 @@ public sealed record CreateTaskRequest(
     TimeOnly? CharterEndTime = null,
     IReadOnlyList<Guid>? ResponsibleUserIds = null,
     IReadOnlyList<Guid>? ResponsiblePostIds = null,
-    IReadOnlyList<Guid>? AccessPostIds = null);
+    IReadOnlyList<Guid>? AccessPostIds = null,
+    Guid? ParentTaskId = null);
 
 /// <summary>
 /// Replaces the task's details. Like every other field here, DueTime is replaced as sent: null
@@ -295,7 +309,8 @@ public sealed record CreateSubTaskRequest(
     int SortOrder = 0,
     bool IsGeneratedOccurrence = false,
     TimeOnly? StartTime = null,
-    TimeOnly? EndTime = null);
+    TimeOnly? EndTime = null,
+    IReadOnlyList<Guid>? AssigneeUserIds = null);
 
 public sealed record UpdateSubTaskRequest(
     string Title,
@@ -304,9 +319,10 @@ public sealed record UpdateSubTaskRequest(
     DateOnly? EndDate = null,
     int SortOrder = 0,
     TimeOnly? StartTime = null,
-    TimeOnly? EndTime = null);
+    TimeOnly? EndTime = null,
+    IReadOnlyList<Guid>? AssigneeUserIds = null);
 
-public sealed record ChangeSubTaskStatusRequest(bool IsCompleted);
+public sealed record ChangeSubTaskStatusRequest(SubTaskStatus Status);
 
 public sealed record CreateRepetitiveTaskRequest(Guid TaskId, RecurrenceInput Recurrence);
 
@@ -342,5 +358,9 @@ public sealed record CreateTaskActivityRequest(string Action, string? Details = 
 /// </summary>
 public sealed record UploadFileRequest(string FileName, string ContentType, byte[] Content);
 
-/// <summary>Limited: the product limits whom the user may make responsible; BlockedUserIds: who they may not.</summary>
-public sealed record AssignmentLimitDto(bool Limited, IReadOnlyList<Guid> BlockedUserIds);
+/// <summary>
+/// Limited: the product limits whom the user may make responsible by level; BlockedUserIds: who they
+/// may not. AllowedUserIds: where everyone is kept to their own company, the only people they may
+/// (null: not kept) - other companies' people are in BlockedUserIds too.
+/// </summary>
+public sealed record AssignmentLimitDto(bool Limited, IReadOnlyList<Guid> BlockedUserIds, IReadOnlyList<Guid>? AllowedUserIds = null);

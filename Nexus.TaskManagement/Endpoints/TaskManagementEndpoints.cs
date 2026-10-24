@@ -63,7 +63,8 @@ public static class TaskManagementEndpoints
     private static IEndpointRouteBuilder MapAssignmentLimitEndpoint(this IEndpointRouteBuilder app)
     {
         app.MapGet("/api/task-management/assignment-limit", async (
-                ICurrentUserContext user, NexusCore.Application.Identity.Interfaces.IWorkAssignmentScope scope, CancellationToken cancellationToken) =>
+                ICurrentUserContext user, NexusCore.Application.Identity.Interfaces.IWorkAssignmentScope scope,
+                NexusCore.Application.Identity.Interfaces.IUserReachScope reachScope, CancellationToken cancellationToken) =>
             {
                 if (user.TenantId is not { } tenantId || user.UserId is not { } userId)
                 {
@@ -71,7 +72,12 @@ public static class TaskManagementEndpoints
                 }
 
                 var limit = await scope.GetLimitAsync(tenantId, userId, cancellationToken);
-                return Results.Ok(new AssignmentLimitDto(limit is not null, limit?.BlockedUserIds.ToList() ?? []));
+                // Kept to one's own company: only its people (AllowedUserIds; null when not limited).
+                var reach = await reachScope.GetReachAsync(tenantId, userId, cancellationToken);
+                return Results.Ok(new AssignmentLimitDto(
+                    limit is not null,
+                    [.. (limit?.BlockedUserIds ?? new HashSet<Guid>()).Union(reach?.PlacedElsewhere ?? new HashSet<Guid>())],
+                    reach?.UserIds.ToList()));
             })
             .WithTags("Tasks")
             .RequireAuthorization()

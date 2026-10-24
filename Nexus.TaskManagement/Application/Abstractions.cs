@@ -15,6 +15,12 @@ public interface ITaskRepository
     /// <summary>Full graph: subtasks, tags, files, assignees and recurrence.</summary>
     Task<TaskItem?> GetByIdAsync(Guid tenantId, Guid id, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// The task with its people (assignees), whoever is signed in: for changes that come from the
+    /// organization structure (a post's new holder, a stand-in), which decides who may make them.
+    /// </summary>
+    Task<TaskItem?> GetPeopleOfAsync(Guid tenantId, Guid id, CancellationToken cancellationToken);
+
     /// <summary>No includes - for commands that only mutate scalar columns.</summary>
     Task<TaskItem?> GetForUpdateAsync(Guid tenantId, Guid id, CancellationToken cancellationToken);
 

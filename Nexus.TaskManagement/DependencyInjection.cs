@@ -30,6 +30,9 @@ public static class DependencyInjection
         // Whom a user may make responsible: anyone, unless a product limits it (Nexus.OrgStructure).
         services.TryAddScoped<NexusCore.Application.Identity.Interfaces.IWorkAssignmentScope,
             NexusCore.Application.Identity.Interfaces.UnlimitedWorkAssignmentScope>();
+        // Everyone in the tenant may be reached, unless a product limits it (Nexus.OrgStructure).
+        services.TryAddScoped<NexusCore.Application.Identity.Interfaces.IUserReachScope,
+            NexusCore.Application.Identity.Interfaces.UnlimitedUserReachScope>();
         // Tasks are given to people, unless a product gives them to posts (Nexus.OrgStructure).
         services.TryAddScoped<NexusCore.Application.Identity.Interfaces.ITaskPosts,
             NexusCore.Application.Identity.Interfaces.NoTaskPosts>();
@@ -61,6 +64,7 @@ public static class DependencyInjection
         services.AddScoped<IValidator<AssignUserGroupRequest>, AssignUserGroupRequestValidator>();
         services.AddScoped<IValidator<CreateSubTaskRequest>, CreateSubTaskRequestValidator>();
         services.AddScoped<IValidator<UpdateSubTaskRequest>, UpdateSubTaskRequestValidator>();
+        services.AddScoped<IValidator<ChangeSubTaskStatusRequest>, ChangeSubTaskStatusRequestValidator>();
         services.AddScoped<IValidator<CreateRepetitiveTaskRequest>, CreateRepetitiveTaskRequestValidator>();
         services.AddScoped<IValidator<UpdateRepetitiveTaskRequest>, UpdateRepetitiveTaskRequestValidator>();
         services.AddScoped<IValidator<CreateTagRequest>, CreateTagRequestValidator>();

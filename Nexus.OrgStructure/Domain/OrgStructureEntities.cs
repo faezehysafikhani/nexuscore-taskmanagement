@@ -197,7 +197,15 @@ public sealed class UnitPosition : AuditableEntity<Guid>
     public int SortOrder { get; private set; }
     public string Code { get; private set; }
 
+    /// <summary>
+    /// The post above this one in its place (same unit, or both directly in the company): its holder
+    /// manages this post's holder. Null: under the unit's manager (or the company's head).
+    /// </summary>
+    public Guid? ParentPostId { get; private set; }
+
     public void MoveTo(int sortOrder) => SortOrder = sortOrder;
+
+    public void PlaceUnder(Guid? parentPostId) => ParentPostId = parentPostId;
 
     /// <summary>Its unit moved to another company.</summary>
     public void MoveToCompany(Guid companyId) => CompanyId = companyId;

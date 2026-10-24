@@ -113,6 +113,7 @@ public sealed class UnitPositionConfiguration : IEntityTypeConfiguration<UnitPos
         builder.HasIndex(x => new { x.TenantId, x.CompanyId, x.Code }).IsUnique();
         builder.HasIndex(x => x.UnitId);
         builder.HasIndex(x => x.PositionId);
+        builder.HasIndex(x => x.ParentPostId);
     }
 }
 

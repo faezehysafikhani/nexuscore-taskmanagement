@@ -126,13 +126,20 @@ public sealed class IdentityRepository(
     int? pageNumber,
     int? pageSize,
     string? search,
-    CancellationToken cancellationToken)
+    CancellationToken cancellationToken,
+    IReadOnlyCollection<Guid>? excludeUserIds = null)
     {
         var query = IncludeUserGraph(dbContext.Users).AsQueryable();
 
         if (tenantId.HasValue)
         {
             query = query.Where(user => user.TenantId == tenantId);
+        }
+
+        if (excludeUserIds is { Count: > 0 })
+        {
+            var excluded = excludeUserIds.ToList();
+            query = query.Where(user => !excluded.Contains(user.Id));
         }
 
         if (!string.IsNullOrWhiteSpace(search))

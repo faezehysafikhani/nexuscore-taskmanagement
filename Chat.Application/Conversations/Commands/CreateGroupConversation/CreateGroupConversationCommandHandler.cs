@@ -1,4 +1,5 @@
 using Chat.Application.Abstractions;
+using Chat.Application.Direct;
 using Chat.Domain.Entities;
 using Chat.Domain.Enums;
 using Chat.Domain.Identity;
@@ -13,19 +14,26 @@ public sealed class CreateGroupConversationCommandHandler
 {
     private readonly IChatDbContext _db;
     private readonly ICurrentUserContext _currentUser;
+    private readonly DirectConversationService? _reach;
 
     public CreateGroupConversationCommandHandler(
         IChatDbContext db,
-        ICurrentUserContext currentUser)
+        ICurrentUserContext currentUser,
+        DirectConversationService? reach = null)
     {
         _db = db;
         _currentUser = currentUser;
+        _reach = reach;
     }
 
     public async Task<Result<Guid>> Handle(
         CreateGroupConversationCommand request,
         CancellationToken cancellationToken)
     {
+        // Kept to one's own company (see IUserReachScope): only its people can be in the group.
+        if (_reach is not null && !await _reach.CanReachAsync(request.ParticipantIds, cancellationToken))
+            return Result.Failure<Guid>(Error.NotFound("User was not found."));
+
         var conversation = new Conversation(
             Guid.NewGuid(),
             _currentUser.TenantId,

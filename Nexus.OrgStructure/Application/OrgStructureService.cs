@@ -3,6 +3,7 @@ using Nexus.Organization.Domain;
 using Nexus.OrgStructure.Application.Dtos;
 using Nexus.OrgStructure.Domain;
 using NexusCore.Application.Identity.Interfaces;
+using NexusCore.SharedKernel.Interfaces;
 using NexusCore.SharedKernel.Results;
 
 namespace Nexus.OrgStructure.Application;
@@ -28,6 +29,7 @@ public interface IOrgStructureService
     Task<Result<UnitPositionDto>> AddUnitPositionAsync(Guid tenantId, Guid unitId, AddUnitPositionRequest request, CancellationToken cancellationToken);
     Task<Result<UnitPositionDto>> AddCompanyPositionAsync(Guid tenantId, Guid companyId, AddUnitPositionRequest request, CancellationToken cancellationToken);
     Task<Result<UnitPositionDto>> UpdateUnitPositionAsync(Guid tenantId, Guid unitPositionId, UpdateUnitPositionRequest request, CancellationToken cancellationToken);
+    Task<Result<UnitPositionDto>> SetPostParentAsync(Guid tenantId, Guid unitPositionId, SetPostParentRequest request, CancellationToken cancellationToken);
     Task<Result<IReadOnlyList<UnitPositionDto>>> OrderUnitPositionsAsync(Guid tenantId, Guid unitId, OrderUnitPositionsRequest request, CancellationToken cancellationToken);
     Task<Result> RemoveUnitPositionAsync(Guid tenantId, Guid unitPositionId, CancellationToken cancellationToken);
 
@@ -43,6 +45,9 @@ public interface IOrgStructureService
 
     Task<Result<IReadOnlyList<OrgChartTeamDto>>> ListTeamsOutsideUnitsAsync(Guid tenantId, CancellationToken cancellationToken);
     Task<Result<IReadOnlyList<UnplacedUserDto>>> ListUnplacedUsersAsync(Guid tenantId, CancellationToken cancellationToken);
+
+    /// <summary>Units of other companies, which a user kept to their own company does not see (empty when not kept).</summary>
+    Task<Result<IReadOnlyList<Guid>>> ListOtherCompaniesUnitsAsync(Guid tenantId, CancellationToken cancellationToken);
 }
 
 public sealed class OrgStructureService(
@@ -51,7 +56,9 @@ public sealed class OrgStructureService(
     IOrganizationUnitRepository units,
     IUserDirectory users,
     IWorkTeamDirectory workTeams,
-    TaskPostDirectory? taskPosts = null) : IOrgStructureService
+    TaskPostDirectory? taskPosts = null,
+    CompanyReachScope? companyReach = null,
+    ICurrentUserContext? currentUser = null) : IOrgStructureService
 {
     private const int MaxNameLength = 200;
     private const int MaxTitleLength = 120;
@@ -62,7 +69,8 @@ public sealed class OrgStructureService(
 
     public async Task<Result<IReadOnlyList<CompanyDto>>> ListCompaniesAsync(Guid tenantId, CancellationToken cancellationToken)
     {
-        var companies = await repository.ListCompaniesAsync(tenantId, cancellationToken);
+        var mine = await MyCompaniesAsync(tenantId, cancellationToken);
+        var companies = (await repository.ListCompaniesAsync(tenantId, cancellationToken)).Where(c => mine is null || mine.Contains(c.Id)).ToList();
         var links = await repository.ListCompanyUnitsAsync(tenantId, cancellationToken);
         var people = await PeopleAsync(companies.Select(c => c.ManagerUserId), cancellationToken);
         return Result.Success<IReadOnlyList<CompanyDto>>(companies.Select(c => ToDto(c, links, people)).ToList());
@@ -71,7 +79,7 @@ public sealed class OrgStructureService(
     public async Task<Result<CompanyDto>> GetCompanyAsync(Guid tenantId, Guid id, CancellationToken cancellationToken)
     {
         var company = await repository.GetCompanyAsync(tenantId, id, cancellationToken);
-        if (company is null)
+        if (company is null || !await IsMineAsync(tenantId, company.Id, cancellationToken))
         {
             return Result.Failure<CompanyDto>(Error.NotFound("Company was not found."));
         }
@@ -81,6 +89,12 @@ public sealed class OrgStructureService(
 
     public async Task<Result<CompanyDto>> CreateCompanyAsync(Guid tenantId, CreateCompanyRequest request, CancellationToken cancellationToken)
     {
+        // A new company is another company: not for someone kept to their own.
+        if (await MyCompaniesAsync(tenantId, cancellationToken) is not null)
+        {
+            return Result.Failure<CompanyDto>(OtherCompany());
+        }
+
         var invalid = await ValidateCompanyAsync(tenantId, null, request.Name, request.Code, request.Description, cancellationToken);
         if (invalid is not null)
         {
@@ -97,7 +111,7 @@ public sealed class OrgStructureService(
     public async Task<Result<CompanyDto>> UpdateCompanyAsync(Guid tenantId, Guid id, UpdateCompanyRequest request, CancellationToken cancellationToken)
     {
         var company = await repository.GetCompanyAsync(tenantId, id, cancellationToken);
-        if (company is null)
+        if (company is null || !await IsMineAsync(tenantId, company.Id, cancellationToken))
         {
             return Result.Failure<CompanyDto>(Error.NotFound("Company was not found."));
         }
@@ -116,7 +130,7 @@ public sealed class OrgStructureService(
     public async Task<Result> DeleteCompanyAsync(Guid tenantId, Guid id, CancellationToken cancellationToken)
     {
         var company = await repository.GetCompanyAsync(tenantId, id, cancellationToken);
-        if (company is null)
+        if (company is null || !await IsMineAsync(tenantId, company.Id, cancellationToken))
         {
             return Result.Failure(Error.NotFound("Company was not found."));
         }
@@ -165,7 +179,9 @@ public sealed class OrgStructureService(
     public async Task<Result<IReadOnlyList<CompanyUnitDto>>> ListCompanyUnitsAsync(Guid tenantId, CancellationToken cancellationToken)
     {
         var snapshot = await LoadAsync(tenantId, cancellationToken);
+        var mine = await MyCompaniesAsync(tenantId, cancellationToken);
         return Result.Success<IReadOnlyList<CompanyUnitDto>>(snapshot.Links
+            .Where(link => mine is null || mine.Contains(link.CompanyId))
             .Select(link => ToDto(link, snapshot))
             .OrderBy(dto => dto.CompanyName).ThenBy(dto => dto.UnitName)
             .ToList());
@@ -180,9 +196,16 @@ public sealed class OrgStructureService(
         }
 
         var company = snapshot.Companies.GetValueOrDefault(request.CompanyId);
-        if (company is null)
+        if (company is null || !await IsMineAsync(tenantId, company.Id, cancellationToken))
         {
             return Result.Failure<CompanyUnitDto>(Error.NotFound("Company was not found."));
+        }
+
+        // A unit of another company stays with it.
+        if (snapshot.Links.FirstOrDefault(link => link.UnitId == unitId) is { } linked
+            && !await IsMineAsync(tenantId, linked.CompanyId, cancellationToken))
+        {
+            return Result.Failure<CompanyUnitDto>(OtherCompany());
         }
 
         if (!company.IsActive)
@@ -238,7 +261,7 @@ public sealed class OrgStructureService(
     public async Task<Result> UnlinkUnitAsync(Guid tenantId, Guid unitId, CancellationToken cancellationToken)
     {
         var link = await repository.GetCompanyUnitAsync(tenantId, unitId, cancellationToken);
-        if (link is null)
+        if (link is null || !await IsMineAsync(tenantId, link.CompanyId, cancellationToken))
         {
             return Result.Failure(Error.NotFound("This unit is not linked to a company."));
         }
@@ -265,8 +288,12 @@ public sealed class OrgStructureService(
     public async Task<Result<IReadOnlyList<PositionDto>>> ListPositionsAsync(Guid tenantId, CancellationToken cancellationToken)
     {
         var links = await repository.ListPositionCompaniesAsync(tenantId, cancellationToken);
+        var mine = await MyCompaniesAsync(tenantId, cancellationToken);
         return Result.Success<IReadOnlyList<PositionDto>>(
-            (await repository.ListPositionsAsync(tenantId, cancellationToken)).Select(position => ToDto(position, links)).ToList());
+            (await repository.ListPositionsAsync(tenantId, cancellationToken))
+                .Where(position => mine is null || links.All(link => link.PositionId != position.Id)
+                    || links.Any(link => link.PositionId == position.Id && mine.Contains(link.CompanyId)))
+                .Select(position => ToDto(position, links)).ToList());
     }
 
     public async Task<Result<PositionDto>> CreatePositionAsync(Guid tenantId, CreatePositionRequest request, CancellationToken cancellationToken)
@@ -284,6 +311,11 @@ public sealed class OrgStructureService(
         }
 
         var companyIds = (request.CompanyIds ?? []).Distinct().ToList();
+        if (await MyCompaniesAsync(tenantId, cancellationToken) is { } mine && !companyIds.All(mine.Contains))
+        {
+            return Result.Failure<PositionDto>(OtherCompany());
+        }
+
         var position = new Position(Guid.NewGuid(), tenantId, request.Title, request.ParentPositionId);
         var wrong = ValidatePositionCompanies(snapshot, position.Id, request.ParentPositionId, companyIds, companyIds);
         if (wrong is not null)
@@ -348,6 +380,13 @@ public sealed class OrgStructureService(
         // Without a list (older clients) the position keeps its companies.
         var currentCompanies = snapshot.CompaniesOf(id);
         var companyIds = request.CompanyIds is null ? currentCompanies.ToList() : request.CompanyIds.Distinct().ToList();
+
+        // Kept to one's own company: only a position of one's own companies alone, and only for them.
+        if (await MyCompaniesAsync(tenantId, cancellationToken) is { } mine
+            && (currentCompanies.Count == 0 || !currentCompanies.All(mine.Contains) || !companyIds.All(mine.Contains)))
+        {
+            return Result.Failure<PositionDto>(OtherCompany());
+        }
         var parentChanged = request.ParentPositionId != position.ParentPositionId;
         var companiesChanged = !currentCompanies.SetEquals(companyIds);
 
@@ -441,6 +480,12 @@ public sealed class OrgStructureService(
         }
 
         var snapshot = await LoadAsync(tenantId, cancellationToken);
+        if (await MyCompaniesAsync(tenantId, cancellationToken) is { } mine
+            && (snapshot.CompaniesOf(id) is not { Count: > 0 } companies || !companies.All(mine.Contains)))
+        {
+            return Result.Failure(OtherCompany());
+        }
+
         if (snapshot.Positions.Values.Any(p => p.ParentPositionId == id))
         {
             return Result.Failure(Error.Conflict("This position has child positions. Reassign or remove them first."));
@@ -490,8 +535,9 @@ public sealed class OrgStructureService(
         Guid tenantId, Guid? unitId, CancellationToken cancellationToken)
     {
         var snapshot = await LoadAsync(tenantId, cancellationToken);
+        var mine = await MyCompaniesAsync(tenantId, cancellationToken);
         var seats = snapshot.Seats
-            .Where(seat => (unitId is null || seat.UnitId == unitId) && snapshot.IsShown(seat))
+            .Where(seat => (unitId is null || seat.UnitId == unitId) && snapshot.IsShown(seat) && (mine is null || mine.Contains(seat.CompanyId)))
             .ToList();
         var seatIds = seats.Select(seat => seat.Id).ToHashSet();
         var people = await PeopleAsync(
@@ -544,6 +590,11 @@ public sealed class OrgStructureService(
     private async Task<Result<UnitPositionDto>> AddPostAsync(
         Guid tenantId, Snapshot snapshot, Guid companyId, Guid? unitId, AddUnitPositionRequest request, CancellationToken cancellationToken)
     {
+        if (!await IsMineAsync(tenantId, companyId, cancellationToken))
+        {
+            return Result.Failure<UnitPositionDto>(unitId is null ? Error.NotFound("Company was not found.") : OtherCompany());
+        }
+
         if (snapshot.Positions.GetValueOrDefault(request.PositionId) is not { IsActive: true })
         {
             return Result.Failure<UnitPositionDto>(Error.Validation("Position was not found or is inactive."));
@@ -562,7 +613,21 @@ public sealed class OrgStructureService(
             return Result.Failure<UnitPositionDto>(invalid);
         }
 
+        if (request.ParentPostId is { } parentId)
+        {
+            if (snapshot.Seats.FirstOrDefault(seat => seat.Id == parentId) is not { } parent)
+            {
+                return Result.Failure<UnitPositionDto>(Error.Validation("The post above was not found."));
+            }
+
+            if (parent.CompanyId != companyId || parent.UnitId != unitId)
+            {
+                return Result.Failure<UnitPositionDto>(Error.Validation("The post above must be in the same place (the same unit, or directly in the company)."));
+            }
+        }
+
         var added = new UnitPosition(Guid.NewGuid(), tenantId, companyId, unitId, request.PositionId, NextSortOrder(snapshot, companyId, unitId, request.PositionId), code);
+        added.PlaceUnder(request.ParentPostId);
         await repository.AddUnitPositionAsync(added, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success(ToDto(added, snapshot, new Dictionary<Guid, UserContact>()));
@@ -574,6 +639,10 @@ public sealed class OrgStructureService(
     {
         var snapshot = await LoadAsync(tenantId, cancellationToken);
         var seat = snapshot.Seats.FirstOrDefault(s => s.Id == unitPositionId);
+        if (seat is not null && !await IsMineAsync(tenantId, seat.CompanyId, cancellationToken))
+        {
+            seat = null;
+        }
         if (seat is null)
         {
             return Result.Failure<UnitPositionDto>(Error.NotFound("Unit position was not found."));
@@ -591,11 +660,69 @@ public sealed class OrgStructureService(
         return Result.Success(ToDto(seat, snapshot, people));
     }
 
+    /// <summary>
+    /// Puts a post under another of its place (same unit, or both directly in the company), or
+    /// under nobody: the holder of the post above manages its holder (a vacant one is passed over).
+    /// </summary>
+    public async Task<Result<UnitPositionDto>> SetPostParentAsync(
+        Guid tenantId, Guid unitPositionId, SetPostParentRequest request, CancellationToken cancellationToken)
+    {
+        var snapshot = await LoadAsync(tenantId, cancellationToken);
+        var seat = snapshot.Seats.FirstOrDefault(s => s.Id == unitPositionId);
+        if (seat is not null && !await IsMineAsync(tenantId, seat.CompanyId, cancellationToken))
+        {
+            seat = null;
+        }
+        if (seat is null)
+        {
+            return Result.Failure<UnitPositionDto>(Error.NotFound("Unit position was not found."));
+        }
+
+        if (request.ParentPostId is { } parentId)
+        {
+            if (snapshot.Seats.FirstOrDefault(s => s.Id == parentId) is not { } parent)
+            {
+                return Result.Failure<UnitPositionDto>(Error.Validation("The post above was not found."));
+            }
+
+            if (parent.CompanyId != seat.CompanyId || parent.UnitId != seat.UnitId)
+            {
+                return Result.Failure<UnitPositionDto>(Error.Validation("The post above must be in the same place (the same unit, or directly in the company)."));
+            }
+
+            // Not itself, nor a post below it.
+            var visited = new HashSet<Guid>();
+            for (Guid? current = parentId; current is { } id && visited.Add(id); current = snapshot.Seats.FirstOrDefault(s => s.Id == id)?.ParentPostId)
+            {
+                if (id == seat.Id)
+                {
+                    return Result.Failure<UnitPositionDto>(Error.Conflict("A post can't be put under itself or under a post below it."));
+                }
+            }
+        }
+
+        var after = snapshot.Resolver(parentOverride: (seat.Id, request.ParentPostId));
+        if (snapshot.Resolver().FindLoop() is null && after.FindLoop() is not null)
+        {
+            return Result.Failure<UnitPositionDto>(Error.Conflict("This change would create a management loop."));
+        }
+
+        seat.PlaceUnder(request.ParentPostId);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        var people = await PeopleAsync(snapshot.Holdings.Where(h => h.UnitPositionId == seat.Id).Select(h => (Guid?)h.UserId), cancellationToken);
+        return Result.Success(ToDto(seat, snapshot, people));
+    }
+
     public async Task<Result<IReadOnlyList<UnitPositionDto>>> OrderUnitPositionsAsync(
         Guid tenantId, Guid unitId, OrderUnitPositionsRequest request, CancellationToken cancellationToken)
     {
         var snapshot = await LoadAsync(tenantId, cancellationToken);
         if (!snapshot.Units.ContainsKey(unitId))
+        {
+            return Result.Failure<IReadOnlyList<UnitPositionDto>>(Error.NotFound("Organization unit was not found."));
+        }
+
+        if (snapshot.Resolver().CompanyOfUnit(unitId) is { } unitCompany && !await IsMineAsync(tenantId, unitCompany, cancellationToken))
         {
             return Result.Failure<IReadOnlyList<UnitPositionDto>>(Error.NotFound("Organization unit was not found."));
         }
@@ -620,6 +747,10 @@ public sealed class OrgStructureService(
     {
         var snapshot = await LoadAsync(tenantId, cancellationToken);
         var seat = snapshot.Seats.FirstOrDefault(s => s.Id == unitPositionId);
+        if (seat is not null && !await IsMineAsync(tenantId, seat.CompanyId, cancellationToken))
+        {
+            seat = null;
+        }
         if (seat is null)
         {
             return Result.Failure(Error.NotFound("Unit position was not found."));
@@ -628,6 +759,11 @@ public sealed class OrgStructureService(
         if (snapshot.Holdings.Any(h => h.UnitPositionId == unitPositionId))
         {
             return Result.Failure(Error.Conflict("People hold this position. Change their positions first."));
+        }
+
+        if (snapshot.Seats.Any(other => other.ParentPostId == unitPositionId))
+        {
+            return Result.Failure(Error.Conflict("Posts are under this one. Move them first."));
         }
 
         repository.RemoveUnitPosition(seat);
@@ -675,7 +811,9 @@ public sealed class OrgStructureService(
     {
         var snapshot = await LoadAsync(tenantId, cancellationToken);
         var resolver = snapshot.Resolver();
+        var mine = await MyCompaniesAsync(tenantId, cancellationToken);
         var selected = snapshot.Assignments
+            .Where(a => mine is null || mine.Contains(a.CompanyId))
             .Where(a => companyId is null || a.CompanyId == companyId)
             .Where(a => unitId is null || a.UnitId == unitId)
             .ToList();
@@ -690,7 +828,7 @@ public sealed class OrgStructureService(
     {
         var snapshot = await LoadAsync(tenantId, cancellationToken);
         var assignment = snapshot.Assignments.FirstOrDefault(a => a.UserId == userId);
-        if (assignment is null)
+        if (assignment is null || !await IsMineAsync(tenantId, assignment.CompanyId, cancellationToken))
         {
             return Result.Failure<UserAssignmentDto>(Error.NotFound("This user has no place in the organization structure yet."));
         }
@@ -708,9 +846,22 @@ public sealed class OrgStructureService(
 
         var snapshot = await LoadAsync(tenantId, cancellationToken);
         var company = snapshot.Companies.GetValueOrDefault(request.CompanyId);
-        if (company is null)
+        if (company is null || !await IsMineAsync(tenantId, company.Id, cancellationToken))
         {
             return Result.Failure<UserAssignmentDto>(Error.Validation("Company was not found."));
+        }
+
+        // Kept to one's own company: its people (or those with no place yet), and a manager from it.
+        if (snapshot.Assignments.FirstOrDefault(a => a.UserId == userId) is { } placed
+            && !await IsMineAsync(tenantId, placed.CompanyId, cancellationToken))
+        {
+            return Result.Failure<UserAssignmentDto>(OtherCompany());
+        }
+
+        if (request.ManagerUserId is { } chosenManager && currentUser?.UserId is { } me && companyReach is not null
+            && await companyReach.GetReachAsync(tenantId, me, cancellationToken) is { } reach && !reach.Contains(chosenManager))
+        {
+            return Result.Failure<UserAssignmentDto>(OtherCompany());
         }
 
         if (!company.IsActive)
@@ -869,9 +1020,10 @@ public sealed class OrgStructureService(
 
         var after = snapshot.Resolver(
             assignmentOverride: new AssignmentNode(userId, request.CompanyId, request.UnitId, request.ManagerUserId),
-            companyManagerOverrides: heads);
+            companyManagerOverrides: heads,
+            heldOverride: (mainPositionId, finalSeats));
         if ((after.ManagementChainOf(userId).Count > 0 && LoopsBackTo(after, userId))
-            || (heads.Count > 0 && snapshot.Resolver().FindLoop() is null && after.FindLoop() is not null))
+            || (snapshot.Resolver().FindLoop() is null && after.FindLoop() is not null))
         {
             return Result.Failure<UserAssignmentDto>(Error.Conflict("This change would create a management loop."));
         }
@@ -915,7 +1067,7 @@ public sealed class OrgStructureService(
     public async Task<Result> RemoveAssignmentAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken)
     {
         var assignment = await repository.GetAssignmentAsync(tenantId, userId, cancellationToken);
-        if (assignment is null)
+        if (assignment is null || !await IsMineAsync(tenantId, assignment.CompanyId, cancellationToken))
         {
             return Result.Failure(Error.NotFound("This user has no place in the organization structure."));
         }
@@ -942,6 +1094,11 @@ public sealed class OrgStructureService(
 
     public async Task<Result<ManagerDto?>> GetManagerAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken)
     {
+        if (!await CanReachAsync(tenantId, userId, cancellationToken))
+        {
+            return Result.Failure<ManagerDto?>(Error.NotFound("User was not found."));
+        }
+
         var resolver = (await LoadAsync(tenantId, cancellationToken)).Resolver();
         if (resolver.ManagerOf(userId) is not { } manager)
         {
@@ -955,6 +1112,11 @@ public sealed class OrgStructureService(
     public async Task<Result<IReadOnlyList<SubordinateDto>>> GetSubordinatesAsync(
         Guid tenantId, Guid userId, bool includeIndirect, CancellationToken cancellationToken)
     {
+        if (!await CanReachAsync(tenantId, userId, cancellationToken))
+        {
+            return Result.Failure<IReadOnlyList<SubordinateDto>>(Error.NotFound("User was not found."));
+        }
+
         var snapshot = await LoadAsync(tenantId, cancellationToken);
         var resolver = snapshot.Resolver();
         var found = includeIndirect
@@ -1055,9 +1217,12 @@ public sealed class OrgStructureService(
             snapshot.Positions[seat.PositionId].IsActive,
             snapshot.Holdings.Where(h => h.UnitPositionId == seat.Id).Select(h => MemberOf(h.UserId)).ToList(),
             seat.Code,
-            snapshot.IsHeadPost(seat));
+            snapshot.IsHeadPost(seat),
+            seat.ParentPostId);
 
+        var mine = await MyCompaniesAsync(tenantId, cancellationToken);
         var chart = snapshot.Companies.Values
+            .Where(company => mine is null || mine.Contains(company.Id))
             .Where(company => companyId is null || company.Id == companyId)
             .OrderBy(company => company.Name)
             .Select(company =>
@@ -1113,8 +1278,12 @@ public sealed class OrgStructureService(
         var snapshot = await LoadAsync(tenantId, cancellationToken);
         var resolver = snapshot.Resolver();
         var linkedUnits = snapshot.Links.Select(link => link.UnitId).ToHashSet();
+        var reach = companyReach is not null && currentUser?.UserId is { } me
+            ? await companyReach.GetReachAsync(tenantId, me, cancellationToken)
+            : null;
         var outside = (await workTeams.ListWorkTeamsAsync(tenantId, cancellationToken))
             .Where(team => UnitOfOwner(snapshot, team) is not { } unitId || !linkedUnits.Contains(unitId))
+            .Where(team => reach is null || reach.Contains(team.OwnerUserId))
             .ToList();
         var people = await PeopleAsync(outside.SelectMany(t => t.MemberIds.Append(t.OwnerUserId)).Select(id => (Guid?)id), cancellationToken);
         return Result.Success<IReadOnlyList<OrgChartTeamDto>>(outside.Select(team => TeamDto(team, snapshot, resolver, people)).ToList());
@@ -1129,6 +1298,40 @@ public sealed class OrgStructureService(
             .Select(user => new UnplacedUserDto(user.Id, user.DisplayName, user.AvatarUrl))
             .ToList());
     }
+
+    public async Task<Result<IReadOnlyList<Guid>>> ListOtherCompaniesUnitsAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        if (await MyCompaniesAsync(tenantId, cancellationToken) is not { } mine)
+        {
+            return Result.Success<IReadOnlyList<Guid>>([]);
+        }
+
+        var snapshot = await LoadAsync(tenantId, cancellationToken);
+        var resolver = snapshot.Resolver();
+        return Result.Success<IReadOnlyList<Guid>>(snapshot.Units.Keys
+            .Where(unitId => resolver.CompanyOfUnit(unitId) is { } company && !mine.Contains(company))
+            .ToList());
+    }
+
+    // ---------------------------------------------------------------- own company only
+
+    /// <summary>
+    /// The companies the signed-in user sees and changes, or null when not kept to their own
+    /// (OrgStructure:LimitToOwnCompany off, AllCompanies held, or no signed-in user).
+    /// </summary>
+    private async Task<IReadOnlySet<Guid>?> MyCompaniesAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        companyReach is not null && currentUser?.UserId is { } me
+            ? await companyReach.GetCompaniesAsync(tenantId, me, cancellationToken)
+            : null;
+
+    private async Task<bool> IsMineAsync(Guid tenantId, Guid companyId, CancellationToken cancellationToken) =>
+        await MyCompaniesAsync(tenantId, cancellationToken) is not { } mine || mine.Contains(companyId);
+
+    private async Task<bool> CanReachAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken) =>
+        companyReach is null || currentUser?.UserId is not { } me
+        || await companyReach.GetReachAsync(tenantId, me, cancellationToken) is not { } reach || reach.Contains(userId);
+
+    private static Error OtherCompany() => Error.Forbidden("You can only see and change your own company.");
 
     /// <summary>The unit of the person who built the team; a team shows under it.</summary>
     private static Guid? UnitOfOwner(Snapshot snapshot, WorkTeamInfo team) =>
@@ -1229,7 +1432,8 @@ public sealed class OrgStructureService(
                 .Select(h => Person(h.UserId, people)).OrderBy(person => person.DisplayName).ToList(),
             seat.Code,
             seat.CompanyId,
-            snapshot.Companies.GetValueOrDefault(seat.CompanyId)?.Name);
+            snapshot.Companies.GetValueOrDefault(seat.CompanyId)?.Name,
+            seat.ParentPostId);
     }
 
     private async Task<CompanyDto> ToDtoAsync(Guid tenantId, Company company, CancellationToken cancellationToken)
@@ -1350,17 +1554,50 @@ public sealed class OrgStructureService(
         public HashSet<Guid> CompaniesOf(Guid positionId) =>
             PositionCompanies.Where(link => link.PositionId == positionId).Select(link => link.CompanyId).ToHashSet();
 
+        /// <summary>
+        /// The reporting structure; the overrides show it as it would be after a change: a person's
+        /// new place (with the main position and posts they would hold), new company heads, or a
+        /// post's new parent.
+        /// </summary>
         public HierarchyResolver Resolver(
             AssignmentNode? assignmentOverride = null,
-            IReadOnlyDictionary<Guid, Guid?>? companyManagerOverrides = null)
+            IReadOnlyDictionary<Guid, Guid?>? companyManagerOverrides = null,
+            (Guid? PositionId, IReadOnlyList<UnitPosition> Posts)? heldOverride = null,
+            (Guid PostId, Guid? ParentPostId)? parentOverride = null)
         {
+            var placements = Assignments
+                .Where(a => assignmentOverride is null || a.UserId != assignmentOverride.UserId)
+                .Select(a => new PostSuperiors.Placement(a.UserId, a.CompanyId, a.UnitId, a.PositionId))
+                .ToList();
+            var seats = Seats.ToList();
+            var holdings = Holdings.ToList();
+            if (assignmentOverride is not null)
+            {
+                placements.Add(new PostSuperiors.Placement(
+                    assignmentOverride.UserId, assignmentOverride.CompanyId, assignmentOverride.UnitId,
+                    heldOverride?.PositionId ?? Assignments.FirstOrDefault(a => a.UserId == assignmentOverride.UserId)?.PositionId));
+                if (heldOverride is { } held)
+                {
+                    holdings = holdings.Where(h => h.UserId != assignmentOverride.UserId)
+                        .Concat(held.Posts.Select(post => new UserPosition(Guid.NewGuid(), Guid.Empty, assignmentOverride.UserId, post.Id)))
+                        .ToList();
+                    seats.AddRange(held.Posts.Where(post => seats.All(seat => seat.Id != post.Id)));
+                }
+            }
+
+            var superiors = PostSuperiors.Of(placements, seats, holdings,
+                parentOverride is { } moved ? seat => seat.Id == moved.PostId ? moved.ParentPostId : seat.ParentPostId : null);
             var assignments = Assignments
                 .Where(a => assignmentOverride is null || a.UserId != assignmentOverride.UserId)
-                .Select(a => new AssignmentNode(a.UserId, a.CompanyId, a.UnitId, a.ManagerUserId))
+                .Select(a => new AssignmentNode(a.UserId, a.CompanyId, a.UnitId, a.ManagerUserId,
+                    superiors.TryGetValue(a.UserId, out var superior) ? superior : null))
                 .ToList();
             if (assignmentOverride is not null)
             {
-                assignments.Add(assignmentOverride);
+                assignments.Add(assignmentOverride with
+                {
+                    PostSuperiorUserId = superiors.TryGetValue(assignmentOverride.UserId, out var superior) ? superior : null,
+                });
             }
 
             var companyManagers = Companies.Values.ToDictionary(

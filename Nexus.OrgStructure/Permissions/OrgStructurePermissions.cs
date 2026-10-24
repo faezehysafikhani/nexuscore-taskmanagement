@@ -29,6 +29,12 @@ public static class OrgStructurePermissions
     public const string ManageSubstitution = "org_structure.manage_substitution";
 
     /// <summary>
+    /// Where everyone is kept to their own company (OrgStructure:LimitToOwnCompany), its holder
+    /// reaches the people and structure of every company. Not one of <see cref="All"/> either.
+    /// </summary>
+    public const string AllCompanies = "org_structure.all_companies";
+
+    /// <summary>
     /// Policy for the read endpoints: any of the permissions above. A manager of companies,
     /// positions or assignments has to see them too, and this module cannot add entries to
     /// NexusCore's PermissionPrerequisites without changing NexusCore for every product.
@@ -62,7 +68,8 @@ public static class OrgStructurePermissions
     [
         new(TeamMembersFromAnyUnit, "Organization", "افزودن اعضای سایر معاونت‌ها به تیم کاری"),
         new(AssignTasksToAnyLevel, "Organization", "ارجاع فعالیت به همه‌ی سطوح سازمانی (حتی بالاتر از خود)"),
-        new(ManageSubstitution, "Organization", "مدیریت کارتابل جانشینی (تعیین سرپرست برای همه‌ی پست‌های خالی)")
+        new(ManageSubstitution, "Organization", "مدیریت کارتابل جانشینی (تعیین سرپرست برای همه‌ی پست‌های خالی)"),
+        new(AllCompanies, "Organization", "دسترسی به همه‌ی شرکت‌ها (عبور از محدودیت شرکت خود)")
     ];
 }
 

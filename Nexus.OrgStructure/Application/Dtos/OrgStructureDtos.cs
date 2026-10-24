@@ -83,10 +83,14 @@ public sealed record UnitPositionDto(
     IReadOnlyList<PersonRef> Holders,
     string Code = "",
     Guid CompanyId = default,
-    string? CompanyName = null);
+    string? CompanyName = null,
+    Guid? ParentPostId = null);
 
-/// <summary>Code: optional; without it the next free number of the company.</summary>
-public sealed record AddUnitPositionRequest(Guid PositionId, string? Code = null);
+/// <summary>Code: optional; without it the next free number of the company. ParentPostId: the post above it.</summary>
+public sealed record AddUnitPositionRequest(Guid PositionId, string? Code = null, Guid? ParentPostId = null);
+
+/// <summary>The post above this one (same unit, or both directly in the company); null: none.</summary>
+public sealed record SetPostParentRequest(Guid? ParentPostId);
 
 public sealed record UpdateUnitPositionRequest(string Code);
 
@@ -152,7 +156,8 @@ public sealed record OrgChartPositionDto(
     bool IsActive,
     IReadOnlyList<OrgChartMemberDto> Holders,
     string Code = "",
-    bool IsHead = false);
+    bool IsHead = false,
+    Guid? ParentPostId = null);
 
 /// <summary>
 /// Members: the company's people in no unit who hold none of its own posts. Positions: the posts

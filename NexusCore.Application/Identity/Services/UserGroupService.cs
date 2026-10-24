@@ -292,7 +292,9 @@ public sealed class UserGroupService(
             && await memberScope.GetLimitAsync(team.TenantId, team.OwnerUserId!.Value, cancellationToken) is { } limit
             && added.Any(userId => !limit.AllowedUserIds.Contains(userId)))
         {
-            return Result.Failure<UserGroupDto>(Error.Forbidden("Only members of your own deputy can be added to your team."));
+            return Result.Failure<UserGroupDto>(Error.Forbidden(limit.IsCompany
+                ? "Only people of your own company can be added to your team."
+                : "Only members of your own deputy can be added to your team."));
         }
 
         team.SetMembers(memberIds);

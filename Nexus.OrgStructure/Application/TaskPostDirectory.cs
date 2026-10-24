@@ -26,8 +26,23 @@ public sealed class TaskPostDirectory(
         return (await LoadAsync(tenantId, cancellationToken)).Posts.Where(post => wanted.Contains(post.PostId)).ToDictionary(post => post.PostId);
     }
 
-    public async Task<IReadOnlyList<WorkPost>> ListPostsAsync(Guid tenantId, CancellationToken cancellationToken) =>
-        (await LoadAsync(tenantId, cancellationToken)).Posts;
+    /// <summary>
+    /// Every post - or, where the signed-in user is kept to their own company
+    /// (<see cref="CompanyReachScope"/>), that company's posts only.
+    /// </summary>
+    public async Task<IReadOnlyList<WorkPost>> ListPostsAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        var state = await LoadAsync(tenantId, cancellationToken);
+        if (services.GetService<NexusCore.SharedKernel.Interfaces.ICurrentUserContext>()?.UserId is not { } me
+            || services.GetService<CompanyReachScope>() is not { } reach
+            || await reach.GetCompaniesAsync(tenantId, me, cancellationToken) is not { } companies)
+        {
+            return state.Posts;
+        }
+
+        var companyOf = state.Seats.ToDictionary(seat => seat.Id, seat => seat.CompanyId);
+        return state.Posts.Where(post => companyOf.TryGetValue(post.PostId, out var company) && companies.Contains(company)).ToList();
+    }
 
     /// <summary>A person's main post: the one of their main position in their own place, else the first they hold.</summary>
     public async Task<IReadOnlyDictionary<Guid, Guid>> GetMainPostsAsync(Guid tenantId, IReadOnlyCollection<Guid> userIds, CancellationToken cancellationToken)

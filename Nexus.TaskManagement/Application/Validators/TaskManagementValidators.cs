@@ -107,6 +107,9 @@ public sealed class CreateTaskRequestValidator : AbstractValidator<CreateTaskReq
             subTask.RuleFor(s => s.EndDate)
                 .GreaterThanOrEqualTo(s => s.StartDate!.Value)
                 .When(s => s.StartDate.HasValue && s.EndDate.HasValue);
+            subTask.RuleFor(s => s.AssigneeUserIds)
+                .Must(ids => ids is { Count: > 0 })
+                .WithMessage("Choose at least one responsible person for the subtask.");
         });
 
         RuleForEach(x => x.Tags!).NotEmpty().MaximumLength(100);
@@ -172,6 +175,9 @@ public sealed class CreateSubTaskRequestValidator : AbstractValidator<CreateSubT
         RuleFor(x => x.EndDate)
             .GreaterThanOrEqualTo(x => x.StartDate!.Value)
             .When(x => x.StartDate.HasValue && x.EndDate.HasValue);
+        RuleFor(x => x.AssigneeUserIds)
+            .Must(ids => ids is { Count: > 0 })
+            .WithMessage("Choose at least one responsible person for the subtask.");
     }
 }
 
@@ -184,7 +190,15 @@ public sealed class UpdateSubTaskRequestValidator : AbstractValidator<UpdateSubT
         RuleFor(x => x.EndDate)
             .GreaterThanOrEqualTo(x => x.StartDate!.Value)
             .When(x => x.StartDate.HasValue && x.EndDate.HasValue);
+        RuleFor(x => x.AssigneeUserIds)
+            .Must(ids => ids is { Count: > 0 })
+            .WithMessage("Choose at least one responsible person for the subtask.");
     }
+}
+
+public sealed class ChangeSubTaskStatusRequestValidator : AbstractValidator<ChangeSubTaskStatusRequest>
+{
+    public ChangeSubTaskStatusRequestValidator() => RuleFor(x => x.Status).IsInEnum();
 }
 
 public sealed class CreateRepetitiveTaskRequestValidator : AbstractValidator<CreateRepetitiveTaskRequest>
