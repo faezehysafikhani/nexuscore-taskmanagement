@@ -18,7 +18,8 @@ public sealed class TaskService(
     ITaskNoticePublisher notices,
     IWorkAssignmentScope assignmentScope,
     ITaskPosts taskPosts,
-    IUserReachScope reachScope) : ITaskService
+    IUserReachScope reachScope,
+    IRecurrenceCalculator calendar) : ITaskService
 {
     /// <summary>
     /// Seeing a task (owner, assignee, collaborator, team) lets a user work on it; changing what
@@ -363,6 +364,11 @@ public sealed class TaskService(
         return Result.Success();
     }
 
+    /// <summary>The moment a task is due: its time on its date, or the end of that day when it has no time.</summary>
+    private DateTimeOffset DueMoment(TaskItem task) => task.DueTime is { } time
+        ? calendar.FromLocal(task.DueDate, time)
+        : calendar.FromLocal(task.DueDate.AddDays(1), TimeOnly.MinValue);
+
     public async Task<Result<TaskDto>> ChangeStatusAsync(
         Guid id, ChangeTaskStatusRequest request, CancellationToken cancellationToken)
     {
@@ -385,7 +391,17 @@ public sealed class TaskService(
         }
 
         var previous = task.Status;
+        // Past due and not done (finished and paused tasks are not "overdue"): whoever cares about
+        // it is told when its status changes.
+        var wasOverdue = task.Recurrence is null
+            && previous is TaskItemStatus.Todo or TaskItemStatus.InProgress
+            && DateTimeOffset.UtcNow >= DueMoment(task);
         task.ChangeStatus(request.Status, DateTimeOffset.UtcNow);
+        if (wasOverdue && request.Status != previous)
+        {
+            task.RaiseOverdueStatusChanged(previous, currentUser.UserId);
+        }
+
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await activity.RecordAsync(id, "Status changed", $"{previous} -> {request.Status}", cancellationToken);
 

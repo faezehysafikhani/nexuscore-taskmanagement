@@ -134,6 +134,24 @@ public sealed class TaskItemTests
         Assert.Contains(NewTask().DomainEvents, e => e is TaskItemCreated);
 
     [Fact]
+    public void ChangingTheStatusOfAnOverdueTask_RaisesTheOverdueChangeEvent()
+    {
+        var task = NewTask();
+        var actor = Guid.NewGuid();
+
+        task.ChangeStatus(TaskItemStatus.Completed, DateTimeOffset.UtcNow);
+        task.RaiseOverdueStatusChanged(TaskItemStatus.Todo, actor);
+
+        var raised = Assert.IsType<TaskItemOverdueStatusChanged>(
+            task.DomainEvents.Single(e => e is TaskItemOverdueStatusChanged));
+        Assert.Equal(task.Id, raised.TaskId);
+        Assert.Equal(task.TenantId, raised.TenantId);
+        Assert.Equal(actor, raised.ChangedByUserId);
+        Assert.Equal(TaskItemStatus.Todo, raised.PreviousStatus);
+        Assert.Equal(TaskItemStatus.Completed, raised.Status);
+    }
+
+    [Fact]
     public void RaisingRecurrenceDue_CarriesTheTaskAndTenant()
     {
         var task = NewTask();
