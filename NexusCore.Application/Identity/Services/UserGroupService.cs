@@ -122,9 +122,20 @@ public sealed class UserGroupService(
             return Result.Failure(Error.Validation("These permissions are not managed in this product: " + string.Join(", ", unmanaged)));
         }
 
+        // Prerequisites are saved with the permission that needs them (same rule as for users and roles).
+        var requestedIds = request.PermissionIds.Distinct().ToList();
+        var byName = known.Values.ToDictionary(permission => permission.Name, StringComparer.Ordinal);
+        foreach (var impliedName in PermissionPrerequisites.ImpliedBy(requestedIds.Select(id => known[id].Name)))
+        {
+            if (byName.TryGetValue(impliedName, out var implied) && _managed.IsManaged(implied) && !requestedIds.Contains(implied.Id))
+            {
+                requestedIds.Add(implied.Id);
+            }
+        }
+
         // Same rule as for users and roles: nobody hands out a permission they do not have.
         var already = group.Permissions.Select(grant => grant.PermissionId).ToHashSet();
-        var notHeld = request.PermissionIds.Distinct()
+        var notHeld = requestedIds
             .Where(id => !already.Contains(id))
             .Select(id => known[id].Name)
             .Where(name => currentUser.UserId is not null && !currentUser.HasPermission(name))
@@ -135,7 +146,7 @@ public sealed class UserGroupService(
         }
 
         // The group's permissions of modules this product does not manage stay as they were.
-        group.SetPermissions(request.PermissionIds.Distinct().Concat(group.Permissions
+        group.SetPermissions(requestedIds.Concat(group.Permissions
             .Where(grant => known.TryGetValue(grant.PermissionId, out var permission) && !_managed.IsManaged(permission))
             .Select(grant => grant.PermissionId)).Distinct().ToList());
         await unitOfWork.SaveChangesAsync(cancellationToken);

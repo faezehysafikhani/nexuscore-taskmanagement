@@ -21,6 +21,7 @@ public static class PermissionPrerequisites
         [IdentityPermissions.UsersAssignRoles] = [IdentityPermissions.UsersView, IdentityPermissions.RolesView],
         [IdentityPermissions.UsersAssignPermissions] = [IdentityPermissions.UsersView, IdentityPermissions.PermissionsView],
         [IdentityPermissions.UsersChangeStatus] = [IdentityPermissions.UsersView],
+        [IdentityPermissions.UsersDelete] = [IdentityPermissions.UsersView],
 
         [IdentityPermissions.RolesCreate] = [IdentityPermissions.RolesView],
         [IdentityPermissions.RolesUpdate] = [IdentityPermissions.RolesView],
@@ -32,6 +33,7 @@ public static class PermissionPrerequisites
         [IdentityPermissions.LdapSettingsUpdate] = [IdentityPermissions.LdapSettingsView],
         [IdentityPermissions.LdapSettingsTest] = [IdentityPermissions.LdapSettingsView],
         [IdentityPermissions.TenantsCreate] = [IdentityPermissions.TenantsView],
+        [IdentityPermissions.TenantsManageAll] = [IdentityPermissions.TenantsView],
 
         // Optional user-group feature. Remove these entries together with the feature.
         [UserGroupPermissions.GroupsCreate] = [UserGroupPermissions.GroupsView],
@@ -53,6 +55,11 @@ public static class PermissionPrerequisites
         ["org_structure.manage_positions"] = new[] { "org_structure.view", IdentityPermissions.UsersView, IdentityPermissions.UsersUpdate },
         ["org_structure.manage_assignments"] = new[] { "org_structure.view", IdentityPermissions.UsersView, IdentityPermissions.UsersUpdate },
 
+        // Org structure scope switches only widen what the view permission already shows.
+        ["org_structure.manage_substitution"] = new[] { "org_structure.view" },
+        ["org_structure.assign_tasks_any_level"] = new[] { "org_structure.view" },
+        ["org_structure.team_members_any_unit"] = new[] { "org_structure.view" },
+
         // Actions/task management: create/edit/delete/submit require view permission
         ["Actions.Create"] = new[] { "Actions.View" },
         ["Actions.Edit"] = new[] { "Actions.View" },
@@ -63,8 +70,27 @@ public static class PermissionPrerequisites
         ["Tasks.Create"] = new[] { "Tasks.View" },
         ["Tasks.Edit"] = new[] { "Tasks.View" },
         ["Tasks.Delete"] = new[] { "Tasks.View" },
-        ["Tasks.Comment"] = new[] { "Tasks.View" }
+        ["Tasks.Comment"] = new[] { "Tasks.View" },
+        ["Tasks.Assign"] = new[] { "Tasks.View" },
+        ["Tasks.UploadFiles"] = new[] { "Tasks.View" },
+        ["Tasks.ManageAll"] = new[] { "Tasks.View" },
+        ["Tasks.ManageRecurring"] = new[] { "Tasks.View" },
+        ["Tasks.ManageTags"] = new[] { "Tasks.View" }
     };
+
+    /// <summary>The whole dependency table (permission -> direct prerequisites), read only.</summary>
+    public static IReadOnlyDictionary<string, string[]> All => Map;
+
+    /// <summary>
+    /// The permissions <paramref name="granted"/> need but do not contain yet. Used when an
+    /// assignment is saved, so the prerequisites are stored together with the permission that
+    /// needs them (the effective set is expanded again when it is resolved).
+    /// </summary>
+    public static IReadOnlyList<string> ImpliedBy(IEnumerable<string> granted)
+    {
+        var given = granted.ToHashSet(StringComparer.Ordinal);
+        return Expand(given).Where(name => !given.Contains(name)).ToList();
+    }
 
     /// <summary>
     /// Returns the granted permissions plus everything they transitively depend on.

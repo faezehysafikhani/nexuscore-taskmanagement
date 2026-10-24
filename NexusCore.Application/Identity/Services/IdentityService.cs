@@ -502,25 +502,25 @@ public sealed class IdentityService(
 
         bool Managed(Guid id) => byId.TryGetValue(id, out var permission) && _managed.IsManaged(permission);
 
-        // Ensure Users.View is persisted when assigning user-related permissions that depend on it.
-        // This mirrors the UI behaviour for roles: if a prerequisite (UsersView) is required it
-        // should be stored so the frontend shows it checked after reload.
+        // A permission is useless without the ones it depends on (PermissionPrerequisites), so they
+        // are saved together with it - for roles, groups and users alike - and the screens show
+        // them checked after a reload. Denying one that a granted permission needs is refused.
         var allPermissions = await repository.ListPermissionsAsync(cancellationToken);
         var nameMap = allPermissions.ToDictionary(p => p.Name, StringComparer.Ordinal);
-        var requestedNames = requested.Select(id => byId[id].Name).ToList();
-        var expandedNames = PermissionPrerequisites.Expand(requestedNames);
-        if (expandedNames.Contains(IdentityPermissions.UsersView) && nameMap.TryGetValue(IdentityPermissions.UsersView, out var usersView) && _managed.IsManaged(usersView))
+        foreach (var impliedName in PermissionPrerequisites.ImpliedBy(requested.Select(id => byId[id].Name)))
         {
-            // Do not add if explicitly denied.
-            if (requestedDenied is null || !requestedDenied.Contains(usersView.Id))
+            if (!nameMap.TryGetValue(impliedName, out var implied) || !_managed.IsManaged(implied) || requested.Contains(implied.Id))
             {
-                if (!requested.Contains(usersView.Id))
-                {
-                    requested.Add(usersView.Id);
-                    // Ensure byId includes it for later name lookups.
-                    byId[usersView.Id] = usersView;
-                }
+                continue;
             }
+
+            if (requestedDenied is not null && requestedDenied.Contains(implied.Id))
+            {
+                return Result.Failure(Error.Validation($"\"{impliedName}\" cannot be denied while a permission that requires it is granted."));
+            }
+
+            requested.Add(implied.Id);
+            byId[implied.Id] = implied;
         }
 
         // Every change that gives something back needs the caller to hold it: a new grant, and a
@@ -652,18 +652,22 @@ public sealed class IdentityService(
             return Result.Failure(Error.Validation("These permissions are not managed in this product: " + string.Join(", ", unmanaged)));
         }
 
-        // Targeted: ensure Users.View persists when assigning role permissions that require it.
+        // Prerequisites are saved with the permission that needs them (same rule as for users and groups).
         var allPermissionsForRoles = await repository.ListPermissionsAsync(cancellationToken);
         var nameMapForRoles = allPermissionsForRoles.ToDictionary(p => p.Name, StringComparer.Ordinal);
-        var requestedNamesForRoles = known.Select(p => p.Name).ToList();
-        var expandedNamesForRoles = PermissionPrerequisites.Expand(requestedNamesForRoles);
-        if (expandedNamesForRoles.Contains(IdentityPermissions.UsersView) && nameMapForRoles.TryGetValue(IdentityPermissions.UsersView, out var usersViewForRole) && _managed.IsManaged(usersViewForRole))
+        var addedForRole = false;
+        foreach (var impliedName in PermissionPrerequisites.ImpliedBy(known.Select(p => p.Name)))
         {
-            if (!requested.Contains(usersViewForRole.Id))
+            if (nameMapForRoles.TryGetValue(impliedName, out var implied) && _managed.IsManaged(implied) && !requested.Contains(implied.Id))
             {
-                requested.Add(usersViewForRole.Id);
-                known = await repository.GetPermissionsByIdsAsync(requested, cancellationToken);
+                requested.Add(implied.Id);
+                addedForRole = true;
             }
+        }
+
+        if (addedForRole)
+        {
+            known = await repository.GetPermissionsByIdsAsync(requested, cancellationToken);
         }
 
         var already = role.Permissions.Select(grant => grant.PermissionId).ToHashSet();
