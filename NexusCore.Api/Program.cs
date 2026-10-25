@@ -162,6 +162,27 @@ app.UseNexusCoreForwardedHeaders();
 
 app.UseSafeErrorResponses();
 
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHsts();
+}
+
+// Tokens, sessions and one-time codes must not be kept by browsers or proxies.
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/api/identity"))
+    {
+        context.Response.OnStarting(() =>
+        {
+            context.Response.Headers["Cache-Control"] = "no-store";
+            context.Response.Headers["Pragma"] = "no-cache";
+            return Task.CompletedTask;
+        });
+    }
+
+    await next();
+});
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
