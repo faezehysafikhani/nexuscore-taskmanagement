@@ -87,6 +87,36 @@ public sealed class UserReachTests(AccessControlTests.Host host) : IClassFixture
         Assert.Equal(HttpStatusCode.OK, (await host.SendFormAsync(me, HttpMethod.Post, $"/api/chat/direct/{colleague.Id}/messages", "سلام")).StatusCode);
     }
 
+    [Fact]
+    public async Task UnreadMessages_FromSomeoneOfAnotherCompany_AreNotCounted()
+    {
+        var me = await host.UserAsync(host.TenantA, []);
+        var outsider = await host.UserAsync(host.TenantA, []);
+        // Sent before the companies were kept apart.
+        Assert.Equal(HttpStatusCode.OK, (await host.SendFormAsync(outsider, HttpMethod.Post, $"/api/chat/direct/{me.Id}/messages", "سلام")).StatusCode);
+        Assert.Contains(outsider.Id, await UnreadSendersAsync(me));
+
+        host.Reach.Keep(me.Id, [me.Id], elsewhere: [outsider.Id]);
+        Assert.DoesNotContain(outsider.Id, await UnreadSendersAsync(me));
+    }
+
+    [Fact]
+    public async Task TheCommentsOfATaskOneCannotSee_AnswerNotFound()
+    {
+        var owner = await host.UserAsync(host.TenantA, Permissions);
+        var stranger = await host.UserAsync(host.TenantA, Permissions);
+        var id = await host.CreatedTaskIdAsync(owner, "Private");
+
+        Assert.Equal(HttpStatusCode.OK, (await host.SendAsync(owner, HttpMethod.Get, $"/api/task-management/tasks/{id}/comments")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await host.SendAsync(stranger, HttpMethod.Get, $"/api/task-management/tasks/{id}/comments")).StatusCode);
+    }
+
+    private async Task<List<Guid>> UnreadSendersAsync(AccessControlTests.Caller caller)
+    {
+        using var json = JsonDocument.Parse(await (await host.SendAsync(caller, HttpMethod.Get, "/api/chat/direct/unread-counts")).Content.ReadAsStringAsync());
+        return json.RootElement.EnumerateArray().Select(x => x.GetProperty("senderUserId").GetGuid()).ToList();
+    }
+
     private async Task<List<Guid>> UserIdsAsync(AccessControlTests.Caller caller)
     {
         var response = await host.SendAsync(caller, HttpMethod.Get, "/api/identity/users?pageNumber=1&pageSize=500");

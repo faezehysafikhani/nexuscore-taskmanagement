@@ -751,6 +751,12 @@ public sealed class TaskCommentService(
         }
 
         var tenantId = currentUser.TenantId.Value;
+        // A task the user cannot see answers "not found", as its other endpoints do.
+        if (await taskRepository.GetForUpdateAsync(tenantId, taskId, cancellationToken) is null)
+        {
+            return Result.Failure<IReadOnlyList<TaskCommentDto>>(Error.NotFound("Task not found."));
+        }
+
         var comments = await repository.ListForTaskAsync(tenantId, taskId, cancellationToken);
         var users = await taskRepository.GetUserSummariesAsync(
             comments.Select(c => c.UserId).Distinct().ToList(), cancellationToken);
