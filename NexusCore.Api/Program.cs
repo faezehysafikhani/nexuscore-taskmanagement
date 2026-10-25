@@ -186,6 +186,7 @@ app.MapHub<NotificationHub>("/hubs/notifications")
 
 app.MapGet("/", () => Results.Redirect("/swagger")).ExcludeFromDescription();
 app.MapIdentityEndpoints();
+app.MapSecurityReportEndpoints();
 if (builder.Configuration.IsUserGroupFeatureEnabled())
 {
     app.MapUserGroupEndpoints();

@@ -20,6 +20,7 @@ public sealed class NexusRateLimitingOptions
     public RateLimitRule ChatSend { get; set; } = new(60, 1);
     public RateLimitRule Sms { get; set; } = new(5, 5);
     public RateLimitRule Realtime { get; set; } = new(120, 1);
+    public RateLimitRule SecurityReports { get; set; } = new(30, 1);
 }
 
 public sealed record RateLimitRule(int PermitLimit, int WindowMinutes)

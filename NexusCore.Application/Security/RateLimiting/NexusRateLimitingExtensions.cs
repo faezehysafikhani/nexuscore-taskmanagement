@@ -68,6 +68,9 @@ public static class NexusRateLimitingExtensions
 
             options.AddPolicy(NexusRateLimitPolicies.Realtime, http =>
                 CreatePartition(UserOrClientPartition(http, "realtime"), configured.Enabled, configured.Realtime));
+
+            options.AddPolicy(NexusRateLimitPolicies.SecurityReports, http =>
+                CreatePartition(ClientPartition(http, "security-reports"), configured.Enabled, configured.SecurityReports));
         });
 
         return services;
