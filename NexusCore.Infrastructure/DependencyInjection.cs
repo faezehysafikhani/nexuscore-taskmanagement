@@ -87,7 +87,19 @@ public static class DependencyInjection
 
         // Outgoing messages. Request logging is removed from this client: the SMS API key is part
         // of the request URL and must not reach the logs.
-        services.AddHttpClient(KavenegarSmsProvider.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(15)).RemoveAllLoggers();
+        // Where outgoing calls configured by administrators (SMS gateway, LDAP) may go.
+        services.Configure<OutboundAddressOptions>(configuration.GetSection(OutboundAddressOptions.SectionName));
+        services.AddSingleton<IOutboundAddressPolicy, OutboundAddressPolicy>();
+        // No redirects (a redirect would carry the request, and the API key in its path, to an
+        // address nobody checked) and the address is checked again at the moment of connecting,
+        // so a name that changes its answer between the check and the call gets nowhere.
+        services.AddHttpClient(KavenegarSmsProvider.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(15))
+            .ConfigurePrimaryHttpMessageHandler(provider => new SocketsHttpHandler
+            {
+                AllowAutoRedirect = false,
+                ConnectCallback = new GatewayConnector(provider.GetRequiredService<IOutboundAddressPolicy>()).ConnectAsync
+            })
+            .RemoveAllLoggers();
         // SMS providers: one implementation each; the panel setting picks one. Add a provider here.
         services.AddScoped<ISmsProvider, KavenegarSmsProvider>();
         services.AddScoped<ISmsSender, GatewaySmsSender>();

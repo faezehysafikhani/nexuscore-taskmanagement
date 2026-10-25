@@ -13,6 +13,8 @@
     <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="8.0.12" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.24" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.24" />
+    <!-- The SQLite native library EF Core pulls in is flagged (GHSA-2m69-gcr7-jv3q); the fixed one wins. -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.12" />
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="8.0.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />

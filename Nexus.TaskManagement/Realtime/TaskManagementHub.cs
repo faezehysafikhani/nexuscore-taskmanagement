@@ -84,7 +84,10 @@ public sealed class TaskChangeBroadcastFilter(
         {
             await hub.Clients.Group(TaskManagementHub.TenantGroup(tenantId)).SendAsync(
                 TaskManagementHub.TasksChangedEvent,
-                new TasksChangedMessage(request.Path.Value ?? string.Empty, request.Method, DateTimeOffset.UtcNow),
+                // Only "something changed": the request path names the task, the comment and the
+                // file, and the whole organization receives this - including people who may not
+                // open that task. Clients reload what they are allowed to see.
+                new TasksChangedMessage(string.Empty, string.Empty, DateTimeOffset.UtcNow),
                 context.HttpContext.RequestAborted);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

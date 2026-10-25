@@ -1073,9 +1073,18 @@ public sealed class TaskService(
             return Result.Failure(Error.Validation("Activity details can be at most 2000 characters."));
         }
 
-        if (await repository.GetForUpdateAsync(currentUser.TenantId.Value, taskId, cancellationToken) is null)
+        var task = await repository.GetForUpdateAsync(currentUser.TenantId.Value, taskId, cancellationToken);
+        if (task is null)
         {
             return Result.Failure(Error.NotFound("Task not found."));
+        }
+
+        // An entry lands in the history of the task's people (and in their notifications) under
+        // the caller's name, so only someone who may change the task can write one. Being able to
+        // see a task is not enough.
+        if (!access.CanManage(task))
+        {
+            return Result.Failure(NotTaskOwner());
         }
 
         await activity.RecordAsync(taskId, request.Action.Trim(), request.Details?.Trim(), cancellationToken);

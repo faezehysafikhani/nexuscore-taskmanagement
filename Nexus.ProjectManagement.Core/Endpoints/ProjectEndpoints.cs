@@ -27,7 +27,7 @@ public static class ProjectEndpoints
                 }
 
                 var request = new ListProjectsRequest(
-                    currentUser.TenantId.Value, pageNumber ?? 1, pageSize ?? 20, search, type, status,
+                    currentUser.TenantId.Value, Math.Max(1, pageNumber ?? 1), Math.Clamp(pageSize ?? 20, 1, 200), search, type, status,
                     organizationUnitId, managerUserId, sortBy ?? ProjectSortBy.CreatedAtUtc, sortDescending ?? true);
                 return (await service.ListAsync(request, cancellationToken)).ToApiResult();
             })

@@ -841,6 +841,13 @@ public sealed class IdentityService(
     public async Task<Result<IReadOnlyList<TenantDto>>> ListTenantsAsync(CancellationToken cancellationToken)
     {
         var tenants = await repository.ListTenantsAsync(cancellationToken);
+        // Another organization's name and slug are not the caller's to read; only a holder of
+        // tenants.manage_all sees them all.
+        if (currentUser.UserId is not null && !currentUser.HasPermission(IdentityPermissions.TenantsManageAll))
+        {
+            tenants = tenants.Where(tenant => tenant.Id == currentUser.TenantId).ToList();
+        }
+
         return Result.Success<IReadOnlyList<TenantDto>>(tenants.Select(ToTenantDto).ToList());
     }
 
@@ -894,10 +901,20 @@ public sealed class IdentityService(
     }
 
     /// <summary>What was typed as the sign-in name, shortened. Never the password.</summary>
+    /// <summary>
+    /// What the sign-in log keeps of the typed name: a username or mobile number as typed (that is
+    /// what an administrator needs to see), anything else - which is sometimes a password typed
+    /// into the wrong field - only as its length.
+    /// </summary>
     private static string AuditIdentifier(string identifier)
     {
         var value = identifier.Trim();
-        return value.Length <= 64 ? value : value[..64];
+        if (Username.IsValid(value) || Username.IsLegacy(value) || PhoneNumber.Normalize(value) is not null)
+        {
+            return value.Length <= 64 ? value : value[..64];
+        }
+
+        return $"(unrecognised input, {value.Length} characters)";
     }
 
     /// <summary>Background work has no caller and is not limited; a person needs the permission.</summary>

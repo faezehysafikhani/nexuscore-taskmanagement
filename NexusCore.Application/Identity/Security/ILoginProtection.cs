@@ -84,11 +84,14 @@ public sealed class LoginProtectionOptions
     /// <summary>How long failed sign-ins are remembered.</summary>
     public int FailureWindowMinutes { get; set; } = 30;
 
-    /// <summary>Failed sign-ins for one identifier within the window before it is refused until the window ends.</summary>
+    /// <summary>
+    /// Failed sign-ins for one identifier from one client within the window before that client is
+    /// refused until the window ends. (All clients together may fail five times as often.)
+    /// </summary>
     public int MaxFailedAttemptsPerIdentifier { get; set; } = 10;
 
     public int CaptchaLifetimeSeconds { get; set; } = 120;
-    public int CaptchaLength { get; set; } = 5;
+    public int CaptchaLength { get; set; } = 6;
 
     /// <summary>Per-client limits: at most N uses of the action per window.</summary>
     public int MaxLoginAttemptsPerClient { get; set; } = 30;

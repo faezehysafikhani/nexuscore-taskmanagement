@@ -47,7 +47,21 @@ public sealed class PlatformService(
             Search = string.IsNullOrWhiteSpace(query.Search) ? null : query.Search.Trim(),
             ActionPrefix = string.IsNullOrWhiteSpace(query.ActionPrefix) ? null : query.ActionPrefix.Trim(),
         };
-        return Result.Success(await repository.ListAuditLogsAsync(safe, cancellationToken));
+        var page = await repository.ListAuditLogsAsync(safe, cancellationToken);
+
+        // Failed sign-ins by an unknown name belong to no organization, so every organization's
+        // administrator is shown them. What was typed in that field is sometimes a password, and
+        // is not theirs to read: those entries keep the time, the address and the action only.
+        if (currentUserContext.UserId is not null && !currentUserContext.HasPermission(IdentityPermissions.TenantsManageAll)
+            && page.Items.Any(entry => entry.TenantId is null))
+        {
+            page = page with
+            {
+                Items = page.Items.Select(entry => entry.TenantId is null ? entry with { Details = null } : entry).ToList()
+            };
+        }
+
+        return Result.Success(page);
     }
 
     // Settings that have a screen and a permission of their own (SMS channels and quiet hours,

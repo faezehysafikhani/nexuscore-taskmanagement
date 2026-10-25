@@ -69,6 +69,16 @@ public static class AllowedUploadTypes
         return extension is not null && TypeByExtension.TryGetValue(extension, out var type) ? type : "application/octet-stream";
     }
 
+    /// <summary>
+    /// The extension a file is stored under: one of the known ones, in lower case, or ".bin".
+    /// What the client typed after the last dot never becomes part of the stored name.
+    /// </summary>
+    public static string StorageExtensionFor(string? fileName)
+    {
+        var extension = string.IsNullOrWhiteSpace(fileName) ? null : Path.GetExtension(fileName)?.ToLowerInvariant();
+        return extension is not null && TypeByExtension.ContainsKey(extension) ? extension : ".bin";
+    }
+
     private static bool Starts(ReadOnlySpan<byte> head, ReadOnlySpan<byte> magic) => head.StartsWith(magic);
 
     /// <summary>Whether the first bytes of a file fit its extension (HTML or SVG renamed to .pdf, ...).</summary>

@@ -135,8 +135,9 @@ public sealed class TaskReportService(
         if (access.IsRestricted)
         {
             var subordinates = (await SubordinatesAsync(tenantId, userId, cancellationToken)).Keys.ToList();
+            // As on the task board: a task whose owner is an empty post is nobody's to see.
             tasks = tasks.Where(task =>
-                task.OwnerUserId == null
+                (task.OwnerUserId == null && !task.OwnerHeldByPost)
                 || task.OwnerUserId == userId
                 || task.AssignedUserId == userId
                 || task.Assignees.Any(a => a.UserId == userId)
@@ -245,7 +246,7 @@ public sealed class TaskReportService(
         {
             var isRecurring = task.Recurrence is not null;
             var canOpen = !access.IsRestricted
-                || task.OwnerUserId == null
+                || (task.OwnerUserId == null && !task.OwnerHeldByPost)
                 || task.OwnerUserId == userId
                 || task.AssignedUserId == userId
                 || task.Assignees.Any(a => a.UserId == userId);

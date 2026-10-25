@@ -28,7 +28,9 @@ public sealed class LoginProtection(
     IOptions<LoginProtectionOptions> options) : ILoginProtection
 {
     private const string Prefix = "nexuscore:auth:";
-    private const string Digits = "0123456789";
+    // Digits and letters that cannot be mistaken for one another (no 0/O, 1/I/l, 5/S, 8/B); every
+    // one has a glyph in CaptchaImage.
+    private const string Alphabet = "23456789ACEFHKLMNPRTUXY";
 
     private LoginProtectionOptions Options => options.Value;
 
@@ -36,7 +38,7 @@ public sealed class LoginProtection(
 
     /// <summary>Makes the code of a new CAPTCHA. Replaced only by tests, which cannot read the image.</summary>
     internal Func<int, string> GenerateCode { get; init; } = length =>
-        string.Concat(Enumerable.Range(0, length).Select(_ => Digits[RandomNumberGenerator.GetInt32(Digits.Length)]));
+        string.Concat(Enumerable.Range(0, length).Select(_ => Alphabet[RandomNumberGenerator.GetInt32(Alphabet.Length)]));
 
     public async Task<Result<CaptchaChallengeDto>> IssueCaptchaAsync(CancellationToken cancellationToken)
     {
@@ -68,8 +70,13 @@ public sealed class LoginProtection(
             return throttled;
         }
 
+        // Locked per identifier AND client: someone typing a colleague's name wrongly from their
+        // own machine locks themselves out, not the colleague. Many clients together can still
+        // not guess without end: the identifier's total has a much higher ceiling.
         var failures = await ReadCounterAsync(IdentifierKey(identifier), cancellationToken);
-        if (failures >= Options.MaxFailedAttemptsPerIdentifier)
+        var failuresByThisClient = await ReadCounterAsync(IdentifierClientKey(identifier), cancellationToken);
+        if (failuresByThisClient >= Options.MaxFailedAttemptsPerIdentifier
+            || failures >= Options.MaxFailedAttemptsPerIdentifier * 5)
         {
             // Same answer for an existing and a non-existing account: the counter is keyed by
             // what was typed, not by a user.
@@ -96,6 +103,7 @@ public sealed class LoginProtection(
     {
         var window = TimeSpan.FromMinutes(Math.Max(1, Options.FailureWindowMinutes));
         var byIdentifier = await IncrementAsync(IdentifierKey(identifier), window, cancellationToken);
+        await IncrementAsync(IdentifierClientKey(identifier), window, cancellationToken);
         var byClient = await IncrementAsync(ClientFailureKey, window, cancellationToken);
         return Math.Max(byIdentifier, byClient) >= Math.Max(1, Options.CaptchaAfterFailedAttempts);
     }
@@ -103,6 +111,7 @@ public sealed class LoginProtection(
     public async Task RecordSuccessfulLoginAsync(string identifier, CancellationToken cancellationToken)
     {
         await cache.RemoveAsync(IdentifierKey(identifier), cancellationToken);
+        await cache.RemoveAsync(IdentifierClientKey(identifier), cancellationToken);
         await cache.RemoveAsync(ClientFailureKey, cancellationToken);
     }
 
@@ -224,6 +233,9 @@ public sealed class LoginProtection(
     /// </summary>
     private static string IdentifierKey(string identifier) => $"{Prefix}fail:id:{Hash("id", CanonicalIdentifier(identifier))}";
 
+    private string IdentifierClientKey(string identifier) =>
+        $"{Prefix}fail:idc:{Hash("idc", CanonicalIdentifier(identifier) + "\n" + ClientKey)}";
+
     private static string CanonicalIdentifier(string identifier)
     {
         var value = identifier.Trim();
@@ -234,7 +246,11 @@ public sealed class LoginProtection(
 
     private static string AnswerHash(string captchaId, string answer) => Hash("captcha:" + captchaId, answer);
 
-    /// <summary>Persian and Arabic-Indic digits count as the digits they are; spaces are ignored.</summary>
+    /// <summary>
+    /// Persian and Arabic-Indic digits count as the digits they are, letters are not case
+    /// sensitive, and a letter typed on the Persian keyboard layout counts as the Latin letter on
+    /// the same key (so the person does not have to switch layouts); spaces are ignored.
+    /// </summary>
     private static string NormalizeAnswer(string answer)
     {
         var builder = new StringBuilder(answer.Length);
@@ -248,14 +264,25 @@ public sealed class LoginProtection(
             {
                 builder.Append((char)('0' + (ch - '٠')));
             }
+            else if (PersianLayout.TryGetValue(ch, out var latin))
+            {
+                builder.Append(latin);
+            }
             else if (!char.IsWhiteSpace(ch))
             {
-                builder.Append(ch);
+                builder.Append(char.ToUpperInvariant(ch));
             }
         }
 
         return builder.ToString();
     }
+
+    // The standard Persian keyboard layout, for the letters the CAPTCHA uses.
+    private static readonly Dictionary<char, char> PersianLayout = new()
+    {
+        ['ش'] = 'A', ['ز'] = 'C', ['ث'] = 'E', ['ب'] = 'F', ['ا'] = 'H', ['ن'] = 'K', ['م'] = 'L',
+        ['پ'] = 'M', ['د'] = 'N', ['ح'] = 'P', ['ق'] = 'R', ['ف'] = 'T', ['ع'] = 'U', ['ط'] = 'X', ['غ'] = 'Y',
+    };
 
     private static string Hash(string purpose, string value) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(purpose + "\n" + value)));

@@ -6,6 +6,8 @@ using Nexus.Knowledge.Application.Dtos;
 using Nexus.Knowledge.Domain;
 using Nexus.Knowledge.Permissions;
 using NexusCore.Application.Common;
+using NexusCore.Application.Files;
+using NexusCore.Application.Security.RateLimiting;
 using NexusCore.SharedKernel.Interfaces;
 
 namespace Nexus.Knowledge.Endpoints;
@@ -57,6 +59,9 @@ public static class KnowledgeDocumentEndpoints
                 await using var stream = file.OpenReadStream();
                 return (await service.UploadAsync(request, stream, cancellationToken)).ToApiResult();
             })
+            .DisableAntiforgery()
+            .WithUploadSizeLimit()
+            .RequireRateLimiting(NexusRateLimitPolicies.Upload)
             .RequireAuthorization(KnowledgePermissions.Upload);
 
         group.MapPut("/{id:guid}", async (Guid id, UpdateKnowledgeDocumentRequest request, IKnowledgeDocumentService service, CancellationToken cancellationToken) =>

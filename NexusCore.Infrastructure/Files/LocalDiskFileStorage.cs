@@ -21,14 +21,39 @@ public sealed class LocalDiskFileStorage : IFileStorage
 
     public async Task<StoredFile> SaveAsync(string fileName, string contentType, Stream content, CancellationToken cancellationToken)
     {
-        var storageKey = $"{Guid.NewGuid():N}{Path.GetExtension(fileName)}";
+        // Named by a new id and a known extension only: nothing the client typed is in the path.
+        var storageKey = $"{Guid.NewGuid():N}{AllowedUploadTypes.StorageExtensionFor(fileName)}";
         var path = Path.Combine(_rootPath, storageKey);
 
-        long sizeBytes;
-        await using (var fileStream = File.Create(path))
+        // The bytes are counted as they are copied, whatever size the request claimed.
+        const long ceiling = UploadPolicySettings.HardCeilingKb * 1024L;
+        long sizeBytes = 0;
+        try
         {
-            await content.CopyToAsync(fileStream, cancellationToken);
-            sizeBytes = fileStream.Length;
+            await using (var fileStream = new FileStream(path, FileMode.CreateNew, FileAccess.Write))
+            {
+                var buffer = new byte[81920];
+                int read;
+                while ((read = await content.ReadAsync(buffer, cancellationToken)) > 0)
+                {
+                    sizeBytes += read;
+                    if (sizeBytes > ceiling)
+                    {
+                        throw new InvalidDataException($"The file is larger than the {ceiling}-byte limit.");
+                    }
+
+                    await fileStream.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+                }
+            }
+        }
+        catch
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+
+            throw;
         }
 
         return new StoredFile(storageKey, fileName, contentType, sizeBytes);

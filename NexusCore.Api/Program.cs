@@ -14,6 +14,7 @@ using Microsoft.OpenApi.Models;
 using NexusCore.Application;
 using NexusCore.Application.Endpoints;
 using NexusCore.Application.Identity.Permissions;
+using NexusCore.Application.Security;
 using NexusCore.Application.Security.RateLimiting;
 using NexusCore.Infrastructure;
 using NexusCore.Infrastructure.Identity;
@@ -53,6 +54,7 @@ builder.Services.AddNotificationInfrastructure(builder.Configuration);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddNexusCoreRateLimiting(builder.Configuration);
 builder.Services.AddNexusCoreForwardedHeaders(builder.Configuration);
+builder.Services.AddNexusCoreRequestLimits();
 
 builder.Services.AddSignalR();
 builder.Services.AddSwaggerGen(options =>
