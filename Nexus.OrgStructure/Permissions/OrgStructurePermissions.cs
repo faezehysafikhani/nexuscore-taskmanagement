@@ -35,6 +35,13 @@ public static class OrgStructurePermissions
     public const string AllCompanies = "org_structure.all_companies";
 
     /// <summary>
+    /// Draws charts by hand («طراحی چارت دلخواه»): chooses companies, deputies and posts, and saves
+    /// the chart under a name. Anyone who may read the structure sees the saved charts. Not one of
+    /// <see cref="All"/> either (it needs org_structure.view, see PermissionPrerequisites).
+    /// </summary>
+    public const string DesignCharts = "org_structure.design_charts";
+
+    /// <summary>
     /// Policy for the read endpoints: any of the permissions above. A manager of companies,
     /// positions or assignments has to see them too, and this module cannot add entries to
     /// NexusCore's PermissionPrerequisites without changing NexusCore for every product.
@@ -69,7 +76,8 @@ public static class OrgStructurePermissions
         new(TeamMembersFromAnyUnit, "Organization", "افزودن اعضای سایر معاونت‌ها به تیم کاری"),
         new(AssignTasksToAnyLevel, "Organization", "ارجاع فعالیت به همه‌ی سطوح سازمانی (حتی بالاتر از خود)"),
         new(ManageSubstitution, "Organization", "مدیریت کارتابل جانشینی (تعیین سرپرست برای همه‌ی پست‌های خالی)"),
-        new(AllCompanies, "Organization", "دسترسی به همه‌ی شرکت‌ها (عبور از محدودیت شرکت خود)")
+        new(AllCompanies, "Organization", "دسترسی به همه‌ی شرکت‌ها (عبور از محدودیت شرکت خود)"),
+        new(DesignCharts, "Organization", "طراحی چارت سازمانی دلخواه")
     ];
 }
 

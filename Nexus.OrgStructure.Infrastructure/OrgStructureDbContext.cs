@@ -19,6 +19,7 @@ public sealed class OrgStructureDbContext(DbContextOptions<OrgStructureDbContext
     public DbSet<UserPosition> UserPositions => Set<UserPosition>();
     public DbSet<Honorific> Honorifics => Set<Honorific>();
     public DbSet<UserHonorific> UserHonorifics => Set<UserHonorific>();
+    public DbSet<CustomChart> CustomCharts => Set<CustomChart>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
