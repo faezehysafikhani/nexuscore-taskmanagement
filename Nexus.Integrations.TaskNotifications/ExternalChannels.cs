@@ -185,10 +185,10 @@ public sealed class TaskChangeSmsNotifier(IServiceScopeFactory scopeFactory)
 
 /// <summary>
 /// When the status of a past-due, unfinished task changes, tells its creator and the people
-/// responsible for it by SMS ("task_overdue_changed") - never the one who made the change. Only
+/// responsible for it in the app and, when the SMS panel is on, by SMS ("task_overdue_changed") - never the one who made the change. Only
 /// when the SMS panel is on and that template is not turned off; in the organization's quiet
-/// hours it is kept and sent when they end. Whoever cannot be texted (the panel is off, no number,
-/// SMS switched off) is told in the app instead. Runs in the background, best-effort.
+/// hours it is kept and sent when they end. They are also always told in the app (the bell's tab
+/// of task changes), whether or not the SMS panel is on. Runs in the background, best-effort.
 /// </summary>
 public sealed class TaskOverdueChangeSmsNotifier(IServiceScopeFactory scopeFactory) : IDomainEventHandler<TaskItemOverdueStatusChanged>
 {
@@ -252,43 +252,38 @@ public sealed class TaskOverdueChangeSmsNotifier(IServiceScopeFactory scopeFacto
             };
             var text = $"وضعیت فعالیت موعدگذشته‌ی «{task.Title}» توسط {actor} به «{status}» تغییر کرد.\nموعد: {due}";
 
-            // By SMS when the SMS panel is on (and the person has a number and SMS on, and the
-            // template is not turned off); everybody else - and everybody when the panel is off -
-            // is told in the app instead, so nobody who cares is left out.
-            var told = new HashSet<Guid>();
+            // In the app, always (the bell's "task changes" tab, with its details).
+            var changeLines = string.Join(" | ", new[]
+            {
+                $"وضعیت: «{StatusTitle(change.PreviousStatus)}» ← «{status}»",
+                $"موعد: {due}",
+                $"تغییر توسط: {actor}",
+            });
+
+            // And by SMS too when the SMS panel is on (to those with a number and SMS switched on,
+            // unless the template is turned off).
             var sms = services.GetRequiredService<ITaskSmsSender>();
             if (await sms.IsEnabledAsync(change.TenantId, CancellationToken.None))
             {
                 var phones = await services.GetRequiredService<IUserContactResolver>()
                     .GetPhoneNumbersAsync(change.TenantId, userIds, CancellationToken.None);
-                var texted = new HashSet<string>(StringComparer.Ordinal);
-                foreach (var (userId, phone) in phones)
+                foreach (var phone in phones.Values.Distinct(StringComparer.Ordinal))
                 {
-                    if (!texted.Add(phone))
-                    {
-                        told.Add(userId);
-                        continue;
-                    }
-
                     var sent = await sms.SendTemplateAsync(change.TenantId, phone, TaskSmsTemplateKeys.TaskOverdueChanged, values, text, CancellationToken.None);
-                    if (sent.IsSuccess)
-                    {
-                        told.Add(userId);
-                    }
-                    else
+                    if (sent.IsFailure)
                     {
                         logger.LogWarning("Task {TaskId}: overdue-change SMS not sent: {Error}", task.Id, sent.Error.Message);
                     }
                 }
             }
 
-            foreach (var userId in userIds.Where(id => !told.Contains(id)))
+            foreach (var userId in userIds)
             {
                 try
                 {
                     await using var notifyScope = scopeFactory.CreateAsyncScope();
                     await notifyScope.ServiceProvider.GetRequiredService<INotificationService>().NotifyAsync(
-                        new NotificationRequest(userId, task.Title, text, "Info", change.TenantId, TaskNoticeNotifications.OverdueChanged,
+                        new NotificationRequest(userId, task.Title, changeLines, "Info", change.TenantId, TaskNoticeNotifications.OverdueChanged,
                             task.Id, change.ChangedByUserId, actor),
                         CancellationToken.None);
                 }
