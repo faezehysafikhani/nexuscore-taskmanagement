@@ -72,3 +72,23 @@ Restart the API (IIS site recycle, service restart, etc.). No `dotnet build`, no
   (developers' machines only).
 - Don't hardcode an IP/domain in `Program.cs` — CORS and hosts are already fully
   configuration-driven; there's nothing to touch there.
+
+## 5. Security settings
+
+The settings that matter for security are the same in every host built on NexusCore; they are
+described once, with examples, in the host's own `DEPLOYMENT-CONFIG.md` (section "Security
+settings" of `TejaratBank-API`). In short, all have safe defaults and these need a value at a real
+install:
+
+| Setting | What it is |
+|---|---|
+| `Jwt__SigningKey` | the access-token key (section 2); the app refuses to start without a real one outside Development |
+| `Identity__AdminPassword` | first administrator's password outside Development (12+ characters) |
+| `NexusCore:ForwardedHeaders:KnownProxies` / `KnownNetworks` | the reverse proxy; client addresses (rate limits, audit log) come from it only |
+| `DataProtection:KeysPath` | where the keys that encrypt the SMS API key and LDAP password are stored (host setting) |
+| `Security:OutboundAddresses:AllowedHosts` | extra SMS gateway hosts besides the provider's own |
+| `Security:TenantFilter:Enabled` / `DisabledContexts` | emergency switch of the organization filter on every query |
+
+The refresh token of a browser sign-in lives in an HttpOnly cookie (`Identity:Session`), the
+access token lasts 15 minutes (`Jwt:AccessTokenMinutes`), and `eng/pack-core-modules.ps1` writes
+`SHA256SUMS.txt` next to the packages and signs them when given `-SigningCertificatePath`.
