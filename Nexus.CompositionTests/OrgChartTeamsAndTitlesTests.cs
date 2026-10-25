@@ -222,63 +222,6 @@ public sealed class OrgChartTeamsAndTitlesTests
         Assert.Contains(await world.PostsAsSeenByAsync(p["d3"]), post => post.Place.Contains("C2"));
     }
 
-    // ------------------------------------------------------------------ charts drawn by hand
-
-    [Fact]
-    public async Task ACustomChart_IsSaved_Changed_AndDeleted_WithWhatWasChosen()
-    {
-        var (world, p, c1, _, _) = await TwoCompaniesAsync();
-        var charts = world.Charts(p["head"], kept: false);
-        var tech = (await world.Service.ListCompanyUnitsAsync(Tenant, default)).Value!.First(link => link.CompanyId == c1).UnitId;
-        var post = (await world.Service.ListUnitPositionsAsync(Tenant, tech, default)).Value!.First().Id;
-
-        var saved = await charts.CreateAsync(Tenant, new SaveCustomChartRequest("چارت فناوری", "برای جلسه", [c1], [tech], [post], ShowHolders: false), default);
-        Assert.True(saved.IsSuccess);
-        Assert.Equal([tech], saved.Value!.UnitIds);
-        Assert.False(saved.Value.ShowHolders);
-
-        var changed = await charts.UpdateAsync(Tenant, saved.Value.Id, new SaveCustomChartRequest("چارت فناوری ۲", null, [c1], [], [post]), default);
-        Assert.True(changed.IsSuccess);
-        Assert.Equal("چارت فناوری ۲", Assert.Single((await charts.ListAsync(Tenant, default)).Value!).Name);
-        Assert.Empty(changed.Value!.UnitIds);
-
-        Assert.True((await charts.DeleteAsync(Tenant, saved.Value.Id, default)).IsSuccess);
-        Assert.Empty((await charts.ListAsync(Tenant, default)).Value!);
-    }
-
-    [Fact]
-    public async Task ACustomChart_NeedsANameAndSomethingThatExists()
-    {
-        var (world, p, c1, _, _) = await TwoCompaniesAsync();
-        var charts = world.Charts(p["head"], kept: false);
-
-        Assert.True((await charts.CreateAsync(Tenant, new SaveCustomChartRequest(" ", null, [c1], [], []), default)).IsFailure);
-        Assert.True((await charts.CreateAsync(Tenant, new SaveCustomChartRequest("خالی", null, [], [], []), default)).IsFailure);
-        Assert.True((await charts.CreateAsync(Tenant, new SaveCustomChartRequest("ناموجود", null, [Guid.NewGuid()], [], []), default)).IsFailure);
-    }
-
-    [Fact]
-    public async Task CustomCharts_KeptToOnesOwnCompany_WhenTurnedOn()
-    {
-        var (world, p, c1, c2, hr) = await TwoCompaniesAsync();
-        var all = world.Charts(p["head"], kept: true, OrgStructurePermissions.AllCompanies);
-        var both = (await all.CreateAsync(Tenant, new SaveCustomChartRequest("هر دو", null, [c1, c2], [], []), default)).Value!;
-        var other = (await all.CreateAsync(Tenant, new SaveCustomChartRequest("شرکت دوم", null, [], [hr], []), default)).Value!;
-
-        // The other company's head: sees what shows something of theirs, changes only their own.
-        var theirs = world.Charts(p["head2"]);
-        Assert.Equal(["شرکت دوم", "هر دو"], (await theirs.ListAsync(Tenant, default)).Value!.Select(c => c.Name).Order());
-        Assert.True((await theirs.UpdateAsync(Tenant, other.Id, new SaveCustomChartRequest("شرکت دوم", null, [c2], [], []), default)).IsSuccess);
-        Assert.True((await theirs.UpdateAsync(Tenant, both.Id, new SaveCustomChartRequest("هر دو", null, [c2], [], []), default)).IsFailure);
-        Assert.True((await theirs.CreateAsync(Tenant, new SaveCustomChartRequest("نفوذ", null, [c1], [], []), default)).IsFailure);
-
-        // Someone of the first company does not see the second company's chart at all.
-        var mine = world.Charts(p["e2"]);
-        Assert.Equal(["هر دو"], (await mine.ListAsync(Tenant, default)).Value!.Select(c => c.Name));
-        Assert.True((await mine.GetAsync(Tenant, other.Id, default)).IsFailure);
-        Assert.True((await mine.DeleteAsync(Tenant, other.Id, default)).IsFailure);
-    }
-
     // ------------------------------------------------------------------ positions of a unit
 
     [Fact]
@@ -964,10 +907,6 @@ public sealed class OrgChartTeamsAndTitlesTests
         public IOrgStructureService ServiceAs(Guid signedIn, params string[] permissions) =>
             new OrgStructureService(_repository, _structure, new OrganizationUnitRepository(_organization), _users, _teams, TaskPosts,
                 Reach(signedIn, true, permissions), new SignedIn(signedIn, permissions));
-
-        /// <summary>Charts drawn by hand, as <paramref name="signedIn"/> (kept to their own company unless <paramref name="kept"/> is false).</summary>
-        public ICustomChartService Charts(Guid signedIn, bool kept = true, params string[] permissions) =>
-            new CustomChartService(_repository, _structure, new SignedIn(signedIn, permissions), Reach(signedIn, kept, permissions));
 
         /// <summary>Whom <paramref name="signedIn"/> may add to their work teams, kept to their own company.</summary>
         public IWorkTeamMemberScope KeptMemberScope(Guid signedIn, params string[] permissions) =>

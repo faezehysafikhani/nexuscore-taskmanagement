@@ -37,7 +37,6 @@ public sealed class PermissionPrerequisitesTests
         ["org_structure.manage_substitution"] = ["org_structure.view"],
         ["org_structure.assign_tasks_any_level"] = ["org_structure.view"],
         ["org_structure.team_members_any_unit"] = ["org_structure.view"],
-        ["org_structure.design_charts"] = ["org_structure.view"],
         ["settings.update"] = ["settings.view"],
         ["sms_settings.update"] = ["sms_settings.view"],
         ["sms_settings.test"] = ["sms_settings.view"],

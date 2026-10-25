@@ -137,15 +137,4 @@ public sealed class OrgStructureRepository(OrgStructureDbContext dbContext) : IO
         await dbContext.UserHonorifics.AddAsync(userHonorific, cancellationToken);
 
     public void RemoveUserHonorific(UserHonorific userHonorific) => dbContext.UserHonorifics.Remove(userHonorific);
-
-    public async Task<IReadOnlyList<CustomChart>> ListCustomChartsAsync(Guid tenantId, CancellationToken cancellationToken) =>
-        await dbContext.CustomCharts.Where(x => x.TenantId == tenantId).OrderBy(x => x.Name).ToListAsync(cancellationToken);
-
-    public Task<CustomChart?> GetCustomChartAsync(Guid tenantId, Guid id, CancellationToken cancellationToken) =>
-        dbContext.CustomCharts.SingleOrDefaultAsync(x => x.TenantId == tenantId && x.Id == id, cancellationToken);
-
-    public async Task AddCustomChartAsync(CustomChart chart, CancellationToken cancellationToken) =>
-        await dbContext.CustomCharts.AddAsync(chart, cancellationToken);
-
-    public void RemoveCustomChart(CustomChart chart) => dbContext.CustomCharts.Remove(chart);
 }

@@ -61,9 +61,4 @@ public interface IOrgStructureRepository
     Task<UserHonorific?> GetUserHonorificAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken);
     Task AddUserHonorificAsync(UserHonorific userHonorific, CancellationToken cancellationToken);
     void RemoveUserHonorific(UserHonorific userHonorific);
-
-    Task<IReadOnlyList<CustomChart>> ListCustomChartsAsync(Guid tenantId, CancellationToken cancellationToken);
-    Task<CustomChart?> GetCustomChartAsync(Guid tenantId, Guid id, CancellationToken cancellationToken);
-    Task AddCustomChartAsync(CustomChart chart, CancellationToken cancellationToken);
-    void RemoveCustomChart(CustomChart chart);
 }

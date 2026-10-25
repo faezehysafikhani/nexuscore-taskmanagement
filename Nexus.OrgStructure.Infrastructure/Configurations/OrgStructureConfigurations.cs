@@ -154,17 +154,3 @@ public sealed class UserHonorificConfiguration : IEntityTypeConfiguration<UserHo
         builder.HasIndex(x => x.HonorificId);
     }
 }
-
-public sealed class CustomChartConfiguration : IEntityTypeConfiguration<CustomChart>
-{
-    public void Configure(EntityTypeBuilder<CustomChart> builder)
-    {
-        builder.ToTable("CustomCharts", OrgStructureSchema.Name);
-        builder.HasKey(x => x.Id);
-        builder.Property(x => x.Id).ValueGeneratedNever();
-        builder.Property(x => x.Name).HasMaxLength(200).IsRequired();
-        builder.Property(x => x.Description).HasMaxLength(1000);
-        builder.Property(x => x.Selection).IsRequired();
-        builder.HasIndex(x => x.TenantId);
-    }
-}

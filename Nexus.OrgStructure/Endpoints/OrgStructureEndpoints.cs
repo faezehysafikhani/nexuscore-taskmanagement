@@ -163,27 +163,6 @@ public static class OrgStructureEndpoints
                 InTenant(user, tenant => service.ListTeamsOutsideUnitsAsync(tenant, ct)))
             .RequireAuthorization(OrgStructurePermissions.ReadPolicy);
 
-        // --- charts drawn by hand («طراحی چارت دلخواه»): seen by readers of the structure, made by designers
-        group.MapGet("/custom-charts", (ICurrentUserContext user, ICustomChartService service, CancellationToken ct) =>
-                InTenant(user, tenant => service.ListAsync(tenant, ct)))
-            .RequireAuthorization(OrgStructurePermissions.ReadPolicy);
-
-        group.MapGet("/custom-charts/{id:guid}", (Guid id, ICurrentUserContext user, ICustomChartService service, CancellationToken ct) =>
-                InTenant(user, tenant => service.GetAsync(tenant, id, ct)))
-            .RequireAuthorization(OrgStructurePermissions.ReadPolicy);
-
-        group.MapPost("/custom-charts", (SaveCustomChartRequest request, ICurrentUserContext user, ICustomChartService service, CancellationToken ct) =>
-                InTenant(user, tenant => service.CreateAsync(tenant, request, ct)))
-            .RequireAuthorization(OrgStructurePermissions.DesignCharts);
-
-        group.MapPut("/custom-charts/{id:guid}", (Guid id, SaveCustomChartRequest request, ICurrentUserContext user, ICustomChartService service, CancellationToken ct) =>
-                InTenant(user, tenant => service.UpdateAsync(tenant, id, request, ct)))
-            .RequireAuthorization(OrgStructurePermissions.DesignCharts);
-
-        group.MapDelete("/custom-charts/{id:guid}", (Guid id, ICurrentUserContext user, ICustomChartService service, CancellationToken ct) =>
-                InTenant(user, tenant => service.DeleteAsync(tenant, id, ct)))
-            .RequireAuthorization(OrgStructurePermissions.DesignCharts);
-
         // --- titles before people's names, managed with the users (see OrgStructurePermissions)
         group.MapGet("/titles", (ICurrentUserContext user, IHonorificService service, CancellationToken ct) =>
                 InTenant(user, tenant => service.ListAsync(tenant, ct)))

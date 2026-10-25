@@ -59,8 +59,6 @@ public static class PermissionPrerequisites
         ["org_structure.manage_substitution"] = new[] { "org_structure.view" },
         ["org_structure.assign_tasks_any_level"] = new[] { "org_structure.view" },
         ["org_structure.team_members_any_unit"] = new[] { "org_structure.view" },
-        // Designing a chart starts from the structure one may see.
-        ["org_structure.design_charts"] = new[] { "org_structure.view" },
 
         // Actions/task management: create/edit/delete/submit require view permission
         ["Actions.Create"] = new[] { "Actions.View" },

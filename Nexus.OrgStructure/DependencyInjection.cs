@@ -18,8 +18,6 @@ public static class DependencyInjection
     {
         services.AddScoped<IOrgStructureService, OrgStructureService>();
         services.AddScoped<IHonorificService, HonorificService>();
-        // Charts drawn by hand («طراحی چارت دلخواه»): made with OrgStructurePermissions.DesignCharts.
-        services.AddScoped<ICustomChartService, CustomChartService>();
         services.AddSingleton<IPermissionCatalog, OrgStructurePermissionCatalog>();
         // Work-team builders add their own deputy's people (more with TeamMembersFromAnyUnit).
         // The Core registers its unlimited default with TryAdd, so this one wins whichever runs first.
