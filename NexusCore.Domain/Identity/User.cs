@@ -193,9 +193,9 @@ public sealed class User : AuditableEntity<Guid>
         }
     }
 
-    public RefreshToken AddRefreshToken(string tokenHash, DateTimeOffset expiresAtUtc, string? createdByIp)
+    public RefreshToken AddRefreshToken(string tokenHash, DateTimeOffset expiresAtUtc, string? createdByIp, Guid? familyId = null)
     {
-        var refreshToken = new RefreshToken(Guid.NewGuid(), Id, tokenHash, expiresAtUtc, createdByIp);
+        var refreshToken = new RefreshToken(Guid.NewGuid(), Id, tokenHash, expiresAtUtc, createdByIp, familyId);
         _refreshTokens.Add(refreshToken);
         return refreshToken;
     }

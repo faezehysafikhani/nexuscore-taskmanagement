@@ -76,7 +76,9 @@ public static class DependencyInjection
         services.AddDistributedMemoryCache();
         services.Configure<LoginProtectionOptions>(configuration.GetSection(LoginProtectionOptions.SectionName));
         services.AddScoped<ILoginProtection, LoginProtection>();
+        services.AddScoped<IPhoneChangeCodes, PhoneChangeCodes>();
 
+        services.Configure<SignInSessionOptions>(configuration.GetSection(SignInSessionOptions.SectionName));
         services.Configure<IdentitySeedOptions>(configuration.GetSection(IdentitySeedOptions.SectionName));
         services.Configure<ManagedPermissionOptions>(configuration.GetSection(ManagedPermissionOptions.SectionName));
         // Password recovery sends its one-time code through ISmsSender (below); no email.

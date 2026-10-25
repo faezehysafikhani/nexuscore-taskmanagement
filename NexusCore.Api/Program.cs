@@ -52,6 +52,7 @@ builder.Services.AddNotificationInfrastructure(builder.Configuration);
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddNexusCoreRateLimiting(builder.Configuration);
+builder.Services.AddNexusCoreForwardedHeaders(builder.Configuration);
 
 builder.Services.AddSignalR();
 builder.Services.AddSwaggerGen(options =>
@@ -154,6 +155,9 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 // Unexpected exceptions: logged here, answered with a Persian message and no internals.
+// Behind a reverse proxy: the real client address, believed only from the configured proxies.
+app.UseNexusCoreForwardedHeaders();
+
 app.UseSafeErrorResponses();
 
 if (app.Environment.IsDevelopment())

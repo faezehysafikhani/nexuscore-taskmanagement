@@ -115,6 +115,7 @@ public sealed class LoginProtection(
             AuthAction.Captcha => (o.MaxCaptchasPerClient, o.CaptchaWindowMinutes),
             AuthAction.ForgotPassword => (o.MaxPasswordResetRequestsPerClient, o.PasswordResetWindowMinutes),
             AuthAction.ResetCode => (o.MaxResetCodeChecksPerClient, o.PasswordResetWindowMinutes),
+            AuthAction.PhoneChange => (o.MaxPasswordResetRequestsPerClient, o.PasswordResetWindowMinutes),
             _ => throw new ArgumentOutOfRangeException(nameof(action))
         };
 

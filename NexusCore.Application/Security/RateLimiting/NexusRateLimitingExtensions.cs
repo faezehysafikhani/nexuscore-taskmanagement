@@ -37,8 +37,10 @@ public static class NexusRateLimitingExtensions
                     .ExecuteAsync(context.HttpContext);
             };
 
+            // Per signed-in user (per address when anonymous): a branch behind one shared NAT
+            // address does not spend a single quota between all its employees.
             options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(http =>
-                CreatePartition(ClientPartition(http, "global"), configured.Enabled, configured.Global));
+                CreatePartition(UserOrClientPartition(http, "global"), configured.Enabled, configured.Global));
 
             options.AddPolicy(NexusRateLimitPolicies.Auth, http =>
                 CreatePartition(ClientPartition(http, "auth"), configured.Enabled, configured.Auth));
@@ -113,18 +115,12 @@ public static class NexusRateLimitingExtensions
             : $"{policy}:user:{userId}";
     }
 
-    private static string ClientAddress(HttpContext http)
-    {
-        var forwardedFor = http.Request.Headers["X-Forwarded-For"].FirstOrDefault();
-        if (!string.IsNullOrWhiteSpace(forwardedFor))
-        {
-            var first = forwardedFor.Split(',')[0].Trim();
-            if (!string.IsNullOrWhiteSpace(first))
-            {
-                return first;
-            }
-        }
-
-        return http.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-    }
+    /// <summary>
+    /// The caller's address as ASP.NET sees it. X-Forwarded-For is never read here: behind a
+    /// reverse proxy the host turns on <see cref="NexusForwardedHeadersExtensions"/>, which
+    /// replaces RemoteIpAddress only for requests that come from a configured proxy. A header
+    /// sent straight to the host therefore cannot choose the rate-limit partition.
+    /// </summary>
+    private static string ClientAddress(HttpContext http) =>
+        http.Connection.RemoteIpAddress?.ToString() ?? "unknown";
 }

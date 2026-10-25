@@ -9,7 +9,8 @@ public enum AuthAction
     Login,
     Captcha,
     ForgotPassword,
-    ResetCode
+    ResetCode,
+    PhoneChange
 }
 
 /// <summary>
@@ -56,6 +57,20 @@ public interface ILoginProtection
 
     /// <summary>After a code was confirmed.</summary>
     Task ClearResetCodeFailuresAsync(string identifier, CancellationToken cancellationToken);
+}
+
+/// <summary>
+/// The code that proves control of a new mobile number before it replaces the one on the account.
+/// One outstanding code per user; a right answer uses it up. Kept hashed and short-lived.
+/// </summary>
+public interface IPhoneChangeCodes
+{
+    Task StoreAsync(Guid userId, string phoneNumber, string code, TimeSpan lifetime, CancellationToken cancellationToken);
+
+    /// <summary>True when <paramref name="code"/> is the outstanding code for this user and number; it is then spent.</summary>
+    Task<bool> ConfirmAsync(Guid userId, string phoneNumber, string code, CancellationToken cancellationToken);
+
+    Task ClearAsync(Guid userId, CancellationToken cancellationToken);
 }
 
 /// <summary>Identity:LoginProtection. The defaults are the intended production behaviour.</summary>
