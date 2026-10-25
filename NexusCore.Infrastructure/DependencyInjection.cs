@@ -40,6 +40,9 @@ public static class DependencyInjection
 
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUserContext, CurrentUserContext>();
+        // The organization condition on every query of the DbContexts (global query filters).
+        services.Configure<TenantFilterOptions>(configuration.GetSection(TenantFilterOptions.SectionName));
+        services.AddScoped<ITenantScope, HttpTenantScope>();
         services.AddScoped<IDomainEventDispatcher, DomainEventDispatcher>();
         services.AddScoped<AuditingInterceptor>();
         services.AddScoped<DomainEventDispatchInterceptor>();
