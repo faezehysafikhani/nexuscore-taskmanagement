@@ -207,6 +207,21 @@ public sealed class TaskOverdueChangeSmsNotifier(IServiceScopeFactory scopeFacto
         _ => status.ToString(),
     };
 
+    /// <summary>«۳ روز و ۴ ساعت» / «۵ ساعت و ۱۰ دقیقه» / «کمتر از یک دقیقه»</summary>
+    private static string LateBy(TimeSpan span)
+    {
+        if (span < TimeSpan.FromMinutes(1))
+        {
+            return "کمتر از یک دقیقه";
+        }
+
+        var parts = new List<string>();
+        if (span.Days > 0) parts.Add($"{span.Days} روز");
+        if (span.Hours > 0) parts.Add($"{span.Hours} ساعت");
+        if (span.Days == 0 && span.Minutes > 0) parts.Add($"{span.Minutes} دقیقه");
+        return TaskCreatedChannelNotifier.ToPersianDigits(string.Join(" و ", parts));
+    }
+
     private async Task SendAsync(TaskItemOverdueStatusChanged change)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
@@ -232,12 +247,16 @@ public sealed class TaskOverdueChangeSmsNotifier(IServiceScopeFactory scopeFacto
                 return;
             }
 
-            var actor = "یکی از همکاران";
-            if (change.ChangedByUserId is { } actorId)
-            {
-                var users = await services.GetRequiredService<IUserDirectory>().GetUsersAsync([actorId], CancellationToken.None);
-                actor = users.FirstOrDefault(u => u.TenantId == change.TenantId)?.DisplayName ?? actor;
-            }
+            // Names of everybody the message is about, in one lookup.
+            var calendar = services.GetRequiredService<IRecurrenceCalculator>();
+            var aboutIds = userIds.Concat(task.ResponsibleUserIds).Concat(task.OwnerUserId is { } creatorId ? [creatorId] : [])
+                .Concat(change.ChangedByUserId is { } changerId ? [changerId] : []).Distinct().ToList();
+            var names = (await services.GetRequiredService<IUserDirectory>().GetUsersAsync(aboutIds, CancellationToken.None))
+                .Where(u => u.TenantId == change.TenantId)
+                .ToDictionary(u => u.Id, u => u.DisplayName);
+            string NameOf(Guid id) => names.TryGetValue(id, out var name) ? name : "کاربر";
+
+            var actor = change.ChangedByUserId is { } actorId && names.TryGetValue(actorId, out var actorName) ? actorName : "یکی از همکاران";
 
             var due = TaskCreatedChannelNotifier.ToPersianDate(task.DueDate);
             if (task.DueTime is { } dueTime)
@@ -246,19 +265,42 @@ public sealed class TaskOverdueChangeSmsNotifier(IServiceScopeFactory scopeFacto
             }
 
             var status = StatusTitle(change.Status);
+            var previousStatus = StatusTitle(change.PreviousStatus);
             var values = new Dictionary<string, string?>
             {
                 ["TaskTitle"] = task.Title, ["DueDate"] = due, ["StatusTitle"] = status, ["ActorName"] = actor,
             };
             var text = $"وضعیت فعالیت موعدگذشته‌ی «{task.Title}» توسط {actor} به «{status}» تغییر کرد.\nموعد: {due}";
 
-            // In the app, always (the bell's "task changes" tab, with its details).
+            // How late it was when it changed: from its due moment (the end of the day when it has no time).
+            var dueAt = task.DueTime is { } at
+                ? calendar.FromLocal(task.DueDate, at)
+                : calendar.FromLocal(task.DueDate.AddDays(1), TimeOnly.MinValue);
+            var late = LateBy(change.OccurredOnUtc - dueAt);
+            var changedAt = calendar.ToLocalTime(change.OccurredOnUtc);
+            var changedAtText = TaskDates.Format(DateOnly.FromDateTime(changedAt.DateTime), TimeOnly.FromDateTime(changedAt.DateTime));
+            var priority = task.Priority switch { TaskPriority.High => "زیاد", TaskPriority.Low => "کم", _ => "متوسط" };
+            var outcome = change.Status switch
+            {
+                TaskItemStatus.Completed => "فعالیت خاتمه یافت و از فهرست «موعد گذشته» خارج شد.",
+                TaskItemStatus.Paused => "فعالیت متوقف شد و دیگر «موعد گذشته» حساب نمی‌شود.",
+                _ => "فعالیت هنوز «موعد گذشته» است و ادامه دارد.",
+            };
+            var responsibleNames = string.Join("، ", task.ResponsibleUserIds.Select(NameOf));
+
+            // In the app, always (the bell's "task changes" tab, shown line by line in the details popup).
             var changeLines = string.Join(" | ", new[]
             {
-                $"وضعیت: «{StatusTitle(change.PreviousStatus)}» ← «{status}»",
+                $"وضعیت: «{previousStatus}» ← «{status}»",
+                $"نتیجه: {outcome}",
                 $"موعد: {due}",
+                $"تأخیر تا لحظه‌ی تغییر: {late}",
+                $"اولویت: {priority}",
+                responsibleNames.Length > 0 ? $"مسئولان اجرا: {responsibleNames}" : null,
+                task.OwnerUserId is { } ownerId ? $"سازنده: {NameOf(ownerId)}" : null,
+                $"زمان تغییر: {changedAtText}",
                 $"تغییر توسط: {actor}",
-            });
+            }.Where(line => line is not null));
 
             // And by SMS too when the SMS panel is on (to those with a number and SMS switched on,
             // unless the template is turned off).

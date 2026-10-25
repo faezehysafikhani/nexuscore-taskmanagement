@@ -403,7 +403,10 @@ public sealed class TaskService(
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        await activity.RecordAsync(id, "Status changed", $"{previous} -> {request.Status}", cancellationToken);
+        // A past-due task's change is told in full by its own notification (TaskItemOverdueStatusChanged);
+        // the short "Status changed" one would only repeat it.
+        await activity.RecordAsync(id, "Status changed", $"{previous} -> {request.Status}", cancellationToken,
+            notify: !(wasOverdue && request.Status != previous));
 
         var updated = await repository.GetByIdAsync(tenantId, id, cancellationToken);
         return Result.Success(await ToDtoAsync(updated!, cancellationToken));
