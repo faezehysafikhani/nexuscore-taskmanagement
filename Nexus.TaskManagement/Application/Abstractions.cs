@@ -232,7 +232,7 @@ public interface ITaskActivityService
     Task<Result<IReadOnlyList<TaskActivityDto>>> GetForTaskAsync(Guid taskId, CancellationToken cancellationToken);
 
     /// <param name="notify">False when the people of the task are told about this change in another, fuller way.</param>
-    Task RecordAsync(Guid taskId, string action, string? details, CancellationToken cancellationToken, bool notify = true);
+    Task RecordAsync(Guid taskId, string action, string? details, CancellationToken cancellationToken, IReadOnlyCollection<Guid>? exceptUserIds = null);
 }
 
 // ---------------------------------------------------------------------------

@@ -1,4 +1,5 @@
 using FluentValidation.TestHelper;
+using Nexus.TaskManagement.Application;
 using Nexus.TaskManagement.Application.Dtos;
 using Nexus.TaskManagement.Application.Validators;
 using Nexus.TaskManagement.Domain;
@@ -149,6 +150,25 @@ public sealed class TaskItemTests
         Assert.Equal(actor, raised.ChangedByUserId);
         Assert.Equal(TaskItemStatus.Todo, raised.PreviousStatus);
         Assert.Equal(TaskItemStatus.Completed, raised.Status);
+    }
+
+    [Fact]
+    public void OverdueChangeRecipients_AreTheCreatorAndThoseResponsible_NotWhoChangedIt()
+    {
+        var creator = Guid.NewGuid();
+        var responsible = Guid.NewGuid();
+        var changer = Guid.NewGuid();
+        var viewer = Guid.NewGuid();
+        var task = new TaskItem(Guid.NewGuid(), Guid.NewGuid(), "Work", new DateOnly(2026, 3, 1), TaskPriority.Medium, false, creator);
+        task.SetResponsibleUsers([responsible, changer]);
+        task.AssignUsers([viewer]);
+
+        var recipients = TaskPeople.OverdueChangeRecipients(task, changer);
+
+        // Those told in full are left out of the short «Status changed» entry; the viewer still gets it.
+        Assert.Equal(new[] { creator, responsible }.Order(), recipients.Order());
+        Assert.DoesNotContain(viewer, recipients);
+        Assert.Contains(viewer, TaskPeople.Of(task).Except(recipients).Where(id => id != changer));
     }
 
     [Fact]

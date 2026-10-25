@@ -66,6 +66,17 @@ public static class TaskPeople
         return people.Distinct().ToList();
     }
 
+    /// <summary>
+    /// Who is told, in full, when the status of an overdue task changes: its creator and those
+    /// responsible, but not whoever made the change. They get no short "Status changed" entry on top.
+    /// </summary>
+    public static IReadOnlyList<Guid> OverdueChangeRecipients(TaskItem task, Guid? changedByUserId) =>
+        task.ResponsibleUserIds
+            .Concat(task.OwnerUserId is { } owner ? [owner] : [])
+            .Distinct()
+            .Where(id => id != changedByUserId)
+            .ToList();
+
     /// <summary>Those on the access list without being responsible.</summary>
     public static IReadOnlyList<Guid> AccessListOf(TaskItem task) =>
         task.Assignees.Where(a => !a.IsActing && !task.IsResponsible(a.UserId)).Select(a => a.UserId).Distinct().ToList();

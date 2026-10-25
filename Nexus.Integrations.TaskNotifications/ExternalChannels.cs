@@ -237,11 +237,7 @@ public sealed class TaskOverdueChangeSmsNotifier(IServiceScopeFactory scopeFacto
             }
 
             // Whoever cares: those responsible and the creator, but not who made the change.
-            var userIds = task.ResponsibleUserIds
-                .Concat(task.OwnerUserId is { } owner ? [owner] : [])
-                .Distinct()
-                .Where(id => id != change.ChangedByUserId)
-                .ToList();
+            var userIds = TaskPeople.OverdueChangeRecipients(task, change.ChangedByUserId);
             if (userIds.Count == 0)
             {
                 return;

@@ -70,7 +70,7 @@ public sealed class TaskActivityService(
             .ToList());
     }
 
-    public async Task RecordAsync(Guid taskId, string action, string? details, CancellationToken cancellationToken, bool notify = true)
+    public async Task RecordAsync(Guid taskId, string action, string? details, CancellationToken cancellationToken, IReadOnlyCollection<Guid>? exceptUserIds = null)
     {
         if (currentUser.TenantId is null)
         {
@@ -90,18 +90,15 @@ public sealed class TaskActivityService(
         await coreDb.AuditLogs.AddAsync(entry, cancellationToken);
         await coreDb.SaveChangesAsync(cancellationToken);
 
-        if (!notify)
-        {
-            return;
-        }
-
         // The entry is news for the people of the task - all but whoever made it. A deleted task
         // is not found here; DeleteAsync tells its people itself.
         var task = await taskDb.Tasks
             .IgnoreQueryFilters()
             .Include(t => t.Assignees)
             .FirstOrDefaultAsync(t => t.Id == taskId && t.TenantId == entry.TenantId, cancellationToken);
-        var people = task is null ? [] : TaskPeople.Of(task).Where(userId => userId != currentUser.UserId).ToList();
+        var people = task is null ? [] : TaskPeople.Of(task)
+            .Where(userId => userId != currentUser.UserId && exceptUserIds?.Contains(userId) != true)
+            .ToList();
         if (people.Count > 0)
         {
             await notices.PublishAsync(
