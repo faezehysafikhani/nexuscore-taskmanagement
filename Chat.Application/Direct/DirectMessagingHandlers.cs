@@ -322,7 +322,8 @@ public sealed class MarkDirectConversationReadCommandHandler(
 
 public sealed class GetUnreadCountsBySenderQueryHandler(
     IChatDbContext db,
-    ICurrentUserContext currentUser)
+    ICurrentUserContext currentUser,
+    IUserReachScope? reachScope = null)
     : IRequestHandler<GetUnreadCountsBySenderQuery, Result<List<UnreadBySenderDto>>>
 {
     public async Task<Result<List<UnreadBySenderDto>>> Handle(GetUnreadCountsBySenderQuery request, CancellationToken cancellationToken)
@@ -341,6 +342,14 @@ public sealed class GetUnreadCountsBySenderQueryHandler(
             .GroupBy(m => m.SenderUserId!.Value)
             .Select(g => new UnreadBySenderDto(g.Key, g.Count()))
             .ToListAsync(cancellationToken);
+
+        // Kept to one's own company (see IUserReachScope): nobody else is counted - their old
+        // messages cannot be opened anyway.
+        if (reachScope is not null && currentUser.TenantId is { } tenantId
+            && await reachScope.GetReachAsync(tenantId, meId, cancellationToken) is { } reach)
+        {
+            counts = counts.Where(count => reach.Contains(count.SenderUserId)).ToList();
+        }
 
         return Result.Success(counts);
     }
