@@ -101,6 +101,23 @@ public sealed class TaskPostConfiguration : IEntityTypeConfiguration<TaskPost>
     }
 }
 
+public sealed class TaskPostPeriodConfiguration : IEntityTypeConfiguration<TaskPostPeriod>
+{
+    public void Configure(EntityTypeBuilder<TaskPostPeriod> builder)
+    {
+        builder.ToTable("TaskPostPeriods", OrgStructureSchema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.Property(x => x.PostTitle).HasMaxLength(200).IsRequired();
+        builder.Property(x => x.PostCode).HasMaxLength(40).IsRequired();
+        builder.Property(x => x.Place).HasMaxLength(500).IsRequired();
+        builder.Property(x => x.PositionTitle).HasMaxLength(200).IsRequired();
+        builder.HasIndex(x => new { x.TenantId, x.TaskId });
+        builder.HasIndex(x => new { x.TenantId, x.UserId });
+        builder.HasIndex(x => new { x.TenantId, x.PositionId });
+    }
+}
+
 public sealed class UnitPositionConfiguration : IEntityTypeConfiguration<UnitPosition>
 {
     public void Configure(EntityTypeBuilder<UnitPosition> builder)

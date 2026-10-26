@@ -24,13 +24,17 @@ public interface ITaskReportService
 /// The subordinates' tasks are why this reads with IgnoreQueryFilters: Task Management's own
 /// query filter would hide them. The tenant and the rule above are then applied here explicitly,
 /// and the report only reads - opening such a task still goes through Task Management's rules.
+///
+/// Where tasks are given to posts (ITaskPostHistory), each row also tells who was on the task
+/// when - and with which position then - and "anyone" above includes whoever was on it before.
 /// </summary>
 public sealed class TaskReportService(
     TaskManagementDbContext db,
     ITaskAccessScope access,
     IOrgStructureService orgStructure,
     IUserDirectory users,
-    IUserReachScope? reachScope = null) : ITaskReportService
+    IUserReachScope? reachScope = null,
+    ITaskPostHistory? history = null) : ITaskReportService
 {
     /// <summary>Rows returned at most; the summary always counts every matching task.</summary>
     public const int MaxRows = 5000;
@@ -125,17 +129,22 @@ public sealed class TaskReportService(
         {
             // Kept to one's own company: the tasks of its people (as on the task board).
             var people = reach.UserIds.ToList();
+            var theirsBefore = await PastTaskIdsAsync(tenantId, people, null, _ => true, cancellationToken);
             tasks = tasks.Where(task =>
                 (task.OwnerUserId == null && !task.OwnerHeldByPost)
                 || (task.OwnerUserId != null && people.Contains(task.OwnerUserId.Value))
                 || (task.AssignedUserId != null && people.Contains(task.AssignedUserId.Value))
-                || task.Assignees.Any(a => people.Contains(a.UserId)));
+                || task.Assignees.Any(a => people.Contains(a.UserId))
+                || theirsBefore.Contains(task.Id));
         }
 
         if (access.IsRestricted)
         {
             var subordinates = (await SubordinatesAsync(tenantId, userId, cancellationToken)).Keys.ToList();
+            // Tasks they were on before, through their posts (responsible, stand-in or creator).
+            var theirsBefore = await PastTaskIdsAsync(tenantId, [userId, .. subordinates], null, _ => true, cancellationToken);
             tasks = tasks.Where(task =>
+                theirsBefore.Contains(task.Id) ||
                 task.OwnerUserId == null
                 || task.OwnerUserId == userId
                 || task.AssignedUserId == userId
@@ -146,20 +155,26 @@ public sealed class TaskReportService(
         }
 
         // --- filters
+        bool InRole(string periodRole) => role == "creator" ? periodRole == "creator" : periodRole != "creator";
         if (query.PersonId is { } personId)
         {
+            var before = await PastTaskIdsAsync(tenantId, [personId], null, InRole, cancellationToken);
             tasks = role == "creator"
-                ? tasks.Where(task => task.OwnerUserId == personId)
-                : tasks.Where(task => task.AssignedUserId == personId || task.Assignees.Any(a => a.IsResponsible && a.UserId == personId));
+                ? tasks.Where(task => task.OwnerUserId == personId || before.Contains(task.Id))
+                : tasks.Where(task => task.AssignedUserId == personId || task.Assignees.Any(a => a.IsResponsible && a.UserId == personId)
+                    || before.Contains(task.Id));
         }
 
         if (query.PositionId is { } positionId)
         {
             var holders = await PositionHoldersAsync(tenantId, positionId, cancellationToken);
+            // Also whoever had the position when they were on a task (they may have another one now).
+            var before = await PastTaskIdsAsync(tenantId, null, positionId, InRole, cancellationToken);
             tasks = role == "creator"
-                ? tasks.Where(task => task.OwnerUserId != null && holders.Contains(task.OwnerUserId.Value))
+                ? tasks.Where(task => (task.OwnerUserId != null && holders.Contains(task.OwnerUserId.Value)) || before.Contains(task.Id))
                 : tasks.Where(task => (task.AssignedUserId != null && holders.Contains(task.AssignedUserId.Value))
-                    || task.Assignees.Any(a => a.IsResponsible && holders.Contains(a.UserId)));
+                    || task.Assignees.Any(a => a.IsResponsible && holders.Contains(a.UserId))
+                    || before.Contains(task.Id));
         }
 
         if (!string.IsNullOrWhiteSpace(query.Tag))
@@ -230,8 +245,13 @@ public sealed class TaskReportService(
             loaded.RemoveAt(loaded.Count - 1);
         }
 
+        var periods = history is null || loaded.Count == 0
+            ? []
+            : await history.ForTasksAsync(tenantId, loaded.Select(task => task.Id).ToList(), cancellationToken);
+        var periodsOf = periods.GroupBy(period => period.TaskId).ToDictionary(group => group.Key, group => group.ToList());
         var peopleIds = loaded
             .SelectMany(task => task.ResponsibleUserIds.Append(task.OwnerUserId ?? Guid.Empty))
+            .Concat(periods.Select(period => period.UserId))
             .Where(id => id != Guid.Empty)
             .Distinct()
             .ToList();
@@ -264,10 +284,55 @@ public sealed class TaskReportService(
                 task.OwnerUserId is { } owner ? Person(owner) : null,
                 task.ResponsibleUserIds.Select(Person).ToList(),
                 task.Tags.Where(link => link.Tag is not null).Select(link => link.Tag!.Name).OrderBy(name => name).ToList(),
-                canOpen);
+                canOpen,
+                HistoryOf(task, periodsOf.GetValueOrDefault(task.Id), id => names.GetValueOrDefault(id)?.DisplayName ?? "کاربر"));
         }).ToList();
 
         return Result.Success(new TaskReportDto(summary, rows, truncated));
+    }
+
+    /// <summary>
+    /// Who was on the task when, oldest first. A done task's periods end when it was done at the
+    /// latest, and those begun after it was done (its post changed hands since) are left out.
+    /// </summary>
+    private static List<ReportPeriod> HistoryOf(TaskItem task, List<TaskPostPeriodDto>? periods, Func<Guid, string> nameOf)
+    {
+        if (periods is null)
+        {
+            return [];
+        }
+
+        var doneAt = task.Status == TaskItemStatus.Completed ? task.ActualCompletionDateUtc : null;
+        return periods
+            .Where(period => doneAt is null || period.StartedAtUtc <= doneAt)
+            .OrderBy(period => period.StartedAtUtc).ThenBy(period => period.Role)
+            .Select(period => new ReportPeriod(
+                period.UserId,
+                nameOf(period.UserId),
+                period.Role,
+                period.PositionTitle,
+                period.PostTitle,
+                period.PostCode,
+                period.Place,
+                period.StartedAtUtc,
+                doneAt is { } done && (period.EndedAtUtc is null || period.EndedAtUtc > done) ? done : period.EndedAtUtc))
+            .ToList();
+    }
+
+    /// <summary>The tasks these people (null: anyone) - or whoever had this position then - were on before, through their posts.</summary>
+    private async Task<List<Guid>> PastTaskIdsAsync(
+        Guid tenantId, IReadOnlyCollection<Guid>? userIds, Guid? positionId, Func<string, bool> inRole, CancellationToken cancellationToken)
+    {
+        if (history is null)
+        {
+            return [];
+        }
+
+        return (await history.FindAsync(tenantId, userIds, positionId, cancellationToken))
+            .Where(period => inRole(period.Role))
+            .Select(period => period.TaskId)
+            .Distinct()
+            .ToList();
     }
 
     private async Task<UserReach?> ReachAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken) =>

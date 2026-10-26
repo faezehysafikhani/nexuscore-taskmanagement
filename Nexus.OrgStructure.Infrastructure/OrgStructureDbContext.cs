@@ -14,6 +14,7 @@ public sealed class OrgStructureDbContext(DbContextOptions<OrgStructureDbContext
     public DbSet<UserAssignment> UserAssignments => Set<UserAssignment>();
     public DbSet<PositionCompany> PositionCompanies => Set<PositionCompany>();
     public DbSet<TaskPost> TaskPosts => Set<TaskPost>();
+    public DbSet<TaskPostPeriod> TaskPostPeriods => Set<TaskPostPeriod>();
     public DbSet<PostActing> PostActings => Set<PostActing>();
     public DbSet<UnitPosition> UnitPositions => Set<UnitPosition>();
     public DbSet<UserPosition> UserPositions => Set<UserPosition>();

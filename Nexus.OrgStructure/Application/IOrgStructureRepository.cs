@@ -37,6 +37,14 @@ public interface IOrgStructureRepository
     Task<IReadOnlyList<TaskPost>> ListTaskPostsAsync(Guid tenantId, IReadOnlyCollection<Guid>? taskIds, IReadOnlyCollection<Guid>? postIds, CancellationToken cancellationToken);
     Task AddTaskPostAsync(TaskPost taskPost, CancellationToken cancellationToken);
     void RemoveTaskPost(TaskPost taskPost);
+
+    /// <summary>The periods of these tasks (null: every task); only those not ended yet when <paramref name="openOnly"/>.</summary>
+    Task<IReadOnlyList<TaskPostPeriod>> ListTaskPostPeriodsAsync(Guid tenantId, IReadOnlyCollection<Guid>? taskIds, bool openOnly, CancellationToken cancellationToken);
+
+    /// <summary>The periods of these people (null: anyone) or of people with this position.</summary>
+    Task<IReadOnlyList<TaskPostPeriod>> FindTaskPostPeriodsAsync(Guid tenantId, IReadOnlyCollection<Guid>? userIds, Guid? positionId, CancellationToken cancellationToken);
+
+    Task AddTaskPostPeriodAsync(TaskPostPeriod period, CancellationToken cancellationToken);
     Task<IReadOnlyList<Guid>> ListTenantIdsAsync(CancellationToken cancellationToken);
 
     Task<IReadOnlyList<PostActing>> ListPostActingsAsync(Guid tenantId, CancellationToken cancellationToken);

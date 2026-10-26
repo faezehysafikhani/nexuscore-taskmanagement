@@ -7,7 +7,8 @@ namespace Nexus.OrgStructure.Infrastructure;
 
 /// <summary>
 /// With tasks given to posts: on start-up, gives tasks that have no posts yet to their people's
-/// posts and brings every task up to date with its posts' holders. Does nothing when it is off;
+/// posts, brings every task up to date with its posts' holders and records who is on each now in
+/// the tasks' history (for those given to posts before it was kept). Does nothing when it is off;
 /// a failure is logged and never stops the host.
 /// </summary>
 public sealed class TaskPostsStartup(IServiceScopeFactory scopes, ILogger<TaskPostsStartup> logger) : IHostedService
@@ -27,6 +28,7 @@ public sealed class TaskPostsStartup(IServiceScopeFactory scopes, ILogger<TaskPo
             {
                 await directory.ConvertTasksAsync(tenantId, cancellationToken);
                 await directory.SyncHoldersAsync(tenantId, null, cancellationToken);
+                await directory.RecordAllPeriodsAsync(tenantId, cancellationToken);
             }
         }
         catch (Exception ex)

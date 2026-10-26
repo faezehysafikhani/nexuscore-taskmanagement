@@ -668,6 +668,71 @@ public sealed class OrgChartTeamsAndTitlesTests
         Assert.Single(world.Updater.Applied);
     }
 
+    [Fact]
+    public async Task ATasksHistory_KeepsWhoHeldItsPost_AndTheirPositionThen()
+    {
+        var world = new World();
+        var (mahdi, reza) = (world.User("مهدی"), world.User("رضا"));
+        var tech = world.Unit("معاونت فناوری");
+        var company = await world.CompanyAsync("C1");
+        await world.Service.LinkUnitAsync(Tenant, tech.Id, new LinkUnitRequest(company), default);
+        var (expertPost, managerPost) = (await world.SeatAsync(tech.Id, "کارشناس"), await world.SeatAsync(tech.Id, "مدیر"));
+        var expertPosition = (await world.Service.ListUnitPositionsAsync(Tenant, tech.Id, default)).Value!.Single(p => p.Id == expertPost).PositionId;
+        await world.Service.SetAssignmentAsync(Tenant, mahdi, new SetUserAssignmentRequest(company, tech.Id, null, null, [expertPost]), default);
+        var task = Guid.NewGuid();
+        await world.TaskPosts.SetTaskPostsAsync(Tenant, task, null, [expertPost], [], default);
+
+        var first = Assert.Single(await world.History.ForTasksAsync(Tenant, [task], default));
+        Assert.Equal((mahdi, "responsible", "کارشناس", "کارشناس", (DateTimeOffset?)null), (first.UserId, first.Role, first.PostTitle, first.PositionTitle, first.EndedAtUtc));
+
+        // Mahdi becomes the manager and Reza takes the expert's post: the task moves to Reza, and
+        // its history keeps Mahdi's stretch as the expert he was then.
+        await world.Service.SetAssignmentAsync(Tenant, mahdi, new SetUserAssignmentRequest(company, tech.Id, null, null, [managerPost]), default);
+        await world.Service.SetAssignmentAsync(Tenant, reza, new SetUserAssignmentRequest(company, tech.Id, null, null, [expertPost]), default);
+
+        var periods = await world.History.ForTasksAsync(Tenant, [task], default);
+        Assert.Equal(2, periods.Count);
+        var (before, after) = (periods.Single(p => p.UserId == mahdi), periods.Single(p => p.UserId == reza));
+        Assert.Equal("کارشناس", before.PositionTitle);
+        Assert.NotNull(before.EndedAtUtc);
+        Assert.Equal(("کارشناس", (DateTimeOffset?)null), (after.PositionTitle, after.EndedAtUtc));
+        Assert.True(after.StartedAtUtc >= before.EndedAtUtc);
+        // Found by each of them, and by the position they had then.
+        Assert.Equal(task, Assert.Single(await world.History.FindAsync(Tenant, [mahdi], null, default)).TaskId);
+        Assert.Equal(2, (await world.History.FindAsync(Tenant, null, expertPosition, default)).Count);
+
+        // Running the start-up fill-in again changes nothing.
+        await world.TaskPosts.RecordAllPeriodsAsync(Tenant, default);
+        Assert.Equal(2, (await world.History.ForTasksAsync(Tenant, [task], default)).Count);
+    }
+
+    [Fact]
+    public async Task ATasksHistory_KeepsItsStandIns_WithTheirOwnPosition()
+    {
+        var world = new World();
+        var (worker, standIn, next, admin) = (world.User("کارمند"), world.User("جانشین"), world.User("نفر بعد"), world.User("مدیر سیستم"));
+        var tech = world.Unit("معاونت فناوری");
+        var company = await world.CompanyAsync("C1");
+        await world.Service.LinkUnitAsync(Tenant, tech.Id, new LinkUnitRequest(company), default);
+        var (post, accountant) = (await world.SeatAsync(tech.Id, "کارشناس"), await world.SeatAsync(tech.Id, "حسابدار"));
+        await world.Service.SetAssignmentAsync(Tenant, worker, new SetUserAssignmentRequest(company, tech.Id, null, null, [post]), default);
+        await world.Service.SetAssignmentAsync(Tenant, standIn, new SetUserAssignmentRequest(company, tech.Id, null, null, [accountant]), default);
+        var task = Guid.NewGuid();
+        world.Updater.Summaries.Add(new TaskSummary(task, "کار باز", new DateOnly(2030, 1, 1), "Todo", false));
+        await world.TaskPosts.SetTaskPostsAsync(Tenant, task, null, [post], [], default);
+
+        // The worker leaves; the accountant stands in for the vacant post; then someone takes it.
+        await world.Service.RemoveAssignmentAsync(Tenant, worker, default);
+        Assert.True((await world.Substitution(admin, OrgStructurePermissions.ManageSubstitution).SetActingAsync(Tenant, post, new SetActingRequest(accountant), default)).IsSuccess);
+        var acting = Assert.Single(await world.History.ForTasksAsync(Tenant, [task], default), p => p.Role == "acting");
+        Assert.Equal((standIn, "کارشناس", "حسابدار", (DateTimeOffset?)null), (acting.UserId, acting.PostTitle, acting.PositionTitle, acting.EndedAtUtc));
+        await world.Service.SetAssignmentAsync(Tenant, next, new SetUserAssignmentRequest(company, tech.Id, null, null, [post]), default);
+
+        var periods = await world.History.ForTasksAsync(Tenant, [task], default);
+        Assert.Equal(["کارمند:responsible:ended", "جانشین:acting:ended", "نفر بعد:responsible:open"],
+            periods.Select(p => $"{world.NameOf(p.UserId)}:{p.Role}:{(p.EndedAtUtc is null ? "open" : "ended")}").ToArray());
+    }
+
     public sealed class RecordingUpdater : ITaskPeopleUpdater
     {
         public List<TaskPersonChange> Applied { get; } = [];
@@ -882,6 +947,9 @@ public sealed class OrgChartTeamsAndTitlesTests
         public IHonorificService Titles { get; }
         public TaskPostDirectory TaskPosts { get; }
         public RecordingUpdater Updater { get; } = new();
+
+        /// <summary>Who was on each task through its posts, and when.</summary>
+        public ITaskPostHistory History => new TaskPostHistory(_repository);
 
         public string NameOf(Guid userId) => _users.Names[userId];
 

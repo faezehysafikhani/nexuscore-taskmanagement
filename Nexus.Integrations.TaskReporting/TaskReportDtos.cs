@@ -8,6 +8,23 @@ public sealed record ReportScopePerson(Guid UserId, string DisplayName, string? 
 
 public sealed record ReportPosition(Guid Id, string Title);
 
+/// <summary>
+/// One stretch of time someone was on the task through one of its posts (where tasks are given to
+/// posts): Role "creator", "responsible" or "acting" (stand-in, جانشین, of its vacant post), with
+/// the position they had then and the task's post then (title, code, where). ToUtc null: still on
+/// it; for a done task, its periods end when it was done at the latest.
+/// </summary>
+public sealed record ReportPeriod(
+    Guid UserId,
+    string DisplayName,
+    string Role,
+    string PositionTitle,
+    string PostTitle,
+    string PostCode,
+    string Place,
+    DateTimeOffset FromUtc,
+    DateTimeOffset? ToUtc);
+
 public sealed record TaskReportScopeDto(
     bool SeesAll,
     IReadOnlyList<ReportScopePerson> People,
@@ -16,7 +33,9 @@ public sealed record TaskReportScopeDto(
 
 /// <summary>
 /// Filters, all optional. PersonRole: "responsible" (default) or "creator" - applies to both the
-/// person and the position filter. Type: "normal", "project" or "recurring". Statuses: any of
+/// person and the position filter. Where tasks are given to posts, a person or position also
+/// finds the tasks they were on before (a stand-in's included, as responsible), by the position
+/// they had then. Type: "normal", "project" or "recurring". Statuses: any of
 /// "todo", "in_progress", "paused", "completed". Due dates are inclusive, yyyy-MM-dd.
 /// </summary>
 public sealed record TaskReportQuery(
@@ -45,7 +64,9 @@ public sealed record TaskReportRow(
     IReadOnlyList<ReportPerson> Responsible,
     IReadOnlyList<string> Tags,
     /// <summary>Whether the caller can open the task itself (owner, responsible, on its access list); otherwise it is in the report only as a manager's view.</summary>
-    bool CanOpen);
+    bool CanOpen,
+    /// <summary>Who was on the task when, oldest first (empty where tasks are given to people).</summary>
+    IReadOnlyList<ReportPeriod>? History = null);
 
 public sealed record TaskReportSummary(
     int Total,
