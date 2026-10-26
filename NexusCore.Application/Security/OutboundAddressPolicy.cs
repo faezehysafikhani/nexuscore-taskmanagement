@@ -70,7 +70,7 @@ public sealed class OutboundAddressPolicy : IOutboundAddressPolicy
 
     public async Task<Result> ValidateGatewayUrlAsync(string url, IReadOnlyCollection<string> providerDefaultUrls, CancellationToken cancellationToken)
     {
-        var refused = Result.Failure(Error.Validation("This address is not allowed for the SMS service. Use the provider's own address, or ask the administrator of the server to list your gateway host."));
+        var refused = Result.Failure(Error.Validation("این آدرس برای سرویس پیامک مجاز نیست. از آدرس خود سرویس‌دهنده استفاده کنید یا از مدیر سرور بخواهید میزبان درگاه شما را در فهرست مجاز ثبت کند."));
 
         if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri) || !string.IsNullOrEmpty(uri.UserInfo))
         {
@@ -91,7 +91,7 @@ public sealed class OutboundAddressPolicy : IOutboundAddressPolicy
         var plainAllowed = uri.Scheme == Uri.UriSchemeHttp && listed && _options.AllowHttp;
         if (!secure && !plainAllowed)
         {
-            return Result.Failure(Error.Validation("The SMS service address must use https."));
+            return Result.Failure(Error.Validation("آدرس سرویس پیامک باید با https شروع شود."));
         }
 
         // A name that points to the inside of the network is not the provider any more; only a
@@ -108,14 +108,14 @@ public sealed class OutboundAddressPolicy : IOutboundAddressPolicy
     {
         if (!_options.LdapAllowedPorts.Contains(port))
         {
-            return Result.Failure(Error.Validation("This LDAP port is not allowed. Allowed: " + string.Join(", ", _options.LdapAllowedPorts) + "."));
+            return Result.Failure(Error.Validation("این پورت LDAP مجاز نیست. پورت‌های مجاز: " + string.Join("، ", _options.LdapAllowedPorts) + "."));
         }
 
         var value = host.Trim();
         if (_options.LdapAllowedHosts.Length > 0
             && !_options.LdapAllowedHosts.Any(entry => HostMatches(entry, value)))
         {
-            return Result.Failure(Error.Validation("This LDAP server is not in the list of allowed servers of this installation."));
+            return Result.Failure(Error.Validation("این سرور LDAP در فهرست سرورهای مجاز این نصب نیست."));
         }
 
         IPAddress[] addresses;
@@ -131,7 +131,7 @@ public sealed class OutboundAddressPolicy : IOutboundAddressPolicy
             }
             catch (SocketException)
             {
-                return Result.Failure(Error.Validation("The LDAP server name could not be resolved."));
+                return Result.Failure(Error.Validation("نام سرور LDAP پیدا نشد."));
             }
         }
 
@@ -139,7 +139,7 @@ public sealed class OutboundAddressPolicy : IOutboundAddressPolicy
         // never a directory server is this machine, the link-local range (cloud metadata) or an
         // address that is not a host at all.
         return addresses.Length == 0 || addresses.Any(IsNeverAServerAddress)
-            ? Result.Failure(Error.Validation("This LDAP server address is not allowed."))
+            ? Result.Failure(Error.Validation("این آدرس سرور LDAP مجاز نیست."))
             : Result.Success();
     }
 
@@ -158,7 +158,7 @@ public sealed class OutboundAddressPolicy : IOutboundAddressPolicy
             }
             catch (SocketException)
             {
-                return Result.Failure(Error.Validation("The SMS service address could not be resolved."));
+                return Result.Failure(Error.Validation("آدرس سرویس پیامک پیدا نشد."));
             }
         }
 

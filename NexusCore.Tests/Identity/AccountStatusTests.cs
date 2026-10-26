@@ -254,6 +254,8 @@ public sealed class AccountStatusTests
             builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["Identity:LoginProtection:CaptchaAfterFailedAttempts"] = captchaAfterFailedAttempts.ToString(),
+                ["Identity:Session:ReturnRefreshTokenInBody"] = "true",
+                ["Identity:Session:AcceptRefreshTokenInBody"] = "true",
             });
 
             builder.Services.AddApplication();

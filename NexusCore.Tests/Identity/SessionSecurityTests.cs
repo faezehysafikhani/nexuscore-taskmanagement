@@ -131,7 +131,19 @@ public sealed class SessionSecurityTests
     }
 
     [Fact]
-    public async Task OtherClients_StillGetTheTokenInTheBody_DuringTheTransition()
+    public async Task ByDefault_EveryClientGetsTheCookieOnly_AndTheBodyTokenIsNotAccepted()
+    {
+        await using var api = await Api.StartAsync(tokenInBody: false);
+
+        var response = await api.LoginAsync(UserName, Password);
+
+        Assert.True(string.IsNullOrEmpty((await Json(response)).GetProperty("refreshToken").GetString()));
+        Assert.Contains(response.Headers.GetValues("Set-Cookie"), value => value.StartsWith("nexus_rt=", StringComparison.Ordinal));
+        Assert.Equal(HttpStatusCode.Unauthorized, (await api.RefreshAsync("anything")).StatusCode);
+    }
+
+    [Fact]
+    public async Task OtherClients_StillGetTheTokenInTheBody_WhenTheTransitionSwitchIsOn()
     {
         await using var api = await Api.StartAsync();
 
@@ -347,7 +359,7 @@ public sealed class SessionSecurityTests
         public Guid UserId { get; private set; }
         public Guid SeniorId { get; private set; }
 
-        public static async Task<Api> StartAsync(int reuseGraceSeconds = 10)
+        public static async Task<Api> StartAsync(int reuseGraceSeconds = 10, bool tokenInBody = true)
         {
             var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Testing" });
             builder.WebHost.UseTestServer();
@@ -359,6 +371,9 @@ public sealed class SessionSecurityTests
                 ["Identity:LoginProtection:ResetCodeCooldownSeconds"] = "0",
                 ["Identity:LoginProtection:MaxResetCodesPerIdentifier"] = "50",
                 ["Identity:Session:ReuseGraceSeconds"] = reuseGraceSeconds.ToString(),
+                // Most tests drive the flow with the body token; the cookie-only default has its own test.
+                ["Identity:Session:ReturnRefreshTokenInBody"] = tokenInBody.ToString(),
+                ["Identity:Session:AcceptRefreshTokenInBody"] = tokenInBody.ToString(),
                 ["PasswordReset:MinimumResponseMilliseconds"] = "0",
             });
 

@@ -91,12 +91,12 @@ public sealed class LoginProtection(
 
         if (string.IsNullOrWhiteSpace(captchaId) || string.IsNullOrWhiteSpace(captchaAnswer))
         {
-            return Result.Failure(new Error("captcha.required", "Complete the CAPTCHA to sign in."));
+            return Result.Failure(new Error("captcha.required", "برای ورود، کد تصویر را وارد کنید."));
         }
 
         return await VerifyCaptchaAsync(captchaId.Trim(), captchaAnswer, cancellationToken)
             ? Result.Success()
-            : Result.Failure(new Error("captcha.invalid", "The CAPTCHA answer is wrong or has expired. Try the new one."));
+            : Result.Failure(new Error("captcha.invalid", "کد تصویر اشتباه است یا منقضی شده. کد جدید را وارد کنید."));
     }
 
     public async Task<bool> RecordFailedLoginAsync(string identifier, CancellationToken cancellationToken)

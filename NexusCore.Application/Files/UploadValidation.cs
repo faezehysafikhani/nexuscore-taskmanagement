@@ -20,28 +20,28 @@ public static class UploadValidation
         var displayName = Path.GetFileName(fileName ?? string.Empty);
         if (string.IsNullOrWhiteSpace(displayName))
         {
-            return Result.Failure<(string, string)>(Error.Validation("The file name is required."));
+            return Result.Failure<(string, string)>(Error.Validation("نام فایل الزامی است."));
         }
 
         if (!content.CanSeek || content.Length == 0)
         {
-            return Result.Failure<(string, string)>(Error.Validation("The uploaded file is empty."));
+            return Result.Failure<(string, string)>(Error.Validation("فایل بارگذاری‌شده خالی است."));
         }
 
         if (!AllowedUploadTypes.IsAllowed(displayName, null))
         {
-            return Result.Failure<(string, string)>(Error.Validation("This file type is not allowed. Only Excel, Word, PDF and image files can be uploaded."));
+            return Result.Failure<(string, string)>(Error.Validation("این نوع فایل مجاز نیست. فقط فایل‌های Excel، Word، PDF و تصویر قابل بارگذاری هستند."));
         }
 
         var maxBytes = await policy.GetMaxFileSizeKbAsync(tenantId, cancellationToken) * 1024L;
         if (content.Length > maxBytes)
         {
-            return Result.Failure<(string, string)>(Error.Validation($"File is too large. The maximum size is {maxBytes} bytes."));
+            return Result.Failure<(string, string)>(Error.Validation($"حجم فایل زیاد است. حداکثر اندازه {maxBytes / 1024.0 / 1024.0:0.#} مگابایت است."));
         }
 
         if (!await AllowedUploadTypes.StreamMatchesAsync(displayName, content, cancellationToken))
         {
-            return Result.Failure<(string, string)>(Error.Validation("The file content does not match its type. Upload a genuine Excel, Word, PDF or image file."));
+            return Result.Failure<(string, string)>(Error.Validation("محتوای فایل با نوع آن هم‌خوانی ندارد. یک فایل واقعی Excel، Word، PDF یا تصویر بارگذاری کنید."));
         }
 
         return Result.Success((displayName, AllowedUploadTypes.ContentTypeFor(displayName)));

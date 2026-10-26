@@ -29,12 +29,13 @@ public sealed class SignInSessionOptions
     public string RefreshCookieName { get; set; } = "nexus_rt";
 
     /// <summary>
-    /// Transition: true keeps returning the refresh token in the response body to clients that do
-    /// not ask for the cookie (header X-Nexus-Session: cookie). False: every client gets the
-    /// cookie only, and the body never carries the token.
+    /// False (default): every client gets the cookie only, and the body never carries the token.
+    /// True is the old behaviour for a client that cannot use cookies: it keeps returning the
+    /// refresh token in the response body to clients that do not ask for the cookie (header
+    /// X-Nexus-Session: cookie).
     /// </summary>
-    public bool ReturnRefreshTokenInBody { get; set; } = true;
+    public bool ReturnRefreshTokenInBody { get; set; }
 
-    /// <summary>Transition: whether /refresh and /logout still accept the token in the request body. False: cookie only.</summary>
-    public bool AcceptRefreshTokenInBody { get; set; } = true;
+    /// <summary>Whether /refresh and /logout also accept the token in the request body. False (default): cookie only.</summary>
+    public bool AcceptRefreshTokenInBody { get; set; }
 }
