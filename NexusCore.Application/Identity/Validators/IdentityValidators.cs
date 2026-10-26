@@ -78,7 +78,7 @@ public sealed class ChangeMyPasswordRequestValidator : AbstractValidator<ChangeM
     {
         RuleFor(x => x.CurrentPassword).NotEmpty().MaximumLength(128);
         RuleFor(x => x.NewPassword).NotEmpty().StrongPassword()
-            .NotEqual(x => x.CurrentPassword).WithMessage("The new password must differ from the current one.");
+            .NotEqual(x => x.CurrentPassword).WithMessage("رمز عبور جدید باید با رمز فعلی متفاوت باشد.");
     }
 }
 

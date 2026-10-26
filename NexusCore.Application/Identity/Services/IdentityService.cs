@@ -491,6 +491,11 @@ public sealed class IdentityService(
             return guard;
         }
 
+        if (request.RoleIds is null)
+        {
+            return Result.Failure(Error.Validation("RoleIds is required."));
+        }
+
         var requestedRoles = request.RoleIds.Distinct().ToList();
         var tenantRoles = (await repository.ListRolesAsync(user.TenantId, cancellationToken)).ToDictionary(role => role.Id);
         if (requestedRoles.Any(id => !tenantRoles.ContainsKey(id)))
@@ -589,6 +594,11 @@ public sealed class IdentityService(
         if (guard.IsFailure)
         {
             return guard;
+        }
+
+        if (request.PermissionIds is null)
+        {
+            return Result.Failure(Error.Validation("PermissionIds is required."));
         }
 
         var requested = request.PermissionIds.Distinct().ToList();
@@ -776,6 +786,11 @@ public sealed class IdentityService(
         if (role.IsSystem)
         {
             return Result.Failure(Error.Forbidden("The permissions of the built-in Administrator role cannot be changed."));
+        }
+
+        if (request.PermissionIds is null)
+        {
+            return Result.Failure(Error.Validation("PermissionIds is required."));
         }
 
         var requested = request.PermissionIds.Distinct().ToList();

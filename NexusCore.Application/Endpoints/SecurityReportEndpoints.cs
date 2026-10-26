@@ -42,7 +42,26 @@ public static class SecurityReportEndpoints
                 try
                 {
                     using var document = JsonDocument.Parse(buffer.ToArray());
-                    var report = document.RootElement.TryGetProperty("csp-report", out var wrapped) ? wrapped : document.RootElement;
+                    // report-uri sends {"csp-report": {...}}; the Reporting API (report-to) sends
+                    // [{"type": "csp-violation", "body": {...}}, ...]. Only the first is logged.
+                    var report = document.RootElement;
+                    if (report.ValueKind == JsonValueKind.Array)
+                    {
+                        report = report.GetArrayLength() > 0 ? report[0] : default;
+                    }
+
+                    if (report.ValueKind == JsonValueKind.Object)
+                    {
+                        if (report.TryGetProperty("csp-report", out var wrapped))
+                        {
+                            report = wrapped;
+                        }
+                        else if (report.TryGetProperty("body", out var body))
+                        {
+                            report = body;
+                        }
+                    }
+
                     logger.LogWarning(
                         "CSP violation: {Directive} blocked {BlockedUri} on {DocumentUri} (disposition {Disposition})",
                         Field(report, "effective-directive", "violated-directive"),

@@ -76,4 +76,20 @@ public sealed class SecurityReportTests
         Assert.Equal(HttpStatusCode.RequestEntityTooLarge, huge.StatusCode);
         Assert.Equal(HttpStatusCode.NoContent, garbage.StatusCode);
     }
+
+    [Theory]
+    [InlineData("[{\"type\":\"csp-violation\",\"body\":{\"effectiveDirective\":\"img-src\",\"blockedURL\":\"https://x.example/a.png\"}}]")]
+    [InlineData("[]")]
+    [InlineData("[1,2]")]
+    [InlineData("\"text\"")]
+    public async Task TheReportingApiShape_IsAcceptedWithoutAnError(string body)
+    {
+        var (app, _) = await StartAsync();
+        await using var _a = app;
+        using var client = app.GetTestClient();
+
+        var response = await client.PostAsync("/api/platform/csp-report", new StringContent(body, Encoding.UTF8, "application/reports+json"));
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+    }
 }

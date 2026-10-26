@@ -110,6 +110,11 @@ public sealed class UserGroupService(
             return Result.Failure(Error.Validation("A personal work team cannot carry permissions."));
         }
 
+        if (request.PermissionIds is null)
+        {
+            return Result.Failure(Error.Validation("PermissionIds is required."));
+        }
+
         var known = (await identityRepository.ListPermissionsAsync(cancellationToken)).ToDictionary(permission => permission.Id);
         if (request.PermissionIds.Any(id => !known.ContainsKey(id)))
         {
