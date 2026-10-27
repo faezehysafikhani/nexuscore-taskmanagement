@@ -11,6 +11,7 @@ using NexusCore.Application.Ldap;
 using NexusCore.Application.Messaging;
 using NexusCore.Application.Platform.Dtos;
 using NexusCore.Application.Platform.Interfaces;
+using NexusCore.Application.Platform.Services;
 using NexusCore.Application.Security.RateLimiting;
 using NexusCore.SharedKernel.Interfaces;
 
@@ -278,6 +279,55 @@ public static class IdentityEndpoints
                 (await platformService.UpsertSettingAsync(request, cancellationToken)).ToApiResult())
             .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(IdentityPermissions.SettingsUpdate);
+
+        // The system's name, logo and browser-tab icon: read by everyone, the sign-in page
+        // included (anonymous); changed with settings.update.
+        platform.MapGet("/branding", async (IBrandingService branding, CancellationToken cancellationToken) =>
+                Results.Ok(await branding.GetAsync(cancellationToken)))
+            .AllowAnonymous()
+            .WithName("GetBranding");
+
+        platform.MapGet("/branding/{kind:regex(^(logo|favicon)$)}", async (string kind, HttpContext http, IBrandingService branding, CancellationToken cancellationToken) =>
+            {
+                if (await branding.OpenImageAsync(kind, cancellationToken) is not { } image)
+                {
+                    return Results.NotFound();
+                }
+
+                // The address carries the version (?v=), so a changed image is a new address.
+                http.Response.Headers.CacheControl = "public, max-age=86400";
+                http.Response.Headers["Content-Security-Policy"] = "default-src 'none'";
+                return Results.Stream(image.Content, image.ContentType);
+            })
+            .AllowAnonymous()
+            .WithName("GetBrandingImage");
+
+        platform.MapPut("/branding", async (HttpRequest http, IBrandingService branding, CancellationToken cancellationToken) =>
+            {
+                if (!http.HasFormContentType)
+                {
+                    return Results.BadRequest();
+                }
+
+                var form = await http.ReadFormAsync(cancellationToken);
+                BrandingImage? Image(string name) =>
+                    form.Files.GetFile(name) is { Length: > 0 } file ? new BrandingImage(file.FileName, file.OpenReadStream(), file.Length) : null;
+                bool Flag(string name) => string.Equals(form[name].FirstOrDefault(), "true", StringComparison.OrdinalIgnoreCase);
+
+                var request = new UpdateBrandingRequest(
+                    form.ContainsKey("systemName") ? form["systemName"].FirstOrDefault() ?? string.Empty : null,
+                    Image("logo"),
+                    Image("favicon"),
+                    Flag("removeLogo"),
+                    Flag("removeFavicon"));
+                return (await branding.UpdateAsync(request, cancellationToken)).ToApiResult();
+            })
+            .DisableAntiforgery()
+            .WithUploadSizeLimit()
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
+            .RequireAuthorization(IdentityPermissions.SettingsUpdate)
+            .WithName("UpdateBranding")
+            .WithSummary("Name, logo and tab icon of the system (multipart: systemName, logo, favicon, removeLogo, removeFavicon)");
 
         // The current upload rules (max file size + accepted types): every signed-in user who can
         // upload a file needs to read this, not just admins, so it carries no extra permission -

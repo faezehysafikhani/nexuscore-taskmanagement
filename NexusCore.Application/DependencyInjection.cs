@@ -35,6 +35,7 @@ public static class DependencyInjection
         services.AddScoped<INotificationChannelSettingsReader, NotificationChannelSettingsReader>();
         services.AddScoped<INotificationChannelService, NotificationChannelService>();
         services.AddScoped<IPlatformService, PlatformService>();
+        services.AddScoped<IBrandingService, BrandingService>();
         services.AddScoped<IUploadPolicyReader, UploadPolicyReader>();
         // Live presence: one tracker for the process (replaceable by a shared one), fed by the hubs.
         services.TryAddSingleton<IUserPresenceTracker, InMemoryUserPresenceTracker>();

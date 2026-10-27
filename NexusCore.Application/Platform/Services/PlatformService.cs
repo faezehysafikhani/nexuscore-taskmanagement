@@ -66,8 +66,9 @@ public sealed class PlatformService(
 
     // Settings that have a screen and a permission of their own (SMS channels and quiet hours,
     // LDAP, reminders) hold secrets or drive outgoing traffic. They are changed and read only
-    // through those endpoints; the generic settings API must not be a way around them.
-    private static readonly string[] ReservedKeyPrefixes = ["Notifications.", "Identity.", "TaskManagement."];
+    // through those endpoints; the generic settings API must not be a way around them. The
+    // branding (BrandingService) points at stored files and is checked there.
+    private static readonly string[] ReservedKeyPrefixes = ["Notifications.", "Identity.", "TaskManagement.", BrandingService.KeyPrefix];
 
     private static bool IsReserved(string key) =>
         ReservedKeyPrefixes.Any(prefix => key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
