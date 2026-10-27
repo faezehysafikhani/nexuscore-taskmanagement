@@ -52,4 +52,25 @@ public interface IIdentityRepository
     Task<bool> IsUserActiveAsync(Guid userId, CancellationToken cancellationToken);
     Task<IReadOnlyList<Permission>> GetPermissionsByIdsAsync(IReadOnlyCollection<Guid> permissionIds, CancellationToken cancellationToken);
     Task<RefreshToken?> FindActiveRefreshTokenAsync(string tokenHash, CancellationToken cancellationToken);
+
+    /// <summary>The refresh token whatever its state (active, replaced, revoked, expired), with its user.</summary>
+    Task<RefreshToken?> FindRefreshTokenAsync(string tokenHash, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Takes the token out of use in one conditional statement (revoked, marked used, pointing to
+    /// its successor) and says whether this call was the one that did it. Two requests with the
+    /// same token cannot both get true.
+    /// </summary>
+    Task<bool> TryUseRefreshTokenAsync(Guid tokenId, string replacedByTokenHash, DateTimeOffset nowUtc, CancellationToken cancellationToken);
+
+    /// <summary>The token's state as it is in the database right now, not as this request first read it.</summary>
+    Task<RefreshTokenState?> GetRefreshTokenStateAsync(Guid tokenId, CancellationToken cancellationToken);
+
+    /// <summary>Revokes every token of one sign-in (family): the token in use, its successors and its replaced ones.</summary>
+    Task RevokeRefreshTokenFamilyAsync(Guid userId, Guid familyId, CancellationToken cancellationToken);
+
+    /// <summary>Signs the user out everywhere except the one sign-in (family) the caller is using.</summary>
+    Task RevokeRefreshTokensExceptFamilyAsync(Guid userId, Guid keepFamilyId, CancellationToken cancellationToken);
 }
+
+public sealed record RefreshTokenState(DateTimeOffset? RevokedAtUtc, DateTimeOffset? UsedAtUtc, string? ReplacedByTokenHash);

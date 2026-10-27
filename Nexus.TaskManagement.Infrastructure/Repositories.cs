@@ -117,13 +117,16 @@ public sealed class TaskRepository(TaskManagementDbContext db) : ITaskRepository
             (_, false) => query.OrderBy(t => t.ModifiedAtUtc ?? t.CreatedAtUtc)
         };
 
+        // A page is at most 200 rows, whatever the request asked for.
+        var pageNumber = Math.Max(1, request.PageNumber);
+        var pageSize = Math.Clamp(request.PageSize, 1, 200);
         var total = await query.CountAsync(cancellationToken);
         var items = await query
-            .Skip((request.PageNumber - 1) * request.PageSize)
-            .Take(request.PageSize)
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
             .ToListAsync(cancellationToken);
 
-        return new PagedResult<TaskItem>(items, request.PageNumber, request.PageSize, total);
+        return new PagedResult<TaskItem>(items, pageNumber, pageSize, total);
     }
 
     public Task<SubTask?> GetSubTaskAsync(Guid tenantId, Guid subTaskId, CancellationToken cancellationToken) =>
@@ -271,14 +274,16 @@ public sealed class RepetitiveTaskRepository(TaskManagementDbContext db) : IRepe
             query = query.Where(r => r.IsActive == isActive);
         }
 
+        var pageNumber = Math.Max(1, request.PageNumber);
+        var pageSize = Math.Clamp(request.PageSize, 1, 200);
         var total = await query.CountAsync(cancellationToken);
         var items = await query
             .OrderBy(r => r.NextExecutionAtUtc ?? DateTimeOffset.MaxValue)
-            .Skip((request.PageNumber - 1) * request.PageSize)
-            .Take(request.PageSize)
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
             .ToListAsync(cancellationToken);
 
-        return new PagedResult<RepetitiveTask>(items, request.PageNumber, request.PageSize, total);
+        return new PagedResult<RepetitiveTask>(items, pageNumber, pageSize, total);
     }
 
     public async Task AddAsync(RepetitiveTask recurrence, CancellationToken cancellationToken) =>

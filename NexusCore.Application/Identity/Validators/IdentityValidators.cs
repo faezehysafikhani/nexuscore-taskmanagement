@@ -28,6 +28,16 @@ internal static class ProfileRules
     public static IRuleBuilderOptions<T, string?> ValidUsername<T>(this IRuleBuilder<T, string?> rule) =>
         rule.Must(Username.IsValid).WithMessage(UsernameMessage);
 
+    /// <summary>data:image/(png|jpeg|webp|gif);base64,... or an https:// address. Never svg, html or another scheme.</summary>
+    private static readonly System.Text.RegularExpressions.Regex AvatarPattern = new(
+        @"^(data:image/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=]+|https://[^\s<>""']+)$",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(1));
+
+    public static IRuleBuilderOptions<T, string?> ValidAvatar<T>(this IRuleBuilder<T, string?> rule) =>
+        rule.Must(value => string.IsNullOrWhiteSpace(value) || AvatarPattern.IsMatch(value.Trim()))
+            .WithMessage("The avatar must be a PNG, JPEG, WebP or GIF image.");
+
     public static IRuleBuilderOptions<T, string?> ValidPhoneNumber<T>(this IRuleBuilder<T, string?> rule) =>
         rule.Must(PhoneNumber.IsValid).WithMessage(PhoneMessage);
 }
@@ -41,7 +51,7 @@ public sealed class CreateUserRequestValidator : AbstractValidator<CreateUserReq
         RuleFor(x => x.FirstName).NotEmpty().MaximumLength(80);
         RuleFor(x => x.LastName).NotEmpty().MaximumLength(80);
         RuleFor(x => x.PhoneNumber).NotEmpty().ValidPhoneNumber();
-        RuleFor(x => x.Password).NotEmpty().MinimumLength(8).MaximumLength(128);
+        RuleFor(x => x.Password).NotEmpty().StrongPassword();
         RuleFor(x => x.Email).EmailAddress().MaximumLength(256).When(x => !string.IsNullOrWhiteSpace(x.Email));
     }
 }
@@ -52,7 +62,7 @@ public sealed class UpdateUserRequestValidator : AbstractValidator<UpdateUserReq
     {
         RuleFor(x => x.DisplayName).NotEmpty().MaximumLength(160);
         RuleFor(x => x.Email).EmailAddress().MaximumLength(256).When(x => !string.IsNullOrWhiteSpace(x.Email));
-        RuleFor(x => x.Password).MinimumLength(8).MaximumLength(128).When(x => !string.IsNullOrWhiteSpace(x.Password));
+        RuleFor(x => x.Password).StrongPassword().When(x => !string.IsNullOrWhiteSpace(x.Password));
         // Null keeps the current username. A changed one must be a national code - checked by
         // the service, which knows the current value (older usernames stay valid unchanged).
         RuleFor(x => x.Username).NotEmpty().When(x => x.Username is not null);
@@ -67,8 +77,8 @@ public sealed class ChangeMyPasswordRequestValidator : AbstractValidator<ChangeM
     public ChangeMyPasswordRequestValidator()
     {
         RuleFor(x => x.CurrentPassword).NotEmpty().MaximumLength(128);
-        RuleFor(x => x.NewPassword).NotEmpty().MinimumLength(8).MaximumLength(128)
-            .NotEqual(x => x.CurrentPassword).WithMessage("The new password must differ from the current one.");
+        RuleFor(x => x.NewPassword).NotEmpty().StrongPassword()
+            .NotEqual(x => x.CurrentPassword).WithMessage("رمز عبور جدید باید با رمز فعلی متفاوت باشد.");
     }
 }
 
@@ -78,8 +88,7 @@ public sealed class ResetPasswordRequestValidator : AbstractValidator<ResetPassw
     {
         RuleFor(x => x.Token).NotEmpty().MaximumLength(200).WithMessage("مهلت تعیین رمز عبور جدید به پایان رسیده است. لطفاً دوباره کد بازیابی دریافت کنید.");
         RuleFor(x => x.NewPassword).NotEmpty().WithMessage("رمز عبور جدید را وارد کنید.")
-            .MinimumLength(8).WithMessage("رمز عبور باید حداقل ۸ کاراکتر باشد.")
-            .MaximumLength(128).WithMessage("رمز عبور نباید بیشتر از ۱۲۸ کاراکتر باشد.");
+            .StrongPassword();
     }
 }
 
@@ -93,6 +102,7 @@ public sealed class UpdateMyProfileRequestValidator : AbstractValidator<UpdateMy
         RuleFor(x => x.PhoneNumber).ValidPhoneNumber().When(x => !string.IsNullOrWhiteSpace(x.PhoneNumber));
         RuleFor(x => x.AvatarUrl).MaximumLength(ProfileRules.MaxAvatarLength)
             .WithMessage("The avatar image is too large.");
+        RuleFor(x => x.AvatarUrl).ValidAvatar();
     }
 }
 

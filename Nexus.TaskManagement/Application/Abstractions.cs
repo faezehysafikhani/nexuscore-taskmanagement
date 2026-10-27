@@ -231,7 +231,8 @@ public interface ITaskActivityService
 {
     Task<Result<IReadOnlyList<TaskActivityDto>>> GetForTaskAsync(Guid taskId, CancellationToken cancellationToken);
 
-    Task RecordAsync(Guid taskId, string action, string? details, CancellationToken cancellationToken);
+    /// <param name="notify">False when the people of the task are told about this change in another, fuller way.</param>
+    Task RecordAsync(Guid taskId, string action, string? details, CancellationToken cancellationToken, IReadOnlyCollection<Guid>? exceptUserIds = null);
 }
 
 // ---------------------------------------------------------------------------
@@ -311,6 +312,9 @@ public static class TaskSmsTemplateKeys
 
     /// <summary>A task's due moment passed and it is not done. TaskTitle, DueDate.</summary>
     public const string TaskOverdue = "task_overdue";
+
+    /// <summary>The status of a task that was past due and not done changed. TaskTitle, DueDate, StatusTitle, ActorName.</summary>
+    public const string TaskOverdueChanged = "task_overdue_changed";
 
     /// <summary>An occurrence of a recurring task is coming up (an hour before, by default). TaskTitle, ExecutionDateTime, ExecutionDate, ExecutionTime.</summary>
     public const string RecurringTaskUpcoming = "recurring_task_upcoming";

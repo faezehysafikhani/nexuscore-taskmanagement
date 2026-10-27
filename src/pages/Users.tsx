@@ -21,7 +21,7 @@ export const Users: React.FC = () => {
   const [tenantId, setTenantId] = useState('11111111-1111-1111-1111-111111111111');
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
-  const [password, setPassword] = useState('Password@123');
+  const [password, setPassword] = useState('');
   const [search, setSearch] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
@@ -239,7 +239,7 @@ export const Users: React.FC = () => {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Password@123"
+              placeholder="••••••••••"
               className="input-field"
             />
           </div>

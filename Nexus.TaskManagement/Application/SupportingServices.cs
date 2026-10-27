@@ -443,6 +443,11 @@ public sealed class TaskFileService(
                 "This file type is not allowed. Only Excel, Word, PDF, image and voice files can be uploaded."));
         }
 
+        if (!AllowedUploadTypes.HeadMatches(request.FileName, request.Content))
+        {
+            return Result.Failure<TaskFileDto>(Error.Validation("The file content does not match its type. Upload a genuine Excel, Word, PDF, image or voice file."));
+        }
+
         var maxConfiguredBytes = await uploadPolicy.GetMaxFileSizeKbAsync(tenantId, cancellationToken) * 1024L;
         if (request.Content.Length > maxConfiguredBytes)
         {
@@ -462,7 +467,8 @@ public sealed class TaskFileService(
             displayName = "file";
         }
 
-        var contentType = string.IsNullOrWhiteSpace(request.ContentType) ? "application/octet-stream" : request.ContentType;
+        // Served with the type its extension stands for, never the one the client claimed.
+        var contentType = AllowedUploadTypes.ContentTypeFor(displayName);
 
         StoredFile stored;
         await using (var content = new MemoryStream(request.Content, writable: false))

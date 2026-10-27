@@ -14,4 +14,5 @@ public static class NexusRateLimitPolicies
     public const string ChatSend = "nexus.chat_send";
     public const string Sms = "nexus.sms";
     public const string Realtime = "nexus.realtime";
+    public const string SecurityReports = "nexus.security_reports";
 }

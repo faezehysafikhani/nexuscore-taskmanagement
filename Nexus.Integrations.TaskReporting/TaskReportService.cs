@@ -143,9 +143,10 @@ public sealed class TaskReportService(
             var subordinates = (await SubordinatesAsync(tenantId, userId, cancellationToken)).Keys.ToList();
             // Tasks they were on before, through their posts (responsible, stand-in or creator).
             var theirsBefore = await PastTaskIdsAsync(tenantId, [userId, .. subordinates], null, _ => true, cancellationToken);
+            // As on the task board: a task whose owner is an empty post is nobody's to see.
             tasks = tasks.Where(task =>
                 theirsBefore.Contains(task.Id) ||
-                task.OwnerUserId == null
+                (task.OwnerUserId == null && !task.OwnerHeldByPost)
                 || task.OwnerUserId == userId
                 || task.AssignedUserId == userId
                 || task.Assignees.Any(a => a.UserId == userId)
@@ -265,7 +266,7 @@ public sealed class TaskReportService(
         {
             var isRecurring = task.Recurrence is not null;
             var canOpen = !access.IsRestricted
-                || task.OwnerUserId == null
+                || (task.OwnerUserId == null && !task.OwnerHeldByPost)
                 || task.OwnerUserId == userId
                 || task.AssignedUserId == userId
                 || task.Assignees.Any(a => a.UserId == userId);

@@ -144,6 +144,9 @@ namespace NexusCore.Infrastructure.Migrations
                     b.Property<DateTimeOffset>("ExpiresAtUtc")
                         .HasColumnType("datetimeoffset");
 
+                    b.Property<Guid?>("FamilyId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<string>("ReplacedByTokenHash")
                         .HasColumnType("nvarchar(max)");
 
@@ -158,6 +161,9 @@ namespace NexusCore.Infrastructure.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("nvarchar(128)");
 
+                    b.Property<DateTimeOffset?>("UsedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<Guid>("UserId")
                         .HasColumnType("uniqueidentifier");
 
@@ -166,7 +172,7 @@ namespace NexusCore.Infrastructure.Migrations
                     b.HasIndex("TokenHash")
                         .IsUnique();
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("UserId", "FamilyId");
 
                     b.ToTable("RefreshTokens", "identity");
                 });

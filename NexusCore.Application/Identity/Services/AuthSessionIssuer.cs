@@ -1,5 +1,7 @@
 using NexusCore.Application.Identity.Dtos;
+using Microsoft.Extensions.Options;
 using NexusCore.Application.Identity.Interfaces;
+using NexusCore.Application.Identity.Options;
 using NexusCore.Application.Platform.Interfaces;
 using NexusCore.Application.Security;
 using NexusCore.Domain.Identity;
@@ -17,14 +19,20 @@ public sealed class AuthSessionIssuer(
     IPasswordHasher passwordHasher,
     IJwtTokenService jwtTokenService,
     IUnitOfWork unitOfWork,
-    IPlatformService platformService)
+    IPlatformService platformService,
+    ICurrentUserContext currentUser,
+    IOptions<SignInSessionOptions> sessionOptions)
 {
     public async Task<AuthResponse> IssueAsync(User user, CancellationToken cancellationToken)
     {
         var permissions = await repository.GetUserPermissionNamesAsync(user.Id, cancellationToken);
         var accessToken = jwtTokenService.CreateAccessToken(user, permissions);
         var refreshToken = jwtTokenService.CreateRefreshToken();
-        var refreshTokenEntity = user.AddRefreshToken(passwordHasher.HashToken(refreshToken), DateTimeOffset.UtcNow.AddDays(14), null);
+        // A new sign-in starts a new family of refresh tokens and fixes the day the session ends.
+        var refreshTokenEntity = user.AddRefreshToken(
+            passwordHasher.HashToken(refreshToken),
+            DateTimeOffset.UtcNow.AddDays(Math.Max(1, sessionOptions.Value.RefreshTokenDays)),
+            currentUser.IpAddress);
         await repository.AddRefreshTokenAsync(refreshTokenEntity, cancellationToken);
         user.MarkLoggedIn(DateTimeOffset.UtcNow);
 
@@ -33,6 +41,6 @@ public sealed class AuthSessionIssuer(
         // shows up in that user's sign-in history.
         await platformService.AuditForAsync(user.TenantId, user.Id, "identity.login", nameof(User), user.Id.ToString(), user.Username ?? user.PhoneNumber, cancellationToken);
 
-        return new AuthResponse(accessToken.Token, refreshToken, accessToken.ExpiresAtUtc, IdentityMappings.ToUserDto(user));
+        return new AuthResponse(accessToken.Token, refreshToken, accessToken.ExpiresAtUtc, IdentityMappings.ToUserDto(user), refreshTokenEntity.ExpiresAtUtc);
     }
 }

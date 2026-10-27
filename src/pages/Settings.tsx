@@ -340,7 +340,7 @@ VALUES
 ON CONFLICT DO NOTHING;
 
 INSERT INTO public.users (id, tenant_id, email, display_name, password_hash, is_active)
-VALUES ('33333333-3333-3333-3333-333333333333', '11111111-1111-1111-1111-111111111111', 'admin@nexus.local', 'مدیر ارشد سامانه', 'Password@123', true)
+VALUES ('33333333-3333-3333-3333-333333333333', '11111111-1111-1111-1111-111111111111', 'admin@nexus.local', 'مدیر ارشد سامانه', 'REPLACE_WITH_A_BCRYPT_HASH', true)
 ON CONFLICT DO NOTHING;
 
 INSERT INTO public.user_roles (user_id, role_id)

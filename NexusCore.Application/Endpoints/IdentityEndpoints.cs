@@ -1,6 +1,8 @@
 using NexusCore.Application.Common;
 using NexusCore.Application.Files;
+using Microsoft.Extensions.Options;
 using NexusCore.Application.Identity.Dtos;
+using NexusCore.Application.Identity.Options;
 using NexusCore.Application.Identity.Interfaces;
 using NexusCore.Application.Identity.Permissions;
 using NexusCore.Application.Identity.Security;
@@ -20,8 +22,11 @@ public static class IdentityEndpoints
     {
         var auth = app.MapGroup("/api/identity/auth").WithTags("Authentication");
 
-        auth.MapPost("/login", async (LoginRequest request, IIdentityService identityService, CancellationToken cancellationToken) =>
-                (await identityService.LoginAsync(request, cancellationToken)).ToApiResult())
+        auth.MapPost("/login", async (LoginRequest request, HttpContext http, IIdentityService identityService, IOptions<SignInSessionOptions> session, CancellationToken cancellationToken) =>
+            {
+                var result = await identityService.LoginAsync(request, cancellationToken);
+                return result.IsSuccess ? WithSessionCookie(http, session.Value, result).ToApiResult() : result.ToApiResult();
+            })
             .AllowAnonymous()
             .RequireRateLimiting(NexusRateLimitPolicies.Auth)
             .WithName("Login")
@@ -34,16 +39,35 @@ public static class IdentityEndpoints
             .WithName("IssueLoginCaptcha")
             .WithSummary("A single-use CAPTCHA image for the next sign-in attempt from this client");
 
-        auth.MapPost("/refresh", async (RefreshTokenRequest request, IIdentityService identityService, CancellationToken cancellationToken) =>
-                (await identityService.RefreshTokenAsync(request, cancellationToken)).ToApiResult())
+        // The refresh token comes from the request body (clients that keep it themselves) or from
+        // the HttpOnly cookie (browsers; they send X-Nexus-Session: cookie and X-Requested-With).
+        auth.MapPost("/refresh", async (RefreshTokenRequest? request, HttpContext http, IIdentityService identityService, IOptions<SignInSessionOptions> session, CancellationToken cancellationToken) =>
+            {
+                var token = SessionCookies.ReadRefreshToken(http, session.Value, request?.RefreshToken);
+                var result = await identityService.RefreshTokenAsync(new RefreshTokenRequest(token), cancellationToken);
+                if (result.IsFailure && result.Error.Code == "unauthorized")
+                {
+                    // A refresh token that no longer works must not stay in the browser.
+                    SessionCookies.Clear(http, session.Value);
+                }
+
+                // A session that lives in the cookie stays there.
+                var viaCookie = token is not null && !string.Equals(token, request?.RefreshToken, StringComparison.Ordinal);
+                return result.IsSuccess ? WithSessionCookie(http, session.Value, result, viaCookie).ToApiResult() : result.ToApiResult();
+            })
             .AllowAnonymous()
             .RequireRateLimiting(NexusRateLimitPolicies.Auth)
             .WithName("RefreshToken");
 
         // Anonymous like /refresh: the refresh token itself is the proof, and signing out must
         // work after the access token has expired.
-        auth.MapPost("/logout", async (RefreshTokenRequest request, IIdentityService identityService, CancellationToken cancellationToken) =>
-                (await identityService.LogoutAsync(request, cancellationToken)).ToApiResult())
+        auth.MapPost("/logout", async (RefreshTokenRequest? request, HttpContext http, IIdentityService identityService, IOptions<SignInSessionOptions> session, CancellationToken cancellationToken) =>
+            {
+                var token = SessionCookies.ReadRefreshToken(http, session.Value, request?.RefreshToken);
+                var result = await identityService.LogoutAsync(new RefreshTokenRequest(token), cancellationToken);
+                SessionCookies.Clear(http, session.Value);
+                return result.ToApiResult();
+            })
             .AllowAnonymous()
             .RequireRateLimiting(NexusRateLimitPolicies.Auth)
             .WithName("Logout")
@@ -99,12 +123,28 @@ public static class IdentityEndpoints
             .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .WithName("UpdateMyPreferences");
 
-        auth.MapPut("/me/password", async (ChangeMyPasswordRequest request, IAccountService accounts, CancellationToken cancellationToken) =>
-                (await accounts.ChangeMyPasswordAsync(request, cancellationToken)).ToApiResult())
+        auth.MapPut("/me/password", async (ChangeMyPasswordRequest request, HttpContext http, IAccountService accounts, IOptions<SignInSessionOptions> session, CancellationToken cancellationToken) =>
+                (await accounts.ChangeMyPasswordAsync(request, cancellationToken, SessionCookies.ReadCookie(http, session.Value))).ToApiResult())
             .RequireAuthorization()
             .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .WithName("ChangeMyPassword")
-            .WithSummary("Change your own password (the current one is required)");
+            .WithSummary("Change your own password (the current one is required). Your other sessions end.");
+
+        // Changing the mobile number (the number a forgotten password is recovered through) takes
+        // the current password and a code sent by SMS to the NEW number.
+        auth.MapPost("/me/phone/request", async (RequestPhoneChangeRequest request, IAccountService accounts, CancellationToken cancellationToken) =>
+                (await accounts.RequestPhoneChangeAsync(request, cancellationToken)).ToApiResult())
+            .RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.Sms)
+            .WithName("RequestPhoneChange")
+            .WithSummary("Step 1: send a verification code by SMS to the new mobile number");
+
+        auth.MapPost("/me/phone/confirm", async (ConfirmPhoneChangeRequest request, HttpContext http, IAccountService accounts, IOptions<SignInSessionOptions> session, CancellationToken cancellationToken) =>
+                (await accounts.ConfirmPhoneChangeAsync(request, cancellationToken, SessionCookies.ReadCookie(http, session.Value))).ToApiResult())
+            .RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
+            .WithName("ConfirmPhoneChange")
+            .WithSummary("Step 2: the code from the SMS and the current password; the number changes and your other sessions end");
 
         var users = app.MapGroup("/api/identity/users")
             .WithTags("Users")
@@ -308,5 +348,21 @@ public static class IdentityEndpoints
             .RequireAuthorization(IdentityPermissions.LdapSettingsTest);
 
         return app;
+    }
+
+    /// <summary>
+    /// For a client that wants the cookie, the refresh token moves from the response body into
+    /// an HttpOnly cookie that lasts until the sign-in ends.
+    /// </summary>
+    private static NexusCore.SharedKernel.Results.Result<AuthResponse> WithSessionCookie(
+        HttpContext http, SignInSessionOptions options, NexusCore.SharedKernel.Results.Result<AuthResponse> result, bool forceCookie = false)
+    {
+        if (!(forceCookie || SessionCookies.WantsCookie(http, options)) || result.Value is not { } response)
+        {
+            return result;
+        }
+
+        var expires = response.RefreshTokenExpiresAtUtc ?? DateTimeOffset.UtcNow.AddDays(Math.Max(1, options.RefreshTokenDays));
+        return NexusCore.SharedKernel.Results.Result.Success(SessionCookies.Attach(http, options, response, expires));
     }
 }

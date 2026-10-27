@@ -302,6 +302,10 @@ public sealed class TaskItem : AuditableEntity<Guid>
         }
     }
 
+    /// <summary>Announces that this task, past due and not done, just changed status (see <see cref="TaskItemOverdueStatusChanged"/>).</summary>
+    public void RaiseOverdueStatusChanged(TaskItemStatus previous, Guid? changedByUserId) =>
+        RaiseDomainEvent(new TaskItemOverdueStatusChanged(Id, TenantId, changedByUserId, previous, Status));
+
     public void AttachRecurrence(RepetitiveTask recurrence) => Recurrence = recurrence;
 
     public void ClearRecurrence() => Recurrence = null;

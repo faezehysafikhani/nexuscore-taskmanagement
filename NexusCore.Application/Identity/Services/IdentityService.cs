@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using FluentValidation;
 using Microsoft.Extensions.Options;
 using NexusCore.Application.Common;
@@ -31,9 +32,15 @@ public sealed class IdentityService(
     IUserGroupPermissionProvider groupPermissions,
     IOptions<ManagedPermissionOptions> managedPermissionOptions,
     IEnumerable<IUserDeactivationListener> deactivationListeners,
-    IUserReachScope? reachScope = null) : IIdentityService
+    IUserReachScope? reachScope = null,
+    IOptions<SignInSessionOptions>? sessionOptions = null) : IIdentityService
 {
     private readonly ManagedPermissionOptions _managed = managedPermissionOptions.Value;
+    private readonly SignInSessionOptions _session = sessionOptions?.Value ?? new SignInSessionOptions();
+
+    // A real hash that matches no password. An unknown account is checked against it, so that
+    // sign-in takes as long for an account that does not exist as for one that does.
+    private static string? _unknownAccountHash;
 
     // One message for every way sign-in can fail on the credentials, so the answer never tells
     // whether a username or mobile number is registered.
@@ -68,7 +75,9 @@ public sealed class IdentityService(
 
         // The identifier is a username or a mobile number; an email address matches nothing.
         var user = await repository.FindUserByLoginAsync(request.Identifier, request.TenantSlug, cancellationToken);
-        var passwordOk = user is not null && passwordHasher.Verify(request.Password, user.PasswordHash);
+        _unknownAccountHash ??= passwordHasher.HashPassword(Convert.ToHexString(RandomNumberGenerator.GetBytes(16)));
+        var passwordChecked = passwordHasher.Verify(request.Password, user?.PasswordHash ?? _unknownAccountHash);
+        var passwordOk = user is not null && passwordChecked;
         if (user is null || !user.IsActive || !passwordOk)
         {
             var captchaNext = await loginProtection.RecordFailedLoginAsync(request.Identifier, cancellationToken);
@@ -96,31 +105,73 @@ public sealed class IdentityService(
     {
         if (string.IsNullOrWhiteSpace(request.RefreshToken))
         {
-            return Result.Failure<AuthResponse>(Error.Validation("Refresh token is required."));
-        }
-
-        var tokenHash = passwordHasher.HashToken(request.RefreshToken);
-        var refreshToken = await repository.FindActiveRefreshTokenAsync(tokenHash, cancellationToken);
-        if (refreshToken?.User is null || !refreshToken.User.IsActive)
-        {
             return Result.Failure<AuthResponse>(Error.Unauthorized("Invalid refresh token."));
         }
 
-        var nextRefreshToken = jwtTokenService.CreateRefreshToken();
-        refreshToken.Revoke(null, passwordHasher.HashToken(nextRefreshToken));
-        var nextRefreshTokenEntity = refreshToken.User.AddRefreshToken(passwordHasher.HashToken(nextRefreshToken), DateTimeOffset.UtcNow.AddDays(14), null);
-        await repository.AddRefreshTokenAsync(nextRefreshTokenEntity, cancellationToken);
+        var invalid = Result.Failure<AuthResponse>(Error.Unauthorized("Invalid refresh token."));
+        var refreshToken = await repository.FindRefreshTokenAsync(passwordHasher.HashToken(request.RefreshToken), cancellationToken);
+        var now = DateTimeOffset.UtcNow;
+        if (refreshToken?.User is null || !refreshToken.User.IsActive || refreshToken.ExpiresAtUtc <= now)
+        {
+            return invalid;
+        }
 
-        var permissions = await repository.GetUserPermissionNamesAsync(refreshToken.UserId, cancellationToken);
-        var accessToken = jwtTokenService.CreateAccessToken(refreshToken.User, permissions);
+        // Normal case: the token has not been used. The database lets one request take it; a
+        // second one with the same token (another tab, a retry) loses the race and is handled
+        // like a token that was exchanged a moment ago.
+        var nextRefreshToken = jwtTokenService.CreateRefreshToken();
+        var usedAt = refreshToken.UsedAtUtc;
+        var exchanged = refreshToken.ReplacedByTokenHash is not null;
+        if (refreshToken.RevokedAtUtc is null)
+        {
+            if (await repository.TryUseRefreshTokenAsync(refreshToken.Id, passwordHasher.HashToken(nextRefreshToken), now, cancellationToken))
+            {
+                return Result.Success(await IssueSuccessorAsync(refreshToken, nextRefreshToken, cancellationToken));
+            }
+
+            var state = await repository.GetRefreshTokenStateAsync(refreshToken.Id, cancellationToken);
+            usedAt = state?.UsedAtUtc;
+            exchanged = state?.ReplacedByTokenHash is not null;
+        }
+
+        // Revoked by sign-out, a password change or the administrator: just not valid any more.
+        if (!exchanged)
+        {
+            return invalid;
+        }
+
+        // Exchanged very recently: a duplicate request, not an attack. It gets its own token
+        // from the same sign-in.
+        if (usedAt is { } used && now - used <= TimeSpan.FromSeconds(Math.Max(0, _session.ReuseGraceSeconds)))
+        {
+            return Result.Success(await IssueSuccessorAsync(refreshToken, nextRefreshToken, cancellationToken));
+        }
+
+        // Exchanged earlier and presented again: whoever holds this copy is not the one who got
+        // the new token. The whole sign-in ends, for the user and for the thief alike.
+        await repository.RevokeRefreshTokenFamilyAsync(refreshToken.UserId, refreshToken.Family, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        await platformService.AuditForAsync(refreshToken.User.TenantId, refreshToken.UserId, "identity.refresh_token_reuse", nameof(User), refreshToken.UserId.ToString(), null, cancellationToken);
+        return invalid;
+    }
+
+    /// <summary>A new refresh token of the same sign-in: same family, same last day.</summary>
+    private async Task<AuthResponse> IssueSuccessorAsync(RefreshToken previous, string rawRefreshToken, CancellationToken cancellationToken)
+    {
+        var user = previous.User!;
+        var entity = user.AddRefreshToken(passwordHasher.HashToken(rawRefreshToken), previous.ExpiresAtUtc, currentUser.IpAddress, previous.Family);
+        await repository.AddRefreshTokenAsync(entity, cancellationToken);
+
+        var permissions = await repository.GetUserPermissionNamesAsync(user.Id, cancellationToken);
+        var accessToken = jwtTokenService.CreateAccessToken(user, permissions);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return Result.Success(new AuthResponse(accessToken.Token, nextRefreshToken, accessToken.ExpiresAtUtc, ToUserDto(refreshToken.User)));
+        return new AuthResponse(accessToken.Token, rawRefreshToken, accessToken.ExpiresAtUtc, ToUserDto(user), entity.ExpiresAtUtc);
     }
 
     /// <summary>
-    /// Ends the session the refresh token belongs to. The same answer whether or not the token
-    /// was still valid, so the call reveals nothing about it.
+    /// Ends the sign-in the refresh token belongs to (the token and its whole family). The same
+    /// answer whether or not the token was still valid, so the call reveals nothing about it.
     /// </summary>
     public async Task<Result> LogoutAsync(RefreshTokenRequest request, CancellationToken cancellationToken)
     {
@@ -129,13 +180,14 @@ public sealed class IdentityService(
             return Result.Success();
         }
 
-        var refreshToken = await repository.FindActiveRefreshTokenAsync(passwordHasher.HashToken(request.RefreshToken), cancellationToken);
+        var refreshToken = await repository.FindRefreshTokenAsync(passwordHasher.HashToken(request.RefreshToken), cancellationToken);
         if (refreshToken is null)
         {
             return Result.Success();
         }
 
         refreshToken.Revoke(null);
+        await repository.RevokeRefreshTokenFamilyAsync(refreshToken.UserId, refreshToken.Family, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await platformService.AuditForAsync(refreshToken.User?.TenantId, refreshToken.UserId, "identity.logout", nameof(User), refreshToken.UserId.ToString(), null, cancellationToken);
         return Result.Success();
@@ -260,12 +312,26 @@ public sealed class IdentityService(
             return Result.Failure<UserDto>(Error.Forbidden("Enabling or disabling users needs the users.change_status permission."));
         }
 
+        // Password, mobile number (which is how a password is recovered) and status of someone who
+        // holds more than the caller are not the caller's to change.
+        var phoneChanges = request.PhoneNumber is not null
+            && (PhoneNumber.Normalize(request.PhoneNumber) ?? string.Empty) != (user.PhoneNumber ?? string.Empty);
+        if (phoneChanges || statusChanges || !string.IsNullOrWhiteSpace(request.Password))
+        {
+            var outranked = await GuardAgainstHigherPrivilegeAsync(user, cancellationToken);
+            if (outranked.IsFailure)
+            {
+                return Result.Failure<UserDto>(outranked.Error);
+            }
+        }
+
         var taken = await FindTakenSignInDetailAsync(user.TenantId, user.Id, usernameChanges ? request.Username : null, request.PhoneNumber, request.Email, cancellationToken);
         if (taken is not null)
         {
             return Result.Failure<UserDto>(taken);
         }
 
+        var previousPhone = user.PhoneNumber;
         user.UpdateProfile(request.DisplayName, request.IsActive);
         if (request.FirstName is not null || request.LastName is not null)
         {
@@ -297,6 +363,14 @@ public sealed class IdentityService(
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await platformService.AuditAsync("users.update", nameof(User), user.Id.ToString(), user.Username, cancellationToken);
+        if (phoneChanges)
+        {
+            // A mobile number is a way into the account (password recovery): its change is a
+            // record of its own, with the numbers masked.
+            await platformService.AuditAsync("users.change_phone", nameof(User), user.Id.ToString(),
+                $"{MaskPhone(previousPhone)} -> {MaskPhone(user.PhoneNumber)}", cancellationToken);
+        }
+
         if (statusChanges)
         {
             await platformService.AuditAsync(user.IsActive ? "users.enable" : "users.disable", nameof(User), user.Id.ToString(), user.Username, cancellationToken);
@@ -326,6 +400,12 @@ public sealed class IdentityService(
         if (currentUser.UserId == user.Id && !request.IsActive)
         {
             return Result.Failure<UserDto>(Error.Validation("You cannot disable your own account."));
+        }
+
+        var outranked = await GuardAgainstHigherPrivilegeAsync(user, cancellationToken);
+        if (outranked.IsFailure)
+        {
+            return Result.Failure<UserDto>(outranked.Error);
         }
 
         var wasActive = user.IsActive;
@@ -374,6 +454,12 @@ public sealed class IdentityService(
             return Result.Failure(Error.Validation("You cannot delete your own account."));
         }
 
+        var outranked = await GuardAgainstHigherPrivilegeAsync(user, cancellationToken);
+        if (outranked.IsFailure)
+        {
+            return outranked;
+        }
+
         var auditDetails = user.Username ?? user.Email;
         await repository.RemoveUserAsync(user, cancellationToken);
         try
@@ -403,6 +489,11 @@ public sealed class IdentityService(
         if (guard.IsFailure)
         {
             return guard;
+        }
+
+        if (request.RoleIds is null)
+        {
+            return Result.Failure(Error.Validation("RoleIds is required."));
         }
 
         var requestedRoles = request.RoleIds.Distinct().ToList();
@@ -505,6 +596,11 @@ public sealed class IdentityService(
             return guard;
         }
 
+        if (request.PermissionIds is null)
+        {
+            return Result.Failure(Error.Validation("PermissionIds is required."));
+        }
+
         var requested = request.PermissionIds.Distinct().ToList();
         var requestedDenied = request.DeniedPermissionIds?.Distinct().ToList();
         if (requestedDenied is not null && requestedDenied.Intersect(requested).Any())
@@ -582,6 +678,31 @@ public sealed class IdentityService(
         await platformService.AuditAsync("users.assign_permissions", nameof(User), user.Id.ToString(), audit, cancellationToken);
         return Result.Success();
     }
+
+    /// <summary>
+    /// Changing someone's password or mobile number is taking over their account, and disabling or
+    /// deleting them is acting on them. Like handing out roles and permissions, that is only
+    /// allowed for a user who is not above the caller: the target must not hold a permission the
+    /// caller lacks. Acting on oneself is not an escalation and is left to the other checks.
+    /// </summary>
+    private async Task<Result> GuardAgainstHigherPrivilegeAsync(User target, CancellationToken cancellationToken)
+    {
+        if (currentUser.UserId is not { } callerId || callerId == target.Id)
+        {
+            return Result.Success();
+        }
+
+        var callerPermissions = (await repository.GetUserPermissionNamesAsync(callerId, cancellationToken)).ToHashSet(StringComparer.Ordinal);
+        var higher = (await repository.GetUserPermissionNamesAsync(target.Id, cancellationToken))
+            .Where(name => !callerPermissions.Contains(name))
+            .ToList();
+        return higher.Count == 0
+            ? Result.Success()
+            : Result.Failure(Error.Forbidden("This user holds permissions you do not have, so you cannot change their password, mobile number or status: " + string.Join(", ", higher.Take(5))));
+    }
+
+    private static string MaskPhone(string? phone) =>
+        string.IsNullOrEmpty(phone) ? "-" : phone.Length <= 4 ? "****" : new string('*', phone.Length - 4) + phone[^4..];
 
     /// <summary>
     /// Nobody changes the built-in administrator's access, and nobody changes their own - so
@@ -667,6 +788,11 @@ public sealed class IdentityService(
             return Result.Failure(Error.Forbidden("The permissions of the built-in Administrator role cannot be changed."));
         }
 
+        if (request.PermissionIds is null)
+        {
+            return Result.Failure(Error.Validation("PermissionIds is required."));
+        }
+
         var requested = request.PermissionIds.Distinct().ToList();
         var known = await repository.GetPermissionsByIdsAsync(requested, cancellationToken);
         if (known.Count != requested.Count)
@@ -730,6 +856,13 @@ public sealed class IdentityService(
     public async Task<Result<IReadOnlyList<TenantDto>>> ListTenantsAsync(CancellationToken cancellationToken)
     {
         var tenants = await repository.ListTenantsAsync(cancellationToken);
+        // Another organization's name and slug are not the caller's to read; only a holder of
+        // tenants.manage_all sees them all.
+        if (currentUser.UserId is not null && !currentUser.HasPermission(IdentityPermissions.TenantsManageAll))
+        {
+            tenants = tenants.Where(tenant => tenant.Id == currentUser.TenantId).ToList();
+        }
+
         return Result.Success<IReadOnlyList<TenantDto>>(tenants.Select(ToTenantDto).ToList());
     }
 
@@ -783,10 +916,20 @@ public sealed class IdentityService(
     }
 
     /// <summary>What was typed as the sign-in name, shortened. Never the password.</summary>
+    /// <summary>
+    /// What the sign-in log keeps of the typed name: a username or mobile number as typed (that is
+    /// what an administrator needs to see), anything else - which is sometimes a password typed
+    /// into the wrong field - only as its length.
+    /// </summary>
     private static string AuditIdentifier(string identifier)
     {
         var value = identifier.Trim();
-        return value.Length <= 64 ? value : value[..64];
+        if (Username.IsValid(value) || Username.IsLegacy(value) || PhoneNumber.Normalize(value) is not null)
+        {
+            return value.Length <= 64 ? value : value[..64];
+        }
+
+        return $"(unrecognised input, {value.Length} characters)";
     }
 
     /// <summary>Background work has no caller and is not limited; a person needs the permission.</summary>

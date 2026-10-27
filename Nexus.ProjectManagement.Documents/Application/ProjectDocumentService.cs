@@ -2,6 +2,7 @@ using Nexus.ProjectManagement.Documents.Application.Dtos;
 using Nexus.ProjectManagement.Documents.Domain;
 using NexusCore.Application.Approvals;
 using NexusCore.Application.Files;
+using NexusCore.SharedKernel.Interfaces;
 using NexusCore.SharedKernel.Results;
 
 namespace Nexus.ProjectManagement.Documents.Application;
@@ -10,17 +11,28 @@ public sealed class ProjectDocumentService(
     IProjectDocumentRepository repository,
     IFileStorage fileStorage,
     IDocumentsUnitOfWork unitOfWork,
-    IApprovalRequester approvalRequester) : IProjectDocumentService
+    IApprovalRequester approvalRequester,
+    ICurrentUserContext currentUser,
+    IUploadPolicyReader uploadPolicy) : IProjectDocumentService
 {
+    /// <summary>The caller's own document; the organization comes from the signed-in user, never from a request.</summary>
+    private async Task<ProjectDocument?> FindAsync(Guid id, CancellationToken cancellationToken) =>
+        currentUser.TenantId is { } tenantId ? await repository.GetByIdAsync(tenantId, id, cancellationToken) : null;
+
     public async Task<Result<IReadOnlyList<ProjectDocumentDto>>> ListByProjectAsync(Guid projectId, CancellationToken cancellationToken)
     {
-        var documents = await repository.ListByProjectAsync(projectId, cancellationToken);
+        if (currentUser.TenantId is not { } tenantId)
+        {
+            return Result.Failure<IReadOnlyList<ProjectDocumentDto>>(Error.Unauthorized());
+        }
+
+        var documents = await repository.ListByProjectAsync(tenantId, projectId, cancellationToken);
         return Result.Success<IReadOnlyList<ProjectDocumentDto>>(documents.Select(ToDto).ToList());
     }
 
     public async Task<Result<ProjectDocumentDto>> GetAsync(Guid id, CancellationToken cancellationToken)
     {
-        var document = await repository.GetByIdAsync(id, cancellationToken);
+        var document = await FindAsync(id, cancellationToken);
         return document is null
             ? Result.Failure<ProjectDocumentDto>(Error.NotFound("Document not found."))
             : Result.Success(ToDto(document));
@@ -33,9 +45,20 @@ public sealed class ProjectDocumentService(
             return Result.Failure<ProjectDocumentDto>(Error.Validation("Description is required."));
         }
 
-        var stored = await fileStorage.SaveAsync(request.FileName, request.ContentType, content, cancellationToken);
+        if (currentUser.TenantId is not { } tenantId)
+        {
+            return Result.Failure<ProjectDocumentDto>(Error.Unauthorized());
+        }
+
+        var checkedFile = await UploadValidation.CheckAsync(uploadPolicy, tenantId, request.FileName, content, cancellationToken);
+        if (checkedFile.IsFailure)
+        {
+            return Result.Failure<ProjectDocumentDto>(checkedFile.Error);
+        }
+
+        var stored = await fileStorage.SaveAsync(checkedFile.Value.FileName, checkedFile.Value.ContentType, content, cancellationToken);
         var document = new ProjectDocument(
-            Guid.NewGuid(), request.TenantId, request.ProjectId, request.Description, request.DocumentType,
+            Guid.NewGuid(), tenantId, request.ProjectId, request.Description, request.DocumentType,
             stored.StorageKey, stored.FileName, stored.ContentType, stored.SizeBytes);
 
         await repository.AddAsync(document, cancellationToken);
@@ -45,7 +68,7 @@ public sealed class ProjectDocumentService(
 
     public async Task<Result<ProjectDocumentDto>> UpdateAsync(Guid id, UpdateProjectDocumentRequest request, CancellationToken cancellationToken)
     {
-        var document = await repository.GetByIdAsync(id, cancellationToken);
+        var document = await FindAsync(id, cancellationToken);
         if (document is null)
         {
             return Result.Failure<ProjectDocumentDto>(Error.NotFound("Document not found."));
@@ -63,7 +86,7 @@ public sealed class ProjectDocumentService(
 
     public async Task<Result<(Stream Content, string FileName, string ContentType)>> DownloadAsync(Guid id, CancellationToken cancellationToken)
     {
-        var document = await repository.GetByIdAsync(id, cancellationToken);
+        var document = await FindAsync(id, cancellationToken);
         if (document is null)
         {
             return Result.Failure<(Stream, string, string)>(Error.NotFound("Document not found."));
@@ -80,7 +103,7 @@ public sealed class ProjectDocumentService(
 
     public async Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
-        var document = await repository.GetByIdAsync(id, cancellationToken);
+        var document = await FindAsync(id, cancellationToken);
         if (document is null)
         {
             return Result.Failure(Error.NotFound("Document not found."));
@@ -94,7 +117,7 @@ public sealed class ProjectDocumentService(
 
     public async Task<Result<ProjectDocumentDto>> SubmitForApprovalAsync(Guid id, CancellationToken cancellationToken)
     {
-        var document = await repository.GetByIdAsync(id, cancellationToken);
+        var document = await FindAsync(id, cancellationToken);
         if (document is null)
         {
             return Result.Failure<ProjectDocumentDto>(Error.NotFound("Document not found."));

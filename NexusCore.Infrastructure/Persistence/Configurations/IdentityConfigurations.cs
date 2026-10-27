@@ -125,6 +125,10 @@ public sealed class RefreshTokenConfiguration : IEntityTypeConfiguration<Refresh
         builder.Property(x => x.Id).ValueGeneratedNever();
         builder.Property(x => x.TokenHash).HasMaxLength(128).IsRequired();
         builder.HasIndex(x => x.TokenHash).IsUnique();
+        builder.Property(x => x.FamilyId);
+        builder.Property(x => x.UsedAtUtc);
+        builder.Ignore(x => x.Family);
+        builder.HasIndex(x => new { x.UserId, x.FamilyId });
         builder.HasOne(x => x.User).WithMany(x => x.RefreshTokens).HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
     }
 }

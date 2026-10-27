@@ -14,6 +14,7 @@ using Microsoft.OpenApi.Models;
 using NexusCore.Application;
 using NexusCore.Application.Endpoints;
 using NexusCore.Application.Identity.Permissions;
+using NexusCore.Application.Security;
 using NexusCore.Application.Security.RateLimiting;
 using NexusCore.Infrastructure;
 using NexusCore.Infrastructure.Identity;
@@ -52,6 +53,8 @@ builder.Services.AddNotificationInfrastructure(builder.Configuration);
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddNexusCoreRateLimiting(builder.Configuration);
+builder.Services.AddNexusCoreForwardedHeaders(builder.Configuration);
+builder.Services.AddNexusCoreRequestLimits();
 
 builder.Services.AddSignalR();
 builder.Services.AddSwaggerGen(options =>
@@ -93,7 +96,7 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>() ?? new JwtOptions();
-if (builder.Environment.IsProduction())
+if (!builder.Environment.IsDevelopment())
 {
     jwtOptions.EnsureSafeForProduction();
 }
@@ -154,7 +157,31 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 // Unexpected exceptions: logged here, answered with a Persian message and no internals.
+// Behind a reverse proxy: the real client address, believed only from the configured proxies.
+app.UseNexusCoreForwardedHeaders();
+
 app.UseSafeErrorResponses();
+
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHsts();
+}
+
+// Tokens, sessions and one-time codes must not be kept by browsers or proxies.
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/api/identity"))
+    {
+        context.Response.OnStarting(() =>
+        {
+            context.Response.Headers["Cache-Control"] = "no-store";
+            context.Response.Headers["Pragma"] = "no-cache";
+            return Task.CompletedTask;
+        });
+    }
+
+    await next();
+});
 
 if (app.Environment.IsDevelopment())
 {
@@ -180,6 +207,7 @@ app.MapHub<NotificationHub>("/hubs/notifications")
 
 app.MapGet("/", () => Results.Redirect("/swagger")).ExcludeFromDescription();
 app.MapIdentityEndpoints();
+app.MapSecurityReportEndpoints();
 if (builder.Configuration.IsUserGroupFeatureEnabled())
 {
     app.MapUserGroupEndpoints();

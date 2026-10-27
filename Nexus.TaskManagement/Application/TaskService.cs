@@ -18,7 +18,8 @@ public sealed class TaskService(
     ITaskNoticePublisher notices,
     IWorkAssignmentScope assignmentScope,
     ITaskPosts taskPosts,
-    IUserReachScope reachScope) : ITaskService
+    IUserReachScope reachScope,
+    IRecurrenceCalculator calendar) : ITaskService
 {
     /// <summary>
     /// Seeing a task (owner, assignee, collaborator, team) lets a user work on it; changing what
@@ -363,6 +364,11 @@ public sealed class TaskService(
         return Result.Success();
     }
 
+    /// <summary>The moment a task is due: its time on its date, or the end of that day when it has no time.</summary>
+    private DateTimeOffset DueMoment(TaskItem task) => task.DueTime is { } time
+        ? calendar.FromLocal(task.DueDate, time)
+        : calendar.FromLocal(task.DueDate.AddDays(1), TimeOnly.MinValue);
+
     public async Task<Result<TaskDto>> ChangeStatusAsync(
         Guid id, ChangeTaskStatusRequest request, CancellationToken cancellationToken)
     {
@@ -385,9 +391,25 @@ public sealed class TaskService(
         }
 
         var previous = task.Status;
+        // Past due and not done (finished and paused tasks are not "overdue"): whoever cares about
+        // it is told when its status changes.
+        var wasOverdue = task.Recurrence is null
+            && previous is TaskItemStatus.Todo or TaskItemStatus.InProgress
+            && DateTimeOffset.UtcNow >= DueMoment(task);
         task.ChangeStatus(request.Status, DateTimeOffset.UtcNow);
+        if (wasOverdue && request.Status != previous)
+        {
+            task.RaiseOverdueStatusChanged(previous, currentUser.UserId);
+        }
+
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        await activity.RecordAsync(id, "Status changed", $"{previous} -> {request.Status}", cancellationToken);
+        // A past-due task's change is told in full by its own notification (TaskItemOverdueStatusChanged)
+        // to its creator and those responsible; the short "Status changed" one would only repeat it
+        // for them. Everybody else of the task still gets it.
+        var toldInFull = wasOverdue && request.Status != previous
+            ? TaskPeople.OverdueChangeRecipients(task, currentUser.UserId)
+            : null;
+        await activity.RecordAsync(id, "Status changed", $"{previous} -> {request.Status}", cancellationToken, toldInFull);
 
         var updated = await repository.GetByIdAsync(tenantId, id, cancellationToken);
         return Result.Success(await ToDtoAsync(updated!, cancellationToken));
@@ -1051,9 +1073,18 @@ public sealed class TaskService(
             return Result.Failure(Error.Validation("Activity details can be at most 2000 characters."));
         }
 
-        if (await repository.GetForUpdateAsync(currentUser.TenantId.Value, taskId, cancellationToken) is null)
+        var task = await repository.GetForUpdateAsync(currentUser.TenantId.Value, taskId, cancellationToken);
+        if (task is null)
         {
             return Result.Failure(Error.NotFound("Task not found."));
+        }
+
+        // An entry lands in the history of the task's people (and in their notifications) under
+        // the caller's name, so only someone who may change the task can write one. Being able to
+        // see a task is not enough.
+        if (!access.CanManage(task))
+        {
+            return Result.Failure(NotTaskOwner());
         }
 
         await activity.RecordAsync(taskId, request.Action.Trim(), request.Details?.Trim(), cancellationToken);

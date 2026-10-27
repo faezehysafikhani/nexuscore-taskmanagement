@@ -31,6 +31,17 @@ public sealed class DefaultDataSeeder(
     {
         await ModuleSchemaInitializer.EnsureCreatedAsync(dbContext, cancellationToken);
 
+        // Columns added after the table first existed: reach databases made before them (the same
+        // change is in the EF migration and in db/upgrade-security-refresh-tokens.sql).
+        await ModuleSchemaInitializer.EnsureColumnAsync(dbContext, "identity.RefreshTokens", "FamilyId",
+            "ALTER TABLE [identity].[RefreshTokens] ADD [FamilyId] uniqueidentifier NULL",
+            "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_RefreshTokens_UserId_FamilyId' AND object_id = OBJECT_ID(N'identity.RefreshTokens')) " +
+            "CREATE INDEX [IX_RefreshTokens_UserId_FamilyId] ON [identity].[RefreshTokens] ([UserId], [FamilyId])",
+            cancellationToken);
+        await ModuleSchemaInitializer.EnsureColumnAsync(dbContext, "identity.RefreshTokens", "UsedAtUtc",
+            "ALTER TABLE [identity].[RefreshTokens] ADD [UsedAtUtc] datetimeoffset NULL",
+            null, cancellationToken);
+
         if (!await dbContext.Tenants.AnyAsync(cancellationToken))
         {
             await dbContext.Tenants.AddAsync(new Tenant(DefaultTenantId, "Default Organization", "default"), cancellationToken);
@@ -67,9 +78,10 @@ public sealed class DefaultDataSeeder(
         if (builtInAdmin is null)
         {
             var configuredPassword = seedOptions.Value.AdminPassword;
-            if (environment.IsProduction() && (string.IsNullOrWhiteSpace(configuredPassword) || configuredPassword.Length < 12 || configuredPassword == "Admin@12345"))
+            // Every environment but local development: Staging/UAT boxes hold real data too.
+            if (!environment.IsDevelopment() && (string.IsNullOrWhiteSpace(configuredPassword) || configuredPassword.Length < 12 || configuredPassword == "Admin@12345"))
             {
-                throw new InvalidOperationException("Identity:AdminPassword must be a unique password of at least 12 characters before creating the administrator in production.");
+                throw new InvalidOperationException("Identity:AdminPassword must be a unique password of at least 12 characters before creating the administrator outside local development.");
             }
             var initialPassword = string.IsNullOrWhiteSpace(configuredPassword) ? "Admin@12345" : configuredPassword;
             var admin = new User(AdminUserId, DefaultTenantId, "admin@nexus.local", "System Administrator", passwordHasher.HashPassword(initialPassword), true);

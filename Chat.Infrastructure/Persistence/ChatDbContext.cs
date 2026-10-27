@@ -2,15 +2,22 @@ using Chat.Application.Abstractions;
 using Chat.Domain.Entities;
 using Chat.Domain.Identity;
 using Microsoft.EntityFrameworkCore;
+using NexusCore.SharedKernel.Interfaces;
 
 namespace Chat.Infrastructure.Persistence;
 
 public class ChatDbContext : DbContext, IChatDbContext
 {
-    public ChatDbContext(DbContextOptions<ChatDbContext> options)
+    private readonly ITenantScope? _tenantScope;
+
+    public ChatDbContext(DbContextOptions<ChatDbContext> options, ITenantScope? tenantScope = null)
         : base(options)
     {
+        _tenantScope = tenantScope;
     }
+
+    // The organization of the signed-in user, or null when nothing confines the work (ITenantScope).
+    private Guid? TenantFilterId => _tenantScope?.FilterTenantIdFor(nameof(ChatDbContext));
 
     public DbSet<Conversation> Conversations => Set<Conversation>();
 
@@ -37,6 +44,11 @@ public class ChatDbContext : DbContext, IChatDbContext
             .Property(x => x.DirectKey).HasMaxLength(65);
         modelBuilder.Entity<Conversation>()
             .HasIndex(x => x.DirectKey).IsUnique().HasFilter("[DirectKey] IS NOT NULL");
+
+        // Conversations of other organizations are not returned, whatever the query says. What
+        // hangs off a conversation (participants, messages, reads) is only reached through it.
+        modelBuilder.Entity<Conversation>()
+            .HasQueryFilter(conversation => TenantFilterId == null || conversation.TenantId == TenantFilterId);
 
         // One conversation per team.
         modelBuilder.Entity<Conversation>()

@@ -7,6 +7,7 @@ using Nexus.TaskManagement.Domain;
 using Nexus.TaskManagement.Permissions;
 using Nexus.TaskManagement.Realtime;
 using NexusCore.Application.Common;
+using NexusCore.Application.Files;
 using NexusCore.Application.Security.RateLimiting;
 using NexusCore.SharedKernel.Interfaces;
 
@@ -390,33 +391,39 @@ public static class TaskManagementEndpoints
         group.MapPost("/tasks/{taskId:guid}", async (
                 Guid taskId, IFormFile file, ITaskFileService service, CancellationToken cancellationToken) =>
             {
+                if (TooLarge(file)) return PayloadTooLarge();
                 var upload = await ReadAsync(file, cancellationToken);
                 return (await service.UploadToTaskAsync(taskId, upload, cancellationToken)).ToApiResult();
             })
             .WithSummary("Upload an attachment to a task (max 200 KB)")
             .DisableAntiforgery()
+            .WithUploadSizeLimit()
             .RequireRateLimiting(NexusRateLimitPolicies.Upload)
             .RequireAuthorization(TaskManagementPermissions.UploadFiles);
 
         group.MapPost("/subtasks/{subTaskId:guid}", async (
                 Guid subTaskId, IFormFile file, ITaskFileService service, CancellationToken cancellationToken) =>
             {
+                if (TooLarge(file)) return PayloadTooLarge();
                 var upload = await ReadAsync(file, cancellationToken);
                 return (await service.UploadToSubTaskAsync(subTaskId, upload, cancellationToken)).ToApiResult();
             })
             .WithSummary("Upload an attachment to a subtask (max 200 KB)")
             .DisableAntiforgery()
+            .WithUploadSizeLimit()
             .RequireRateLimiting(NexusRateLimitPolicies.Upload)
             .RequireAuthorization(TaskManagementPermissions.UploadFiles);
 
         group.MapPost("/comments/{commentId:guid}", async (
                 Guid commentId, IFormFile file, ITaskFileService service, CancellationToken cancellationToken) =>
             {
+                if (TooLarge(file)) return PayloadTooLarge();
                 var upload = await ReadAsync(file, cancellationToken);
                 return (await service.UploadToCommentAsync(commentId, upload, cancellationToken)).ToApiResult();
             })
             .WithSummary("Attach a file to your own comment (max 200 KB)")
             .DisableAntiforgery()
+            .WithUploadSizeLimit()
             .RequireRateLimiting(NexusRateLimitPolicies.Upload)
             .RequireAuthorization(TaskManagementPermissions.Comment);
 
@@ -429,7 +436,8 @@ public static class TaskManagementEndpoints
                     return result.ToApiResult();
                 }
 
-                return Results.File(download.Content, download.ContentType, download.FileName);
+                // The type comes from the extension, so a file stored earlier with a type the client chose is served safely too.
+                return Results.File(download.Content, NexusCore.Application.Files.AllowedUploadTypes.ContentTypeFor(download.FileName), download.FileName);
             })
             .WithSummary("Download an attachment")
             .RequireAuthorization(TaskManagementPermissions.View);
@@ -500,6 +508,12 @@ public static class TaskManagementEndpoints
 
         return app;
     }
+
+    /// <summary>Said before a single byte of the file is read into memory.</summary>
+    private static bool TooLarge(IFormFile file) => file.Length > TaskFileAsset.MaxFileSizeBytes;
+
+    private static IResult PayloadTooLarge() =>
+        Results.Problem(title: "payload_too_large", detail: "The file is too large.", statusCode: StatusCodes.Status413PayloadTooLarge);
 
     private static async Task<UploadFileRequest> ReadAsync(IFormFile file, CancellationToken cancellationToken)
     {

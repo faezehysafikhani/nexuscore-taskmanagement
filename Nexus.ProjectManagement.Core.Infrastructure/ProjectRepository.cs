@@ -45,12 +45,14 @@ public sealed class ProjectRepository(ProjectManagementCoreDbContext dbContext) 
 
         query = ApplySort(query, request.SortBy, request.SortDescending);
 
+        var pageNumber = Math.Max(1, request.PageNumber);
+        var pageSize = Math.Clamp(request.PageSize, 1, 1000);
         var items = await query
-            .Skip((request.PageNumber - 1) * request.PageSize)
-            .Take(request.PageSize)
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
             .ToListAsync(cancellationToken);
 
-        return new PagedResult<Project>(items, request.PageNumber, request.PageSize, total);
+        return new PagedResult<Project>(items, pageNumber, pageSize, total);
     }
 
     public Task<bool> CodeExistsAsync(Guid tenantId, string code, Guid? excludeId, CancellationToken cancellationToken) =>
