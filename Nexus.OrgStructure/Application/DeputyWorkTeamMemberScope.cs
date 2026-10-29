@@ -16,7 +16,8 @@ public sealed class DeputyWorkTeamMemberScope(
     IOrgStructureRepository repository,
     IOrganizationUnitRepository units,
     ICurrentUserContext currentUser,
-    CompanyReachScope? companyReach = null) : IWorkTeamMemberScope
+    CompanyReachScope? companyReach = null,
+    IOrgGraphProvider? graphs = null) : IWorkTeamMemberScope
 {
     public async Task<WorkTeamMemberLimit?> GetLimitAsync(Guid tenantId, Guid ownerUserId, CancellationToken cancellationToken)
     {
@@ -32,7 +33,10 @@ public sealed class DeputyWorkTeamMemberScope(
             return await CompanyLimitAsync(tenantId, ownerUserId, reach, cancellationToken);
         }
 
-        var allowed = assignments.Where(a => a.UnitId == unitId).Select(a => a.UserId).Append(ownerUserId)
+        // «The same deputy»: people whose unit has the same domain as the builder's (with no nesting, the same unit).
+        var graph = await (graphs ?? new OrgGraphProvider(units, repository)).GetAsync(tenantId, cancellationToken);
+        var domain = graph.DomainOf(unitId);
+        var allowed = assignments.Where(a => a.UnitId is { } u && graph.DomainOf(u) == domain).Select(a => a.UserId).Append(ownerUserId)
             .Where(userId => reach is null || reach.Contains(userId))
             .ToHashSet();
         var unit = await units.GetByIdAsync(unitId, cancellationToken);

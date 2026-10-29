@@ -133,4 +133,72 @@ public sealed class OrgGraphTests
         Assert.Equal(Tech, graph.DomainOf(Office));
         Assert.Equal(Tech, graph.DomainOf(Tech));
     }
+
+    // ------------------------------------------------------------------ 1.4: the levels behind the assignment limit
+
+    private static readonly Guid TechPerson = Guid.NewGuid();
+    private static readonly Guid OfficePerson = Guid.NewGuid();
+    private static readonly Guid OfficePerson2 = Guid.NewGuid();
+
+    private static WorkAssignmentLevels Levels(OrgGraph graph)
+    {
+        var top = new Position(Guid.NewGuid(), Tenant, "رئیس کل");
+        var deputy = new Position(Guid.NewGuid(), Tenant, "معاون", top.Id);
+        var expert = new Position(Guid.NewGuid(), Tenant, "کارشناس", deputy.Id);
+        UserAssignment Assignment(Guid user, Guid? unit, Guid position) { var a = new UserAssignment(Guid.NewGuid(), Tenant, user); a.Set(Company, unit, position, null); return a; }
+        var company = new Company(Company, Tenant, "شرکت", "C1", null, Head);
+        var seats = new[]
+        {
+            new UnitPosition(Guid.NewGuid(), Tenant, Company, Tech, deputy.Id, 0, "1"),
+            new UnitPosition(Guid.NewGuid(), Tenant, Company, Office, expert.Id, 0, "2"),
+            new UnitPosition(Guid.NewGuid(), Tenant, Company, Office, expert.Id, 1, "3"),
+        };
+        var holdings = new[]
+        {
+            new UserPosition(Guid.NewGuid(), Tenant, TechPerson, seats[0].Id),
+            new UserPosition(Guid.NewGuid(), Tenant, OfficePerson, seats[1].Id),
+            new UserPosition(Guid.NewGuid(), Tenant, OfficePerson2, seats[2].Id),
+        };
+        var assignments = new[] { Assignment(TechPerson, Tech, deputy.Id), Assignment(OfficePerson, Office, expert.Id), Assignment(OfficePerson2, Office, expert.Id) };
+        var resolver = new HierarchyResolver(graph, new Dictionary<Guid, Guid?> { [Company] = Head },
+            assignments.Select(a => new AssignmentNode(a.UserId, a.CompanyId, a.UnitId, null)));
+        return new WorkAssignmentLevels(assignments, [company], seats, holdings,
+            new[] { top, deputy, expert }.ToDictionary(p => p.Id), resolver);
+    }
+
+    [Fact]
+    public void Levels_AreTheSame_ForNoParentAndForTheCompanyAsParent()
+    {
+        string Everything(WorkAssignmentLevels levels)
+        {
+            var people = new[] { TechPerson, OfficePerson, OfficePerson2 };
+            return string.Join("|", people.SelectMany(a => people.Select(b => $"{levels.IsAllowed(a, b)}/{levels.InSameDeputy(a, b)}"))
+                .Concat(people.Select(p => $"{levels.LevelOf(p)}/{levels.RankOf(p)}")));
+        }
+
+        Assert.Equal(Everything(Levels(Flat(null))), Everything(Levels(Flat(Company))));
+    }
+
+    /// <summary>The deputy is managed by <see cref="TechPerson"/>; the office under it has no manager of its own.</summary>
+    private static OrgGraph NestedUnderPerson(bool officeIsBoundary) => new(
+        [new UnitNode(Tech, null, TechPerson), new UnitNode(Office, Tech, null, officeIsBoundary)], Links(Tech));
+
+    [Fact]
+    public void SameDeputy_FollowsTheDomain_ForNestedUnits()
+    {
+        var flat = Levels(new OrgGraph([new UnitNode(Tech, null, TechPerson), new UnitNode(Office, null, null)], Links(Tech, Office)));
+        Assert.True(flat.InSameDeputy(OfficePerson, OfficePerson2));
+        Assert.False(flat.InSameDeputy(TechPerson, OfficePerson));
+        Assert.False(flat.IsAllowed(TechPerson, OfficePerson));
+
+        var nestedOwnDomain = Levels(NestedUnderPerson(officeIsBoundary: true));
+        Assert.False(nestedOwnDomain.InSameDeputy(TechPerson, OfficePerson));
+        // not the same deputy, but the office's people are below the deputy's manager through the chart
+        Assert.True(nestedOwnDomain.IsAllowed(TechPerson, OfficePerson));
+
+        var nestedInside = Levels(NestedUnderPerson(officeIsBoundary: false));
+        Assert.True(nestedInside.InSameDeputy(TechPerson, OfficePerson));
+        Assert.True(nestedInside.IsAllowed(TechPerson, OfficePerson));
+        Assert.False(nestedInside.IsAllowed(OfficePerson, TechPerson));
+    }
 }

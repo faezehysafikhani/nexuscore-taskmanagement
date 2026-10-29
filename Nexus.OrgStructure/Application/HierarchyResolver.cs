@@ -96,9 +96,18 @@ public sealed class HierarchyResolver
         IReadOnlyDictionary<Guid, Guid> companyOfLinkedUnit,
         IReadOnlyDictionary<Guid, Guid?> companyManagers,
         IEnumerable<AssignmentNode> assignments)
+        : this(new OrgGraph(units, companyOfLinkedUnit), companyManagers, assignments)
     {
-        _graph = new OrgGraph(units, companyOfLinkedUnit);
-        _companyOfLinkedUnit = companyOfLinkedUnit;
+    }
+
+    /// <summary>The resolver over an existing graph (the usual way: the graph is built once and shared).</summary>
+    public HierarchyResolver(
+        OrgGraph graph,
+        IReadOnlyDictionary<Guid, Guid?> companyManagers,
+        IEnumerable<AssignmentNode> assignments)
+    {
+        _graph = graph;
+        _companyOfLinkedUnit = graph.LinkedUnits;
         _companyManagers = companyManagers;
         _assignments = assignments.ToDictionary(assignment => assignment.UserId);
     }

@@ -26,10 +26,11 @@
 - `1.1` — فیلدهای اختیاری گره (`ParentUnitId`، `NodeTypeId`، `ValidFrom/To`، `RowVersion`)، `Company` (`ParentCompanyId`، `TemplateId`، `UiLevel`)، `UnitPosition` (`IsManagerPost`، `IsCompanyHead`، `RowVersion`) و جدول‌های جدید (نوع گره، قاعده، رابطه، قالب، لاگ تغییر) با نگاشت EF و خواندن در ریپازیتوری. هیچ منطقی به آنها وصل نشده؛ migration در ۱.۲ می‌آید.
 - `1.3` — `OrgGraph` و `IOrgGraphProvider`: یک گراف واحد با والد واقعی (`ParentOf`، `SubtreeOf`، `DomainOf`، شرکت مالک از گره‌ی بالایی)؛ `HierarchyResolver` همین گراف را به‌کار می‌برد. ریشه ضمنی است (بدون ردیف و بدون مدیر): والد خالی و والد=شناسه شرکت یک گراف مسطح یکسان می‌دهند (تست برابری). مصرف‌کننده‌های دیگر در ۱.۴ وصل می‌شوند.
 - `1.3b` — در `docs/OrgStructure.md` سه مفهوم جدا شد: مرز سازمان مالک (شرکت)، ریشه‌ی ضمنی ساختار، و مرز هم‌معاونت (`IsDomainBoundary`).
+- `1.4` — مصرف‌کننده‌ها به `OrgGraph` وصل شدند: `HierarchyWorkAssignmentScope` (منطق سطح/رتبه/هم‌معاونت به کلاس قابل‌تست `WorkAssignmentLevels` رفت)، `SubstitutionService`، snapshot در `OrgStructureService` و `DeputyWorkTeamMemberScope` (هم‌معاونت با `DomainOf`). دیگر هیچ `new UnitNode(..., null, ...)` جدا نمانده؛ `TaskPostDirectory` و `CompanyReachScope` دست‌نخورده. تست‌های طلایی روی داده‌ی مسطح بدون تغییر پاس‌اند.
 - فازهای بعدی: طبق پلن؛ این بخش بعد از هر فاز به‌روز می‌شود.
 
 ## تست‌های پایه
-۲۳۶ تست، ۲۳۳ پاس (تست‌های جدید: ۳ مدل در ۱.۱ و ۷ گراف در ۱.۳)، ۳ فِیل قدیمی و بی‌ربط به این کار:
+۲۳۸ تست، ۲۳۵ پاس (تست‌های جدید: ۳ مدل در ۱.۱، ۷ گراف در ۱.۳ و ۲ سطح/هم‌معاونت در ۱.۴)، ۳ فِیل قدیمی و بی‌ربط به این کار:
 - `OrgStructureTests.Units_BelongToACompany_ThroughTheirTopUnit`
 - `EffectivePermissionTests.AnotherModulesPermission_CannotBeAssigned_ButStaysWhereItIs_AndStillWorks`
 - `RecurringTaskReminderTests.IncompleteSmsSettings_AreReported_AndNothingIsSent`

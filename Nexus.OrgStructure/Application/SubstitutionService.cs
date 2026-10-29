@@ -50,7 +50,8 @@ public sealed class SubstitutionService(
     TaskPostDirectory taskPosts,
     ICurrentUserContext currentUser,
     IUserDirectory users,
-    IServiceProvider services) : ISubstitutionService
+    IServiceProvider services,
+    IOrgGraphProvider? graphs = null) : ISubstitutionService
 {
     public async Task<Result<SubstitutionInboxDto>> GetInboxAsync(Guid tenantId, CancellationToken cancellationToken)
     {
@@ -186,7 +187,7 @@ public sealed class SubstitutionService(
 
     private async Task<State> LoadAsync(Guid tenantId, CancellationToken cancellationToken)
     {
-        var unitList = await units.ListAsync(tenantId, cancellationToken);
+        var graph = await (graphs ?? new OrgGraphProvider(units, repository)).GetAsync(tenantId, cancellationToken);
         var companies = (await repository.ListCompaniesAsync(tenantId, cancellationToken)).ToDictionary(company => company.Id);
         var seats = (await repository.ListUnitPositionsAsync(tenantId, cancellationToken)).ToDictionary(seat => seat.Id);
         var positions = (await repository.ListPositionsAsync(tenantId, cancellationToken)).ToDictionary(position => position.Id);
@@ -195,8 +196,7 @@ public sealed class SubstitutionService(
             assignments.Select(a => new PostSuperiors.Placement(a.UserId, a.CompanyId, a.UnitId, a.PositionId)),
             seats.Values, await repository.ListUserPositionsAsync(tenantId, cancellationToken));
         var resolver = new HierarchyResolver(
-            unitList.Select(unit => new UnitNode(unit.Id, null, unit.ManagerUserId)),
-            (await repository.ListCompanyUnitsAsync(tenantId, cancellationToken)).ToDictionary(link => link.UnitId, link => link.CompanyId),
+            graph,
             companies.ToDictionary(company => company.Key, company => company.Value.ManagerUserId),
             assignments.Select(a => new AssignmentNode(a.UserId, a.CompanyId, a.UnitId, a.ManagerUserId,
                 postSuperiors.TryGetValue(a.UserId, out var superior) ? superior : null)));
@@ -204,7 +204,7 @@ public sealed class SubstitutionService(
         return new State(
             posts,
             seats,
-            unitList.ToDictionary(unit => unit.Id, unit => unit.ManagerUserId),
+            graph.Nodes.ToDictionary(node => node.Id, node => node.ManagerUserId),
             companies,
             positions,
             resolver,

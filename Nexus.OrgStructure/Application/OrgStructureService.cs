@@ -1509,15 +1509,21 @@ public sealed class OrgStructureService(
         }
     }
 
-    private async Task<Snapshot> LoadAsync(Guid tenantId, CancellationToken cancellationToken) => new(
-        (await units.ListAsync(tenantId, cancellationToken)).ToDictionary(unit => unit.Id),
-        (await repository.ListCompaniesAsync(tenantId, cancellationToken)).ToDictionary(company => company.Id),
-        await repository.ListCompanyUnitsAsync(tenantId, cancellationToken),
-        (await repository.ListPositionsAsync(tenantId, cancellationToken)).ToDictionary(position => position.Id),
-        await repository.ListAssignmentsAsync(tenantId, cancellationToken),
-        await repository.ListUnitPositionsAsync(tenantId, cancellationToken),
-        await repository.ListUserPositionsAsync(tenantId, cancellationToken),
-        await repository.ListPositionCompaniesAsync(tenantId, cancellationToken));
+    private async Task<Snapshot> LoadAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        var unitList = await units.ListAsync(tenantId, cancellationToken);
+        var links = await repository.ListCompanyUnitsAsync(tenantId, cancellationToken);
+        return new(
+            unitList.ToDictionary(unit => unit.Id),
+            (await repository.ListCompaniesAsync(tenantId, cancellationToken)).ToDictionary(company => company.Id),
+            links,
+            (await repository.ListPositionsAsync(tenantId, cancellationToken)).ToDictionary(position => position.Id),
+            await repository.ListAssignmentsAsync(tenantId, cancellationToken),
+            await repository.ListUnitPositionsAsync(tenantId, cancellationToken),
+            await repository.ListUserPositionsAsync(tenantId, cancellationToken),
+            await repository.ListPositionCompaniesAsync(tenantId, cancellationToken),
+            OrgGraph.Build(unitList, await repository.ListNodeTypesAsync(tenantId, cancellationToken), links));
+    }
 
     /// <summary>
     /// One tenant's structure, read once per request. Seats: the positions units have;
@@ -1531,7 +1537,8 @@ public sealed class OrgStructureService(
         IReadOnlyList<UserAssignment> Assignments,
         IReadOnlyList<UnitPosition> Seats,
         IReadOnlyList<UserPosition> Holdings,
-        IReadOnlyList<PositionCompany> PositionCompanies)
+        IReadOnlyList<PositionCompany> PositionCompanies,
+        OrgGraph Graph)
     {
         public bool IsFor(Guid positionId, Guid companyId) =>
             PositionCompanies.Any(link => link.PositionId == positionId && link.CompanyId == companyId);
@@ -1606,11 +1613,7 @@ public sealed class OrgStructureService(
                     ? head
                     : company.ManagerUserId);
 
-            return new HierarchyResolver(
-                Units.Values.Select(unit => new UnitNode(unit.Id, null, unit.ManagerUserId)),
-                Links.ToDictionary(link => link.UnitId, link => link.CompanyId),
-                companyManagers,
-                assignments);
+            return new HierarchyResolver(Graph, companyManagers, assignments);
         }
     }
 }

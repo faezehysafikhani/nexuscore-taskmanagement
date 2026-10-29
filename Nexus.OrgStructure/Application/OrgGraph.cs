@@ -24,6 +24,25 @@ public sealed class OrgGraph
 
     public IReadOnlyCollection<UnitNode> Nodes => _nodes.Values.ToList();
 
+    /// <summary>The units linked to a company (the top unit of each company's branches) and their companies.</summary>
+    public IReadOnlyDictionary<Guid, Guid> LinkedUnits => _companyOfLinkedUnit;
+
+    /// <summary>
+    /// The graph of the given units. A unit whose node type is not a domain boundary is not the
+    /// boundary of «the same deputy»; a unit with no node type (a plain unit) is.
+    /// </summary>
+    public static OrgGraph Build(IEnumerable<Nexus.Organization.Domain.OrganizationUnit> units, IEnumerable<Domain.NodeType> nodeTypes, IEnumerable<Domain.CompanyUnit> links)
+    {
+        var boundaryOf = nodeTypes.ToDictionary(type => type.Id, type => type.IsDomainBoundary);
+        return new OrgGraph(
+            units.Select(unit => new UnitNode(
+                unit.Id,
+                unit.ParentUnitId,
+                unit.ManagerUserId,
+                unit.NodeTypeId is { } typeId && boundaryOf.TryGetValue(typeId, out var boundary) ? boundary : true)),
+            links.ToDictionary(link => link.UnitId, link => link.CompanyId));
+    }
+
     public UnitNode? Node(Guid unitId) => _nodes.GetValueOrDefault(unitId);
 
     /// <summary>The unit above this one; null when it is at the top (no parent, or the parent is not a unit).</summary>
@@ -109,17 +128,8 @@ public interface IOrgGraphProvider
 
 public sealed class OrgGraphProvider(IOrganizationUnitRepository units, IOrgStructureRepository repository) : IOrgGraphProvider
 {
-    public async Task<OrgGraph> GetAsync(Guid tenantId, CancellationToken cancellationToken)
-    {
-        var unitList = await units.ListAsync(tenantId, cancellationToken);
-        var boundaryOf = (await repository.ListNodeTypesAsync(tenantId, cancellationToken)).ToDictionary(type => type.Id, type => type.IsDomainBoundary);
-        var links = (await repository.ListCompanyUnitsAsync(tenantId, cancellationToken)).ToDictionary(link => link.UnitId, link => link.CompanyId);
-        return new OrgGraph(
-            unitList.Select(unit => new UnitNode(
-                unit.Id,
-                unit.ParentUnitId,
-                unit.ManagerUserId,
-                unit.NodeTypeId is { } typeId && boundaryOf.TryGetValue(typeId, out var boundary) ? boundary : true)),
-            links);
-    }
+    public async Task<OrgGraph> GetAsync(Guid tenantId, CancellationToken cancellationToken) => OrgGraph.Build(
+        await units.ListAsync(tenantId, cancellationToken),
+        await repository.ListNodeTypesAsync(tenantId, cancellationToken),
+        await repository.ListCompanyUnitsAsync(tenantId, cancellationToken));
 }
