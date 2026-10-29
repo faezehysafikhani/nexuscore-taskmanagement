@@ -31,16 +31,44 @@ public sealed class OrgGraph
     /// The graph of the given units. A unit whose node type is not a domain boundary is not the
     /// boundary of «the same deputy»; a unit with no node type (a plain unit) is.
     /// </summary>
-    public static OrgGraph Build(IEnumerable<Nexus.Organization.Domain.OrganizationUnit> units, IEnumerable<Domain.NodeType> nodeTypes, IEnumerable<Domain.CompanyUnit> links)
+    public static OrgGraph Build(
+        IEnumerable<Nexus.Organization.Domain.OrganizationUnit> units,
+        IEnumerable<Domain.NodeType> nodeTypes,
+        IEnumerable<Domain.CompanyUnit> links,
+        IEnumerable<Domain.UnitPosition>? seats = null,
+        IEnumerable<Domain.UserPosition>? holdings = null)
     {
         var boundaryOf = nodeTypes.ToDictionary(type => type.Id, type => type.IsDomainBoundary);
+        var managerPostHolder = ManagerPostHolders(seats, holdings);
         return new OrgGraph(
             units.Select(unit => new UnitNode(
                 unit.Id,
                 unit.ParentUnitId,
-                unit.ManagerUserId,
+                // The manager set on the unit; only when there is none, whoever holds its manager's post.
+                unit.ManagerUserId ?? (managerPostHolder.TryGetValue(unit.Id, out var holder) ? holder : null),
                 unit.NodeTypeId is { } typeId && boundaryOf.TryGetValue(typeId, out var boundary) ? boundary : true)),
             links.ToDictionary(link => link.UnitId, link => link.CompanyId));
+    }
+
+    /// <summary>Per unit, the holder of its manager's post (the first held one in the unit's order).</summary>
+    private static Dictionary<Guid, Guid> ManagerPostHolders(IEnumerable<Domain.UnitPosition>? seats, IEnumerable<Domain.UserPosition>? holdings)
+    {
+        var result = new Dictionary<Guid, Guid>();
+        if (seats is null || holdings is null)
+        {
+            return result;
+        }
+
+        var holderOf = holdings.GroupBy(h => h.UnitPositionId).ToDictionary(group => group.Key, group => group.First().UserId);
+        foreach (var seat in seats.Where(seat => seat.IsManagerPost && seat.UnitId is not null).OrderBy(seat => seat.SortOrder))
+        {
+            if (holderOf.TryGetValue(seat.Id, out var holder))
+            {
+                result.TryAdd(seat.UnitId!.Value, holder);
+            }
+        }
+
+        return result;
     }
 
     public UnitNode? Node(Guid unitId) => _nodes.GetValueOrDefault(unitId);
@@ -131,5 +159,7 @@ public sealed class OrgGraphProvider(IOrganizationUnitRepository units, IOrgStru
     public async Task<OrgGraph> GetAsync(Guid tenantId, CancellationToken cancellationToken) => OrgGraph.Build(
         await units.ListAsync(tenantId, cancellationToken),
         await repository.ListNodeTypesAsync(tenantId, cancellationToken),
-        await repository.ListCompanyUnitsAsync(tenantId, cancellationToken));
+        await repository.ListCompanyUnitsAsync(tenantId, cancellationToken),
+        await repository.ListUnitPositionsAsync(tenantId, cancellationToken),
+        await repository.ListUserPositionsAsync(tenantId, cancellationToken));
 }

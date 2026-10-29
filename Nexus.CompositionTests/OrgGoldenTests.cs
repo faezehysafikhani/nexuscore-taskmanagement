@@ -24,6 +24,7 @@ public sealed class OrgGoldenTests
 {
 
     private static readonly Guid Tenant = Guid.NewGuid();
+    internal static Guid TenantId => Tenant;
     private static readonly string[] Who = ["head", "dep", "gm", "e1", "e2", "fin", "fe", "h2", "c2", "nowhere"];
 
     /// <summary>
@@ -175,7 +176,7 @@ public sealed class OrgGoldenTests
             Task.FromResult<IReadOnlyList<TaskSummary>>(Summaries.Where(s => taskIds.Contains(s.TaskId)).ToList());
     }
 
-    private sealed class GoldenWorld
+    internal sealed class GoldenWorld
     {
         private readonly OrganizationDbContext _organization;
         private readonly OrgStructureRepository _repository;
@@ -319,7 +320,7 @@ public sealed class OrgGoldenTests
         public Task<Guid> CompanyAsync(string code) => AddCompanyAsync("شرکت " + code, code);
     }
 
-    private sealed class SignedIn(Guid userId, string[] permissions) : ICurrentUserContext
+    internal sealed class SignedIn(Guid userId, string[] permissions) : ICurrentUserContext
     {
         public Guid? UserId => userId;
         public Guid? TenantId => Tenant;
@@ -328,7 +329,7 @@ public sealed class OrgGoldenTests
         public bool HasPermission(string permission) => permissions.Contains(permission);
     }
 
-    private sealed class WorkTeams : IWorkTeamDirectory
+    internal sealed class WorkTeams : IWorkTeamDirectory
     {
         public List<WorkTeamInfo> Teams { get; } = [];
 
@@ -344,7 +345,7 @@ public sealed class OrgGoldenTests
     }
 
     /// <summary>The identity side: users' names, and the title writer working on them like the real one.</summary>
-    private sealed class Directory : IUserDirectory, IUserTitleWriter
+    internal sealed class Directory : IUserDirectory, IUserTitleWriter
     {
         public Dictionary<Guid, string> Names { get; } = [];
 

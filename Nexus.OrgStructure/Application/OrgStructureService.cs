@@ -628,6 +628,7 @@ public sealed class OrgStructureService(
 
         var added = new UnitPosition(Guid.NewGuid(), tenantId, companyId, unitId, request.PositionId, NextSortOrder(snapshot, companyId, unitId, request.PositionId), code);
         added.PlaceUnder(request.ParentPostId);
+        added.SetCompanyHead(CompanyHeadPost.Is(added, snapshot.Positions.GetValueOrDefault(added.PositionId), snapshot.IsFor(added.PositionId, companyId)));
         await repository.AddUnitPositionAsync(added, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success(ToDto(added, snapshot, new Dictionary<Guid, UserContact>()));
@@ -975,6 +976,7 @@ public sealed class OrgStructureService(
                     mainSeat = new UnitPosition(
                         Guid.NewGuid(), tenantId, request.CompanyId, request.UnitId, mainPosition,
                         NextSortOrder(snapshot, request.CompanyId, request.UnitId, mainPosition), NextCode(snapshot, request.CompanyId, []));
+                    mainSeat.SetCompanyHead(CompanyHeadPost.Is(mainSeat, snapshot.Positions.GetValueOrDefault(mainPosition), snapshot.IsFor(mainPosition, request.CompanyId)));
                     newMainSeat = true;
                 }
             }
@@ -1167,7 +1169,7 @@ public sealed class OrgStructureService(
         var people = await PeopleAsync(
             snapshot.Assignments.Select(a => (Guid?)a.UserId)
                 .Concat(snapshot.Companies.Values.Select(c => c.ManagerUserId))
-                .Concat(snapshot.Units.Values.Select(u => u.ManagerUserId))
+                .Concat(snapshot.Graph.Nodes.Select(node => node.ManagerUserId))
                 .Concat(teams.SelectMany(t => t.MemberIds.Append(t.OwnerUserId)).Select(id => (Guid?)id))
                 .Concat(snapshot.Holdings.Select(h => (Guid?)h.UserId)),
             cancellationToken);
@@ -1200,7 +1202,7 @@ public sealed class OrgStructureService(
             return new OrgChartUnitDto(
                 unit.Id,
                 unit.Name,
-                unit.ManagerUserId is { } m ? Person(m, people) : null,
+                snapshot.Graph.Node(unit.Id)?.ManagerUserId is { } m ? Person(m, people) : null,
                 unitPeople.Where(a => !seated.Contains(a.UserId)).Select(Member).OrderBy(x => x.DisplayName).ToList(),
                 new List<OrgChartUnitDto>(),
                 teams.Where(team => UnitOfOwner(snapshot, team) == unit.Id).Select(team => TeamDto(team, snapshot, resolver, people)).ToList(),
@@ -1513,16 +1515,18 @@ public sealed class OrgStructureService(
     {
         var unitList = await units.ListAsync(tenantId, cancellationToken);
         var links = await repository.ListCompanyUnitsAsync(tenantId, cancellationToken);
+        var seats = await repository.ListUnitPositionsAsync(tenantId, cancellationToken);
+        var holdings = await repository.ListUserPositionsAsync(tenantId, cancellationToken);
         return new(
             unitList.ToDictionary(unit => unit.Id),
             (await repository.ListCompaniesAsync(tenantId, cancellationToken)).ToDictionary(company => company.Id),
             links,
             (await repository.ListPositionsAsync(tenantId, cancellationToken)).ToDictionary(position => position.Id),
             await repository.ListAssignmentsAsync(tenantId, cancellationToken),
-            await repository.ListUnitPositionsAsync(tenantId, cancellationToken),
-            await repository.ListUserPositionsAsync(tenantId, cancellationToken),
+            seats,
+            holdings,
             await repository.ListPositionCompaniesAsync(tenantId, cancellationToken),
-            OrgGraph.Build(unitList, await repository.ListNodeTypesAsync(tenantId, cancellationToken), links));
+            OrgGraph.Build(unitList, await repository.ListNodeTypesAsync(tenantId, cancellationToken), links, seats, holdings));
     }
 
     /// <summary>
@@ -1549,9 +1553,9 @@ public sealed class OrgStructureService(
 
         public Guid? HolderOf(Guid seatId) => Holdings.FirstOrDefault(h => h.UnitPositionId == seatId)?.UserId;
 
-        /// <summary>The company head's post: directly in the company, of its position with no superior.</summary>
+        /// <summary>The company head's post: directly in the company, marked as the head's or (until all data is marked) of its position with no superior.</summary>
         public bool IsHeadPost(UnitPosition seat) =>
-            seat.UnitId is null && Positions.GetValueOrDefault(seat.PositionId) is { ParentPositionId: null } && IsFor(seat.PositionId, seat.CompanyId);
+            CompanyHeadPost.Is(seat, Positions.GetValueOrDefault(seat.PositionId), IsFor(seat.PositionId, seat.CompanyId));
 
         /// <summary>Where a post is: its unit's name, or its company's for a post directly in it.</summary>
         public string PlaceOf(UnitPosition seat) => seat.UnitId is { } unitId

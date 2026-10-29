@@ -246,7 +246,7 @@ public sealed class SubstitutionService(
                 }
             }
 
-            var isHeadPost = seat.UnitId is null && Positions.GetValueOrDefault(seat.PositionId) is { ParentPositionId: null };
+            var isHeadPost = CompanyHeadPost.Is(seat, Positions.GetValueOrDefault(seat.PositionId));
             var first = seat.UnitId is { } unitId ? UnitManagers.GetValueOrDefault(unitId) : null;
             first ??= isHeadPost ? null : Companies.GetValueOrDefault(seat.CompanyId)?.ManagerUserId;
             if (first is not { } manager)

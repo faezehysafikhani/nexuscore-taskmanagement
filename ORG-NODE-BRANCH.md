@@ -27,10 +27,11 @@
 - `1.3` — `OrgGraph` و `IOrgGraphProvider`: یک گراف واحد با والد واقعی (`ParentOf`، `SubtreeOf`، `DomainOf`، شرکت مالک از گره‌ی بالایی)؛ `HierarchyResolver` همین گراف را به‌کار می‌برد. ریشه ضمنی است (بدون ردیف و بدون مدیر): والد خالی و والد=شناسه شرکت یک گراف مسطح یکسان می‌دهند (تست برابری). مصرف‌کننده‌های دیگر در ۱.۴ وصل می‌شوند.
 - `1.3b` — در `docs/OrgStructure.md` سه مفهوم جدا شد: مرز سازمان مالک (شرکت)، ریشه‌ی ضمنی ساختار، و مرز هم‌معاونت (`IsDomainBoundary`).
 - `1.4` — مصرف‌کننده‌ها به `OrgGraph` وصل شدند: `HierarchyWorkAssignmentScope` (منطق سطح/رتبه/هم‌معاونت به کلاس قابل‌تست `WorkAssignmentLevels` رفت)، `SubstitutionService`، snapshot در `OrgStructureService` و `DeputyWorkTeamMemberScope` (هم‌معاونت با `DomainOf`). دیگر هیچ `new UnitNode(..., null, ...)` جدا نمانده؛ `TaskPostDirectory` و `CompanyReachScope` دست‌نخورده. تست‌های طلایی روی داده‌ی مسطح بدون تغییر پاس‌اند.
+- `1.5` — رئیس شرکت با `IsCompanyHead` (هر دو ملاک: علامت یا پست بدون مافوق، در یک نقطه `CompanyHeadPost`؛ پست تازه‌ی سمت بدون مافوق علامت می‌خورد) و مدیر گره: `ManagerUserId` می‌ماند و فقط وقتی خالی بود دارنده‌ی پست `IsManagerPost` مدیر است (در `OrgGraph.Build`، پس چارت و همه‌ی مصرف‌کننده‌ها یک‌جور می‌بینند). تست‌های طلایی یک اشکال در همین مسیر را هنگام کار گرفتند و اصلاح شد.
 - فازهای بعدی: طبق پلن؛ این بخش بعد از هر فاز به‌روز می‌شود.
 
 ## تست‌های پایه
-۲۳۸ تست، ۲۳۵ پاس (تست‌های جدید: ۳ مدل در ۱.۱، ۷ گراف در ۱.۳ و ۲ سطح/هم‌معاونت در ۱.۴)، ۳ فِیل قدیمی و بی‌ربط به این کار:
+۲۴۱ تست، ۲۳۸ پاس (تست‌های جدید: ۳ مدل در ۱.۱، ۹ گراف/سطح در ۱.۳ و ۱.۴ و ۳ رئیس/مدیر گره در ۱.۵)، ۳ فِیل قدیمی و بی‌ربط به این کار:
 - `OrgStructureTests.Units_BelongToACompany_ThroughTheirTopUnit`
 - `EffectivePermissionTests.AnotherModulesPermission_CannotBeAssigned_ButStaysWhereItIs_AndStillWorks`
 - `RecurringTaskReminderTests.IncompleteSmsSettings_AreReported_AndNothingIsSent`
