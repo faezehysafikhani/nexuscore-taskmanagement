@@ -1,0 +1,46 @@
+{
+  "$schema": "./structure-template.schema.json",
+  "schemaVersion": 1,
+  "key": "deputy",
+  "name": "معاونتی",
+  "description": "شرکت متوسط: مدیرعامل مستقیم در شرکت، زیر آن معاونت‌ها و زیر هر معاونت واحدها. واحد جزو معاونت بالای خود حساب می‌شود.",
+  "uiLevel": "normal",
+  "nodeTypes": [
+    { "key": "deputy", "name": "معاونت", "color": "#0f766e", "icon": "building-2", "isDomainBoundary": true },
+    { "key": "unit", "name": "واحد", "color": "#2563eb", "icon": "folder", "isDomainBoundary": false }
+  ],
+  "rules": [
+    { "parent": null, "child": "deputy" },
+    { "parent": "deputy", "child": "unit" }
+  ],
+  "linkTypes": [
+    { "key": "functional", "name": "گزارش‌دهی تخصصی", "lineStyle": "dotted", "countsAsManager": false }
+  ],
+  "autoLinkRules": [],
+  "positions": [
+    { "key": "ceo", "title": "مدیرعامل", "parent": null },
+    { "key": "vp", "title": "معاون", "parent": "ceo" },
+    { "key": "manager", "title": "مدیر", "parent": "vp" },
+    { "key": "expert", "title": "کارشناس", "parent": "manager" }
+  ],
+  "postTemplates": [
+    {
+      "nodeType": "deputy",
+      "posts": [
+        { "position": "vp", "isManagerPost": true }
+      ]
+    },
+    {
+      "nodeType": "unit",
+      "posts": [
+        { "position": "manager", "isManagerPost": true },
+        { "position": "expert" }
+      ]
+    }
+  ],
+  "companyPosts": [
+    { "position": "ceo", "isCompanyHead": true }
+  ],
+  "nodes": [],
+  "links": []
+}

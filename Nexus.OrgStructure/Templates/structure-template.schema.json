@@ -1,0 +1,218 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "structure-template.schema.json",
+  "title": "Organization structure template",
+  "description": "A ready-made structure a company starts from: node types, what may sit under what, secondary-link types and their automatic rules, positions (ranks), post patterns, the initial nodes and links, and the display level. Keys are stable identifiers inside one template; names are what people see. Copied into the company when it is created (no tie to the template afterwards).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "key",
+    "name",
+    "uiLevel",
+    "nodeTypes",
+    "rules",
+    "linkTypes",
+    "autoLinkRules",
+    "positions",
+    "postTemplates",
+    "companyPosts",
+    "nodes",
+    "links"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": 1 },
+    "key": { "$ref": "#/$defs/key" },
+    "name": { "$ref": "#/$defs/name" },
+    "description": { "type": "string", "maxLength": 1000 },
+    "uiLevel": {
+      "description": "How much of the structure screens a company sees: simple, normal or advanced (hiding only).",
+      "enum": ["simple", "normal", "advanced"]
+    },
+    "nodeTypes": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/nodeType" }
+    },
+    "rules": {
+      "description": "What may sit under what. parent null: a top-level node (under the company). A company with no rules stays flat.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/rule" }
+    },
+    "linkTypes": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/linkType" }
+    },
+    "autoLinkRules": {
+      "description": "When a node of sourceType is created, it is linked to the one node of targetType (none or several: the user chooses).",
+      "type": "array",
+      "items": { "$ref": "#/$defs/autoLinkRule" }
+    },
+    "positions": {
+      "description": "Positions (ranks) with their superior position; a position's level is how many superiors are above it.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/position" }
+    },
+    "postTemplates": {
+      "description": "The posts each node of a type gets. At most one manager post per type.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/postTemplate" }
+    },
+    "companyPosts": {
+      "description": "Posts placed directly in the company (no node).",
+      "type": "array",
+      "items": { "$ref": "#/$defs/companyPost" }
+    },
+    "nodes": {
+      "description": "The initial nodes, as a tree; top-level nodes sit directly under the company.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/node" }
+    },
+    "links": {
+      "description": "Initial secondary links between nodes (besides the main parent): source reports to / is overseen by target.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/link" }
+    }
+  },
+  "$defs": {
+    "key": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+      "maxLength": 60
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "nodeType": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "name", "color", "icon", "isDomainBoundary"],
+      "properties": {
+        "key": { "$ref": "#/$defs/key" },
+        "name": { "$ref": "#/$defs/name" },
+        "description": { "type": "string", "maxLength": 500 },
+        "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+        "icon": {
+          "description": "A lucide icon name (kebab-case), e.g. building-2.",
+          "type": "string",
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+        },
+        "isDomainBoundary": {
+          "description": "Whether a node of this type starts its own domain (\"the same deputy\"). False: it belongs to the domain of the nearest node above it that starts one.",
+          "type": "boolean"
+        }
+      }
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["parent", "child"],
+      "properties": {
+        "parent": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/key" }
+          ]
+        },
+        "child": { "$ref": "#/$defs/key" }
+      }
+    },
+    "linkType": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "name", "lineStyle", "countsAsManager"],
+      "properties": {
+        "key": { "$ref": "#/$defs/key" },
+        "name": { "$ref": "#/$defs/name" },
+        "lineStyle": { "enum": ["solid", "dotted", "dashed"] },
+        "countsAsManager": {
+          "description": "Whether the target's manager also counts as a manager of the source's people. A dotted line never does.",
+          "type": "boolean"
+        }
+      }
+    },
+    "autoLinkRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceType", "targetType", "linkType"],
+      "properties": {
+        "sourceType": { "$ref": "#/$defs/key" },
+        "targetType": { "$ref": "#/$defs/key" },
+        "linkType": { "$ref": "#/$defs/key" }
+      }
+    },
+    "position": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "title", "parent"],
+      "properties": {
+        "key": { "$ref": "#/$defs/key" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "parent": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/key" }
+          ]
+        }
+      }
+    },
+    "post": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["position"],
+      "properties": {
+        "position": { "$ref": "#/$defs/key" },
+        "isManagerPost": { "type": "boolean", "default": false },
+        "isCompanyHead": { "type": "boolean", "default": false }
+      }
+    },
+    "postTemplate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nodeType", "posts"],
+      "properties": {
+        "nodeType": { "$ref": "#/$defs/key" },
+        "posts": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/post" }
+        }
+      }
+    },
+    "companyPost": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["position"],
+      "properties": {
+        "position": { "$ref": "#/$defs/key" },
+        "isCompanyHead": { "type": "boolean", "default": false }
+      }
+    },
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "name", "type"],
+      "properties": {
+        "key": { "$ref": "#/$defs/key" },
+        "name": { "$ref": "#/$defs/name" },
+        "type": { "$ref": "#/$defs/key" },
+        "children": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/node" }
+        }
+      }
+    },
+    "link": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "target", "type"],
+      "properties": {
+        "source": { "$ref": "#/$defs/key" },
+        "target": { "$ref": "#/$defs/key" },
+        "type": { "$ref": "#/$defs/key" }
+      }
+    }
+  }
+}
