@@ -18,6 +18,11 @@ public interface IOrgStructureRepository
     Task<IReadOnlyList<StructureTemplate>> ListStructureTemplatesAsync(Guid tenantId, CancellationToken cancellationToken);
     Task<IReadOnlyList<StructureTemplateItem>> ListStructureTemplateItemsAsync(Guid tenantId, Guid? templateId, CancellationToken cancellationToken);
     Task<IReadOnlyList<OrgChangeLog>> ListOrgChangeLogsAsync(Guid tenantId, Guid? entityId, int take, CancellationToken cancellationToken);
+    Task AddNodeTypeAsync(NodeType nodeType, CancellationToken cancellationToken);
+    void RemoveNodeType(NodeType nodeType);
+    Task AddNodeTypeRuleAsync(NodeTypeRule rule, CancellationToken cancellationToken);
+    void RemoveNodeTypeRule(NodeTypeRule rule);
+    Task AddOrgChangeLogAsync(OrgChangeLog entry, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<Company>> ListCompaniesAsync(Guid tenantId, CancellationToken cancellationToken);
     Task<Company?> GetCompanyAsync(Guid tenantId, Guid id, CancellationToken cancellationToken);

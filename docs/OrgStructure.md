@@ -158,6 +158,53 @@ The built-in administrator role gets all of them automatically.
 Deleting a company or position that is in use is refused (deactivate it instead); so is
 unlinking or moving a unit while people sit in its branch.
 
+## Nodes: units under units (dynamic structure, phase 2)
+
+Units are the structure's **nodes** and may sit under each other. The flat structure is unchanged
+until two things are both true:
+
+- `OrgStructure:AllowNesting` is `true` (temporary switch, **off by default**; with it off a node is
+  only made and moved at the top of its company, as before), and
+- the organization has «what may sit under what» rules (`/node-type-rules`). No rules: flat only.
+
+Only the top node of each branch is linked to a company; the nodes under it belong to the same
+company. Every change is made in the organization's turn (one change at a time, on SQL Server with an
+application lock across servers), checked against the data as it is then (loops, the rules, the
+company), saved with the node's version and written to `org_structure.OrgChangeLogs`. Send back the
+`rowVersion` you read: a save over someone else's newer change is refused with 409.
+
+| | |
+|---|---|
+| `GET /nodes?companyId=`, `GET /nodes/{id}` | nodes (`parentNodeId`, `nodeTypeId`, `companyId`, `sortOrder`, `childCount`, `rowVersion`) |
+| `POST /nodes` | `{ name, parentNodeId?, companyId?, nodeTypeId? }` (no type: the plain «واحد») |
+| `PUT /nodes/{id}` | `{ name, nodeTypeId?, rowVersion? }` |
+| `PUT /nodes/{id}/manager` | `{ managerUserId, rowVersion? }` |
+| `POST /nodes/{id}/move` | `{ parentNodeId, companyId?, rowVersion? }` (null parent: to the top of `companyId` or its own company) |
+| `POST /nodes/{id}/reorder` | `{ position, rowVersion? }` among the nodes beside it |
+| `POST /nodes/{id}/deactivate`, `/activate` | refused (409, with the list) while active nodes, posts or people depend on it; nothing is deleted |
+| `GET /nodes/search?q=&companyId=` | by name, post code or the person in it; each hit with its path from the top |
+| `GET /nodes/{id}/ancestors` | the nodes above it, from the top |
+| `GET/POST /node-types`, `PUT/DELETE /node-types/{id}` | types: name, `color` (#rrggbb), `icon` (lucide name), `isDomainBoundary` |
+| `GET/PUT /node-type-rules` | `{ rules: [{ parentNodeTypeId?, childNodeTypeId }] }`; returns the nodes that do not match (nothing is changed) |
+| `POST /impact-preview` | `{ changes: [{ kind: "move"/"add"/"manager"/"unlink", nodeId, parentNodeId, companyId, managerUserId, name }] }`: per person, before and after: manager, people under them, whom they cannot give tasks to, substitution inbox, work team. Nothing is saved |
+
+`GET /chart` keeps its fields and adds: on each unit `children` (the nodes under it, nested),
+`parentNodeId`, `nodeType` (`name`, `color`, `icon`, `isDomainBoundary`) and `links`; on each company
+`uiLevel` (`simple` / `normal` / `advanced`). `units` of a company are its top nodes.
+
+Permissions, each operation on its own; every one is also passed by the older permission that
+covered it, so nobody loses anything:
+
+| Permission | Also passed by |
+|---|---|
+| `org_structure.node.view` | `org_structure.view` and the other structure permissions, `organization_units.view` |
+| `org_structure.node.create` | `organization_units.create` |
+| `org_structure.node.update` | `organization_units.update` |
+| `org_structure.node.move` (moving and ordering) | `org_structure.manage_companies` |
+| `org_structure.node.deactivate` | `organization_units.delete` |
+| `org_structure.node.assign` (a node's manager) | `organization_units.update` |
+| `org_structure.manage_rules` (types and rules) | - |
+
 ## Trying it: the Tejarat Bank host
 
 The product that composes NexusCore + Organization + this module is built outside this

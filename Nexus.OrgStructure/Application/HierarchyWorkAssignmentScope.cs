@@ -28,6 +28,13 @@ public sealed class OrgStructureOptions
     /// Holders of OrgStructurePermissions.AllCompanies are not limited. Off unless the product turns it on.
     /// </summary>
     public bool LimitToOwnCompany { get; set; }
+
+    /// <summary>
+    /// Temporary (until the dynamic structure is delivered): whether the node API may put a node
+    /// under another node. Off: nodes are only made and moved at the top of their company, as
+    /// before. Turned on only where the nested structure is being tried out.
+    /// </summary>
+    public bool AllowNesting { get; set; }
 }
 
 /// <summary>

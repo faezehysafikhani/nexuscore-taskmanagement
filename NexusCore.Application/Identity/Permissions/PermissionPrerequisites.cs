@@ -60,6 +60,16 @@ public static class PermissionPrerequisites
         ["org_structure.assign_tasks_any_level"] = new[] { "org_structure.view" },
         ["org_structure.team_members_any_unit"] = new[] { "org_structure.view" },
 
+        // Org structure nodes: every node operation needs to see the nodes (which shows the
+        // structure); naming a node's manager means picking them from the user list.
+        ["org_structure.node.view"] = new[] { "org_structure.view" },
+        ["org_structure.node.create"] = new[] { "org_structure.node.view" },
+        ["org_structure.node.update"] = new[] { "org_structure.node.view" },
+        ["org_structure.node.move"] = new[] { "org_structure.node.view" },
+        ["org_structure.node.deactivate"] = new[] { "org_structure.node.view" },
+        ["org_structure.node.assign"] = new[] { "org_structure.node.view", IdentityPermissions.UsersView },
+        ["org_structure.manage_rules"] = new[] { "org_structure.node.view" },
+
         // Actions/task management: create/edit/delete/submit require view permission
         ["Actions.Create"] = new[] { "Actions.View" },
         ["Actions.Edit"] = new[] { "Actions.View" },

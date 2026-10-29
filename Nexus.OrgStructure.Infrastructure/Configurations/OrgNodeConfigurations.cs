@@ -13,6 +13,8 @@ public sealed class NodeTypeConfiguration : IEntityTypeConfiguration<NodeType>
         builder.Property(x => x.Id).ValueGeneratedNever();
         builder.Property(x => x.Code).HasMaxLength(40).IsRequired();
         builder.Property(x => x.Name).HasMaxLength(120).IsRequired();
+        builder.Property(x => x.Color).HasMaxLength(7).IsRequired().HasDefaultValue(NodeType.DefaultColor);
+        builder.Property(x => x.Icon).HasMaxLength(40).IsRequired().HasDefaultValue(NodeType.DefaultIcon);
         builder.HasIndex(x => new { x.TenantId, x.Code }).IsUnique();
     }
 }

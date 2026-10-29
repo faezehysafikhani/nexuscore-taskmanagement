@@ -188,6 +188,9 @@ public static class OrgStructureEndpoints
                 InTenant(user, tenant => service.SetUserTitleAsync(tenant, userId, request, ct)))
             .RequireAuthorization(OrgStructurePermissions.TitlesAssignPolicy);
 
+        // --- the dynamic structure's nodes, types, rules and impact preview
+        app.MapOrgNodeEndpoints();
+
         return app;
     }
 

@@ -24,6 +24,8 @@ public static class DependencyInjection
 
         services.AddScoped<IOrgStructureUnitOfWork>(provider => provider.GetRequiredService<OrgStructureDbContext>());
         services.AddScoped<IOrgStructureRepository, OrgStructureRepository>();
+        // One structure change at a time per organization (on SQL Server across every server).
+        services.AddScoped<IOrgStructureWriteLock, SqlOrgStructureWriteLock>();
         services.AddHostedService<TaskPostsStartup>();
 
         return services;

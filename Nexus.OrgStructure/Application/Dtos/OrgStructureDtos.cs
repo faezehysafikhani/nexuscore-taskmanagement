@@ -135,6 +135,9 @@ public sealed record OrgChartTeamDto(
 /// Positions: the unit's positions in its order, each with its holders (vacant ones too).
 /// Members: the unit's people who hold none of its positions. Teams: the work teams built by the
 /// unit's people (no longer drawn in the chart; kept for older clients).
+/// Children: the nodes directly under it (Units of the company holds only its top nodes), in their
+/// order; ParentNodeId: the node above (null at the top); NodeType and Links: its type and its
+/// secondary links (null / empty for a plain unit with none).
 /// </summary>
 public sealed record OrgChartUnitDto(
     Guid UnitId,
@@ -145,7 +148,16 @@ public sealed record OrgChartUnitDto(
     IReadOnlyList<OrgChartTeamDto> Teams,
     bool IsActive = true,
     int PeopleCount = 0,
-    IReadOnlyList<OrgChartPositionDto>? Positions = null);
+    IReadOnlyList<OrgChartPositionDto>? Positions = null,
+    Guid? ParentNodeId = null,
+    OrgChartNodeTypeDto? NodeType = null,
+    IReadOnlyList<OrgChartLinkDto>? Links = null);
+
+/// <summary>A node's type as the chart draws it: colour (#rrggbb) and lucide icon name.</summary>
+public sealed record OrgChartNodeTypeDto(Guid NodeTypeId, string Name, string Color, string Icon, bool IsDomainBoundary);
+
+/// <summary>A secondary link from a node to another (LineStyle: solid, dotted or dashed).</summary>
+public sealed record OrgChartLinkDto(Guid LinkId, Guid TargetNodeId, Guid LinkTypeId, string Name, string LineStyle, bool CountsAsManager);
 
 /// <summary>A post in the chart; no holder means it is vacant. IsHead: the company head's post.</summary>
 public sealed record OrgChartPositionDto(
@@ -172,7 +184,8 @@ public sealed record OrgChartCompanyDto(
     IReadOnlyList<OrgChartMemberDto> Members,
     IReadOnlyList<OrgChartUnitDto> Units,
     int PeopleCount = 0,
-    IReadOnlyList<OrgChartPositionDto>? Positions = null);
+    IReadOnlyList<OrgChartPositionDto>? Positions = null,
+    string? UiLevel = null);
 
 /// <summary>Someone of the organization who has no place in the structure yet.</summary>
 public sealed record UnplacedUserDto(Guid UserId, string DisplayName, string? AvatarUrl);

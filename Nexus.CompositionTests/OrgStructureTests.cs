@@ -297,6 +297,8 @@ public sealed class OrgStructureTests
         {
             var unit = new OrganizationUnit(Guid.NewGuid(), Tenant, name, managerUserId);
             unit.Update(unit.Name, managerUserId, isActive: true);
+            // Units sit under units again (the dynamic structure): the parent is real.
+            unit.SetParent(parentId);
             _organization.OrganizationUnits.Add(unit);
             _organization.SaveChanges();
             return unit;

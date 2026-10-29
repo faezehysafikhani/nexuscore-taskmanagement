@@ -19,6 +19,9 @@ public static class DependencyInjection
         // The one graph of units everything reads (parents, subtrees, domains).
         services.AddScoped<IOrgGraphProvider, OrgGraphProvider>();
         services.AddScoped<IOrgStructureService, OrgStructureService>();
+        // The dynamic structure's nodes, types and rules, and the impact preview of a change.
+        services.AddScoped<IOrgNodeService, OrgNodeService>();
+        services.AddScoped<IOrgImpactPreview, OrgImpactPreview>();
         services.AddScoped<IHonorificService, HonorificService>();
         services.AddSingleton<IPermissionCatalog, OrgStructurePermissionCatalog>();
         // Work-team builders add their own deputy's people (more with TeamMembersFromAnyUnit).
@@ -41,10 +44,18 @@ public static class DependencyInjection
 
         services.AddAuthorization(options =>
         {
-            foreach (var permission in OrgStructurePermissions.All.Concat(OrgStructurePermissions.WorkTeams))
+            foreach (var permission in OrgStructurePermissions.All.Concat(OrgStructurePermissions.WorkTeams)
+                         .Where(permission => !OrgStructurePermissions.NodePolicies.ContainsKey(permission.Name)))
             {
                 options.AddPolicy(permission.Name, policy =>
                     policy.RequireAuthenticatedUser().AddRequirements(new PermissionRequirement(permission.Name)));
+            }
+
+            // Node operations: their own permission or the older one that covered them.
+            foreach (var (name, accepted) in OrgStructurePermissions.NodePolicies)
+            {
+                options.AddPolicy(name, policy => policy.RequireAuthenticatedUser().RequireAssertion(context =>
+                    accepted.Any(permission => context.User.HasClaim("permission", permission))));
             }
 
             options.AddPolicy(OrgStructurePermissions.ReadPolicy, policy =>

@@ -44,6 +44,11 @@ public sealed class OrganizationUnit : AuditableEntity<Guid>
     /// <summary>Concurrency token: saving with an older version is refused.</summary>
     public byte[] RowVersion { get; private set; } = [];
 
+    /// <summary>Its place among the nodes beside it (same parent, or the same company's top), lowest first.</summary>
+    public int SortOrder { get; private set; }
+
+    public void SetSortOrder(int sortOrder) => SortOrder = sortOrder;
+
     public void SetParent(Guid? parentUnitId) => ParentUnitId = parentUnitId;
 
     public void SetNodeType(Guid? nodeTypeId) => NodeTypeId = nodeTypeId;

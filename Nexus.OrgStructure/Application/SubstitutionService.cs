@@ -177,6 +177,13 @@ public sealed class SubstitutionService(
             : Result.Failure(Error.Forbidden("Only the managers above a post may put someone in charge of it."));
     }
 
+    /// <summary>For the impact preview: each vacant post and the managers above it (whose inbox shows it).</summary>
+    internal async Task<IReadOnlyDictionary<Guid, (WorkPost Post, IReadOnlyList<Guid> Superiors)>> VacantPostSuperiorsAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        var state = await LoadAsync(tenantId, cancellationToken);
+        return state.Vacant.ToDictionary(post => post.PostId, post => (post, state.SuperiorsOf(post.PostId)));
+    }
+
     private async Task<IReadOnlyDictionary<Guid, string>> NamesAsync(IEnumerable<Guid?> ids, CancellationToken cancellationToken)
     {
         var distinct = ids.OfType<Guid>().Distinct().ToList();

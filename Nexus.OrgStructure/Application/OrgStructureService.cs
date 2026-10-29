@@ -195,6 +195,13 @@ public sealed class OrgStructureService(
             return Result.Failure<CompanyUnitDto>(Error.NotFound("Organization unit was not found."));
         }
 
+        // Only the top unit of a branch is linked: one under another belongs to that one's company.
+        if (snapshot.Graph.ParentOf(unitId) is not null)
+        {
+            return Result.Failure<CompanyUnitDto>(Error.Validation(
+                "Only the top unit of a branch is linked to a company; this unit belongs to the company of the unit above it."));
+        }
+
         var company = snapshot.Companies.GetValueOrDefault(request.CompanyId);
         if (company is null || !await IsMineAsync(tenantId, company.Id, cancellationToken))
         {
@@ -1174,8 +1181,17 @@ public sealed class OrgStructureService(
                 .Concat(snapshot.Holdings.Select(h => (Guid?)h.UserId)),
             cancellationToken);
 
-        // Units no longer carry parent references: build an empty children map.
-        var children = new Dictionary<Guid, List<OrganizationUnit>>();
+        // Each node's type and secondary links (the dynamic structure; absent for older data).
+        var nodeTypes = (await repository.ListNodeTypesAsync(tenantId, cancellationToken)).ToDictionary(type => type.Id);
+        var linkTypes = (await repository.ListLinkTypesAsync(tenantId, cancellationToken)).ToDictionary(type => type.Id);
+        var linksFrom = (await repository.ListOrgLinksAsync(tenantId, cancellationToken))
+            .Where(link => linkTypes.ContainsKey(link.LinkTypeId))
+            .ToLookup(link => link.FromUnitId);
+
+        // The nodes under a node, in their order.
+        IEnumerable<OrganizationUnit> ChildrenOf(Guid unitId) => snapshot.Graph.ChildrenOf(unitId)
+            .Select(id => snapshot.Units.GetValueOrDefault(id)).OfType<OrganizationUnit>()
+            .OrderBy(unit => unit.SortOrder).ThenBy(unit => unit.Name);
 
         OrgChartMemberDto MemberOf(Guid userId)
         {
@@ -1204,11 +1220,19 @@ public sealed class OrgStructureService(
                 unit.Name,
                 snapshot.Graph.Node(unit.Id)?.ManagerUserId is { } m ? Person(m, people) : null,
                 unitPeople.Where(a => !seated.Contains(a.UserId)).Select(Member).OrderBy(x => x.DisplayName).ToList(),
-                new List<OrgChartUnitDto>(),
+                ChildrenOf(unit.Id).Where(child => visited.Add(child.Id)).ToList().Select(child => BuildUnit(child, visited)).ToList(),
                 teams.Where(team => UnitOfOwner(snapshot, team) == unit.Id).Select(team => TeamDto(team, snapshot, resolver, people)).ToList(),
                 unit.IsActive,
                 unitPeople.Select(a => a.UserId).Concat(seated).Distinct().Count(),
-                seats.Select(PostOf).ToList());
+                seats.Select(PostOf).ToList(),
+                snapshot.Graph.ParentOf(unit.Id),
+                unit.NodeTypeId is { } typeId && nodeTypes.TryGetValue(typeId, out var nodeType)
+                    ? new OrgChartNodeTypeDto(nodeType.Id, nodeType.Name, nodeType.Color, nodeType.Icon, nodeType.IsDomainBoundary)
+                    : null,
+                linksFrom[unit.Id].Where(link => snapshot.Units.ContainsKey(link.ToUnitId))
+                    .Select(link => new OrgChartLinkDto(link.Id, link.ToUnitId, link.LinkTypeId, linkTypes[link.LinkTypeId].Name,
+                        linkTypes[link.LinkTypeId].LineStyle, linkTypes[link.LinkTypeId].CountsAsManager))
+                    .ToList());
         }
 
         OrgChartPositionDto PostOf(UnitPosition seat) => new(
@@ -1234,7 +1258,7 @@ public sealed class OrgStructureService(
                     .Where(link => link.CompanyId == company.Id && snapshot.Units.ContainsKey(link.UnitId))
                     .Select(link => snapshot.Units[link.UnitId])
                     .Where(unit => visited.Add(unit.Id))
-                    .OrderBy(unit => unit.Name)
+                    .OrderBy(unit => unit.SortOrder).ThenBy(unit => unit.Name)
                     .ToList();
 
                 // The posts directly in the company, the head's first.
@@ -1265,7 +1289,8 @@ public sealed class OrgStructureService(
                     companyMembers,
                     topUnits.Select(unit => BuildUnit(unit, visited)).ToList(),
                     snapshot.Assignments.Count(a => a.CompanyId == company.Id),
-                    companyPosts.Select(PostOf).ToList());
+                    companyPosts.Select(PostOf).ToList(),
+                    company.UiLevel.ToString().ToLowerInvariant());
             })
             .ToList();
 

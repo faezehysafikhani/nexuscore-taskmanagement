@@ -34,12 +34,25 @@ public sealed class NodeType : AuditableEntity<Guid>
     public int SortOrder { get; private set; }
     public bool IsActive { get; private set; }
 
+    /// <summary>How the chart shows it: a #rrggbb colour and a lucide icon name (kebab-case).</summary>
+    public string Color { get; private set; } = DefaultColor;
+    public string Icon { get; private set; } = DefaultIcon;
+
+    public const string DefaultColor = "#2563eb";
+    public const string DefaultIcon = "folder";
+
     public void Update(string name, bool isDomainBoundary, int sortOrder, bool isActive)
     {
         Name = name.Trim();
         IsDomainBoundary = isDomainBoundary;
         SortOrder = sortOrder;
         IsActive = isActive;
+    }
+
+    public void SetStyle(string color, string icon)
+    {
+        Color = color.Trim().ToLowerInvariant();
+        Icon = icon.Trim();
     }
 }
 

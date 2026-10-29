@@ -35,6 +35,19 @@ public sealed class OrgStructureRepository(OrgStructureDbContext dbContext) : IO
         await dbContext.OrgChangeLogs.Where(x => x.TenantId == tenantId && (entityId == null || x.EntityId == entityId))
             .OrderByDescending(x => x.AtUtc).Take(take).ToListAsync(cancellationToken);
 
+    public async Task AddNodeTypeAsync(NodeType nodeType, CancellationToken cancellationToken) =>
+        await dbContext.NodeTypes.AddAsync(nodeType, cancellationToken);
+
+    public void RemoveNodeType(NodeType nodeType) => dbContext.NodeTypes.Remove(nodeType);
+
+    public async Task AddNodeTypeRuleAsync(NodeTypeRule rule, CancellationToken cancellationToken) =>
+        await dbContext.NodeTypeRules.AddAsync(rule, cancellationToken);
+
+    public void RemoveNodeTypeRule(NodeTypeRule rule) => dbContext.NodeTypeRules.Remove(rule);
+
+    public async Task AddOrgChangeLogAsync(OrgChangeLog entry, CancellationToken cancellationToken) =>
+        await dbContext.OrgChangeLogs.AddAsync(entry, cancellationToken);
+
     public async Task<IReadOnlyList<Company>> ListCompaniesAsync(Guid tenantId, CancellationToken cancellationToken) =>
         await dbContext.Companies.Where(x => x.TenantId == tenantId).OrderBy(x => x.Name).ToListAsync(cancellationToken);
 

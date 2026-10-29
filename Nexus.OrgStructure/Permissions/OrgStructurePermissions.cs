@@ -34,6 +34,35 @@ public static class OrgStructurePermissions
     /// </summary>
     public const string AllCompanies = "org_structure.all_companies";
 
+    // The dynamic structure's nodes (deputies, general departments, committees...), each operation on
+    // its own. Every one is also allowed by the older permission that covered it (see NodePolicies),
+    // so nobody loses what they could do; which nodes (whose company) is a separate limit.
+    public const string NodeView = "org_structure.node.view";
+    public const string NodeCreate = "org_structure.node.create";
+    public const string NodeUpdate = "org_structure.node.update";
+    public const string NodeMove = "org_structure.node.move";
+    public const string NodeDeactivate = "org_structure.node.deactivate";
+    public const string NodeAssign = "org_structure.node.assign";
+
+    /// <summary>Node types (colour, icon, «the same deputy») and what may sit under what.</summary>
+    public const string ManageRules = "org_structure.manage_rules";
+
+    /// <summary>
+    /// Who passes each node policy: its own permission, or the older one that already allowed the
+    /// same thing (units were made, changed and deactivated with organization_units.*, put in a
+    /// company with manage_companies, and read with any of this module's permissions).
+    /// </summary>
+    public static IReadOnlyDictionary<string, string[]> NodePolicies { get; } = new Dictionary<string, string[]>
+    {
+        [NodeView] = [NodeView, View, ManageCompanies, ManagePositions, ManageAssignments, "organization_units.view"],
+        [NodeCreate] = [NodeCreate, "organization_units.create"],
+        [NodeUpdate] = [NodeUpdate, "organization_units.update"],
+        [NodeMove] = [NodeMove, ManageCompanies],
+        [NodeDeactivate] = [NodeDeactivate, "organization_units.delete"],
+        [NodeAssign] = [NodeAssign, "organization_units.update"],
+        [ManageRules] = [ManageRules],
+    };
+
     /// <summary>
     /// Policy for the read endpoints: any of the permissions above. A manager of companies,
     /// positions or assignments has to see them too, and this module cannot add entries to
@@ -60,7 +89,14 @@ public static class OrgStructurePermissions
         new(View, "Organization", "مشاهده ساختار سازمانی (شرکت‌ها، سمت‌ها، مدیر و زیردستان کاربران)"),
         new(ManageCompanies, "Organization", "مدیریت شرکت‌ها و تعیین معاونت‌های هر شرکت"),
         new(ManagePositions, "Organization", "مدیریت سمت‌های سازمانی"),
-        new(ManageAssignments, "Organization", "تعیین شرکت، معاونت، سمت و مدیر کاربران")
+        new(ManageAssignments, "Organization", "تعیین شرکت، معاونت، سمت و مدیر کاربران"),
+        new(NodeView, "Organization", "مشاهده گره‌های ساختار سازمانی"),
+        new(NodeCreate, "Organization", "ایجاد گره در ساختار سازمانی"),
+        new(NodeUpdate, "Organization", "ویرایش نام و نوع گره‌های ساختار سازمانی"),
+        new(NodeMove, "Organization", "جابه‌جایی گره‌ها و ترتیب آن‌ها در ساختار سازمانی"),
+        new(NodeDeactivate, "Organization", "غیرفعال و فعال کردن گره‌های ساختار سازمانی"),
+        new(NodeAssign, "Organization", "تعیین مدیر گره‌های ساختار سازمانی"),
+        new(ManageRules, "Organization", "مدیریت نوع گره‌ها و قاعده‌ی «چه زیر چه»")
     ];
 
     /// <summary>Permissions about work teams that only mean something with the organization structure.</summary>
