@@ -23,7 +23,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="Samples\*.csv" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Samples\*.csv;Samples\*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
