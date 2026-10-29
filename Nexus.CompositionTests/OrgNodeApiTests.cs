@@ -284,6 +284,12 @@ public sealed class OrgNodeApiTests
         Assert.Contains(preview.People.Single(p => p.Person.UserId == financeHead).SubordinatesAdded, s => s.UserId == expert);
         Assert.Equal(preview.People.Count, preview.PeopleAffected);
 
+        // A manager who has no place in the structure is still named.
+        var newcomer = w.User("مدیر تازه");
+        var named = await w.Ok(w.Preview.PreviewAsync(Tenant,
+            new ImpactPreviewRequest([new ImpactChangeRequest("manager", it.Id, ManagerUserId: newcomer)]), default));
+        Assert.Equal("مدیر تازه", named.People.Single(p => p.Person.UserId == expert).ManagerAfter!.DisplayName);
+
         // An empty new node changes nobody; a loop is refused.
         Assert.Equal(0, (await w.Ok(w.Preview.PreviewAsync(Tenant,
             new ImpactPreviewRequest([new ImpactChangeRequest("add", ParentNodeId: it.Id, Name: "اداره کل تازه")]), default))).PeopleAffected);

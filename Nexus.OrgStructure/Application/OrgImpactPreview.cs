@@ -95,8 +95,17 @@ public sealed class OrgImpactPreview(
 
         // The people of the structure, before and after (a new empty node adds nobody).
         var people = before.Managers.Keys.Concat(after.Managers.Keys).ToHashSet();
-        var directory = (await users.GetUsersAsync(people.Concat(before.Supervised.Keys).Concat(after.Supervised.Keys).Distinct().ToList(), cancellationToken))
-            .ToDictionary(user => user.Id);
+        // Everyone the result may name: the people, their managers, and whoever is in their lists.
+        var named = new HashSet<Guid>(people);
+        foreach (var view in new[] { before, after })
+        {
+            named.UnionWith(view.Managers.Values.OfType<Guid>());
+            named.UnionWith(view.Subordinates.Values.SelectMany(ids => ids));
+            named.UnionWith(view.Blocked.Values.SelectMany(ids => ids));
+            named.UnionWith(view.Team.Values.OfType<HashSet<Guid>>().SelectMany(ids => ids));
+        }
+
+        var directory = (await users.GetUsersAsync(named.ToList(), cancellationToken)).ToDictionary(user => user.Id);
         PersonRef Ref(Guid id) => directory.TryGetValue(id, out var user)
             ? new PersonRef(id, user.DisplayName, user.IsActive, user.AvatarUrl)
             : new PersonRef(id, id.ToString(), false);
