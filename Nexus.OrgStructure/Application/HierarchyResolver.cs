@@ -128,6 +128,27 @@ public sealed class HierarchyResolver
 
     public ResolvedManager? ManagerOf(Guid userId) => Managers.TryGetValue(userId, out var manager) ? manager : null;
 
+    /// <summary>
+    /// Managers a user has besides their own (ManagerOf) through secondary links that count as
+    /// manager: the managers of the nodes their unit (or a unit above it) is linked to that way.
+    /// Not used by anything else yet (task approval stays with the main manager).
+    /// </summary>
+    public IReadOnlyList<Guid> ExtraManagersOf(Guid userId, ILookup<Guid, Guid> countingLinks)
+    {
+        if (!_assignments.TryGetValue(userId, out var assignment) || assignment.UnitId is not { } unitId)
+        {
+            return [];
+        }
+
+        var main = ManagerOf(userId)?.ManagerUserId;
+        return _graph.ExtraManagerNodesOf(unitId, countingLinks)
+            .Select(node => _graph.Node(node)?.ManagerUserId)
+            .OfType<Guid>()
+            .Where(manager => manager != userId && manager != main)
+            .Distinct()
+            .ToList();
+    }
+
     /// <summary>The user's managers, nearest first, stopping before a loop would repeat anyone.</summary>
     public IReadOnlyList<Guid> ManagementChainOf(Guid userId)
     {

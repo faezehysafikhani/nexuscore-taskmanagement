@@ -126,6 +126,25 @@ public sealed class OrgGraph
     public Guid? CompanyOfUnit(Guid unitId) => LinkedAncestorOf(unitId) is { } linked ? _companyOfLinkedUnit[linked] : null;
 
     /// <summary>
+    /// The nodes a unit is under through secondary links that count as manager (CountsAsManager):
+    /// the targets of such links from the unit itself or from any unit above it. countingLinks maps a
+    /// node to the nodes its counting links point at. None when no link counts (the default).
+    /// </summary>
+    public IReadOnlyList<Guid> ExtraManagerNodesOf(Guid unitId, ILookup<Guid, Guid> countingLinks)
+    {
+        var result = new List<Guid>();
+        var visited = new HashSet<Guid>();
+        Guid? current = unitId;
+        while (current is { } id && visited.Add(id))
+        {
+            result.AddRange(countingLinks[id].Where(target => _nodes.ContainsKey(target) && !result.Contains(target)));
+            current = ParentOf(id);
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// «The same deputy»: the nearest unit at or above this one that is a domain boundary (a unit of
     /// a node type with IsDomainBoundary, which a plain unit is). Two people are in the same deputy
     /// when their units have the same domain. With no nesting every unit is its own domain.

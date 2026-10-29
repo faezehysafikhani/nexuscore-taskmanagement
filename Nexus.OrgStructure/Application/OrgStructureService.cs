@@ -58,7 +58,8 @@ public sealed class OrgStructureService(
     IWorkTeamDirectory workTeams,
     TaskPostDirectory? taskPosts = null,
     CompanyReachScope? companyReach = null,
-    ICurrentUserContext? currentUser = null) : IOrgStructureService
+    ICurrentUserContext? currentUser = null,
+    IOrgTemplateService? templates = null) : IOrgStructureService
 {
     private const int MaxNameLength = 200;
     private const int MaxTitleLength = 120;
@@ -103,6 +104,19 @@ public sealed class OrgStructureService(
 
         // No head yet: whoever is given the company's position with no superior becomes it.
         var company = new Company(Guid.NewGuid(), tenantId, request.Name, request.Code, request.Description, managerUserId: null);
+        if (request.TemplateId is { } templateId)
+        {
+            if (templates is null)
+            {
+                return Result.Failure<CompanyDto>(Error.Validation("ساخت شرکت از قالب در دسترس نیست."));
+            }
+
+            var made = await templates.CreateCompanyFromTemplateAsync(tenantId, company, templateId, cancellationToken);
+            return made.IsSuccess
+                ? Result.Success(await ToDtoAsync(tenantId, company, cancellationToken))
+                : Result.Failure<CompanyDto>(made.Error);
+        }
+
         await repository.AddCompanyAsync(company, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success(await ToDtoAsync(tenantId, company, cancellationToken));

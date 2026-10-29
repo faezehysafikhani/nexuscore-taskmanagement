@@ -44,6 +44,7 @@ public sealed class PermissionPrerequisitesTests
         ["org_structure.node.deactivate"] = ["org_structure.node.view"],
         ["org_structure.node.assign"] = ["org_structure.node.view", "users.view"],
         ["org_structure.manage_rules"] = ["org_structure.node.view"],
+        ["org_structure.manage_templates"] = ["org_structure.node.view"],
         ["settings.update"] = ["settings.view"],
         ["sms_settings.update"] = ["sms_settings.view"],
         ["sms_settings.test"] = ["sms_settings.view"],

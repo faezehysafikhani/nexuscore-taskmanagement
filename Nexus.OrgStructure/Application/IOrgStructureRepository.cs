@@ -23,6 +23,15 @@ public interface IOrgStructureRepository
     Task AddNodeTypeRuleAsync(NodeTypeRule rule, CancellationToken cancellationToken);
     void RemoveNodeTypeRule(NodeTypeRule rule);
     Task AddOrgChangeLogAsync(OrgChangeLog entry, CancellationToken cancellationToken);
+    Task AddLinkTypeAsync(LinkType linkType, CancellationToken cancellationToken);
+    void RemoveLinkType(LinkType linkType);
+    Task AddAutoLinkRuleAsync(AutoLinkRule rule, CancellationToken cancellationToken);
+    void RemoveAutoLinkRule(AutoLinkRule rule);
+    Task AddOrgLinkAsync(OrgLink link, CancellationToken cancellationToken);
+    void RemoveOrgLink(OrgLink link);
+    Task AddNodeTypePostTemplateAsync(NodeTypePostTemplate template, CancellationToken cancellationToken);
+    Task AddStructureTemplateAsync(StructureTemplate template, CancellationToken cancellationToken);
+    void RemoveStructureTemplate(StructureTemplate template);
 
     Task<IReadOnlyList<Company>> ListCompaniesAsync(Guid tenantId, CancellationToken cancellationToken);
     Task<Company?> GetCompanyAsync(Guid tenantId, Guid id, CancellationToken cancellationToken);

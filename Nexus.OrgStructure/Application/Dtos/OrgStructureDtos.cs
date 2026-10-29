@@ -12,8 +12,12 @@ public sealed record CompanyDto(
     bool IsActive,
     IReadOnlyList<Guid> LinkedUnitIds);
 
-/// <summary>The head is not chosen here: see <see cref="PositionDto"/>.</summary>
-public sealed record CreateCompanyRequest(string Name, string Code, string? Description);
+/// <summary>
+/// The head is not chosen here: see <see cref="PositionDto"/>. TemplateId (optional): a structure
+/// template (GET /api/org-structure/templates) whose types, rules, positions, nodes and links the
+/// new company gets a copy of.
+/// </summary>
+public sealed record CreateCompanyRequest(string Name, string Code, string? Description, Guid? TemplateId = null);
 
 public sealed record UpdateCompanyRequest(string Name, string Code, string? Description, bool IsActive);
 

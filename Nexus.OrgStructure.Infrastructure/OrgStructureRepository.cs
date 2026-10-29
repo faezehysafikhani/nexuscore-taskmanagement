@@ -48,6 +48,26 @@ public sealed class OrgStructureRepository(OrgStructureDbContext dbContext) : IO
     public async Task AddOrgChangeLogAsync(OrgChangeLog entry, CancellationToken cancellationToken) =>
         await dbContext.OrgChangeLogs.AddAsync(entry, cancellationToken);
 
+    public async Task AddLinkTypeAsync(LinkType linkType, CancellationToken cancellationToken) => await dbContext.LinkTypes.AddAsync(linkType, cancellationToken);
+
+    public void RemoveLinkType(LinkType linkType) => dbContext.LinkTypes.Remove(linkType);
+
+    public async Task AddAutoLinkRuleAsync(AutoLinkRule rule, CancellationToken cancellationToken) => await dbContext.AutoLinkRules.AddAsync(rule, cancellationToken);
+
+    public void RemoveAutoLinkRule(AutoLinkRule rule) => dbContext.AutoLinkRules.Remove(rule);
+
+    public async Task AddOrgLinkAsync(OrgLink link, CancellationToken cancellationToken) => await dbContext.OrgLinks.AddAsync(link, cancellationToken);
+
+    public void RemoveOrgLink(OrgLink link) => dbContext.OrgLinks.Remove(link);
+
+    public async Task AddNodeTypePostTemplateAsync(NodeTypePostTemplate template, CancellationToken cancellationToken) =>
+        await dbContext.NodeTypePostTemplates.AddAsync(template, cancellationToken);
+
+    public async Task AddStructureTemplateAsync(StructureTemplate template, CancellationToken cancellationToken) =>
+        await dbContext.StructureTemplates.AddAsync(template, cancellationToken);
+
+    public void RemoveStructureTemplate(StructureTemplate template) => dbContext.StructureTemplates.Remove(template);
+
     public async Task<IReadOnlyList<Company>> ListCompaniesAsync(Guid tenantId, CancellationToken cancellationToken) =>
         await dbContext.Companies.Where(x => x.TenantId == tenantId).OrderBy(x => x.Name).ToListAsync(cancellationToken);
 

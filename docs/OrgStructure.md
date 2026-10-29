@@ -204,6 +204,55 @@ covered it, so nobody loses anything:
 | `org_structure.node.deactivate` | `organization_units.delete` |
 | `org_structure.node.assign` (a node's manager) | `organization_units.update` |
 | `org_structure.manage_rules` (types and rules) | - |
+| `org_structure.manage_templates` (saving and removing templates) | - |
+
+## Secondary links and templates (phase 4)
+
+A **secondary link** joins two nodes of the same company outside the tree (a committee to the board,
+internal audit to the audit committee). Its type has a line style (`solid`, `dotted`, `dashed`) and
+`countsAsManager`. A dotted line never counts as manager. A link that counts gives the people of the
+source node an **extra manager**: the target node's manager. Their main manager, the people under
+anyone, the task limit and the substitution inbox do not change. No counting link (the default):
+nothing changes at all.
+
+An **automatic rule** says that a new node of one type is linked to the one node of another type in
+its company. One target: linked when the node is made. Several: not linked; the new node comes back
+with `autoLinkChoices` for the user to pick (`POST /links`). None: nothing happens (the rule waits).
+Existing nodes are linked only through the preview: `POST /auto-link-rules/preview` lists what the
+rules would add, and `POST /auto-link-rules/apply` adds those (any link not in the current plan: 409).
+
+A **structure template** is a copy of a structure: node types, rules, link types, automatic rules,
+positions, the posts each node type gets, nodes and links, and the screen level. Three are built in
+(`simple`, `deputy`, `bank`, from `Nexus.OrgStructure/Templates`, with fixed ids). An organization
+can save any of its companies as its own template. `POST /companies` with `templateId` makes the
+company and adds the template's copy: a type, link type or position that already exists (same code,
+or same name/title) is reused. Rules are for the whole organization, so the template's rules are
+added to them. If the organization had none (flat), the places its nodes are in now become rules
+first, so no existing node becomes a mismatch. A template with nested nodes needs `AllowNesting`.
+Posts are not made from a template yet (the posts each type should get are saved). Later changes or
+removing the template do not touch companies made from it.
+
+| | |
+|---|---|
+| `GET/POST /link-types`, `PUT/DELETE /link-types/{id}` | `{ name, code?, lineStyle, countsAsManager }`; a type in use is not removed |
+| `GET/PUT /auto-link-rules` | `{ rules: [{ sourceNodeTypeId, targetNodeTypeId, linkTypeId }] }` |
+| `POST /auto-link-rules/preview`, `POST /auto-link-rules/apply` | `{ links: [] }` (one target each) and `ambiguous`; apply `{ links: [{ fromNodeId, toNodeId, linkTypeId }] }` |
+| `GET /links?nodeId=`, `POST /links`, `DELETE /links/{id}` | `{ fromNodeId, toNodeId, linkTypeId }`: same company, not to itself, not twice |
+| `PUT /companies/{id}/ui-level` | `{ uiLevel: "simple" / "normal" / "advanced" }` (only hides things in the screens) |
+| `GET /users/{userId}/extra-managers` | the managers someone has through links that count (their own, or with a read permission) |
+| `GET /templates`, `GET /templates/{id}` | the templates; one with its whole content |
+| `POST /templates`, `DELETE /templates/{id}` | `{ companyId, name, code?, description? }`; built-in ones are not removed |
+
+`/impact-preview` also takes `{ kind: "link", nodeId, toNodeId, linkTypeId }` and
+`{ kind: "unlink-link", linkId }`, and lists each person's `extraManagersAdded` / `extraManagersRemoved`.
+
+| Permission | for |
+|---|---|
+| `org_structure.node.view` | reading link types, rules, links, templates; the previews |
+| `org_structure.manage_rules` | link types, automatic rules, applying them |
+| `org_structure.node.update` | adding and removing links |
+| `org_structure.manage_companies` | the screen level; making a company (with or without a template) |
+| `org_structure.manage_templates` | saving and removing templates |
 
 ## Trying it: the Tejarat Bank host
 

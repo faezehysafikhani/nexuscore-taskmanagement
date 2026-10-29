@@ -13,7 +13,8 @@ namespace Nexus.OrgStructure.Application;
 /// One proposed change. Kind: "move" (NodeId under ParentNodeId, or to the top of CompanyId / its
 /// own company - as the move endpoint does it: a node put under another loses its company link),
 /// "add" (a new empty node: Name, ParentNodeId or CompanyId), "manager" (NodeId gets ManagerUserId;
-/// null: none) or "unlink" (NodeId loses its company link).
+/// null: none), "unlink" (NodeId loses its company link), "link" (a secondary link from NodeId to
+/// ToNodeId of LinkTypeId) or "unlink-link" (the secondary link LinkId goes).
 /// </summary>
 public sealed record ImpactChangeRequest(
     string Kind,
@@ -21,7 +22,10 @@ public sealed record ImpactChangeRequest(
     Guid? ParentNodeId = null,
     Guid? CompanyId = null,
     Guid? ManagerUserId = null,
-    string? Name = null);
+    string? Name = null,
+    Guid? ToNodeId = null,
+    Guid? LinkTypeId = null,
+    Guid? LinkId = null);
 
 /// <summary>The changes, applied together in this order.</summary>
 public sealed record ImpactPreviewRequest(IReadOnlyList<ImpactChangeRequest> Changes);
@@ -31,7 +35,8 @@ public sealed record ImpactPostDto(Guid PostId, string Title, string Code, strin
 /// <summary>
 /// What changes for one person: their manager; the people under them (at any depth); whom they may
 /// no longer / now give tasks to (with LimitTaskAssignment on); the vacant posts whose substitution
-/// inbox they see; whom they may add to their work teams. Only what changes is listed.
+/// inbox they see; whom they may add to their work teams; their extra managers (through links that
+/// count as manager). Only what changes is listed.
 /// </summary>
 public sealed record ImpactPersonDto(
     PersonRef Person,
@@ -45,7 +50,9 @@ public sealed record ImpactPersonDto(
     IReadOnlyList<ImpactPostDto> SubstitutionAdded,
     IReadOnlyList<ImpactPostDto> SubstitutionRemoved,
     IReadOnlyList<PersonRef> TeamAdded,
-    IReadOnlyList<PersonRef> TeamRemoved);
+    IReadOnlyList<PersonRef> TeamRemoved,
+    IReadOnlyList<PersonRef>? ExtraManagersAdded = null,
+    IReadOnlyList<PersonRef>? ExtraManagersRemoved = null);
 
 /// <summary>PeopleAffected: how many people have any change. TaskLimitOn: whether «cannot give tasks to» was compared (LimitTaskAssignment).</summary>
 public sealed record ImpactPreviewDto(int PeopleAffected, IReadOnlyList<ImpactPersonDto> People, bool TaskLimitOn);
@@ -103,6 +110,7 @@ public sealed class OrgImpactPreview(
             named.UnionWith(view.Subordinates.Values.SelectMany(ids => ids));
             named.UnionWith(view.Blocked.Values.SelectMany(ids => ids));
             named.UnionWith(view.Team.Values.OfType<HashSet<Guid>>().SelectMany(ids => ids));
+            named.UnionWith(view.ExtraManagers.Values.SelectMany(ids => ids));
         }
 
         var directory = (await users.GetUsersAsync(named.ToList(), cancellationToken)).ToDictionary(user => user.Id);
@@ -126,6 +134,8 @@ public sealed class OrgImpactPreview(
             var teamAfter = after.Team.GetValueOrDefault(person);
             var teamAdded = teamAfter is null || teamBefore is null ? [] : teamAfter.Except(teamBefore).ToList();
             var teamRemoved = teamAfter is null || teamBefore is null ? [] : teamBefore.Except(teamAfter).ToList();
+            var extraBefore = before.ExtraManagers.GetValueOrDefault(person) ?? [];
+            var extraAfter = after.ExtraManagers.GetValueOrDefault(person) ?? [];
 
             var dto = new ImpactPersonDto(
                 Ref(person),
@@ -139,10 +149,12 @@ public sealed class OrgImpactPreview(
                 postsAfter.Except(postsBefore).Select(id => after.Posts[id]).OrderBy(post => post.Title).ToList(),
                 postsBefore.Except(postsAfter).Select(id => before.Posts[id]).OrderBy(post => post.Title).ToList(),
                 Refs(teamAdded),
-                Refs(teamRemoved));
+                Refs(teamRemoved),
+                Refs(extraAfter.Except(extraBefore)),
+                Refs(extraBefore.Except(extraAfter)));
             if (dto.ManagerChanged || dto.SubordinatesAdded.Count + dto.SubordinatesRemoved.Count + dto.CannotAssignAdded.Count
                 + dto.CannotAssignRemoved.Count + dto.SubstitutionAdded.Count + dto.SubstitutionRemoved.Count
-                + dto.TeamAdded.Count + dto.TeamRemoved.Count > 0)
+                + dto.TeamAdded.Count + dto.TeamRemoved.Count + dto.ExtraManagersAdded!.Count + dto.ExtraManagersRemoved!.Count > 0)
             {
                 changed.Add(dto);
             }
@@ -237,8 +249,44 @@ public sealed class OrgImpactPreview(
                 overlay.Links[change.NodeId!.Value] = null;
                 return null;
 
+            case "link":
+                if (Known(change.NodeId, "گره‌ی مبدأ") is { } missingFrom)
+                {
+                    return missingFrom;
+                }
+
+                if (Known(change.ToNodeId, "گره‌ی مقصد") is { } missingTo)
+                {
+                    return missingTo;
+                }
+
+                if (change.NodeId == change.ToNodeId)
+                {
+                    return Error.Validation("گره را نمی‌شود به خودش وصل کرد.");
+                }
+
+                var linkTypes = await data.Structure(overlay).ListLinkTypesAsync(tenantId, cancellationToken);
+                if (change.LinkTypeId is not { } linkTypeId || !linkTypes.Any(type => type.Id == linkTypeId))
+                {
+                    return Error.NotFound("نوع رابطه پیدا نشد.");
+                }
+
+                overlay.AddedLinks.Add(new Domain.OrgLink(Guid.NewGuid(), tenantId, change.NodeId!.Value, change.ToNodeId!.Value, linkTypeId));
+                return null;
+
+            case "unlink-link":
+                var existing = await data.Structure(overlay).ListOrgLinksAsync(tenantId, cancellationToken);
+                if (change.LinkId is not { } linkId || existing.FirstOrDefault(link => link.Id == linkId) is not { } found
+                    || !Visible(found.FromUnitId))
+                {
+                    return Error.NotFound("رابطه پیدا نشد.");
+                }
+
+                overlay.RemovedLinks.Add(linkId);
+                return null;
+
             default:
-                return Error.Validation($"نوع تغییر «{change.Kind}» شناخته نیست (move، add، manager، unlink).");
+                return Error.Validation($"نوع تغییر «{change.Kind}» شناخته نیست (move، add، manager، unlink، link، unlink-link).");
         }
     }
 
@@ -248,7 +296,8 @@ public sealed class OrgImpactPreview(
         IReadOnlyDictionary<Guid, HashSet<Guid>> Blocked,
         IReadOnlyDictionary<Guid, HashSet<Guid>?> Team,
         IReadOnlyDictionary<Guid, HashSet<Guid>> Supervised,
-        IReadOnlyDictionary<Guid, ImpactPostDto> Posts);
+        IReadOnlyDictionary<Guid, ImpactPostDto> Posts,
+        IReadOnlyDictionary<Guid, HashSet<Guid>> ExtraManagers);
 
     /// <summary>Everything compared, for every person, as the structure is seen through the overlay.</summary>
     private async Task<View> ViewAsync(ImpactData data, StructureOverlay overlay, CancellationToken cancellationToken)
@@ -303,8 +352,20 @@ public sealed class OrgImpactPreview(
             }
         }
 
+        // Extra managers: only when some link counts as manager (none by default: nothing to compare).
+        var extra = new Dictionary<Guid, HashSet<Guid>>();
+        var (resolver, countingLinks) = await OrgNodeService.ResolverAsync(structure, unitView, tenantId, cancellationToken);
+        if (countingLinks.Count > 0)
+        {
+            foreach (var person in people)
+            {
+                extra[person] = resolver.ExtraManagersOf(person, countingLinks).ToHashSet();
+            }
+        }
+
         return new View(managers, subordinates, blocked, team, supervised,
-            vacant.ToDictionary(pair => pair.Key, pair => new ImpactPostDto(pair.Key, pair.Value.Post.Title, pair.Value.Post.Code, pair.Value.Post.Place)));
+            vacant.ToDictionary(pair => pair.Key, pair => new ImpactPostDto(pair.Key, pair.Value.Post.Title, pair.Value.Post.Code, pair.Value.Post.Place)),
+            extra);
     }
 
     /// <summary>No one signed in: nobody is let past a limit by their own permissions.</summary>

@@ -69,6 +69,7 @@ public static class PermissionPrerequisites
         ["org_structure.node.deactivate"] = new[] { "org_structure.node.view" },
         ["org_structure.node.assign"] = new[] { "org_structure.node.view", IdentityPermissions.UsersView },
         ["org_structure.manage_rules"] = new[] { "org_structure.node.view" },
+        ["org_structure.manage_templates"] = new[] { "org_structure.node.view" },
 
         // Actions/task management: create/edit/delete/submit require view permission
         ["Actions.Create"] = new[] { "Actions.View" },

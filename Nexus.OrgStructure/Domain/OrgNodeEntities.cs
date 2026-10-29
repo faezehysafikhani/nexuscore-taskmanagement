@@ -129,6 +129,14 @@ public sealed class LinkType : AuditableEntity<Guid>
     public string LineStyle { get; private set; }
 
     public bool IsActive { get; private set; }
+
+    public void Update(string name, bool countsAsManager, string lineStyle, bool isActive)
+    {
+        Name = name.Trim();
+        CountsAsManager = countsAsManager;
+        LineStyle = lineStyle.Trim();
+        IsActive = isActive;
+    }
 }
 
 /// <summary>A relation made automatically when a node of the source type is put under / next to one of the target type.</summary>
@@ -196,6 +204,14 @@ public sealed class StructureTemplate : AuditableEntity<Guid>
     public string Name { get; private set; }
     public string? Description { get; private set; }
     public bool IsSystem { get; private set; }
+
+    /// <summary>
+    /// The whole template as JSON, in the form of the built-in templates (Templates/structure-template.schema.json):
+    /// types, rules, links, positions, post patterns, nodes. Null for a template kept only as items.
+    /// </summary>
+    public string? Content { get; private set; }
+
+    public void SetContent(string? content) => Content = content;
 }
 
 /// <summary>One node of a template. ParentKey points at another item's Key of the same template (null: top).</summary>

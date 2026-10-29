@@ -89,6 +89,7 @@ public sealed class StructureTemplateConfiguration : IEntityTypeConfiguration<St
         builder.Property(x => x.Code).HasMaxLength(40).IsRequired();
         builder.Property(x => x.Name).HasMaxLength(120).IsRequired();
         builder.Property(x => x.Description).HasMaxLength(1000);
+        builder.Property(x => x.Content);
         builder.HasIndex(x => new { x.TenantId, x.Code }).IsUnique();
     }
 }

@@ -7,7 +7,8 @@ namespace Nexus.OrgStructure.Application.Dtos;
 /// <summary>
 /// A node (a unit: deputy, general department, committee...). ParentNodeId null: at the top, under
 /// its company (CompanyId, through its link) or under none. CompanyId: the company it belongs to,
-/// through itself or the nearest node above it that is linked to one.
+/// through itself or the nearest node above it that is linked to one. AutoLinkChoices (only right
+/// after it is made): automatic links with several possible targets, for the user to choose.
 /// </summary>
 public sealed record OrgNodeDto(
     Guid Id,
@@ -20,7 +21,8 @@ public sealed record OrgNodeDto(
     bool IsActive,
     int SortOrder,
     int ChildCount,
-    string RowVersion);
+    string RowVersion,
+    IReadOnlyList<AutoLinkChoiceDto>? AutoLinkChoices = null);
 
 /// <summary>ParentNodeId null: a top node, linked to CompanyId when given. NodeTypeId null: the plain «واحد» type.</summary>
 public sealed record CreateNodeRequest(string Name, Guid? ParentNodeId = null, Guid? CompanyId = null, Guid? NodeTypeId = null);
@@ -70,3 +72,47 @@ public sealed record RuleConflictDto(Guid NodeId, string NodeName, string? NodeT
 
 /// <summary>The rules and the nodes that do not match them. No rules at all: nodes stay at the top (flat).</summary>
 public sealed record NodeTypeRulesDto(IReadOnlyList<NodeTypeRuleDto> Rules, IReadOnlyList<RuleConflictDto> Conflicts);
+
+// ---------------------------------------------------------------- secondary links (phase 4)
+
+/// <summary>A kind of secondary link. LineStyle: solid, dotted or dashed. A dotted one never counts as manager.</summary>
+public sealed record LinkTypeDto(Guid Id, string Code, string Name, string LineStyle, bool CountsAsManager, bool IsActive, int LinkCount);
+
+public sealed record CreateLinkTypeRequest(string Name, string? Code = null, string LineStyle = "dotted", bool CountsAsManager = false);
+
+public sealed record UpdateLinkTypeRequest(string Name, string LineStyle, bool CountsAsManager, bool IsActive);
+
+/// <summary>A node of the source type, when made, is linked to the one node of the target type (in its company).</summary>
+public sealed record AutoLinkRuleDto(Guid SourceNodeTypeId, Guid TargetNodeTypeId, Guid LinkTypeId);
+
+public sealed record SetAutoLinkRulesRequest(IReadOnlyList<AutoLinkRuleDto> Rules);
+
+public sealed record OrgLinkDto(
+    Guid Id, Guid FromNodeId, string FromName, Guid ToNodeId, string ToName, Guid LinkTypeId, string LinkTypeName, string LineStyle, bool CountsAsManager);
+
+public sealed record CreateLinkRequest(Guid FromNodeId, Guid ToNodeId, Guid LinkTypeId);
+
+/// <summary>An automatic link with several possible targets: the user picks one (POST /links).</summary>
+public sealed record AutoLinkChoiceDto(Guid NodeId, string NodeName, Guid LinkTypeId, string LinkTypeName, IReadOnlyList<NodePathItemDto> Targets);
+
+public sealed record ProposedLinkDto(Guid FromNodeId, string FromName, Guid ToNodeId, string ToName, Guid LinkTypeId, string LinkTypeName);
+
+/// <summary>What the automatic rules would add to the existing nodes: Links (one target each) and Ambiguous (several targets: not added).</summary>
+public sealed record AutoLinkPlanDto(IReadOnlyList<ProposedLinkDto> Links, IReadOnlyList<AutoLinkChoiceDto> Ambiguous);
+
+/// <summary>The links of a plan to add (each must still be in the plan).</summary>
+public sealed record ApplyAutoLinksRequest(IReadOnlyList<CreateLinkRequest> Links);
+
+/// <summary>simple, normal or advanced.</summary>
+public sealed record SetUiLevelRequest(string UiLevel);
+
+// ---------------------------------------------------------------- templates (phase 4)
+
+/// <summary>A structure template: built in (IsSystem, from the product) or saved from a company of this organization.</summary>
+public sealed record StructureTemplateDto(Guid Id, string Code, string Name, string? Description, bool IsSystem, string UiLevel, int NodeCount, int NodeTypeCount);
+
+/// <summary>The template and its whole content (types, rules, positions, nodes...), as JSON.</summary>
+public sealed record StructureTemplateDetailDto(StructureTemplateDto Template, System.Text.Json.JsonElement Content);
+
+/// <summary>Saves a company's structure as a template of this organization (a copy).</summary>
+public sealed record SaveStructureTemplateRequest(Guid CompanyId, string Name, string? Code = null, string? Description = null);

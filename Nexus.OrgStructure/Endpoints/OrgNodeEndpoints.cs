@@ -91,6 +91,76 @@ public static class OrgNodeEndpoints
                 InTenant(user, tenant => service.SetRulesAsync(tenant, request, ct)))
             .RequireAuthorization(OrgStructurePermissions.ManageRules);
 
+        // --- secondary links (phase 4): their types, the automatic rules and the links themselves
+        group.MapGet("/link-types", (ICurrentUserContext user, IOrgLinkService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.ListLinkTypesAsync(tenant, ct)))
+            .RequireAuthorization(OrgStructurePermissions.NodeView);
+
+        group.MapPost("/link-types", (CreateLinkTypeRequest request, ICurrentUserContext user, IOrgLinkService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.CreateLinkTypeAsync(tenant, request, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ManageRules);
+
+        group.MapPut("/link-types/{id:guid}", (Guid id, UpdateLinkTypeRequest request, ICurrentUserContext user, IOrgLinkService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.UpdateLinkTypeAsync(tenant, id, request, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ManageRules);
+
+        group.MapDelete("/link-types/{id:guid}", (Guid id, ICurrentUserContext user, IOrgLinkService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.DeleteLinkTypeAsync(tenant, id, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ManageRules);
+
+        group.MapGet("/auto-link-rules", (ICurrentUserContext user, IOrgLinkService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.ListAutoLinkRulesAsync(tenant, ct)))
+            .RequireAuthorization(OrgStructurePermissions.NodeView);
+
+        group.MapPut("/auto-link-rules", (SetAutoLinkRulesRequest request, ICurrentUserContext user, IOrgLinkService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.SetAutoLinkRulesAsync(tenant, request, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ManageRules);
+
+        group.MapPost("/auto-link-rules/preview", (ICurrentUserContext user, IOrgLinkService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.PlanAutoLinksAsync(tenant, ct)))
+            .RequireAuthorization(OrgStructurePermissions.NodeView);
+
+        group.MapPost("/auto-link-rules/apply", (ApplyAutoLinksRequest request, ICurrentUserContext user, IOrgLinkService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.ApplyAutoLinksAsync(tenant, request, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ManageRules);
+
+        group.MapGet("/links", (Guid? nodeId, ICurrentUserContext user, IOrgLinkService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.ListLinksAsync(tenant, nodeId, ct)))
+            .RequireAuthorization(OrgStructurePermissions.NodeView);
+
+        group.MapPost("/links", (CreateLinkRequest request, ICurrentUserContext user, IOrgLinkService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.CreateLinkAsync(tenant, request, ct)))
+            .RequireAuthorization(OrgStructurePermissions.NodeUpdate);
+
+        group.MapDelete("/links/{id:guid}", (Guid id, ICurrentUserContext user, IOrgLinkService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.DeleteLinkAsync(tenant, id, ct)))
+            .RequireAuthorization(OrgStructurePermissions.NodeUpdate);
+
+        group.MapPut("/companies/{id:guid}/ui-level", (Guid id, SetUiLevelRequest request, ICurrentUserContext user, IOrgLinkService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.SetCompanyUiLevelAsync(tenant, id, request, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ManageCompanies);
+
+        // A user's extra managers (through links that count as manager): their own, or anyone's with a read permission.
+        group.MapGet("/users/{userId:guid}/extra-managers", (Guid userId, ICurrentUserContext user, IOrgLinkService service, CancellationToken ct) =>
+                SelfOrReader(user, userId) ?? InTenant(user, tenant => service.GetExtraManagersAsync(tenant, userId, ct)));
+
+        // --- structure templates: the built-in ones and those saved from a company (a company is made from one with POST /api/org-structure/companies and templateId)
+        group.MapGet("/templates", (ICurrentUserContext user, IOrgTemplateService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.ListTemplatesAsync(tenant, ct)))
+            .RequireAuthorization(OrgStructurePermissions.NodeView);
+
+        group.MapGet("/templates/{id:guid}", (Guid id, ICurrentUserContext user, IOrgTemplateService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.GetTemplateAsync(tenant, id, ct)))
+            .RequireAuthorization(OrgStructurePermissions.NodeView);
+
+        group.MapPost("/templates", (SaveStructureTemplateRequest request, ICurrentUserContext user, IOrgTemplateService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.SaveCompanyAsTemplateAsync(tenant, request, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ManageTemplates);
+
+        group.MapDelete("/templates/{id:guid}", (Guid id, ICurrentUserContext user, IOrgTemplateService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.DeleteTemplateAsync(tenant, id, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ManageTemplates);
+
         // --- what a structure change would do, before it is made (nothing is saved)
         group.MapPost("/impact-preview", (ImpactPreviewRequest request, ICurrentUserContext user, IOrgImpactPreview service, CancellationToken ct) =>
                 InTenant(user, tenant => service.PreviewAsync(tenant, request, ct)))
@@ -104,4 +174,10 @@ public static class OrgNodeEndpoints
 
     private static async Task<IResult> InTenant(ICurrentUserContext user, Func<Guid, Task<Result>> action) =>
         user.TenantId is { } tenant ? (await action(tenant)).ToApiResult() : Results.Unauthorized();
+
+    /// <summary>Null when the caller may read this user's place: it is themselves, or they hold a read permission.</summary>
+    private static Task<IResult>? SelfOrReader(ICurrentUserContext user, Guid userId) =>
+        user.UserId == userId || OrgStructurePermissions.All.Any(p => user.HasPermission(p.Name))
+            ? null
+            : Task.FromResult(Results.Forbid());
 }

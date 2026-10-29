@@ -47,6 +47,9 @@ public static class OrgStructurePermissions
     /// <summary>Node types (colour, icon, «the same deputy») and what may sit under what.</summary>
     public const string ManageRules = "org_structure.manage_rules";
 
+    /// <summary>Saving a company's structure as a template, and removing saved templates.</summary>
+    public const string ManageTemplates = "org_structure.manage_templates";
+
     /// <summary>
     /// Who passes each node policy: its own permission, or the older one that already allowed the
     /// same thing (units were made, changed and deactivated with organization_units.*, put in a
@@ -61,6 +64,7 @@ public static class OrgStructurePermissions
         [NodeDeactivate] = [NodeDeactivate, "organization_units.delete"],
         [NodeAssign] = [NodeAssign, "organization_units.update"],
         [ManageRules] = [ManageRules],
+        [ManageTemplates] = [ManageTemplates],
     };
 
     /// <summary>
@@ -96,7 +100,8 @@ public static class OrgStructurePermissions
         new(NodeMove, "Organization", "جابه‌جایی گره‌ها و ترتیب آن‌ها در ساختار سازمانی"),
         new(NodeDeactivate, "Organization", "غیرفعال و فعال کردن گره‌های ساختار سازمانی"),
         new(NodeAssign, "Organization", "تعیین مدیر گره‌های ساختار سازمانی"),
-        new(ManageRules, "Organization", "مدیریت نوع گره‌ها و قاعده‌ی «چه زیر چه»")
+        new(ManageRules, "Organization", "مدیریت نوع گره‌ها و قاعده‌ی «چه زیر چه»"),
+        new(ManageTemplates, "Organization", "ذخیره‌ی ساختار شرکت به‌عنوان قالب و حذف قالب‌های ذخیره‌شده")
     ];
 
     /// <summary>Permissions about work teams that only mean something with the organization structure.</summary>

@@ -20,7 +20,10 @@ public static class DependencyInjection
         services.AddScoped<IOrgGraphProvider, OrgGraphProvider>();
         services.AddScoped<IOrgStructureService, OrgStructureService>();
         // The dynamic structure's nodes, types and rules, and the impact preview of a change.
-        services.AddScoped<IOrgNodeService, OrgNodeService>();
+        services.AddScoped<OrgNodeService>();
+        services.AddScoped<IOrgNodeService>(sp => sp.GetRequiredService<OrgNodeService>());
+        services.AddScoped<IOrgLinkService>(sp => sp.GetRequiredService<OrgNodeService>());
+        services.AddScoped<IOrgTemplateService>(sp => sp.GetRequiredService<OrgNodeService>());
         services.AddScoped<IOrgImpactPreview, OrgImpactPreview>();
         services.AddScoped<IHonorificService, HonorificService>();
         services.AddSingleton<IPermissionCatalog, OrgStructurePermissionCatalog>();

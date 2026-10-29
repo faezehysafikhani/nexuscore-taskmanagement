@@ -20,7 +20,7 @@ namespace Nexus.CompositionTests;
 /// loops, the company, versions, deactivation, search, path, order), node types and rules, the
 /// chart's new fields, the separate permissions and the impact preview.
 /// </summary>
-public sealed class OrgNodeApiTests
+public sealed partial class OrgNodeApiTests
 {
     private static readonly Guid Tenant = Guid.NewGuid();
 
@@ -320,8 +320,8 @@ public sealed class OrgNodeApiTests
             _organization = new OrganizationDbContext(new DbContextOptionsBuilder<OrganizationDbContext>().UseInMemoryDatabase("org-" + name).Options);
             _structure = new OrgStructureDbContext(new DbContextOptionsBuilder<OrgStructureDbContext>().UseInMemoryDatabase("orgs-" + name).Options);
             Repo = new OrgStructureRepository(_structure);
-            Service = new OrgStructureService(Repo, _structure, new OrganizationUnitRepository(_organization), _users, new NoTeams());
             Nodes = NodesAs(null);
+            Service = new OrgStructureService(Repo, _structure, new OrganizationUnitRepository(_organization), _users, new NoTeams(), templates: (IOrgTemplateService)Nodes);
             Preview = new OrgImpactPreview(Repo, new OrganizationUnitRepository(_organization), _users, new NoTeams(), Options());
             // As upgrade-10 leaves every organization: the «company» and plain «unit» types, no rules.
             _structure.NodeTypes.Add(new Nexus.OrgStructure.Domain.NodeType(Guid.NewGuid(), Tenant, "company", "شرکت", true, 0));
@@ -334,6 +334,8 @@ public sealed class OrgNodeApiTests
         public OrgStructureRepository Repo { get; }
         public IOrgStructureService Service { get; }
         public IOrgNodeService Nodes { get; }
+        public IOrgLinkService Links => (IOrgLinkService)Nodes;
+        public IOrgTemplateService Templates => (IOrgTemplateService)Nodes;
         public IOrgImpactPreview Preview { get; }
         public Guid PlainType { get; }
         public Guid Company { get; private set; }

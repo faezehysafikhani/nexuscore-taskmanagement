@@ -4,7 +4,7 @@
 قالب‌ها با `structure-template.schema.json` توصیف شده‌اند. این فایل‌ها داخل اسمبلی
 `Nexus.OrgStructure` جاسازی می‌شوند (با نام `Nexus.OrgStructure.Templates.<key>.json`) و هیچ
 فایلی به میزبان یا بسته کپی نمی‌شود. تست `StructureTemplateFileTests` درستی و سازگاری داخلی
-هر سه را بررسی می‌کند. خواندن آن‌ها و ساخت شرکت از قالب در فاز ۴ انجام می‌شود.
+هر سه را بررسی می‌کند. از فاز ۴ با `GET /api/org-structure/templates` فهرست می‌شوند و شرکت با `templateId` از آن‌ها ساخته می‌شود.
 
 ## اجزای هر قالب
 

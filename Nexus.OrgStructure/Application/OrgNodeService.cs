@@ -220,13 +220,22 @@ public sealed partial class OrgNodeService(
             await repository.AddCompanyUnitAsync(new CompanyUnit(Guid.NewGuid(), tenantId, linkTo, unit.Id), cancellationToken);
         }
 
-        await LogAsync(tenantId, "Node", unit.Id, "create", new { name, parent = request.ParentNodeId, company = companyId, type = typeId }, cancellationToken);
+        // Its automatic links: one target, linked now; several, left for the user to choose.
+        var nodeCompany = request.ParentNodeId is { } under ? state.Graph.CompanyOfUnit(under) : companyId;
+        var (autoLinks, choices) = AutoLinksFor(state, unit, nodeCompany);
+        foreach (var link in autoLinks)
+        {
+            await repository.AddOrgLinkAsync(new OrgLink(Guid.NewGuid(), tenantId, unit.Id, link.ToNodeId, link.LinkTypeId), cancellationToken);
+        }
+
+        await LogAsync(tenantId, "Node", unit.Id, "create", new { name, parent = request.ParentNodeId, company = companyId, type = typeId, autoLinks = autoLinks.Select(l => l.ToNodeId) }, cancellationToken);
         if (!await turn.SaveAsync(unitOfWork, unitsUnitOfWork, cancellationToken))
         {
             return Result.Failure<OrgNodeDto>(ChangedMeanwhile());
         }
 
-        return await GetNodeAsync(tenantId, unit.Id, cancellationToken);
+        var created = await GetNodeAsync(tenantId, unit.Id, cancellationToken);
+        return created.IsSuccess && choices.Count > 0 ? Result.Success(created.Value! with { AutoLinkChoices = choices }) : created;
     }
 
     public Task<Result<OrgNodeDto>> UpdateNodeAsync(Guid tenantId, Guid id, UpdateNodeRequest request, CancellationToken cancellationToken) =>
@@ -868,7 +877,10 @@ public sealed partial class OrgNodeService(
             seats,
             holdings,
             await repository.ListAssignmentsAsync(tenantId, cancellationToken),
-            OrgGraph.Build(unitList, nodeTypes, links, seats, holdings));
+            OrgGraph.Build(unitList, nodeTypes, links, seats, holdings),
+            (await repository.ListLinkTypesAsync(tenantId, cancellationToken)).ToDictionary(type => type.Id),
+            await repository.ListAutoLinkRulesAsync(tenantId, cancellationToken),
+            await repository.ListOrgLinksAsync(tenantId, cancellationToken));
     }
 
     /// <summary>One organization's nodes and what hangs on them, read in one go for a request.</summary>
@@ -881,5 +893,8 @@ public sealed partial class OrgNodeService(
         IReadOnlyList<UnitPosition> Seats,
         IReadOnlyList<UserPosition> Holdings,
         IReadOnlyList<UserAssignment> Assignments,
-        OrgGraph Graph);
+        OrgGraph Graph,
+        IReadOnlyDictionary<Guid, LinkType> LinkTypes,
+        IReadOnlyList<AutoLinkRule> AutoLinkRules,
+        IReadOnlyList<OrgLink> OrgLinks);
 }

@@ -18,6 +18,10 @@ public sealed class StructureOverlay
     public Dictionary<Guid, Guid?> Links { get; } = [];
 
     public List<OrganizationUnit> NewUnits { get; } = [];
+
+    /// <summary>Secondary links added and removed (by id).</summary>
+    public List<OrgLink> AddedLinks { get; } = [];
+    public HashSet<Guid> RemovedLinks { get; } = [];
 }
 
 /// <summary>
@@ -90,7 +94,8 @@ public sealed class ImpactData(IOrgStructureRepository real, IOrganizationUnitRe
         public Task<IReadOnlyList<NodeTypePostTemplate>> ListNodeTypePostTemplatesAsync(Guid t, CancellationToken ct) => R("postTemplates", () => real.ListNodeTypePostTemplatesAsync(t, ct));
         public Task<IReadOnlyList<LinkType>> ListLinkTypesAsync(Guid t, CancellationToken ct) => R("linkTypes", () => real.ListLinkTypesAsync(t, ct));
         public Task<IReadOnlyList<AutoLinkRule>> ListAutoLinkRulesAsync(Guid t, CancellationToken ct) => R("autoLinks", () => real.ListAutoLinkRulesAsync(t, ct));
-        public Task<IReadOnlyList<OrgLink>> ListOrgLinksAsync(Guid t, CancellationToken ct) => R("orgLinks", () => real.ListOrgLinksAsync(t, ct));
+        public async Task<IReadOnlyList<OrgLink>> ListOrgLinksAsync(Guid t, CancellationToken ct) =>
+            (await R("orgLinks", () => real.ListOrgLinksAsync(t, ct))).Where(link => !overlay.RemovedLinks.Contains(link.Id)).Concat(overlay.AddedLinks).ToList();
         public Task<IReadOnlyList<StructureTemplate>> ListStructureTemplatesAsync(Guid t, CancellationToken ct) => real.ListStructureTemplatesAsync(t, ct);
         public Task<IReadOnlyList<StructureTemplateItem>> ListStructureTemplateItemsAsync(Guid t, Guid? templateId, CancellationToken ct) => real.ListStructureTemplateItemsAsync(t, templateId, ct);
         public Task<IReadOnlyList<OrgChangeLog>> ListOrgChangeLogsAsync(Guid t, Guid? entityId, int take, CancellationToken ct) => real.ListOrgChangeLogsAsync(t, entityId, take, ct);
@@ -141,6 +146,15 @@ public sealed class ImpactData(IOrgStructureRepository real, IOrganizationUnitRe
         public Task AddNodeTypeRuleAsync(NodeTypeRule rule, CancellationToken ct) => throw ReadOnly();
         public void RemoveNodeTypeRule(NodeTypeRule rule) => throw ReadOnly();
         public Task AddOrgChangeLogAsync(OrgChangeLog entry, CancellationToken ct) => throw ReadOnly();
+        public Task AddLinkTypeAsync(LinkType linkType, CancellationToken ct) => throw ReadOnly();
+        public void RemoveLinkType(LinkType linkType) => throw ReadOnly();
+        public Task AddAutoLinkRuleAsync(AutoLinkRule rule, CancellationToken ct) => throw ReadOnly();
+        public void RemoveAutoLinkRule(AutoLinkRule rule) => throw ReadOnly();
+        public Task AddOrgLinkAsync(OrgLink link, CancellationToken ct) => throw ReadOnly();
+        public void RemoveOrgLink(OrgLink link) => throw ReadOnly();
+        public Task AddNodeTypePostTemplateAsync(NodeTypePostTemplate template, CancellationToken ct) => throw ReadOnly();
+        public Task AddStructureTemplateAsync(StructureTemplate template, CancellationToken ct) => throw ReadOnly();
+        public void RemoveStructureTemplate(StructureTemplate template) => throw ReadOnly();
         public Task AddCompanyAsync(Company company, CancellationToken ct) => throw ReadOnly();
         public void RemoveCompany(Company company) => throw ReadOnly();
         public Task AddCompanyUnitAsync(CompanyUnit link, CancellationToken ct) => throw ReadOnly();
