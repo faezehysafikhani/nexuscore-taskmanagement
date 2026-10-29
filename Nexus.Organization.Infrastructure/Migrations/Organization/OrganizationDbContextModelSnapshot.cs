@@ -50,10 +50,32 @@ namespace Nexus.Organization.Infrastructure.Migrations.Organization
                         .HasMaxLength(160)
                         .HasColumnType("nvarchar(160)");
 
+                    b.Property<Guid?>("NodeTypeId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("ParentUnitId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<DateTimeOffset?>("ValidFrom")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset?>("ValidTo")
+                        .HasColumnType("datetimeoffset");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("NodeTypeId");
+
+                    b.HasIndex("ParentUnitId");
 
                     b.ToTable("OrganizationUnits", "organization");
                 });

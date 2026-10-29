@@ -28,6 +28,7 @@
 - `1.3b` — در `docs/OrgStructure.md` سه مفهوم جدا شد: مرز سازمان مالک (شرکت)، ریشه‌ی ضمنی ساختار، و مرز هم‌معاونت (`IsDomainBoundary`).
 - `1.4` — مصرف‌کننده‌ها به `OrgGraph` وصل شدند: `HierarchyWorkAssignmentScope` (منطق سطح/رتبه/هم‌معاونت به کلاس قابل‌تست `WorkAssignmentLevels` رفت)، `SubstitutionService`، snapshot در `OrgStructureService` و `DeputyWorkTeamMemberScope` (هم‌معاونت با `DomainOf`). دیگر هیچ `new UnitNode(..., null, ...)` جدا نمانده؛ `TaskPostDirectory` و `CompanyReachScope` دست‌نخورده. تست‌های طلایی روی داده‌ی مسطح بدون تغییر پاس‌اند.
 - `1.5` — رئیس شرکت با `IsCompanyHead` (هر دو ملاک: علامت یا پست بدون مافوق، در یک نقطه `CompanyHeadPost`؛ پست تازه‌ی سمت بدون مافوق علامت می‌خورد) و مدیر گره: `ManagerUserId` می‌ماند و فقط وقتی خالی بود دارنده‌ی پست `IsManagerPost` مدیر است (در `OrgGraph.Build`، پس چارت و همه‌ی مصرف‌کننده‌ها یک‌جور می‌بینند). تست‌های طلایی یک اشکال در همین مسیر را هنگام کار گرفتند و اصلاح شد.
+- `1.2` (core) — دو migration: `AddUnitNodeFields` (ستون‌های واحد در `organization.OrganizationUnits`، نام جدول همان) و `AddOrgNodes` (ستون‌های شرکت/پست، جدول‌های جدید و پر کردن داده: انواع «شرکت» و «واحد» برای هر سازمان، واحدهای فعلی = «واحد» بدون والد، علامت رئیس روی پست رئیس هر شرکت). اسکریپت SQL در ریپوی میزبان است. **اجرا روی SQL Server هنوز راستی‌آزمایی نشده.**
 - فازهای بعدی: طبق پلن؛ این بخش بعد از هر فاز به‌روز می‌شود.
 
 ## تست‌های پایه
