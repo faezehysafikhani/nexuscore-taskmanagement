@@ -10,14 +10,21 @@ public sealed record CompanyDto(
     string? Description,
     PersonRef? Manager,
     bool IsActive,
-    IReadOnlyList<Guid> LinkedUnitIds);
+    IReadOnlyList<Guid> LinkedUnitIds,
+    Guid? ParentCompanyId = null);
 
 /// <summary>
 /// The head is not chosen here: see <see cref="PositionDto"/>. TemplateId (optional): a structure
 /// template (GET /api/org-structure/templates) whose types, rules, positions, nodes and links the
 /// new company gets a copy of.
 /// </summary>
-public sealed record CreateCompanyRequest(string Name, string Code, string? Description, Guid? TemplateId = null);
+public sealed record CreateCompanyRequest(string Name, string Code, string? Description, Guid? TemplateId = null, Guid? ParentCompanyId = null);
+
+/// <summary>The company's parent in a group (holding); null: a company of its own.</summary>
+public sealed record SetParentCompanyRequest(Guid? ParentCompanyId);
+
+/// <summary>A company and the companies under it in its group, at any depth.</summary>
+public sealed record CompanyGroupDto(Guid Id, string Name, string Code, bool IsActive, IReadOnlyList<CompanyGroupDto> Children);
 
 public sealed record UpdateCompanyRequest(string Name, string Code, string? Description, bool IsActive);
 

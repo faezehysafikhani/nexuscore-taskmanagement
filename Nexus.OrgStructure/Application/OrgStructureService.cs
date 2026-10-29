@@ -104,6 +104,16 @@ public sealed partial class OrgStructureService(
 
         // No head yet: whoever is given the company's position with no superior becomes it.
         var company = new Company(Guid.NewGuid(), tenantId, request.Name, request.Code, request.Description, managerUserId: null);
+        if (request.ParentCompanyId is { } parentCompanyId)
+        {
+            if (await repository.GetCompanyAsync(tenantId, parentCompanyId, cancellationToken) is null)
+            {
+                return Result.Failure<CompanyDto>(Error.Validation("شرکت مادر پیدا نشد."));
+            }
+
+            company.SetGroup(parentCompanyId, company.TemplateId);
+        }
+
         if (request.TemplateId is { } templateId)
         {
             if (templates is null)
@@ -1499,7 +1509,8 @@ public sealed partial class OrgStructureService(
         company.Description,
         company.ManagerUserId is { } m ? Person(m, people) : null,
         company.IsActive,
-        links.Where(link => link.CompanyId == company.Id).Select(link => link.UnitId).ToList());
+        links.Where(link => link.CompanyId == company.Id).Select(link => link.UnitId).ToList(),
+        company.ParentCompanyId);
 
     private static CompanyUnitDto ToDto(CompanyUnit link, Snapshot snapshot) => new(
         link.UnitId,

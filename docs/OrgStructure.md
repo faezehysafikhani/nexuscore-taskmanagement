@@ -279,6 +279,13 @@ its name), a phone and an address: `PUT /nodes/{id}/details { code, latinName, c
 phone, address, rowVersion }` (each empty: none). They are optional and empty for every existing
 node; `POST /nodes` also takes `code`. A node does not move to a company that already has its code.
 
+## Company groups (phase 6.3)
+
+A company may sit under a parent company (a holding): `POST /companies` takes `parentCompanyId`, and
+`PUT /companies/{id}/parent { parentCompanyId }` (null: none; a loop is refused, 409) changes it.
+`GET /company-groups` gives the companies as a tree. It is only a grouping: who sees which company,
+managers and everything else stay as they were, and a company with no parent is as before.
+
 `/impact-preview` also takes `{ kind: "link", nodeId, toNodeId, linkTypeId }` and
 `{ kind: "unlink-link", linkId }`, and lists each person's `extraManagersAdded` / `extraManagersRemoved`.
 

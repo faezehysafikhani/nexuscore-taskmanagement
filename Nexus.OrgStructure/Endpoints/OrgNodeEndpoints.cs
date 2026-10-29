@@ -191,6 +191,15 @@ public static class OrgNodeEndpoints
                 ImportAsync(http, user, (tenant, target, rows) => service.CommitAsync(tenant, target, rows, ct), ct))
             .RequireAuthorization(OrgStructurePermissions.NodeCreate);
 
+        // --- company groups (phase 6.3)
+        group.MapPut("/companies/{id:guid}/parent", (Guid id, SetParentCompanyRequest request, ICurrentUserContext user, IOrgCompanyGroupService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.SetParentCompanyAsync(tenant, id, request, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ManageCompanies);
+
+        group.MapGet("/company-groups", (ICurrentUserContext user, IOrgCompanyGroupService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.GetCompanyGroupsAsync(tenant, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ReadPolicy);
+
         // --- what a structure change would do, before it is made (nothing is saved)
         group.MapPost("/impact-preview", (ImpactPreviewRequest request, ICurrentUserContext user, IOrgImpactPreview service, CancellationToken ct) =>
                 InTenant(user, tenant => service.PreviewAsync(tenant, request, ct)))
