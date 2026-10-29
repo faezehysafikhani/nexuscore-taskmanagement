@@ -962,11 +962,17 @@ namespace Nexus.OrgStructure.Infrastructure.Migrations.OrgStructure
                     b.Property<Guid?>("CreatedByUserId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<DateTimeOffset?>("EndDate")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<DateTimeOffset?>("ModifiedAtUtc")
                         .HasColumnType("datetimeoffset");
 
                     b.Property<Guid?>("ModifiedByUserId")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("StartDate")
+                        .HasColumnType("datetimeoffset");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uniqueidentifier");
@@ -982,7 +988,8 @@ namespace Nexus.OrgStructure.Infrastructure.Migrations.OrgStructure
                     b.HasIndex("UserId");
 
                     b.HasIndex("TenantId", "UnitPositionId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[EndDate] IS NULL");
 
                     b.ToTable("UserPositions", "org_structure");
                 });

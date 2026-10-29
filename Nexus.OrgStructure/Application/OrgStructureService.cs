@@ -59,7 +59,8 @@ public sealed partial class OrgStructureService(
     TaskPostDirectory? taskPosts = null,
     CompanyReachScope? companyReach = null,
     ICurrentUserContext? currentUser = null,
-    IOrgTemplateService? templates = null) : IOrgStructureService
+    IOrgTemplateService? templates = null,
+    TimeProvider? clock = null) : IOrgStructureService
 {
     private const int MaxNameLength = 200;
     private const int MaxTitleLength = 120;
@@ -978,6 +979,13 @@ public sealed partial class OrgStructureService(
             if (seats.Any(seat => !held.Contains(seat.Id) && snapshot.HolderOf(seat.Id) is not null))
             {
                 return Result.Failure<UserAssignmentDto>(Error.Conflict("Someone already holds this post. Free it first."));
+            }
+
+            // Nor a post someone is already appointed to from a later day.
+            var newSeats = seats.Where(seat => !held.Contains(seat.Id)).Select(seat => seat.Id).ToHashSet();
+            if (newSeats.Count > 0 && (await UpcomingAppointmentsAsync(tenantId, cancellationToken)).Any(a => newSeats.Contains(a.UnitPositionId)))
+            {
+                return Result.Failure<UserAssignmentDto>(Error.Conflict("این پست برای کس دیگری از تاریخی بعد انتصاب دارد."));
             }
         }
 

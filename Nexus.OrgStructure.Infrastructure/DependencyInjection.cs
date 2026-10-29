@@ -27,6 +27,7 @@ public static class DependencyInjection
         // One structure change at a time per organization (on SQL Server across every server).
         services.AddScoped<IOrgStructureWriteLock, SqlOrgStructureWriteLock>();
         services.AddHostedService<TaskPostsStartup>();
+        services.AddHostedService<AppointmentActivationService>();
 
         return services;
     }

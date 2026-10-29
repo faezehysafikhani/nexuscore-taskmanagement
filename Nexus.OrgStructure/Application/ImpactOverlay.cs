@@ -175,6 +175,7 @@ public sealed class ImpactData(IOrgStructureRepository real, IOrganizationUnitRe
                 }).ToList();
         }
         public Task<IReadOnlyList<UserPosition>> ListUserPositionsAsync(Guid t, CancellationToken ct) => R("holdings", () => real.ListUserPositionsAsync(t, ct));
+        public Task<IReadOnlyList<UserPosition>> ListUserPositionHistoryAsync(Guid t, Guid? userId, Guid? unitPositionId, CancellationToken ct) => real.ListUserPositionHistoryAsync(t, userId, unitPositionId, ct);
         public Task<IReadOnlyList<Honorific>> ListHonorificsAsync(Guid t, CancellationToken ct) => real.ListHonorificsAsync(t, ct);
         public Task<Honorific?> GetHonorificAsync(Guid t, Guid id, CancellationToken ct) => real.GetHonorificAsync(t, id, ct);
         public Task<bool> HonorificTitleExistsAsync(Guid t, string title, Guid? excludeId, CancellationToken ct) => real.HonorificTitleExistsAsync(t, title, excludeId, ct);

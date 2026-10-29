@@ -4,7 +4,7 @@ using Nexus.OrgStructure.Domain;
 
 namespace Nexus.OrgStructure.Infrastructure;
 
-public sealed class OrgStructureRepository(OrgStructureDbContext dbContext) : IOrgStructureRepository
+public sealed class OrgStructureRepository(OrgStructureDbContext dbContext, TimeProvider? clock = null) : IOrgStructureRepository
 {
     public async Task<IReadOnlyList<NodeType>> ListNodeTypesAsync(Guid tenantId, CancellationToken cancellationToken) =>
         await dbContext.NodeTypes.Where(x => x.TenantId == tenantId).OrderBy(x => x.SortOrder).ThenBy(x => x.Name).ToListAsync(cancellationToken);
@@ -206,13 +206,45 @@ public sealed class OrgStructureRepository(OrgStructureDbContext dbContext) : IO
 
     public void RemoveUnitPosition(UnitPosition unitPosition) => dbContext.UnitPositions.Remove(unitPosition);
 
-    public async Task<IReadOnlyList<UserPosition>> ListUserPositionsAsync(Guid tenantId, CancellationToken cancellationToken) =>
-        await dbContext.UserPositions.Where(x => x.TenantId == tenantId).ToListAsync(cancellationToken);
+    private DateTimeOffset Now => (clock ?? TimeProvider.System).GetUtcNow();
 
-    public async Task AddUserPositionAsync(UserPosition userPosition, CancellationToken cancellationToken) =>
+    /// <summary>The appointments on now (started, not ended): what every reader of «who holds which post» sees.</summary>
+    public async Task<IReadOnlyList<UserPosition>> ListUserPositionsAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        var now = Now;
+        return await dbContext.UserPositions
+            .Where(x => x.TenantId == tenantId && (x.StartDate == null || x.StartDate <= now) && (x.EndDate == null || x.EndDate > now))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<UserPosition>> ListUserPositionHistoryAsync(Guid tenantId, Guid? userId, Guid? unitPositionId, CancellationToken cancellationToken) =>
+        await dbContext.UserPositions
+            .Where(x => x.TenantId == tenantId && (userId == null || x.UserId == userId) && (unitPositionId == null || x.UnitPositionId == unitPositionId))
+            .ToListAsync(cancellationToken);
+
+    public async Task AddUserPositionAsync(UserPosition userPosition, CancellationToken cancellationToken)
+    {
+        userPosition.StartOn(Now);
         await dbContext.UserPositions.AddAsync(userPosition, cancellationToken);
+    }
 
-    public void RemoveUserPosition(UserPosition userPosition) => dbContext.UserPositions.Remove(userPosition);
+    /// <summary>
+    /// Ends the appointment now: it stays as history. One that has not started yet never was, so it goes.
+    /// </summary>
+    public void RemoveUserPosition(UserPosition userPosition)
+    {
+        var now = Now;
+        if (userPosition.StartDate is { } start && start > now)
+        {
+            dbContext.UserPositions.Remove(userPosition);
+            return;
+        }
+
+        if (userPosition.EndDate is not { } end || end > now)
+        {
+            userPosition.End(now);
+        }
+    }
 
     public async Task<IReadOnlyList<Honorific>> ListHonorificsAsync(Guid tenantId, CancellationToken cancellationToken) =>
         await dbContext.Honorifics.Where(x => x.TenantId == tenantId).OrderBy(x => x.SortOrder).ThenBy(x => x.Title).ToListAsync(cancellationToken);

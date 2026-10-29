@@ -235,3 +235,16 @@ public sealed record ApplyPostTemplatesResultDto(IReadOnlyList<UnitPositionDto> 
 
 /// <summary>A post a template puts directly in the company (resolved to the organization's position).</summary>
 public sealed record CompanyPostToMake(Guid PositionId, bool IsCompanyHead);
+
+// ---------------------------------------------------------------- appointments over time (phase 9)
+
+/// <summary>UserId takes the post from StartDate (null: now; never in the past). Whoever holds it then ends on that day.</summary>
+public sealed record AppointRequest(Guid UserId, DateTimeOffset? StartDate = null);
+
+/// <summary>The post's appointment on now ends on EndDate (null: now; never in the past).</summary>
+public sealed record EndAppointmentRequest(DateTimeOffset? EndDate = null);
+
+/// <summary>One appointment: who held (holds, will hold) which post, from when until when (null: no limit).</summary>
+public sealed record AppointmentDto(
+    Guid Id, Guid UnitPositionId, string? PostTitle, string? PostCode, string? Place, PersonRef Person,
+    DateTimeOffset? StartDate, DateTimeOffset? EndDate, bool IsActive);

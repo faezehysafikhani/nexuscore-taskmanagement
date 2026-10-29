@@ -143,8 +143,8 @@ public sealed class UserPositionConfiguration : IEntityTypeConfiguration<UserPos
         builder.ToTable("UserPositions", OrgStructureSchema.Name);
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).ValueGeneratedNever();
-        // One person per post.
-        builder.HasIndex(x => new { x.TenantId, x.UnitPositionId }).IsUnique();
+        // One open appointment per post (ended ones stay as history).
+        builder.HasIndex(x => new { x.TenantId, x.UnitPositionId }).IsUnique().HasFilter("[EndDate] IS NULL");
         builder.HasIndex(x => x.UserId);
     }
 }

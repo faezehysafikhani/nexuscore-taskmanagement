@@ -304,6 +304,25 @@ activating, a merge). It goes through the same checks and is logged as a change 
 undone only while everything it moved is still where it put it. Making a node, ordering, rules and
 links are not undone.
 
+## Appointments over time (phase 9)
+
+Holding a post is an appointment with a start and an end (`org_structure.UserPositions.StartDate` /
+`EndDate`, null: no limit; today's rows start on the day they were saved and have no end). Everything
+that asks who holds a post (managers, the task limit, stand-ins, tasks given to posts, work teams,
+the company head) sees only the appointment on now. A post has one person at a time; one person may
+hold several posts, as before. Nothing is deleted or rewritten: taking a post off someone ends their
+appointment and it stays as history.
+
+| | |
+|---|---|
+| `POST /unit-positions/{id}/appointment` | `{ userId, startDate? }` (permission `manage_assignments`): the person takes the post now or from a later day; whoever holds it ends then, in the same save. Not in the past; not while the post has another appointment waiting |
+| `POST /unit-positions/{id}/appointment/end` | `{ endDate? }`: the present appointment ends now or on a later day |
+| `GET /unit-positions/{id}/history`, `GET /users/{userId}/positions/history` | the appointments, newest first (`startDate`, `endDate`, `isActive`) |
+
+Open tasks of the post go to its new holder when the appointment starts (at once, or for a later
+day within a few minutes of it, by a background service); what the old holder did stays theirs in
+the task's history.
+
 `/impact-preview` also takes `{ kind: "link", nodeId, toNodeId, linkTypeId }` and
 `{ kind: "unlink-link", linkId }`, and lists each person's `extraManagersAdded` / `extraManagersRemoved`.
 

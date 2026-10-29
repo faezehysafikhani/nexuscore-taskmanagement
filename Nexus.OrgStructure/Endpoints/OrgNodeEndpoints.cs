@@ -208,6 +208,22 @@ public static class OrgNodeEndpoints
                 ImportAsync(http, user, (tenant, target, rows) => service.CommitAsync(tenant, target, rows, ct), ct))
             .RequireAuthorization(OrgStructurePermissions.NodeCreate);
 
+        // --- appointments over time (phase 9)
+        group.MapPost("/unit-positions/{id:guid}/appointment", (Guid id, AppointRequest request, ICurrentUserContext user, IOrgAppointmentService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.AppointAsync(tenant, id, request, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ManageAssignments);
+
+        group.MapPost("/unit-positions/{id:guid}/appointment/end", (Guid id, EndAppointmentRequest? request, ICurrentUserContext user, IOrgAppointmentService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.EndAppointmentAsync(tenant, id, request ?? new EndAppointmentRequest(), ct)))
+            .RequireAuthorization(OrgStructurePermissions.ManageAssignments);
+
+        group.MapGet("/unit-positions/{id:guid}/history", (Guid id, ICurrentUserContext user, IOrgAppointmentService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.GetPostHistoryAsync(tenant, id, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ReadPolicy);
+
+        group.MapGet("/users/{userId:guid}/positions/history", (Guid userId, ICurrentUserContext user, IOrgAppointmentService service, CancellationToken ct) =>
+                SelfOrReader(user, userId) ?? InTenant(user, tenant => service.GetUserHistoryAsync(tenant, userId, ct)));
+
         // --- company groups (phase 6.3)
         group.MapPut("/companies/{id:guid}/parent", (Guid id, SetParentCompanyRequest request, ICurrentUserContext user, IOrgCompanyGroupService service, CancellationToken ct) =>
                 InTenant(user, tenant => service.SetParentCompanyAsync(tenant, id, request, ct)))

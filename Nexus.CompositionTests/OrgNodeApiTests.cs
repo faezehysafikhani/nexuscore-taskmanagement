@@ -312,14 +312,18 @@ public sealed partial class OrgNodeApiTests
         private readonly List<Guid> _companies = [];
         private Guid? _top;
 
-        public World()
+        public World(TimeProvider? clock = null)
         {
             var name = Guid.NewGuid().ToString();
             _organization = new OrganizationDbContext(new DbContextOptionsBuilder<OrganizationDbContext>().UseInMemoryDatabase("org-" + name).Options);
             _structure = new OrgStructureDbContext(new DbContextOptionsBuilder<OrgStructureDbContext>().UseInMemoryDatabase("orgs-" + name).Options);
-            Repo = new OrgStructureRepository(_structure);
+            Repo = new OrgStructureRepository(_structure, clock);
             Nodes = NodesAs(null);
-            Service = new OrgStructureService(Repo, _structure, new OrganizationUnitRepository(_organization), _users, new NoTeams(), templates: (IOrgTemplateService)Nodes);
+            TaskPosts = new TaskPostDirectory(Repo, _structure, new OrganizationUnitRepository(_organization),
+                Microsoft.Extensions.Options.Options.Create(new OrgStructureOptions { AssignTasksToPosts = true }),
+                new ServiceCollection().AddSingleton<ITaskPeopleUpdater>(Updater).BuildServiceProvider());
+            Service = new OrgStructureService(Repo, _structure, new OrganizationUnitRepository(_organization), _users, new NoTeams(),
+                clock is null ? null : TaskPosts, templates: (IOrgTemplateService)Nodes, clock: clock);
             Preview = new OrgImpactPreview(Repo, new OrganizationUnitRepository(_organization), _users, new NoTeams(), Options());
             // As upgrade-10 leaves every organization: the «company» and plain «unit» types, no rules.
             _structure.NodeTypes.Add(new Nexus.OrgStructure.Domain.NodeType(Guid.NewGuid(), Tenant, "company", "شرکت", true, 0));
@@ -332,11 +336,15 @@ public sealed partial class OrgNodeApiTests
         public OrgStructureRepository Repo { get; }
         public IOrgStructureService Service { get; }
         public IOrgNodeService Nodes { get; }
+
+        /// <summary>Tasks given to posts (only wired into Service in a world made with a clock).</summary>
+        public TaskPostDirectory TaskPosts { get; }
+        public OrgChartTeamsAndTitlesTests.RecordingUpdater Updater { get; } = new();
         public IOrgLinkService Links => (IOrgLinkService)Nodes;
         public IOrgTemplateService Templates => (IOrgTemplateService)Nodes;
         public IOrgImpactPreview Preview { get; }
         public Guid PlainType { get; }
-        public Guid Company { get; private set; }
+        public Guid Company { get; set; }
         private readonly Dictionary<string, Guid> _types = [];
 
         public Guid Type(string code) => _types[code];
@@ -405,6 +413,8 @@ public sealed partial class OrgNodeApiTests
         public IOrgPostTemplateService Posts => (IOrgPostTemplateService)Service;
 
         public Task SaveAsync() => _structure.SaveChangesAsync();
+
+        public OrgStructureDbContext Context => _structure;
 
         /// <summary>A post of a new position (under the head's) in the node; its id.</summary>
         public async Task<Guid> SeatAsync(Guid nodeId, string title)

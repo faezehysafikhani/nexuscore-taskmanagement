@@ -81,8 +81,13 @@ public interface IOrgStructureRepository
     Task AddUnitPositionAsync(UnitPosition unitPosition, CancellationToken cancellationToken);
     void RemoveUnitPosition(UnitPosition unitPosition);
 
+    /// <summary>Who holds which post now (appointments started and not ended).</summary>
     Task<IReadOnlyList<UserPosition>> ListUserPositionsAsync(Guid tenantId, CancellationToken cancellationToken);
+
+    /// <summary>Every appointment, ended and future ones too (each filter null: all).</summary>
+    Task<IReadOnlyList<UserPosition>> ListUserPositionHistoryAsync(Guid tenantId, Guid? userId, Guid? unitPositionId, CancellationToken cancellationToken);
     Task AddUserPositionAsync(UserPosition userPosition, CancellationToken cancellationToken);
+    /// <summary>Ends the appointment now (it stays as history); one not started yet is removed.</summary>
     void RemoveUserPosition(UserPosition userPosition);
 
     Task<IReadOnlyList<Honorific>> ListHonorificsAsync(Guid tenantId, CancellationToken cancellationToken);

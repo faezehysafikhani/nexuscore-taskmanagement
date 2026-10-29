@@ -264,16 +264,31 @@ public sealed class UserPosition : AuditableEntity<Guid>
     {
     }
 
-    public UserPosition(Guid id, Guid tenantId, Guid userId, Guid unitPositionId) : base(id)
+    public UserPosition(Guid id, Guid tenantId, Guid userId, Guid unitPositionId, DateTimeOffset? startDate = null) : base(id)
     {
         TenantId = tenantId;
         UserId = userId;
         UnitPositionId = unitPositionId;
+        StartDate = startDate;
     }
 
     public Guid TenantId { get; private set; }
     public Guid UserId { get; private set; }
     public Guid UnitPositionId { get; private set; }
+
+    /// <summary>
+    /// The appointment's period (phase 9): from StartDate (null: since always) until EndDate (null: still
+    /// on). An appointment that has ended stays as history; at most one is open (no EndDate) per post.
+    /// </summary>
+    public DateTimeOffset? StartDate { get; private set; }
+    public DateTimeOffset? EndDate { get; private set; }
+
+    /// <summary>A new appointment with no start given starts when it is saved.</summary>
+    public void StartOn(DateTimeOffset at) => StartDate ??= at;
+
+    public void End(DateTimeOffset at) => EndDate = at;
+
+    public bool IsActiveAt(DateTimeOffset at) => (StartDate is not { } from || from <= at) && (EndDate is not { } to || at < to);
 }
 
 /// <summary>
