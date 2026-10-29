@@ -161,11 +161,9 @@ unlinking or moving a unit while people sit in its branch.
 ## Nodes: units under units (dynamic structure, phase 2)
 
 Units are the structure's **nodes** and may sit under each other. The flat structure is unchanged
-until two things are both true:
-
-- `OrgStructure:AllowNesting` is `true` (temporary switch, **off by default**; with it off a node is
-  only made and moved at the top of its company, as before), and
-- the organization has «what may sit under what» rules (`/node-type-rules`). No rules: flat only.
+until the organization has «what may sit under what» rules (`/node-type-rules`). No rules: flat only
+(a node is only made and moved at the top of its company, as before). There is no switch any more:
+the temporary `OrgStructure:AllowNesting` of the trial phases was removed in phase 8.
 
 Only the top node of each branch is linked to a company; the nodes under it belong to the same
 company. Every change is made in the organization's turn (one change at a time, on SQL Server with an
@@ -228,7 +226,7 @@ can save any of its companies as its own template. `POST /companies` with `templ
 company and adds the template's copy: a type, link type or position that already exists (same code,
 or same name/title) is reused. Rules are for the whole organization, so the template's rules are
 added to them. If the organization had none (flat), the places its nodes are in now become rules
-first, so no existing node becomes a mismatch. A template with nested nodes needs `AllowNesting`.
+first, so no existing node becomes a mismatch. A template with nested nodes works as any other: it brings its rules.
 Posts are not made from a template yet (the posts each type should get are saved). Later changes or
 removing the template do not touch companies made from it.
 
@@ -262,7 +260,7 @@ posts directly in the company (the head's) and each node's posts from its type.
 `POST /import/preview` and `POST /import/commit` (permission `org_structure.node.create`) take a
 multipart form: `file` (.xlsx, its first sheet, or a UTF-8 .csv; at most 5 MB and 5000 rows) and
 either `companyId` (the sheet's top rows go to the top of that company) or `parentNodeId` (under
-that node; needs `AllowNesting`). Columns, after a header row: code, name, parent code, type (a node
+that node; needs the rules). Columns, after a header row: code, name, parent code, type (a node
 type's code; empty: «واحد»), manager's position (a position of the company; empty: none).
 
 The sheet is checked as a whole and every fault is listed with its row (missing or duplicate codes,
@@ -316,6 +314,35 @@ links are not undone.
 | `org_structure.node.update` | adding and removing links |
 | `org_structure.manage_companies` | the screen level; making a company (with or without a template) |
 | `org_structure.manage_templates` | saving and removing templates |
+
+## What stays, and what was cleaned up (phase 8)
+
+- The temporary `OrgStructure:AllowNesting` switch is gone. Nodes nest as soon as the organization has
+  «what may sit under what» rules; with none the structure is flat, exactly as before the work.
+- `OrganizationUnits.ManagerUserId` **stays** (a node's manager set directly still wins over the holder
+  of its manager post). It is not removed; removing it needs an explicit decision of its own.
+- The table is still `organization.OrganizationUnits`: the host checks that name at start-up, so a rename
+  would be a separate upgrade script plus the host's probe.
+- Production database: `TejaratBank_API/DEPLOYMENT-CONFIG.md` section 6.1 (scripts 10 to 13, before/after
+  checks, undo).
+
+## Acceptance scenarios (run on staging, on a copy of the data)
+
+Run them with display level «پیشرفته» on the company, after the checks of section 6.1 pass. The
+`-nima` packages and the UI of the same branch go together.
+
+| | Scenario | Pass when |
+|---|---|---|
+| الف | Small company: «شرکت جدید» with the «ساده» template | Created without help; only posts, no nodes; tasks are given to posts as before |
+| ب | Medium: deputies and units; drag a unit onto another deputy | The impact preview shows first; after confirming, the unit's people have the new deputy's manager; «تاریخچه و بازگردانی» can undo it |
+| پ | Bank: «بانکی» template | Assembly, board, CEO, deputies, general departments; committees are drawn with dotted lines; nothing in a committee changes anyone's manager |
+| ت | Holding: a parent company | «چارت گروه» shows the group; opening a company shows its own chart; access and managers did not change |
+| ث | Matrix: a second boss with a dotted link | Drawn dotted; not a manager. With a link type that counts as manager: the target's manager appears as an extra manager, the main manager does not change |
+| ج | Restructuring: merge two general departments, with a date | The preview comes first; open tasks stay on the same posts; the merged node is inactive; «نمایش به تاریخ» shows nodes by their dates |
+| چ | Many branches: import a sheet of 400+ rows, then «اجرا روی همه‌ی این نوع» for the branch type | A faulty sheet lists every error with its row and makes nothing; the good one makes all; the chart stays smooth |
+
+Regression: the Composition tests are as at the baseline (only the old failures), `NexusCore.Tests` and
+`TaskManagement.Tests` pass, and the golden tests (`OrgGoldenTests`) are unchanged.
 
 ## Trying it: the Tejarat Bank host
 

@@ -62,7 +62,6 @@ public sealed class OrgNodeConcurrencyTests
             var structure = Structure();
             var service = new OrgNodeService(
                 new OrgStructureRepository(structure), structure, new OrganizationUnitRepository(organization), organization, new NoUsers(),
-                Microsoft.Extensions.Options.Options.Create(new OrgStructureOptions { AllowNesting = true }),
                 new SqlOrgStructureWriteLock(structure));
             return (service, new Both(organization, structure));
         }

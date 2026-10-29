@@ -15,8 +15,8 @@ namespace Nexus.OrgStructure.Application;
 /// The nodes of the dynamic structure (units under units), their types and «what may sit under
 /// what». Every change is made in the organization's turn (IOrgStructureWriteLock), checked against
 /// the data as it is then (loops, the rules, the company), saved with the node's version
-/// (RowVersion) and written to the change log. With OrgStructure:AllowNesting off a node is only
-/// made and moved at the top of its company, as before. A user kept to their own company
+/// (RowVersion) and written to the change log. Without any «what may sit under what» rule a node
+/// is only made and moved at the top of its company (the flat structure). A user kept to their own company
 /// (LimitToOwnCompany) sees and changes only its nodes.
 /// </summary>
 public interface IOrgNodeService
@@ -48,7 +48,6 @@ public sealed partial class OrgNodeService(
     IOrganizationUnitRepository units,
     IOrganizationUnitOfWork unitsUnitOfWork,
     IUserDirectory users,
-    IOptions<OrgStructureOptions> options,
     IOrgStructureWriteLock? writeLock = null,
     CompanyReachScope? companyReach = null,
     ICurrentUserContext? currentUser = null,
@@ -157,11 +156,6 @@ public sealed partial class OrgNodeService(
         if (NameProblem(name) is { } invalid)
         {
             return Result.Failure<OrgNodeDto>(invalid);
-        }
-
-        if (request.ParentNodeId is not null && !options.Value.AllowNesting)
-        {
-            return Result.Failure<OrgNodeDto>(NestingOff());
         }
 
         await using var turn = await _lock.BeginAsync(tenantId, cancellationToken);
@@ -312,11 +306,6 @@ public sealed partial class OrgNodeService(
     public Task<Result<OrgNodeDto>> MoveNodeAsync(Guid tenantId, Guid id, MoveNodeRequest request, CancellationToken cancellationToken) =>
         ChangeNodeAsync(tenantId, id, request.RowVersion, "move", async (state, unit) =>
         {
-            if (request.ParentNodeId is not null && !options.Value.AllowNesting)
-            {
-                return (NestingOff(), null);
-            }
-
             var mine = await MyCompaniesAsync(tenantId, cancellationToken);
             var subtree = state.Graph.SubtreeOf(unit.Id).ToHashSet();
             Guid? newCompany;
@@ -832,8 +821,6 @@ public sealed partial class OrgNodeService(
         : null;
 
     private static Error NodeNotFound() => Error.NotFound("گره پیدا نشد.");
-
-    private static Error NestingOff() => Error.Validation("قرار دادن گره زیر گره دیگر هنوز فعال نشده است (OrgStructure:AllowNesting).");
 
     private static Error Busy() => Error.Conflict("ساختار سازمانی همین حالا در حال تغییر است؛ چند لحظه بعد دوباره امتحان کنید.");
 

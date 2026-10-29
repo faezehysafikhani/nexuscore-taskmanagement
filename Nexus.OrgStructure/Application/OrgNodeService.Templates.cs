@@ -270,12 +270,6 @@ public sealed partial class OrgNodeService : IOrgTemplateService
             return Result.Failure<IReadOnlyList<CompanyPostToMake>>(Error.Validation($"قالب «{model.Name}» درست نیست: {broken}"));
         }
 
-        if (!options.Value.AllowNesting && model.Nodes.Any(node => node.Children is { Count: > 0 }))
-        {
-            return Result.Failure<IReadOnlyList<CompanyPostToMake>>(Error.Validation(
-                $"قالب «{model.Name}» گره‌های تودرتو دارد و قرار دادن گره زیر گره دیگر هنوز فعال نشده است (OrgStructure:AllowNesting)."));
-        }
-
         await using var turn = await _lock.BeginAsync(tenantId, cancellationToken);
         if (turn is null)
         {

@@ -68,13 +68,10 @@ public sealed partial class OrgNodeApiTests
     }
 
     [Fact]
-    public async Task ANestedTemplate_IsRefusedWithNestingOff_AndAFlatOneIsNot()
+    public async Task ANestedTemplate_MakesTheCompany_AndSoDoesAFlatOne()
     {
-        var w = new World(allowNesting: false);
-        var refused = await w.Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("بانک", "B", null, OrgNodeService.SystemTemplateId("bank")), default);
-        Assert.Equal("validation.error", refused.Error.Code);
-        Assert.Contains("AllowNesting", refused.Error.Message);
-        Assert.Empty((await w.Ok(w.Service.ListCompaniesAsync(Tenant, default))));
+        var w = new World();
+        await w.Ok(w.Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("بانک", "B", null, OrgNodeService.SystemTemplateId("bank")), default));
 
         await w.Ok(w.Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("ساده", "S", null, OrgNodeService.SystemTemplateId("simple")), default));
         Assert.Equal("not_found", (await w.Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("x", "X", null, Guid.NewGuid()), default)).Error.Code);

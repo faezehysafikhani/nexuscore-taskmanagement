@@ -36,11 +36,6 @@ public sealed partial class OrgNodeService
         OrganizationUnit? parent = null;
         if (target.ParentNodeId is { } parentId)
         {
-            if (!options.Value.AllowNesting)
-            {
-                return Result.Failure<ImportPlan>(NestingOff());
-            }
-
             if (!state.Units.TryGetValue(parentId, out parent) || !Sees(state, mine, parentId))
             {
                 return Result.Failure<ImportPlan>(NodeNotFound());
@@ -164,14 +159,10 @@ public sealed partial class OrgNodeService
 
         }
 
-        // Nesting needs the switch and «what may sit under what» rules, as in the node API.
+        // Nesting needs «what may sit under what» rules, as in the node API.
         if (rows.Any(row => !Blank(row) && !string.IsNullOrWhiteSpace(row.ParentCode)) || (parent is not null && rows.Any(row => !Blank(row))))
         {
-            if (!options.Value.AllowNesting)
-            {
-                errors.Add(new ImportErrorDto(null, null, "فایل گره‌ی زیرمجموعه دارد و قرار دادن گره زیر گره دیگر هنوز فعال نشده است (OrgStructure:AllowNesting)."));
-            }
-            else if (state.Rules.Count == 0)
+            if (state.Rules.Count == 0)
             {
                 errors.Add(new ImportErrorDto(null, null, "هنوز قاعده‌ای برای «چه زیر چه» تعریف نشده؛ گره فقط در سطح اول شرکت ممکن است."));
             }

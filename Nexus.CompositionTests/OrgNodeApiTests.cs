@@ -16,7 +16,7 @@ using NexusCore.SharedKernel.Results;
 namespace Nexus.CompositionTests;
 
 /// <summary>
-/// Phase 2 of the dynamic structure: the node API (nested nodes behind AllowNesting, the rules,
+/// Phase 2 of the dynamic structure: the node API (nested nodes under the rules,
 /// loops, the company, versions, deactivation, search, path, order), node types and rules, the
 /// chart's new fields, the separate permissions and the impact preview.
 /// </summary>
@@ -24,12 +24,12 @@ public sealed partial class OrgNodeApiTests
 {
     private static readonly Guid Tenant = Guid.NewGuid();
 
-    // ------------------------------------------------------------------ the switch and the rules
+    // ------------------------------------------------------------------ the rules
 
     [Fact]
-    public async Task WithNestingOff_NodesAreMadeAndMovedOnlyAtTheTop_AsBefore()
+    public async Task WithNoRules_NodesAreMadeAndMovedOnlyAtTheTop_AsBefore()
     {
-        var w = new World(allowNesting: false);
+        var w = new World();
         var company = await w.CompanyAsync("C1");
         var it = await w.Ok(w.Nodes.CreateNodeAsync(Tenant, new CreateNodeRequest("معاونت فناوری", CompanyId: company), default));
         Assert.Null(it.ParentNodeId);
@@ -50,7 +50,7 @@ public sealed partial class OrgNodeApiTests
     }
 
     [Fact]
-    public async Task WithNoRules_NodesStayFlat_EvenWithNestingOn()
+    public async Task WithNoRules_NodesStayFlat_AndTheMessageSaysWhy()
     {
         var w = new World();
         var company = await w.CompanyAsync("C1");
@@ -309,13 +309,11 @@ public sealed partial class OrgNodeApiTests
         private readonly OrganizationDbContext _organization;
         private readonly OrgStructureDbContext _structure;
         private readonly Users _users = new();
-        private readonly bool _allowNesting;
         private readonly List<Guid> _companies = [];
         private Guid? _top;
 
-        public World(bool allowNesting = true)
+        public World()
         {
-            _allowNesting = allowNesting;
             var name = Guid.NewGuid().ToString();
             _organization = new OrganizationDbContext(new DbContextOptionsBuilder<OrganizationDbContext>().UseInMemoryDatabase("org-" + name).Options);
             _structure = new OrgStructureDbContext(new DbContextOptionsBuilder<OrgStructureDbContext>().UseInMemoryDatabase("orgs-" + name).Options);
@@ -344,13 +342,13 @@ public sealed partial class OrgNodeApiTests
         public Guid Type(string code) => _types[code];
 
         private Microsoft.Extensions.Options.IOptions<OrgStructureOptions> Options(bool limitToOwnCompany = false) =>
-            Microsoft.Extensions.Options.Options.Create(new OrgStructureOptions { AllowNesting = _allowNesting, LimitToOwnCompany = limitToOwnCompany });
+            Microsoft.Extensions.Options.Options.Create(new OrgStructureOptions { LimitToOwnCompany = limitToOwnCompany });
 
         /// <summary>The node API as someone kept to their own company (null: not kept).</summary>
         public IOrgNodeService NodesAs(Guid? userId)
         {
             var who = new SignedIn(userId);
-            return new OrgNodeService(Repo, _structure, new OrganizationUnitRepository(_organization), _organization, _users, Options(),
+            return new OrgNodeService(Repo, _structure, new OrganizationUnitRepository(_organization), _organization, _users,
                 companyReach: userId is null ? null : new CompanyReachScope(Repo, who, Options(limitToOwnCompany: true)), currentUser: who);
         }
 

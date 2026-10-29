@@ -31,11 +31,11 @@ public sealed partial class OrgNodeApiTests
         return OrgSheetReader.Read(stream, "x.csv").Rows;
     }
 
-    private static async Task<(World W, Guid Company, IOrgImportService Import)> BankCompanyAsync(bool allowNesting = true)
+    private static async Task<(World W, Guid Company, IOrgImportService Import)> BankCompanyAsync()
     {
-        var w = new World(allowNesting);
+        var w = new World();
         // The bank's types, rules and positions come with the template (an empty bank: no nodes kept).
-        var company = await w.Ok(w.Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("بانک", "B", null, OrgNodeService.SystemTemplateId(allowNesting ? "bank" : "deputy")), default));
+        var company = await w.Ok(w.Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("بانک", "B", null, OrgNodeService.SystemTemplateId("bank")), default));
         return (w, company.Id, new OrgImportService((OrgNodeService)w.Nodes, (OrgStructureService)w.Service));
     }
 
@@ -115,11 +115,13 @@ public sealed partial class OrgNodeApiTests
         Assert.Equal([2, 3], preview.Errors.Select(e => e.Row!.Value).Order());
         Assert.Equal("validation.error", (await import.PreviewAsync(Tenant, new ImportTargetRequest(), bad, default)).Error.Code);
 
-        // With nesting off: a flat sheet is fine, a nested one is not.
-        var (flatWorld, flatCompany, flatImport) = await BankCompanyAsync(allowNesting: false);
-        Assert.Equal(2, (await flatWorld.Ok(flatImport.CommitAsync(Tenant, new ImportTargetRequest(flatCompany), Csv("کد,نام,کد والد,نوع\nF1,معاونت یک,,deputy\nF2,معاونت دو,,deputy\n"), default))).Nodes.Count);
+        // A company with no rules: a flat sheet is fine, a nested one is not.
+        var flatWorld = new World();
+        var flatCompany = (await flatWorld.Ok(flatWorld.Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("بدون قاعده", "N", null), default))).Id;
+        var flatImport = new OrgImportService((OrgNodeService)flatWorld.Nodes, (OrgStructureService)flatWorld.Service);
+        Assert.Equal(2, (await flatWorld.Ok(flatImport.CommitAsync(Tenant, new ImportTargetRequest(flatCompany), Csv("کد,نام,کد والد\nF1,یک\nF2,دو\n"), default))).Nodes.Count);
         var nested = await flatWorld.Ok(flatImport.PreviewAsync(Tenant, new ImportTargetRequest(flatCompany), Csv("کد,نام,کد والد\nG1,یک\nG2,دو,G1\n"), default));
-        Assert.Contains(nested.Errors, e => e.Message.Contains("AllowNesting"));
+        Assert.Contains(nested.Errors, e => e.Message.Contains("قاعده"));
     }
 
     [Fact]
