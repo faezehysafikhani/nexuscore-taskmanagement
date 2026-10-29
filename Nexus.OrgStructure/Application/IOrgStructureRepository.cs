@@ -30,6 +30,7 @@ public interface IOrgStructureRepository
     Task AddOrgLinkAsync(OrgLink link, CancellationToken cancellationToken);
     void RemoveOrgLink(OrgLink link);
     Task AddNodeTypePostTemplateAsync(NodeTypePostTemplate template, CancellationToken cancellationToken);
+    void RemoveNodeTypePostTemplate(NodeTypePostTemplate template);
     Task AddStructureTemplateAsync(StructureTemplate template, CancellationToken cancellationToken);
     void RemoveStructureTemplate(StructureTemplate template);
 

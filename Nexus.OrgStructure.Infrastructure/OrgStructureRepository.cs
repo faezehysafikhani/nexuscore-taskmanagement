@@ -63,6 +63,8 @@ public sealed class OrgStructureRepository(OrgStructureDbContext dbContext) : IO
     public async Task AddNodeTypePostTemplateAsync(NodeTypePostTemplate template, CancellationToken cancellationToken) =>
         await dbContext.NodeTypePostTemplates.AddAsync(template, cancellationToken);
 
+    public void RemoveNodeTypePostTemplate(NodeTypePostTemplate template) => dbContext.NodeTypePostTemplates.Remove(template);
+
     public async Task AddStructureTemplateAsync(StructureTemplate template, CancellationToken cancellationToken) =>
         await dbContext.StructureTemplates.AddAsync(template, cancellationToken);
 

@@ -243,6 +243,20 @@ removing the template do not touch companies made from it.
 | `GET /templates`, `GET /templates/{id}` | the templates; one with its whole content |
 | `POST /templates`, `DELETE /templates/{id}` | `{ companyId, name, code?, description? }`; built-in ones are not removed |
 
+## A node's posts (phase 6.1)
+
+A node has at most one **manager post** (`PUT /unit-positions/{id}/manager-post { isManagerPost }`;
+a second one is refused, 409). Marking or unmarking it changes no other post. A post added to a node
+with no post above given goes under the node's manager post; existing posts are never moved under it.
+
+Each node type can say which posts its nodes get (`GET/PUT /node-types/{id}/posts`:
+`{ posts: [{ positionId, isManagerPost }] }`, at most one manager post). `POST /post-templates/apply`
+`{ nodeId }` or `{ nodeTypeId }` makes the posts a node lacks: a position the node already has is not
+made again, the manager post only when the node has none, and the new posts go under its manager
+post. A position that is not for the node's company is listed in `skipped`, not made. Running it
+again makes nothing. A company made from a template gets its posts this way too: the template's
+posts directly in the company (the head's) and each node's posts from its type.
+
 `/impact-preview` also takes `{ kind: "link", nodeId, toNodeId, linkTypeId }` and
 `{ kind: "unlink-link", linkId }`, and lists each person's `extraManagersAdded` / `extraManagersRemoved`.
 

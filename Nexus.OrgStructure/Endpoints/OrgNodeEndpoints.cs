@@ -161,6 +161,23 @@ public static class OrgNodeEndpoints
                 InTenant(user, tenant => service.DeleteTemplateAsync(tenant, id, ct)))
             .RequireAuthorization(OrgStructurePermissions.ManageTemplates);
 
+        // --- posts from a pattern (phase 6.1): the manager post, the posts each node type gets, applying them
+        group.MapPut("/unit-positions/{id:guid}/manager-post", (Guid id, SetManagerPostRequest request, ICurrentUserContext user, IOrgPostTemplateService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.SetManagerPostAsync(tenant, id, request, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ManagePositions);
+
+        group.MapGet("/node-types/{id:guid}/posts", (Guid id, ICurrentUserContext user, IOrgPostTemplateService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.GetNodeTypePostsAsync(tenant, id, ct)))
+            .RequireAuthorization(OrgStructurePermissions.NodeView);
+
+        group.MapPut("/node-types/{id:guid}/posts", (Guid id, SetNodeTypePostsRequest request, ICurrentUserContext user, IOrgPostTemplateService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.SetNodeTypePostsAsync(tenant, id, request, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ManageRules);
+
+        group.MapPost("/post-templates/apply", (ApplyPostTemplatesRequest request, ICurrentUserContext user, IOrgPostTemplateService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.ApplyPostTemplatesAsync(tenant, request, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ManagePositions);
+
         // --- what a structure change would do, before it is made (nothing is saved)
         group.MapPost("/impact-preview", (ImpactPreviewRequest request, ICurrentUserContext user, IOrgImpactPreview service, CancellationToken ct) =>
                 InTenant(user, tenant => service.PreviewAsync(tenant, request, ct)))

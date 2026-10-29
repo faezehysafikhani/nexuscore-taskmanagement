@@ -50,7 +50,7 @@ public interface IOrgStructureService
     Task<Result<IReadOnlyList<Guid>>> ListOtherCompaniesUnitsAsync(Guid tenantId, CancellationToken cancellationToken);
 }
 
-public sealed class OrgStructureService(
+public sealed partial class OrgStructureService(
     IOrgStructureRepository repository,
     IOrgStructureUnitOfWork unitOfWork,
     IOrganizationUnitRepository units,
@@ -112,9 +112,14 @@ public sealed class OrgStructureService(
             }
 
             var made = await templates.CreateCompanyFromTemplateAsync(tenantId, company, templateId, cancellationToken);
-            return made.IsSuccess
-                ? Result.Success(await ToDtoAsync(tenantId, company, cancellationToken))
-                : Result.Failure<CompanyDto>(made.Error);
+            if (!made.IsSuccess)
+            {
+                return Result.Failure<CompanyDto>(made.Error);
+            }
+
+            // Its posts: the company's own and each node's (from its type's pattern).
+            await MakeTemplateCompanyPostsAsync(tenantId, company.Id, made.Value!, cancellationToken);
+            return Result.Success(await ToDtoAsync(tenantId, company, cancellationToken));
         }
 
         await repository.AddCompanyAsync(company, cancellationToken);
@@ -648,7 +653,8 @@ public sealed class OrgStructureService(
         }
 
         var added = new UnitPosition(Guid.NewGuid(), tenantId, companyId, unitId, request.PositionId, NextSortOrder(snapshot, companyId, unitId, request.PositionId), code);
-        added.PlaceUnder(request.ParentPostId);
+        // No post above given: a new post of a node goes under the node's manager post, if it has one (existing posts are never changed).
+        added.PlaceUnder(request.ParentPostId ?? (unitId is { } node ? ManagerPostOf(snapshot.Seats, node)?.Id : null));
         added.SetCompanyHead(CompanyHeadPost.Is(added, snapshot.Positions.GetValueOrDefault(added.PositionId), snapshot.IsFor(added.PositionId, companyId)));
         await repository.AddUnitPositionAsync(added, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -1474,7 +1480,8 @@ public sealed class OrgStructureService(
             seat.Code,
             seat.CompanyId,
             snapshot.Companies.GetValueOrDefault(seat.CompanyId)?.Name,
-            seat.ParentPostId);
+            seat.ParentPostId,
+            seat.IsManagerPost);
     }
 
     private async Task<CompanyDto> ToDtoAsync(Guid tenantId, Company company, CancellationToken cancellationToken)

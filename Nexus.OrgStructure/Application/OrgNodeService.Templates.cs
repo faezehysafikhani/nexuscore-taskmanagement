@@ -24,9 +24,10 @@ public interface IOrgTemplateService
 
     /// <summary>
     /// Adds a new (not yet saved) company with everything of the template, and saves it all.
-    /// Posts are not made here (phase 6): only positions and the posts each node type should get.
+    /// Posts are made by the caller (phase 6.1): this returns the template's posts directly in the
+    /// company; the nodes' posts follow from the posts each node type gets.
     /// </summary>
-    Task<Result> CreateCompanyFromTemplateAsync(Guid tenantId, Company company, Guid templateId, CancellationToken cancellationToken);
+    Task<Result<IReadOnlyList<CompanyPostToMake>>> CreateCompanyFromTemplateAsync(Guid tenantId, Company company, Guid templateId, CancellationToken cancellationToken);
 }
 
 public sealed partial class OrgNodeService : IOrgTemplateService
@@ -255,30 +256,30 @@ public sealed partial class OrgNodeService : IOrgTemplateService
 
     // ---------------------------------------------------------------- making a company from a template
 
-    public async Task<Result> CreateCompanyFromTemplateAsync(Guid tenantId, Company company, Guid templateId, CancellationToken cancellationToken)
+    public async Task<Result<IReadOnlyList<CompanyPostToMake>>> CreateCompanyFromTemplateAsync(Guid tenantId, Company company, Guid templateId, CancellationToken cancellationToken)
     {
         var found = await FindTemplateAsync(tenantId, templateId, cancellationToken);
         if (found is null)
         {
-            return Result.Failure(TemplateNotFound());
+            return Result.Failure<IReadOnlyList<CompanyPostToMake>>(TemplateNotFound());
         }
 
         var model = found.Value.Model;
         if (TemplateProblem(model) is { } broken)
         {
-            return Result.Failure(Error.Validation($"قالب «{model.Name}» درست نیست: {broken}"));
+            return Result.Failure<IReadOnlyList<CompanyPostToMake>>(Error.Validation($"قالب «{model.Name}» درست نیست: {broken}"));
         }
 
         if (!options.Value.AllowNesting && model.Nodes.Any(node => node.Children is { Count: > 0 }))
         {
-            return Result.Failure(Error.Validation(
+            return Result.Failure<IReadOnlyList<CompanyPostToMake>>(Error.Validation(
                 $"قالب «{model.Name}» گره‌های تودرتو دارد و قرار دادن گره زیر گره دیگر هنوز فعال نشده است (OrgStructure:AllowNesting)."));
         }
 
         await using var turn = await _lock.BeginAsync(tenantId, cancellationToken);
         if (turn is null)
         {
-            return Result.Failure(Busy());
+            return Result.Failure<IReadOnlyList<CompanyPostToMake>>(Busy());
         }
 
         var state = await LoadAsync(tenantId, cancellationToken);
@@ -392,7 +393,7 @@ public sealed partial class OrgNodeService : IOrgTemplateService
             }
         }
 
-        // The posts each node type should get (made with the posts themselves, in phase 6).
+        // The posts each node type should get (the caller then makes them).
         var existingPostTemplates = await repository.ListNodeTypePostTemplatesAsync(tenantId, cancellationToken);
         foreach (var item in model.PostTemplates)
         {
@@ -460,9 +461,16 @@ public sealed partial class OrgNodeService : IOrgTemplateService
 
         await LogAsync(tenantId, "Company", company.Id, "create-from-template",
             new { template = templateId, key = model.Key, nodes = nodeIds.Count, newTypes, links = linked.Count }, cancellationToken);
-        return await turn.SaveAsync(unitOfWork, unitsUnitOfWork, cancellationToken)
-            ? Result.Success()
-            : Result.Failure(Busy());
+        if (!await turn.SaveAsync(unitOfWork, unitsUnitOfWork, cancellationToken))
+        {
+            return Result.Failure<IReadOnlyList<CompanyPostToMake>>(Busy());
+        }
+
+        // Its own posts (the head's...), for the caller to make together with its nodes' posts.
+        return Result.Success<IReadOnlyList<CompanyPostToMake>>(model.CompanyPosts
+            .Where(post => positionIds.ContainsKey(post.Position))
+            .Select(post => new CompanyPostToMake(positionIds[post.Position], post.IsCompanyHead == true))
+            .ToList());
     }
 
     /// <summary>Positions with each one's superior before it.</summary>

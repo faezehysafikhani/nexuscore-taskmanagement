@@ -400,6 +400,12 @@ public sealed partial class OrgNodeApiTests
             return id;
         }
 
+        /// <summary>A new position (under the head's) for every company so far; its id.</summary>
+        public async Task<Guid> PositionAsync(string title) =>
+            (await Ok(Service.CreatePositionAsync(Tenant, new CreatePositionRequest(title, _top, _companies.ToList()), default))).Id;
+
+        public IOrgPostTemplateService Posts => (IOrgPostTemplateService)Service;
+
         /// <summary>A post of a new position (under the head's) in the node; its id.</summary>
         public async Task<Guid> SeatAsync(Guid nodeId, string title)
         {

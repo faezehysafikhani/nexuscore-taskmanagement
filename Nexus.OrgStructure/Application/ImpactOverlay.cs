@@ -153,6 +153,7 @@ public sealed class ImpactData(IOrgStructureRepository real, IOrganizationUnitRe
         public Task AddOrgLinkAsync(OrgLink link, CancellationToken ct) => throw ReadOnly();
         public void RemoveOrgLink(OrgLink link) => throw ReadOnly();
         public Task AddNodeTypePostTemplateAsync(NodeTypePostTemplate template, CancellationToken ct) => throw ReadOnly();
+        public void RemoveNodeTypePostTemplate(NodeTypePostTemplate template) => throw ReadOnly();
         public Task AddStructureTemplateAsync(StructureTemplate template, CancellationToken ct) => throw ReadOnly();
         public void RemoveStructureTemplate(StructureTemplate template) => throw ReadOnly();
         public Task AddCompanyAsync(Company company, CancellationToken ct) => throw ReadOnly();

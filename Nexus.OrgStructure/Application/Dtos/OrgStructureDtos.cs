@@ -88,7 +88,8 @@ public sealed record UnitPositionDto(
     string Code = "",
     Guid CompanyId = default,
     string? CompanyName = null,
-    Guid? ParentPostId = null);
+    Guid? ParentPostId = null,
+    bool IsManagerPost = false);
 
 /// <summary>Code: optional; without it the next free number of the company. ParentPostId: the post above it.</summary>
 public sealed record AddUnitPositionRequest(Guid PositionId, string? Code = null, Guid? ParentPostId = null);
@@ -204,3 +205,26 @@ public sealed record UserTitleDto(Guid UserId, Guid? HonorificId, string? Title)
 
 /// <summary>Null removes the user's title.</summary>
 public sealed record SetUserTitleRequest(Guid? HonorificId);
+
+// ---------------------------------------------------------------- posts from a pattern (phase 6.1)
+
+public sealed record SetManagerPostRequest(bool IsManagerPost);
+
+/// <summary>A post a node type gets: of this position; IsManagerPost: the node's manager post.</summary>
+public sealed record NodeTypePostDto(Guid PositionId, string Title, bool IsManagerPost, int SortOrder);
+
+public sealed record NodeTypePostRequest(Guid PositionId, bool IsManagerPost = false);
+
+/// <summary>The posts, in order; at most one manager post.</summary>
+public sealed record SetNodeTypePostsRequest(IReadOnlyList<NodeTypePostRequest> Posts);
+
+/// <summary>One node (NodeId) or every active node of a type (NodeTypeId).</summary>
+public sealed record ApplyPostTemplatesRequest(Guid? NodeId = null, Guid? NodeTypeId = null);
+
+/// <summary>A post of the pattern that was not made, and why (a post the node already has is not listed).</summary>
+public sealed record SkippedPostDto(Guid NodeId, string NodeName, string? PositionTitle, string Reason);
+
+public sealed record ApplyPostTemplatesResultDto(IReadOnlyList<UnitPositionDto> Created, IReadOnlyList<SkippedPostDto> Skipped);
+
+/// <summary>A post a template puts directly in the company (resolved to the organization's position).</summary>
+public sealed record CompanyPostToMake(Guid PositionId, bool IsCompanyHead);
