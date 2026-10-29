@@ -75,6 +75,34 @@ So a unit's head reports to the head of the unit above, and the head of a compan
 reports to the company's head. Writes that would create a loop are rejected; reads are
 loop-safe even if units are later rearranged in `Nexus.Organization`.
 
+## Three boundaries that are not the same thing
+
+The dynamic structure (units under units, kinds of node, secondary relations) uses three words
+that must not be mixed up:
+
+1. **The owning organization** — the **company** (`Company` and `CompanyUnit`). It is the boundary of
+   access and reach: with `OrgStructure:LimitToOwnCompany` people see, message and give tasks only
+   inside it. A unit belongs to a company through the **top unit of its branch** — the only unit
+   that has a `CompanyUnit` link. A unit nested below it belongs to the same company; it is never
+   linked itself. (`OrgGraph.CompanyOfUnit` walks up to the linked unit.)
+2. **The root of the whole structure** — each company's **implicit root**. It has no row and no
+   manager: a unit with no parent (or whose parent is not a unit, e.g. the company) is at the top
+   of its company. So a structure where no unit has a parent is exactly the flat structure that
+   existed before nesting, and gives the same managers, subordinates, task-assignment limits and
+   stand-ins. A root with a manager would change those results, so there is none.
+3. **«Same deputy»** (هم‌معاونت) — `OrgGraph.DomainOf(unit)`: the nearest unit at or above it whose
+   node type has `IsDomainBoundary` (true for a plain unit and by default for every type). Two
+   people are in the same deputy when their units have the same domain. It decides who a team
+   builder may add and who counts as at one's level in one's own deputy. With no nesting every
+   unit is its own domain, so nothing changes.
+
+Moving a node from one company to another is **not allowed** until the rules for it exist (the
+move endpoint refuses it with a validation error); the top unit's company link is changed with
+`PUT /company-units/{unitId}` as before, and only while nobody sits in its branch.
+
+All of these read one graph, `OrgGraph`, built once per operation by `IOrgGraphProvider` from the
+units, their company links and their node types; `HierarchyResolver` walks the same graph.
+
 ## Work teams in the chart
 
 The chart shows the work teams people build for their tasks and chat (the user-group feature's
