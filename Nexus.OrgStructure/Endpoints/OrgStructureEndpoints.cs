@@ -144,8 +144,9 @@ public static class OrgStructureEndpoints
         group.MapGet("/me/subordinates", (bool? all, ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
                 user.UserId is { } me ? InTenant(user, tenant => service.GetSubordinatesAsync(tenant, me, all ?? false, ct)) : Task.FromResult(Results.Unauthorized()));
 
-        group.MapGet("/chart", (Guid? companyId, ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
-                InTenant(user, tenant => service.GetChartAsync(tenant, companyId, ct)))
+        // asOf (optional): only the nodes that exist on that day.
+        group.MapGet("/chart", (Guid? companyId, DateTimeOffset? asOf, ICurrentUserContext user, OrgStructureService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.GetChartAsync(tenant, companyId, asOf, ct)))
             .RequireAuthorization(OrgStructurePermissions.ReadPolicy);
 
         // People of the organization with no place in the structure yet (to place them).

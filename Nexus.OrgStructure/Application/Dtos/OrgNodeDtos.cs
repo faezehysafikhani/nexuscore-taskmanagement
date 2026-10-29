@@ -141,3 +141,14 @@ public sealed record ImportPreviewDto(int RowCount, IReadOnlyList<ImportNodePrev
 
 /// <summary>What was made: nodes, automatic links, posts (manager posts of the sheet and each type's posts), and links left to choose.</summary>
 public sealed record ImportResultDto(IReadOnlyList<OrgNodeDto> Nodes, int Links, int Posts, IReadOnlyList<AutoLinkChoiceDto> AutoLinkChoices, IReadOnlyList<SkippedPostDto> SkippedPosts);
+
+// ---------------------------------------------------------------- dates, merge, log (phase 6.4)
+
+/// <summary>From when and until when the node exists (each null: no limit). Only for the chart on a day (asOf).</summary>
+public sealed record NodeValidityRequest(DateTimeOffset? ValidFrom = null, DateTimeOffset? ValidTo = null, string? RowVersion = null);
+
+/// <summary>The node goes into TargetNodeId (same company). EffectiveDate: the day it ends (null: now). RowVersion: the source's.</summary>
+public sealed record MergeNodeRequest(Guid TargetNodeId, DateTimeOffset? EffectiveDate = null, string? RowVersion = null);
+
+/// <summary>One change of a node, newest first. Details: what changed (JSON). CanUndo: the kind of change can be undone (only the last one is).</summary>
+public sealed record NodeChangeDto(Guid Id, string Action, Guid? UserId, DateTimeOffset AtUtc, string? Details, bool CanUndo);

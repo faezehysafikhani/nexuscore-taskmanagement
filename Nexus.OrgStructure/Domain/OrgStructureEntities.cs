@@ -245,6 +245,9 @@ public sealed class UnitPosition : AuditableEntity<Guid>
 
     public void PlaceUnder(Guid? parentPostId) => ParentPostId = parentPostId;
 
+    /// <summary>To another node of the same company (a merge): the post, its holder and its tasks stay as they are.</summary>
+    public void MoveToUnit(Guid unitId) => UnitId = unitId;
+
     /// <summary>Its unit moved to another company.</summary>
     public void MoveToCompany(Guid companyId) => CompanyId = companyId;
 

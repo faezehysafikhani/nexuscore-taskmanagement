@@ -54,6 +54,23 @@ public static class OrgNodeEndpoints
                 InTenant(user, tenant => service.SetDetailsAsync(tenant, id, request, ct)))
             .RequireAuthorization(OrgStructurePermissions.NodeUpdate);
 
+        // --- dates, merge, the log and undo (phase 6.4)
+        group.MapPut("/nodes/{id:guid}/validity", (Guid id, NodeValidityRequest request, ICurrentUserContext user, IOrgNodeHistoryService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.SetValidityAsync(tenant, id, request, ct)))
+            .RequireAuthorization(OrgStructurePermissions.NodeUpdate);
+
+        group.MapPost("/nodes/{id:guid}/merge", (Guid id, MergeNodeRequest request, ICurrentUserContext user, IOrgNodeHistoryService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.MergeAsync(tenant, id, request, ct)))
+            .RequireAuthorization(OrgStructurePermissions.NodeMove);
+
+        group.MapGet("/nodes/{id:guid}/changes", (Guid id, int? take, ICurrentUserContext user, IOrgNodeHistoryService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.ListChangesAsync(tenant, id, take ?? 50, ct)))
+            .RequireAuthorization(OrgStructurePermissions.NodeView);
+
+        group.MapPost("/nodes/{id:guid}/undo", (Guid id, NodeVersionRequest? request, ICurrentUserContext user, IOrgNodeHistoryService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.UndoLastChangeAsync(tenant, id, request ?? new NodeVersionRequest(), ct)))
+            .RequireAuthorization(OrgStructurePermissions.NodeMove);
+
         group.MapPost("/nodes/{id:guid}/move", (Guid id, MoveNodeRequest request, ICurrentUserContext user, IOrgNodeService service, CancellationToken ct) =>
                 InTenant(user, tenant => service.MoveNodeAsync(tenant, id, request, ct)))
             .RequireAuthorization(OrgStructurePermissions.NodeMove);

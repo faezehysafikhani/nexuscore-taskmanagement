@@ -1198,9 +1198,24 @@ public sealed partial class OrgStructureService(
             chain.Select(id => Person(id, people)).ToList()));
     }
 
-    public async Task<Result<IReadOnlyList<OrgChartCompanyDto>>> GetChartAsync(Guid tenantId, Guid? companyId, CancellationToken cancellationToken)
+    public Task<Result<IReadOnlyList<OrgChartCompanyDto>>> GetChartAsync(Guid tenantId, Guid? companyId, CancellationToken cancellationToken) =>
+        GetChartAsync(tenantId, companyId, null, cancellationToken);
+
+    /// <summary>The chart; with asOf, only the nodes that exist on that day (their ValidFrom/ValidTo). Without it: as always.</summary>
+    public async Task<Result<IReadOnlyList<OrgChartCompanyDto>>> GetChartAsync(Guid tenantId, Guid? companyId, DateTimeOffset? asOf, CancellationToken cancellationToken)
     {
         var snapshot = await LoadAsync(tenantId, cancellationToken);
+        if (asOf is { } date)
+        {
+            var graph = OrgGraph.AsOf(date, snapshot.Units.Values, await repository.ListNodeTypesAsync(tenantId, cancellationToken), snapshot.Links, snapshot.Seats, snapshot.Holdings);
+            var kept = graph.Nodes.Select(node => node.Id).ToHashSet();
+            snapshot = snapshot with
+            {
+                Units = snapshot.Units.Where(pair => kept.Contains(pair.Key)).ToDictionary(pair => pair.Key, pair => pair.Value),
+                Graph = graph,
+            };
+        }
+
         var resolver = snapshot.Resolver();
         var teams = await workTeams.ListWorkTeamsAsync(tenantId, cancellationToken);
         var people = await PeopleAsync(

@@ -14,7 +14,8 @@ namespace Nexus.OrgStructure.Application;
 /// own company - as the move endpoint does it: a node put under another loses its company link),
 /// "add" (a new empty node: Name, ParentNodeId or CompanyId), "manager" (NodeId gets ManagerUserId;
 /// null: none), "unlink" (NodeId loses its company link), "link" (a secondary link from NodeId to
-/// ToNodeId of LinkTypeId) or "unlink-link" (the secondary link LinkId goes).
+/// ToNodeId of LinkTypeId), "unlink-link" (the secondary link LinkId goes) or "merge" (NodeId goes
+/// into ToNodeId: its children, posts and people move there and it becomes inactive).
 /// </summary>
 public sealed record ImpactChangeRequest(
     string Kind,
@@ -285,8 +286,54 @@ public sealed class OrgImpactPreview(
                 overlay.RemovedLinks.Add(linkId);
                 return null;
 
+            case "merge":
+                if (Known(change.NodeId, "گره") is { } missingSource)
+                {
+                    return missingSource;
+                }
+
+                if (Known(change.ToNodeId, "گره‌ی مقصد") is { } missingTarget)
+                {
+                    return missingTarget;
+                }
+
+                var (source, target) = (change.NodeId!.Value, change.ToNodeId!.Value);
+                if (source == target || graph.SubtreeOf(source).Contains(target))
+                {
+                    return Error.Validation("گره را نمی‌شود در خودش یا در زیرمجموعه‌ی خودش ادغام کرد.");
+                }
+
+                if (graph.CompanyOfUnit(source) != graph.CompanyOfUnit(target))
+                {
+                    return Error.Validation("ادغام فقط بین گره‌های یک شرکت است.");
+                }
+
+                foreach (var child in all.Values.Where(unit => unit.ParentUnitId == source))
+                {
+                    overlay.Parents[child.Id] = target;
+                }
+
+                var seats = await data.Structure(overlay).ListUnitPositionsAsync(tenantId, cancellationToken);
+                var targetHasManager = seats.Any(seat => seat.UnitId == target && seat.IsManagerPost);
+                foreach (var seat in seats.Where(seat => seat.UnitId == source))
+                {
+                    overlay.SeatUnits[seat.Id] = target;
+                    if (seat.IsManagerPost && targetHasManager)
+                    {
+                        overlay.UnmarkedManagerPosts.Add(seat.Id);
+                    }
+                }
+
+                foreach (var assignment in (await data.Structure(overlay).ListAssignmentsAsync(tenantId, cancellationToken)).Where(a => a.UnitId == source))
+                {
+                    overlay.AssignmentUnits[assignment.UserId] = target;
+                }
+
+                overlay.Deactivated.Add(source);
+                return null;
+
             default:
-                return Error.Validation($"نوع تغییر «{change.Kind}» شناخته نیست (move، add، manager، unlink، link، unlink-link).");
+                return Error.Validation($"نوع تغییر «{change.Kind}» شناخته نیست (move، add، manager، unlink، link، unlink-link، merge).");
         }
     }
 

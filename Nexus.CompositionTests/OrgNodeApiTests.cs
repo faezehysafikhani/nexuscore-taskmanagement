@@ -406,6 +406,8 @@ public sealed partial class OrgNodeApiTests
 
         public IOrgPostTemplateService Posts => (IOrgPostTemplateService)Service;
 
+        public Task SaveAsync() => _structure.SaveChangesAsync();
+
         /// <summary>A post of a new position (under the head's) in the node; its id.</summary>
         public async Task<Guid> SeatAsync(Guid nodeId, string title)
         {

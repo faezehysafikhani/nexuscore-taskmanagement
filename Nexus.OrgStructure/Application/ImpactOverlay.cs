@@ -22,6 +22,12 @@ public sealed class StructureOverlay
     /// <summary>Secondary links added and removed (by id).</summary>
     public List<OrgLink> AddedLinks { get; } = [];
     public HashSet<Guid> RemovedLinks { get; } = [];
+
+    /// <summary>A merge: posts and people moved to another node, nodes made inactive, manager marks taken off.</summary>
+    public Dictionary<Guid, Guid> SeatUnits { get; } = [];
+    public Dictionary<Guid, Guid> AssignmentUnits { get; } = [];
+    public HashSet<Guid> Deactivated { get; } = [];
+    public HashSet<Guid> UnmarkedManagerPosts { get; } = [];
 }
 
 /// <summary>
@@ -63,7 +69,7 @@ public sealed class ImpactData(IOrgStructureRepository real, IOrganizationUnitRe
         copy.SetNodeType(unit.NodeTypeId);
         copy.SetSortOrder(unit.SortOrder);
         copy.SetValidity(unit.ValidFrom, unit.ValidTo);
-        if (!unit.IsActive)
+        if (!unit.IsActive || overlay.Deactivated.Contains(unit.Id))
         {
             copy.Update(copy.Name, copy.ManagerUserId, isActive: false);
         }
@@ -124,7 +130,23 @@ public sealed class ImpactData(IOrgStructureRepository real, IOrganizationUnitRe
         public async Task<bool> PositionTitleExistsAsync(Guid t, string title, Guid? excludeId, CancellationToken ct) =>
             (await ListPositionsAsync(t, ct)).Any(p => p.Title == title && p.Id != excludeId);
 
-        public Task<IReadOnlyList<UserAssignment>> ListAssignmentsAsync(Guid t, CancellationToken ct) => R("assignments", () => real.ListAssignmentsAsync(t, ct));
+        public async Task<IReadOnlyList<UserAssignment>> ListAssignmentsAsync(Guid t, CancellationToken ct)
+        {
+            var assignments = await R("assignments", () => real.ListAssignmentsAsync(t, ct));
+            return overlay.AssignmentUnits.Count == 0
+                ? assignments
+                : assignments.Select(a =>
+                {
+                    if (!overlay.AssignmentUnits.TryGetValue(a.UserId, out var unit))
+                    {
+                        return a;
+                    }
+
+                    var copy = new UserAssignment(a.Id, a.TenantId, a.UserId);
+                    copy.Set(a.CompanyId, unit, a.PositionId, a.ManagerUserId);
+                    return copy;
+                }).ToList();
+        }
         public async Task<UserAssignment?> GetAssignmentAsync(Guid t, Guid userId, CancellationToken ct) => (await ListAssignmentsAsync(t, ct)).FirstOrDefault(a => a.UserId == userId);
         public Task<IReadOnlyList<PositionCompany>> ListPositionCompaniesAsync(Guid t, CancellationToken ct) => R("positionCompanies", () => real.ListPositionCompaniesAsync(t, ct));
         public Task<IReadOnlyList<TaskPost>> ListTaskPostsAsync(Guid t, IReadOnlyCollection<Guid>? taskIds, IReadOnlyCollection<Guid>? postIds, CancellationToken ct) => real.ListTaskPostsAsync(t, taskIds, postIds, ct);
@@ -132,7 +154,26 @@ public sealed class ImpactData(IOrgStructureRepository real, IOrganizationUnitRe
         public Task<IReadOnlyList<TaskPostPeriod>> FindTaskPostPeriodsAsync(Guid t, IReadOnlyCollection<Guid>? userIds, Guid? positionId, CancellationToken ct) => real.FindTaskPostPeriodsAsync(t, userIds, positionId, ct);
         public Task<IReadOnlyList<Guid>> ListTenantIdsAsync(CancellationToken ct) => real.ListTenantIdsAsync(ct);
         public Task<IReadOnlyList<PostActing>> ListPostActingsAsync(Guid t, CancellationToken ct) => R("actings", () => real.ListPostActingsAsync(t, ct));
-        public Task<IReadOnlyList<UnitPosition>> ListUnitPositionsAsync(Guid t, CancellationToken ct) => R("seats", () => real.ListUnitPositionsAsync(t, ct));
+        public async Task<IReadOnlyList<UnitPosition>> ListUnitPositionsAsync(Guid t, CancellationToken ct)
+        {
+            var seats = await R("seats", () => real.ListUnitPositionsAsync(t, ct));
+            return overlay.SeatUnits.Count == 0 && overlay.UnmarkedManagerPosts.Count == 0
+                ? seats
+                : seats.Select(seat =>
+                {
+                    if (!overlay.SeatUnits.ContainsKey(seat.Id) && !overlay.UnmarkedManagerPosts.Contains(seat.Id))
+                    {
+                        return seat;
+                    }
+
+                    var copy = new UnitPosition(seat.Id, seat.TenantId, seat.CompanyId,
+                        overlay.SeatUnits.TryGetValue(seat.Id, out var unit) ? unit : seat.UnitId, seat.PositionId, seat.SortOrder, seat.Code);
+                    copy.PlaceUnder(seat.ParentPostId);
+                    copy.SetManagerPost(seat.IsManagerPost && !overlay.UnmarkedManagerPosts.Contains(seat.Id));
+                    copy.SetCompanyHead(seat.IsCompanyHead);
+                    return copy;
+                }).ToList();
+        }
         public Task<IReadOnlyList<UserPosition>> ListUserPositionsAsync(Guid t, CancellationToken ct) => R("holdings", () => real.ListUserPositionsAsync(t, ct));
         public Task<IReadOnlyList<Honorific>> ListHonorificsAsync(Guid t, CancellationToken ct) => real.ListHonorificsAsync(t, ct);
         public Task<Honorific?> GetHonorificAsync(Guid t, Guid id, CancellationToken ct) => real.GetHonorificAsync(t, id, ct);

@@ -286,6 +286,26 @@ A company may sit under a parent company (a holding): `POST /companies` takes `p
 `GET /company-groups` gives the companies as a tree. It is only a grouping: who sees which company,
 managers and everything else stay as they were, and a company with no parent is as before.
 
+## Dates, merging, the log and undo (phase 6.4)
+
+Changes take effect at once. A node's dates only say when it exists: `PUT /nodes/{id}/validity
+{ validFrom, validTo, rowVersion }` (each null: no limit). `GET /chart?asOf=<date>` shows only the
+nodes that exist on that day (a node under one that does not is left out too). Without `asOf` the
+chart is as always. It shows which nodes existed, not where they sat then.
+
+`POST /nodes/{id}/merge { targetNodeId, effectiveDate?, rowVersion? }` (permission `node.move`)
+puts a node into another node of the same company: its child nodes (if the rules allow them there),
+its posts (with their holders, so open tasks stay on the same posts) and its people move to the
+target. The node becomes inactive and ends on `effectiveDate` (default: now). The target keeps its
+manager post; the merged node's manager post loses its mark. `/impact-preview` takes
+`{ kind: "merge", nodeId, toNodeId }`.
+
+`GET /nodes/{id}/changes` lists a node's log, newest first. `POST /nodes/{id}/undo` puts back what the
+node's last change changed (name or type, manager, details, dates, a move, deactivating or
+activating, a merge). It goes through the same checks and is logged as a change itself. A merge is
+undone only while everything it moved is still where it put it. Making a node, ordering, rules and
+links are not undone.
+
 `/impact-preview` also takes `{ kind: "link", nodeId, toNodeId, linkTypeId }` and
 `{ kind: "unlink-link", linkId }`, and lists each person's `extraManagersAdded` / `extraManagersRemoved`.
 

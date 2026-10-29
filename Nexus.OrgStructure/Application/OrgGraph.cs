@@ -50,6 +50,42 @@ public sealed class OrgGraph
             links.ToDictionary(link => link.UnitId, link => link.CompanyId));
     }
 
+    /// <summary>Whether a unit exists on a day: from its ValidFrom (none: always before) to its ValidTo (none: always after).</summary>
+    public static bool IsValidAt(Nexus.Organization.Domain.OrganizationUnit unit, DateTimeOffset date) =>
+        (unit.ValidFrom is not { } from || from <= date) && (unit.ValidTo is not { } to || date < to);
+
+    /// <summary>
+    /// The graph as it is on a day: only the units that exist then (a unit under one that does not is
+    /// left out too). Units with no dates exist always, so for today's data it is the same graph.
+    /// </summary>
+    public static OrgGraph AsOf(
+        DateTimeOffset date,
+        IEnumerable<Nexus.Organization.Domain.OrganizationUnit> units,
+        IEnumerable<Domain.NodeType> nodeTypes,
+        IEnumerable<Domain.CompanyUnit> links,
+        IEnumerable<Domain.UnitPosition>? seats = null,
+        IEnumerable<Domain.UserPosition>? holdings = null)
+    {
+        var all = units.ToDictionary(unit => unit.Id);
+        bool Exists(Nexus.Organization.Domain.OrganizationUnit unit)
+        {
+            var seen = new HashSet<Guid>();
+            for (var current = unit; current is not null && seen.Add(current.Id); current = current.ParentUnitId is { } p ? all.GetValueOrDefault(p) : null)
+            {
+                if (!IsValidAt(current, date))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        var kept = all.Values.Where(Exists).ToList();
+        var ids = kept.Select(unit => unit.Id).ToHashSet();
+        return Build(kept, nodeTypes, links.Where(link => ids.Contains(link.UnitId)), seats?.Where(seat => seat.UnitId is not { } u || ids.Contains(u)), holdings);
+    }
+
     /// <summary>Per unit, the holder of its manager's post (the first held one in the unit's order).</summary>
     private static Dictionary<Guid, Guid> ManagerPostHolders(IEnumerable<Domain.UnitPosition>? seats, IEnumerable<Domain.UserPosition>? holdings)
     {
