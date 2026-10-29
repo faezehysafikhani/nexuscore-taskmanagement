@@ -1,3 +1,5 @@
+> **برنچ `feature/1405-08-07-orgNode` — ساختار سازمانی داینامیک (در حال کار).** توضیح هدف، وضعیت فعلی و تست‌های پایه: [ORG-NODE-BRANCH.md](ORG-NODE-BRANCH.md)
+
 # NexusCore platform packages
 
 NexusCore is the shared .NET 8 platform for identity, tenants, permissions, audit, settings and
