@@ -257,6 +257,28 @@ post. A position that is not for the node's company is listed in `skipped`, not 
 again makes nothing. A company made from a template gets its posts this way too: the template's
 posts directly in the company (the head's) and each node's posts from its type.
 
+## Importing nodes from a sheet (phase 6.2)
+
+`POST /import/preview` and `POST /import/commit` (permission `org_structure.node.create`) take a
+multipart form: `file` (.xlsx, its first sheet, or a UTF-8 .csv; at most 5 MB and 5000 rows) and
+either `companyId` (the sheet's top rows go to the top of that company) or `parentNodeId` (under
+that node; needs `AllowNesting`). Columns, after a header row: code, name, parent code, type (a node
+type's code; empty: «واحد»), manager's position (a position of the company; empty: none).
+
+The sheet is checked as a whole and every fault is listed with its row (missing or duplicate codes,
+a missing parent, a loop, an unknown type, a type not allowed there, a code the company already has,
+an unknown manager's position, nesting without the switch or rules). Commit makes nothing unless
+nothing is wrong: it only makes new nodes. It then adds the automatic links (several targets: left
+to choose, as `autoLinkChoices`), each node's manager post from the sheet, and the posts of each
+node's type.
+
+## A node's code and details (phase 6.5)
+
+Every node may have a code (unique in its company), a latin name, a title used in letters (apart from
+its name), a phone and an address: `PUT /nodes/{id}/details { code, latinName, correspondenceTitle,
+phone, address, rowVersion }` (each empty: none). They are optional and empty for every existing
+node; `POST /nodes` also takes `code`. A node does not move to a company that already has its code.
+
 `/impact-preview` also takes `{ kind: "link", nodeId, toNodeId, linkTypeId }` and
 `{ kind: "unlink-link", linkId }`, and lists each person's `extraManagersAdded` / `extraManagersRemoved`.
 

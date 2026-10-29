@@ -16,5 +16,11 @@ public sealed class OrganizationUnitConfiguration : IEntityTypeConfiguration<Org
         builder.Property(x => x.RowVersion).IsRowVersion();
         builder.HasIndex(x => x.ParentUnitId);
         builder.HasIndex(x => x.NodeTypeId);
+        // Optional node code and details (phase 6): all nullable, empty for every existing unit.
+        builder.Property(x => x.NodeCode).HasMaxLength(40);
+        builder.Property(x => x.LatinName).HasMaxLength(200);
+        builder.Property(x => x.CorrespondenceTitle).HasMaxLength(200);
+        builder.Property(x => x.Phone).HasMaxLength(40);
+        builder.Property(x => x.Address).HasMaxLength(500);
     }
 }

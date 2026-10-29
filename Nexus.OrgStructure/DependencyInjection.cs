@@ -21,6 +21,7 @@ public static class DependencyInjection
         services.AddScoped<OrgStructureService>();
         services.AddScoped<IOrgStructureService>(sp => sp.GetRequiredService<OrgStructureService>());
         services.AddScoped<IOrgPostTemplateService>(sp => sp.GetRequiredService<OrgStructureService>());
+        services.AddScoped<IOrgImportService, OrgImportService>();
         // The dynamic structure's nodes, types and rules, and the impact preview of a change.
         services.AddScoped<OrgNodeService>();
         services.AddScoped<IOrgNodeService>(sp => sp.GetRequiredService<OrgNodeService>());

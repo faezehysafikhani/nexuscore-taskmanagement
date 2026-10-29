@@ -26,6 +26,7 @@ public interface IOrgNodeService
     Task<Result<OrgNodeDto>> CreateNodeAsync(Guid tenantId, CreateNodeRequest request, CancellationToken cancellationToken);
     Task<Result<OrgNodeDto>> UpdateNodeAsync(Guid tenantId, Guid id, UpdateNodeRequest request, CancellationToken cancellationToken);
     Task<Result<OrgNodeDto>> SetManagerAsync(Guid tenantId, Guid id, SetNodeManagerRequest request, CancellationToken cancellationToken);
+    Task<Result<OrgNodeDto>> SetDetailsAsync(Guid tenantId, Guid id, SetNodeDetailsRequest request, CancellationToken cancellationToken);
     Task<Result<OrgNodeDto>> MoveNodeAsync(Guid tenantId, Guid id, MoveNodeRequest request, CancellationToken cancellationToken);
     Task<Result<OrgNodeDto>> ReorderNodeAsync(Guid tenantId, Guid id, ReorderNodeRequest request, CancellationToken cancellationToken);
     Task<Result<OrgNodeDto>> DeactivateNodeAsync(Guid tenantId, Guid id, NodeVersionRequest request, CancellationToken cancellationToken);
@@ -204,7 +205,14 @@ public sealed partial class OrgNodeService(
             return Result.Failure<OrgNodeDto>(companyProblem);
         }
 
+        var nodeCompanyId = request.ParentNodeId is { } p0 ? state.Graph.CompanyOfUnit(p0) : companyId;
+        if (NodeCodeProblem(state, request.Code, nodeCompanyId, null) is { } codeProblem)
+        {
+            return Result.Failure<OrgNodeDto>(codeProblem);
+        }
+
         var unit = new OrganizationUnit(Guid.NewGuid(), tenantId, name);
+        unit.SetNodeCode(request.Code);
         unit.SetParent(request.ParentNodeId);
         unit.SetNodeType(typeId);
         unit.SetSortOrder(NextSortOrder(state, request.ParentNodeId, request.ParentNodeId is null ? companyId : null));
@@ -263,6 +271,25 @@ public sealed partial class OrgNodeService(
             unit.Update(name, unit.ManagerUserId, unit.IsActive);
             unit.SetNodeType(typeId);
             return Task.FromResult<(Error?, object?)>((null, new { before, after = new { name, type = typeId } }));
+        }, cancellationToken);
+
+    public Task<Result<OrgNodeDto>> SetDetailsAsync(Guid tenantId, Guid id, SetNodeDetailsRequest request, CancellationToken cancellationToken) =>
+        ChangeNodeAsync(tenantId, id, request.RowVersion, "details", (state, unit) =>
+        {
+            if (NodeCodeProblem(state, request.Code, state.Graph.CompanyOfUnit(unit.Id), unit.Id) is { } codeProblem)
+            {
+                return Task.FromResult<(Error?, object?)>((codeProblem, null));
+            }
+
+            if (DetailsProblem(request) is { } invalid)
+            {
+                return Task.FromResult<(Error?, object?)>((invalid, null));
+            }
+
+            var before = new { code = unit.NodeCode, unit.LatinName, unit.CorrespondenceTitle, unit.Phone, unit.Address };
+            unit.SetNodeCode(request.Code);
+            unit.SetDetails(request.LatinName, request.CorrespondenceTitle, request.Phone, request.Address);
+            return Task.FromResult<(Error?, object?)>((null, new { before, after = new { code = unit.NodeCode, unit.LatinName, unit.CorrespondenceTitle, unit.Phone, unit.Address } }));
         }, cancellationToken);
 
     public Task<Result<OrgNodeDto>> SetManagerAsync(Guid tenantId, Guid id, SetNodeManagerRequest request, CancellationToken cancellationToken) =>
@@ -340,6 +367,16 @@ public sealed partial class OrgNodeService(
                 if (people > 0 || posts > 0)
                 {
                     return (Error.Conflict($"این گره و زیرمجموعه‌اش {posts} پست و {people} نفر دارند؛ برای بردن به شرکت دیگر اول آن‌ها را جابه‌جا کنید."), null);
+                }
+
+                // Node codes are unique in a company: none of the branch's may already be used there.
+                foreach (var moving in subtree.Select(id => state.Units[id]).Where(u => u.NodeCode is not null))
+                {
+                    if (state.Units.Values.Any(other => !subtree.Contains(other.Id) && other.NodeCode is { } c
+                                                        && Normalize(c) == Normalize(moving.NodeCode) && state.Graph.CompanyOfUnit(other.Id) == newCompany))
+                    {
+                        return (Error.Conflict($"کد «{moving.NodeCode}» (گره‌ی «{moving.Name}») در شرکت مقصد هست."), null);
+                    }
                 }
             }
 
@@ -752,6 +789,36 @@ public sealed partial class OrgNodeService(
         return company.IsActive ? null : Error.Validation($"شرکت «{company.Name}» غیرفعال است.");
     }
 
+    public const int MaxNodeCodeLength = 40;
+
+    /// <summary>A node code: at most 40 characters and not used by another node of the same company (compared loosely).</summary>
+    private static Error? NodeCodeProblem(NodeState state, string? code, Guid? companyId, Guid? exceptId)
+    {
+        var text = code?.Trim();
+        if (string.IsNullOrEmpty(text))
+        {
+            return null;
+        }
+
+        if (text.Length > MaxNodeCodeLength)
+        {
+            return Error.Validation($"کد گره حداکثر {MaxNodeCodeLength} نویسه است.");
+        }
+
+        var key = Normalize(text);
+        return state.Units.Values.Any(other => other.Id != exceptId && other.NodeCode is { } c && Normalize(c) == key
+                                               && state.Graph.CompanyOfUnit(other.Id) == companyId)
+            ? Error.Conflict($"گره‌ی دیگری در همین شرکت کد «{text}» دارد.")
+            : null;
+    }
+
+    private static Error? DetailsProblem(SetNodeDetailsRequest request) =>
+        request.LatinName?.Trim().Length > 200 ? Error.Validation("نام لاتین حداکثر ۲۰۰ نویسه است.")
+        : request.CorrespondenceTitle?.Trim().Length > 200 ? Error.Validation("عنوان مکاتباتی حداکثر ۲۰۰ نویسه است.")
+        : request.Phone?.Trim().Length > 40 ? Error.Validation("شماره تماس حداکثر ۴۰ نویسه است.")
+        : request.Address?.Trim().Length > 500 ? Error.Validation("نشانی حداکثر ۵۰۰ نویسه است.")
+        : null;
+
     private static Error? NameProblem(string name) =>
         name.Length == 0 ? Error.Validation("نام گره را وارد کنید.")
         : name.Length > MaxNodeNameLength ? Error.Validation($"نام گره حداکثر {MaxNodeNameLength} نویسه است.")
@@ -855,7 +922,13 @@ public sealed partial class OrgNodeService(
         unit.IsActive,
         unit.SortOrder,
         state.Graph.ChildrenOf(unit.Id).Count,
-        Convert.ToBase64String(unit.RowVersion ?? []));
+        Convert.ToBase64String(unit.RowVersion ?? []),
+        null,
+        unit.NodeCode,
+        unit.LatinName,
+        unit.CorrespondenceTitle,
+        unit.Phone,
+        unit.Address);
 
     private static NodeTypeDto ToDto(NodeState state, NodeType type) => new(
         type.Id, type.Code, type.Name, type.Color, type.Icon, type.IsDomainBoundary, type.SortOrder, type.IsActive,

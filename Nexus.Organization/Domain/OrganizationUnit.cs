@@ -47,6 +47,30 @@ public sealed class OrganizationUnit : AuditableEntity<Guid>
     /// <summary>Its place among the nodes beside it (same parent, or the same company's top), lowest first.</summary>
     public int SortOrder { get; private set; }
 
+    /// <summary>
+    /// The node's own code (unique in its company; null: none - every unit before phase 6). Not the
+    /// old Code column that upgrade-1 removed: that is why it is NodeCode.
+    /// </summary>
+    public string? NodeCode { get; private set; }
+
+    /// <summary>Optional details (null: none): a latin name, the title used in letters (apart from the name), and contact details.</summary>
+    public string? LatinName { get; private set; }
+    public string? CorrespondenceTitle { get; private set; }
+    public string? Phone { get; private set; }
+    public string? Address { get; private set; }
+
+    public void SetNodeCode(string? code) => NodeCode = Clean(code);
+
+    public void SetDetails(string? latinName, string? correspondenceTitle, string? phone, string? address)
+    {
+        LatinName = Clean(latinName);
+        CorrespondenceTitle = Clean(correspondenceTitle);
+        Phone = Clean(phone);
+        Address = Clean(address);
+    }
+
+    private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
     public void SetSortOrder(int sortOrder) => SortOrder = sortOrder;
 
     public void SetParent(Guid? parentUnitId) => ParentUnitId = parentUnitId;

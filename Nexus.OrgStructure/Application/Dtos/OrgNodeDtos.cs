@@ -22,10 +22,19 @@ public sealed record OrgNodeDto(
     int SortOrder,
     int ChildCount,
     string RowVersion,
-    IReadOnlyList<AutoLinkChoiceDto>? AutoLinkChoices = null);
+    IReadOnlyList<AutoLinkChoiceDto>? AutoLinkChoices = null,
+    string? Code = null,
+    string? LatinName = null,
+    string? CorrespondenceTitle = null,
+    string? Phone = null,
+    string? Address = null);
 
 /// <summary>ParentNodeId null: a top node, linked to CompanyId when given. NodeTypeId null: the plain «واحد» type.</summary>
-public sealed record CreateNodeRequest(string Name, Guid? ParentNodeId = null, Guid? CompanyId = null, Guid? NodeTypeId = null);
+public sealed record CreateNodeRequest(string Name, Guid? ParentNodeId = null, Guid? CompanyId = null, Guid? NodeTypeId = null, string? Code = null);
+
+/// <summary>The node's code (unique in its company) and optional details; each null or empty: none. Replaces them all.</summary>
+public sealed record SetNodeDetailsRequest(
+    string? Code = null, string? LatinName = null, string? CorrespondenceTitle = null, string? Phone = null, string? Address = null, string? RowVersion = null);
 
 public sealed record UpdateNodeRequest(string Name, Guid? NodeTypeId = null, string? RowVersion = null);
 
@@ -116,3 +125,19 @@ public sealed record StructureTemplateDetailDto(StructureTemplateDto Template, S
 
 /// <summary>Saves a company's structure as a template of this organization (a copy).</summary>
 public sealed record SaveStructureTemplateRequest(Guid CompanyId, string Name, string? Code = null, string? Description = null);
+
+// ---------------------------------------------------------------- import from a sheet (phase 6.2)
+
+/// <summary>Where the sheet's top rows go: the top of CompanyId, or under ParentNodeId (one of the two).</summary>
+public sealed record ImportTargetRequest(Guid? CompanyId = null, Guid? ParentNodeId = null);
+
+/// <summary>A fault of the sheet; Row: its row in the sheet (null: the file as a whole).</summary>
+public sealed record ImportErrorDto(int? Row, string? Code, string Message);
+
+public sealed record ImportNodePreviewDto(int Row, string Code, string Name, string? ParentCode, string TypeName, string? ManagerPosition, int Depth);
+
+/// <summary>What the sheet would make. Nothing is made while Errors is not empty (all or nothing).</summary>
+public sealed record ImportPreviewDto(int RowCount, IReadOnlyList<ImportNodePreviewDto> Nodes, IReadOnlyList<ImportErrorDto> Errors);
+
+/// <summary>What was made: nodes, automatic links, posts (manager posts of the sheet and each type's posts), and links left to choose.</summary>
+public sealed record ImportResultDto(IReadOnlyList<OrgNodeDto> Nodes, int Links, int Posts, IReadOnlyList<AutoLinkChoiceDto> AutoLinkChoices, IReadOnlyList<SkippedPostDto> SkippedPosts);

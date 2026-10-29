@@ -27,6 +27,14 @@ namespace Nexus.Organization.Infrastructure.Migrations.Organization
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("Address")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("CorrespondenceTitle")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("datetimeoffset");
 
@@ -35,6 +43,10 @@ namespace Nexus.Organization.Infrastructure.Migrations.Organization
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
+
+                    b.Property<string>("LatinName")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
 
                     b.Property<Guid?>("ManagerUserId")
                         .HasColumnType("uniqueidentifier");
@@ -50,11 +62,19 @@ namespace Nexus.Organization.Infrastructure.Migrations.Organization
                         .HasMaxLength(160)
                         .HasColumnType("nvarchar(160)");
 
+                    b.Property<string>("NodeCode")
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
                     b.Property<Guid?>("NodeTypeId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<Guid?>("ParentUnitId")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
 
                     b.Property<byte[]>("RowVersion")
                         .IsConcurrencyToken()
