@@ -23,10 +23,11 @@
 ## وضعیت فعلی
 - **فاز ۰ — پیش‌نیازها:** انجام شده است (تست‌های طلایی روی داده‌ی مسطح، مبنا و قواعد کار، این توضیح).
 - `0.0` — تست‌های طلایی (`OrgGoldenTests`، ۵ تست) رفتار فعلی را روی سه چیدمان مسطح ثبت می‌کنند؛ هنوز هیچ تغییری در رفتار برنامه نیست.
+- `1.1` — فیلدهای اختیاری گره (`ParentUnitId`، `NodeTypeId`، `ValidFrom/To`، `RowVersion`)، `Company` (`ParentCompanyId`، `TemplateId`، `UiLevel`)، `UnitPosition` (`IsManagerPost`، `IsCompanyHead`، `RowVersion`) و جدول‌های جدید (نوع گره، قاعده، رابطه، قالب، لاگ تغییر) با نگاشت EF و خواندن در ریپازیتوری. هیچ منطقی به آنها وصل نشده؛ migration در ۱.۲ می‌آید.
 - فازهای بعدی: طبق پلن؛ این بخش بعد از هر فاز به‌روز می‌شود.
 
 ## تست‌های پایه
-۲۲۶ تست، ۲۲۳ پاس، ۳ فِیل قدیمی و بی‌ربط به این کار:
+۲۲۹ تست، ۲۲۶ پاس (۳ تست جدید مدل در ۱.۱)، ۳ فِیل قدیمی و بی‌ربط به این کار:
 - `OrgStructureTests.Units_BelongToACompany_ThroughTheirTopUnit`
 - `EffectivePermissionTests.AnotherModulesPermission_CannotBeAssigned_ButStaysWhereItIs_AndStillWorks`
 - `RecurringTaskReminderTests.IncompleteSmsSettings_AreReported_AndNothingIsSent`

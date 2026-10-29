@@ -28,6 +28,32 @@ public sealed class OrganizationUnit : AuditableEntity<Guid>
     public Guid? ManagerUserId { get; private set; }
     public bool IsActive { get; private set; }
 
+    /// <summary>
+    /// The unit above this one. Null: directly under the (implicit, row-less) root of its company,
+    /// which is how every unit was until now. Kept as a bare reference like every other id here.
+    /// </summary>
+    public Guid? ParentUnitId { get; private set; }
+
+    /// <summary>Which node type (Nexus.OrgStructure, org_structure.NodeTypes) this unit is; null: the plain «unit».</summary>
+    public Guid? NodeTypeId { get; private set; }
+
+    /// <summary>The period the unit exists in (null: always). For planned restructurings; not used yet.</summary>
+    public DateTimeOffset? ValidFrom { get; private set; }
+    public DateTimeOffset? ValidTo { get; private set; }
+
+    /// <summary>Concurrency token: saving with an older version is refused.</summary>
+    public byte[] RowVersion { get; private set; } = [];
+
+    public void SetParent(Guid? parentUnitId) => ParentUnitId = parentUnitId;
+
+    public void SetNodeType(Guid? nodeTypeId) => NodeTypeId = nodeTypeId;
+
+    public void SetValidity(DateTimeOffset? validFrom, DateTimeOffset? validTo)
+    {
+        ValidFrom = validFrom;
+        ValidTo = validTo;
+    }
+
     public void Update(string name, Guid? managerUserId, bool isActive)
     {
         Name = name.Trim();

@@ -12,6 +12,9 @@ public sealed class OrganizationUnitConfiguration : IEntityTypeConfiguration<Org
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).ValueGeneratedNever();
         builder.Property(x => x.Name).HasMaxLength(160).IsRequired();
-        // Code and parent were removed: units are flat in this product.
+        // Parent, node type and validity are optional: a unit with none of them is a flat unit, as before.
+        builder.Property(x => x.RowVersion).IsRowVersion();
+        builder.HasIndex(x => x.ParentUnitId);
+        builder.HasIndex(x => x.NodeTypeId);
     }
 }

@@ -20,6 +20,7 @@ public sealed class CompanyConfiguration : IEntityTypeConfiguration<Company>
         builder.Property(x => x.Code).HasMaxLength(40).IsRequired();
         builder.Property(x => x.Description).HasMaxLength(1000);
         builder.HasIndex(x => new { x.TenantId, x.Code }).IsUnique();
+        builder.HasIndex(x => x.ParentCompanyId);
     }
 }
 
@@ -131,6 +132,7 @@ public sealed class UnitPositionConfiguration : IEntityTypeConfiguration<UnitPos
         builder.HasIndex(x => x.UnitId);
         builder.HasIndex(x => x.PositionId);
         builder.HasIndex(x => x.ParentPostId);
+        builder.Property(x => x.RowVersion).IsRowVersion();
     }
 }
 

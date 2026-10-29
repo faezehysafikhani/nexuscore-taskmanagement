@@ -6,6 +6,35 @@ namespace Nexus.OrgStructure.Infrastructure;
 
 public sealed class OrgStructureRepository(OrgStructureDbContext dbContext) : IOrgStructureRepository
 {
+    public async Task<IReadOnlyList<NodeType>> ListNodeTypesAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        await dbContext.NodeTypes.Where(x => x.TenantId == tenantId).OrderBy(x => x.SortOrder).ThenBy(x => x.Name).ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<NodeTypeRule>> ListNodeTypeRulesAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        await dbContext.NodeTypeRules.Where(x => x.TenantId == tenantId).ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<NodeTypePostTemplate>> ListNodeTypePostTemplatesAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        await dbContext.NodeTypePostTemplates.Where(x => x.TenantId == tenantId).OrderBy(x => x.SortOrder).ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<LinkType>> ListLinkTypesAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        await dbContext.LinkTypes.Where(x => x.TenantId == tenantId).OrderBy(x => x.Name).ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<AutoLinkRule>> ListAutoLinkRulesAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        await dbContext.AutoLinkRules.Where(x => x.TenantId == tenantId).ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<OrgLink>> ListOrgLinksAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        await dbContext.OrgLinks.Where(x => x.TenantId == tenantId).ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<StructureTemplate>> ListStructureTemplatesAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        await dbContext.StructureTemplates.Where(x => x.TenantId == tenantId).OrderBy(x => x.Name).ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<StructureTemplateItem>> ListStructureTemplateItemsAsync(Guid tenantId, Guid? templateId, CancellationToken cancellationToken) =>
+        await dbContext.StructureTemplateItems.Where(x => x.TenantId == tenantId && (templateId == null || x.TemplateId == templateId))
+            .OrderBy(x => x.SortOrder).ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<OrgChangeLog>> ListOrgChangeLogsAsync(Guid tenantId, Guid? entityId, int take, CancellationToken cancellationToken) =>
+        await dbContext.OrgChangeLogs.Where(x => x.TenantId == tenantId && (entityId == null || x.EntityId == entityId))
+            .OrderByDescending(x => x.AtUtc).Take(take).ToListAsync(cancellationToken);
+
     public async Task<IReadOnlyList<Company>> ListCompaniesAsync(Guid tenantId, CancellationToken cancellationToken) =>
         await dbContext.Companies.Where(x => x.TenantId == tenantId).OrderBy(x => x.Name).ToListAsync(cancellationToken);
 

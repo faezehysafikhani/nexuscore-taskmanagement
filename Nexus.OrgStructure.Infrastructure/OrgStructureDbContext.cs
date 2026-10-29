@@ -25,6 +25,15 @@ public sealed class OrgStructureDbContext(DbContextOptions<OrgStructureDbContext
     public DbSet<UserPosition> UserPositions => Set<UserPosition>();
     public DbSet<Honorific> Honorifics => Set<Honorific>();
     public DbSet<UserHonorific> UserHonorifics => Set<UserHonorific>();
+    public DbSet<NodeType> NodeTypes => Set<NodeType>();
+    public DbSet<NodeTypeRule> NodeTypeRules => Set<NodeTypeRule>();
+    public DbSet<NodeTypePostTemplate> NodeTypePostTemplates => Set<NodeTypePostTemplate>();
+    public DbSet<LinkType> LinkTypes => Set<LinkType>();
+    public DbSet<AutoLinkRule> AutoLinkRules => Set<AutoLinkRule>();
+    public DbSet<OrgLink> OrgLinks => Set<OrgLink>();
+    public DbSet<StructureTemplate> StructureTemplates => Set<StructureTemplate>();
+    public DbSet<StructureTemplateItem> StructureTemplateItems => Set<StructureTemplateItem>();
+    public DbSet<OrgChangeLog> OrgChangeLogs => Set<OrgChangeLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

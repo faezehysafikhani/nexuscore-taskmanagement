@@ -8,6 +8,17 @@ public interface IOrgStructureUnitOfWork : IUnitOfWork;
 
 public interface IOrgStructureRepository
 {
+    // The dynamic structure's data (read only for now: nothing uses it yet).
+    Task<IReadOnlyList<NodeType>> ListNodeTypesAsync(Guid tenantId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<NodeTypeRule>> ListNodeTypeRulesAsync(Guid tenantId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<NodeTypePostTemplate>> ListNodeTypePostTemplatesAsync(Guid tenantId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<LinkType>> ListLinkTypesAsync(Guid tenantId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<AutoLinkRule>> ListAutoLinkRulesAsync(Guid tenantId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<OrgLink>> ListOrgLinksAsync(Guid tenantId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<StructureTemplate>> ListStructureTemplatesAsync(Guid tenantId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<StructureTemplateItem>> ListStructureTemplateItemsAsync(Guid tenantId, Guid? templateId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<OrgChangeLog>> ListOrgChangeLogsAsync(Guid tenantId, Guid? entityId, int take, CancellationToken cancellationToken);
+
     Task<IReadOnlyList<Company>> ListCompaniesAsync(Guid tenantId, CancellationToken cancellationToken);
     Task<Company?> GetCompanyAsync(Guid tenantId, Guid id, CancellationToken cancellationToken);
     Task<bool> CompanyCodeExistsAsync(Guid tenantId, string code, Guid? excludeId, CancellationToken cancellationToken);

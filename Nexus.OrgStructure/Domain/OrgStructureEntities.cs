@@ -38,6 +38,23 @@ public sealed class Company : AuditableEntity<Guid>
 
     public bool IsActive { get; private set; }
 
+    /// <summary>The parent company in a group (holding); null: a company of its own.</summary>
+    public Guid? ParentCompanyId { get; private set; }
+
+    /// <summary>The structure template the company was made from (a copy; later edits do not change it).</summary>
+    public Guid? TemplateId { get; private set; }
+
+    /// <summary>How much of the structure tools the screens show (only hides things in the UI).</summary>
+    public OrgUiLevel UiLevel { get; private set; }
+
+    public void SetGroup(Guid? parentCompanyId, Guid? templateId)
+    {
+        ParentCompanyId = parentCompanyId;
+        TemplateId = templateId;
+    }
+
+    public void SetUiLevel(OrgUiLevel level) => UiLevel = level;
+
     public void Update(string name, string code, string? description, bool isActive)
     {
         Name = name.Trim();
@@ -49,6 +66,14 @@ public sealed class Company : AuditableEntity<Guid>
     public void SetHead(Guid? userId) => ManagerUserId = userId;
 
     private static string? Normalize(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+}
+
+/// <summary>Screen detail level of a company. The default (0) is Normal, so existing rows need no value.</summary>
+public enum OrgUiLevel
+{
+    Normal = 0,
+    Simple = 1,
+    Advanced = 2,
 }
 
 /// <summary>
@@ -202,6 +227,19 @@ public sealed class UnitPosition : AuditableEntity<Guid>
     /// manages this post's holder. Null: under the unit's manager (or the company's head).
     /// </summary>
     public Guid? ParentPostId { get; private set; }
+
+    /// <summary>The post that manages its unit (its holder is the unit's manager when the unit has none set).</summary>
+    public bool IsManagerPost { get; private set; }
+
+    /// <summary>The company head's post. Until the data is migrated, a directly-in-company post whose position has no superior counts too.</summary>
+    public bool IsCompanyHead { get; private set; }
+
+    /// <summary>Concurrency token: saving with an older version is refused.</summary>
+    public byte[] RowVersion { get; private set; } = [];
+
+    public void SetManagerPost(bool isManagerPost) => IsManagerPost = isManagerPost;
+
+    public void SetCompanyHead(bool isCompanyHead) => IsCompanyHead = isCompanyHead;
 
     public void MoveTo(int sortOrder) => SortOrder = sortOrder;
 
