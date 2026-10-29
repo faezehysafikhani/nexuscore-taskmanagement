@@ -16,6 +16,8 @@ public static class DependencyInjection
     /// </summary>
     public static IServiceCollection AddOrgStructure(this IServiceCollection services)
     {
+        // The one graph of units everything reads (parents, subtrees, domains).
+        services.AddScoped<IOrgGraphProvider, OrgGraphProvider>();
         services.AddScoped<IOrgStructureService, OrgStructureService>();
         services.AddScoped<IHonorificService, HonorificService>();
         services.AddSingleton<IPermissionCatalog, OrgStructurePermissionCatalog>();

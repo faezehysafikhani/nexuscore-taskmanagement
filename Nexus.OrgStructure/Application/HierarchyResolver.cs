@@ -16,7 +16,8 @@ public enum ManagerSource
     PostSuperior = 3
 }
 
-public sealed record UnitNode(Guid Id, Guid? ParentId, Guid? ManagerUserId);
+/// <summary>IsDomainBoundary: whether the unit is the boundary of «the same deputy» (see <see cref="OrgGraph.DomainOf"/>); true for a plain unit.</summary>
+public sealed record UnitNode(Guid Id, Guid? ParentId, Guid? ManagerUserId, bool IsDomainBoundary = true);
 
 /// <summary>PostSuperiorUserId: who holds the post above the user's own (see <see cref="PostSuperiors"/>).</summary>
 public sealed record AssignmentNode(Guid UserId, Guid CompanyId, Guid? UnitId, Guid? ManagerUserId, Guid? PostSuperiorUserId = null);
@@ -84,7 +85,7 @@ public sealed record ResolvedManager(Guid ManagerUserId, ManagerSource Source);
 /// </summary>
 public sealed class HierarchyResolver
 {
-    private readonly IReadOnlyDictionary<Guid, UnitNode> _units;
+    private readonly OrgGraph _graph;
     private readonly IReadOnlyDictionary<Guid, Guid> _companyOfLinkedUnit;
     private readonly IReadOnlyDictionary<Guid, Guid?> _companyManagers;
     private readonly IReadOnlyDictionary<Guid, AssignmentNode> _assignments;
@@ -96,7 +97,7 @@ public sealed class HierarchyResolver
         IReadOnlyDictionary<Guid, Guid?> companyManagers,
         IEnumerable<AssignmentNode> assignments)
     {
-        _units = units.ToDictionary(unit => unit.Id);
+        _graph = new OrgGraph(units, companyOfLinkedUnit);
         _companyOfLinkedUnit = companyOfLinkedUnit;
         _companyManagers = companyManagers;
         _assignments = assignments.ToDictionary(assignment => assignment.UserId);
@@ -104,55 +105,17 @@ public sealed class HierarchyResolver
 
     public IReadOnlyDictionary<Guid, AssignmentNode> Assignments => _assignments;
 
+    /// <summary>The graph of units this resolver walks (the one algorithm for parents, subtrees and domains).</summary>
+    public OrgGraph Graph => _graph;
+
     /// <summary>The company a unit belongs to: the one linked to it or to the nearest unit above it.</summary>
-    public Guid? CompanyOfUnit(Guid unitId) => LinkedAncestorOf(unitId) is { } linked ? _companyOfLinkedUnit[linked] : null;
+    public Guid? CompanyOfUnit(Guid unitId) => _graph.CompanyOfUnit(unitId);
 
     /// <summary>The unit itself or the nearest unit above it that is linked to a company.</summary>
-    public Guid? LinkedAncestorOf(Guid unitId)
-    {
-        var visited = new HashSet<Guid>();
-        Guid? current = unitId;
-        while (current is { } id && visited.Add(id))
-        {
-            if (_companyOfLinkedUnit.ContainsKey(id))
-            {
-                return id;
-            }
-
-            current = _units.TryGetValue(id, out var unit) ? unit.ParentId : null;
-        }
-
-        return null;
-    }
+    public Guid? LinkedAncestorOf(Guid unitId) => _graph.LinkedAncestorOf(unitId);
 
     /// <summary>Every unit at or below the given one (cycle-safe).</summary>
-    public IReadOnlyList<Guid> SubtreeOf(Guid unitId)
-    {
-        var children = _units.Values
-            .Where(unit => unit.ParentId is not null)
-            .GroupBy(unit => unit.ParentId!.Value)
-            .ToDictionary(group => group.Key, group => group.Select(unit => unit.Id).ToList());
-
-        var result = new List<Guid>();
-        var visited = new HashSet<Guid>();
-        var pending = new Stack<Guid>([unitId]);
-        while (pending.Count > 0)
-        {
-            var id = pending.Pop();
-            if (!visited.Add(id))
-            {
-                continue;
-            }
-
-            result.Add(id);
-            if (children.TryGetValue(id, out var below))
-            {
-                below.ForEach(pending.Push);
-            }
-        }
-
-        return result;
-    }
+    public IReadOnlyList<Guid> SubtreeOf(Guid unitId) => _graph.SubtreeOf(unitId);
 
     public ResolvedManager? ManagerOf(Guid userId) => Managers.TryGetValue(userId, out var manager) ? manager : null;
 
@@ -247,7 +210,7 @@ public sealed class HierarchyResolver
 
         var visited = new HashSet<Guid>();
         var current = assignment.UnitId;
-        while (current is { } unitId && visited.Add(unitId) && _units.TryGetValue(unitId, out var unit))
+        while (current is { } unitId && visited.Add(unitId) && _graph.Node(unitId) is { } unit)
         {
             if (unit.ManagerUserId is { } unitManager && unitManager != assignment.UserId)
             {

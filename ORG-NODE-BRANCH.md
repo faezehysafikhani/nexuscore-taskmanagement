@@ -24,10 +24,11 @@
 - **فاز ۰ — پیش‌نیازها:** انجام شده است (تست‌های طلایی روی داده‌ی مسطح، مبنا و قواعد کار، این توضیح).
 - `0.0` — تست‌های طلایی (`OrgGoldenTests`، ۵ تست) رفتار فعلی را روی سه چیدمان مسطح ثبت می‌کنند؛ هنوز هیچ تغییری در رفتار برنامه نیست.
 - `1.1` — فیلدهای اختیاری گره (`ParentUnitId`، `NodeTypeId`، `ValidFrom/To`، `RowVersion`)، `Company` (`ParentCompanyId`، `TemplateId`، `UiLevel`)، `UnitPosition` (`IsManagerPost`، `IsCompanyHead`، `RowVersion`) و جدول‌های جدید (نوع گره، قاعده، رابطه، قالب، لاگ تغییر) با نگاشت EF و خواندن در ریپازیتوری. هیچ منطقی به آنها وصل نشده؛ migration در ۱.۲ می‌آید.
+- `1.3` — `OrgGraph` و `IOrgGraphProvider`: یک گراف واحد با والد واقعی (`ParentOf`، `SubtreeOf`، `DomainOf`، شرکت مالک از گره‌ی بالایی)؛ `HierarchyResolver` همین گراف را به‌کار می‌برد. ریشه ضمنی است (بدون ردیف و بدون مدیر): والد خالی و والد=شناسه شرکت یک گراف مسطح یکسان می‌دهند (تست برابری). مصرف‌کننده‌های دیگر در ۱.۴ وصل می‌شوند.
 - فازهای بعدی: طبق پلن؛ این بخش بعد از هر فاز به‌روز می‌شود.
 
 ## تست‌های پایه
-۲۲۹ تست، ۲۲۶ پاس (۳ تست جدید مدل در ۱.۱)، ۳ فِیل قدیمی و بی‌ربط به این کار:
+۲۳۶ تست، ۲۳۳ پاس (تست‌های جدید: ۳ مدل در ۱.۱ و ۷ گراف در ۱.۳)، ۳ فِیل قدیمی و بی‌ربط به این کار:
 - `OrgStructureTests.Units_BelongToACompany_ThroughTheirTopUnit`
 - `EffectivePermissionTests.AnotherModulesPermission_CannotBeAssigned_ButStaysWhereItIs_AndStillWorks`
 - `RecurringTaskReminderTests.IncompleteSmsSettings_AreReported_AndNothingIsSent`
