@@ -3,6 +3,10 @@ param(
     [string]$Version = "0.1.0",
     [string]$Output = "artifacts/packages",
 
+    # Optional: a label after the version, e.g. "nima" gives 0.1.0.1405080801-nima, so it is clear
+    # whose packages these are. The build number of the day counts packages with any label.
+    [string]$VersionSuffix,
+
     # Optional: sign every package with a code-signing certificate (.pfx). Hosts can then require
     # signed packages (nuget.config / "dotnet nuget verify") and refuse a swapped file.
     [string]$SigningCertificatePath,
@@ -45,7 +49,7 @@ $escapedDate = [regex]::Escape($persianDate)
 $existingBuildNumbers = @(
     Get-ChildItem -Path $outputPath -Filter "*.nupkg" -File -ErrorAction SilentlyContinue |
     ForEach-Object {
-        if ($_.Name -match "\.$escapedVersion\.$escapedDate(\d{2})\.nupkg$") {
+        if ($_.Name -match "\.$escapedVersion\.$escapedDate(\d{2})(-[0-9A-Za-z.]+)?\.nupkg$") {
             [int]$Matches[1]
         }
     }
@@ -66,6 +70,10 @@ if ($buildNumber -gt 99) {
 $buildNumberText = "{0:D2}" -f $buildNumber
 
 $PackageVersion = "$Version.$persianDate$buildNumberText"
+
+if ($VersionSuffix) {
+    $PackageVersion = "$PackageVersion-$($VersionSuffix.TrimStart('-'))"
+}
 
 Write-Host ""
 Write-Host "Base Version:    $Version"
