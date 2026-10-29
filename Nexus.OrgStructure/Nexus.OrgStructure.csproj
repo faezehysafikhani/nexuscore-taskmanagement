@@ -16,4 +16,13 @@
 		<ProjectReference Include="..\NexusCore.SharedKernel\NexusCore.SharedKernel.csproj" />
 	</ItemGroup>
 
+	<!-- Ready-made structure templates (data only): built into the assembly, never copied as
+	     loose files to a host or into the package. The schema and the notes stay in the source. -->
+	<ItemGroup>
+		<Content Remove="Templates\**" />
+		<None Remove="Templates\**" />
+		<EmbeddedResource Include="Templates\*.json" Exclude="Templates\*.schema.json" LogicalName="Nexus.OrgStructure.Templates.%(Filename)%(Extension)" />
+		<None Include="Templates\*.schema.json;Templates\*.md" Pack="false" />
+	</ItemGroup>
+
 </Project>

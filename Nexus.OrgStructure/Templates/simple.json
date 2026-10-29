@@ -1,0 +1,23 @@
+{
+  "$schema": "./structure-template.schema.json",
+  "schemaVersion": 1,
+  "key": "simple",
+  "name": "ساده",
+  "description": "شرکت کوچک: فقط مدیر و کارکنان، بدون معاونت و واحد. پست‌ها مستقیم در شرکت‌اند.",
+  "uiLevel": "simple",
+  "nodeTypes": [],
+  "rules": [],
+  "linkTypes": [],
+  "autoLinkRules": [],
+  "positions": [
+    { "key": "head", "title": "مدیرعامل", "parent": null },
+    { "key": "staff", "title": "کارشناس", "parent": "head" }
+  ],
+  "postTemplates": [],
+  "companyPosts": [
+    { "position": "head", "isCompanyHead": true },
+    { "position": "staff" }
+  ],
+  "nodes": [],
+  "links": []
+}
