@@ -9,6 +9,8 @@ public sealed record StructureTypeRule(string? ParentTypeCode, string ChildTypeC
 public enum StructureErrorKind
 {
     MissingCode,
+    MissingName,
+    NameTooLong,
     DuplicateCode,
     MissingParent,
     Cycle,
