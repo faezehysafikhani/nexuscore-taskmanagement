@@ -33,8 +33,16 @@ public static class OrgStructureValidator
     public static IReadOnlyList<StructureError> Validate(
         IReadOnlyList<StructureNodeInput> nodes,
         IReadOnlyCollection<string>? knownTypeCodes = null,
-        IReadOnlyCollection<StructureTypeRule>? rules = null)
+        IReadOnlyCollection<StructureTypeRule>? rules = null,
+        IReadOnlyDictionary<string, string>? typeNames = null)
     {
+        // A type as people know it: its name, and its code beside it («اداره کل» (general-department)).
+        string TypeText(string? typeCode)
+        {
+            var code = typeCode?.Trim() ?? string.Empty;
+            return typeNames is not null && typeNames.TryGetValue(code, out var name) && name != code ? $"«{name}» ({code})" : $"«{code}»";
+        }
+
         var errors = new List<StructureError>();
         var byCode = new Dictionary<string, StructureNodeInput>();
         var cleanNodes = new List<StructureNodeInput>();
@@ -86,7 +94,7 @@ public static class OrgStructureValidator
             var typeKnown = type.Length == 0 || types is null || types.Contains(type);
             if (!typeKnown)
             {
-                errors.Add(new(StructureErrorKind.UnknownType, code, node.Row, $"{At(node.Row)}نوع «{node.TypeCode!.Trim()}» برای گره «{code}» تعریف نشده است."));
+                errors.Add(new(StructureErrorKind.UnknownType, code, node.Row, $"{At(node.Row)}نوع {TypeText(node.TypeCode)} برای گره «{code}» تعریف نشده است."));
             }
 
             // Only a node whose place is clear is checked against the rules (a missing or looping parent has its own error).
@@ -97,9 +105,9 @@ public static class OrgStructureValidator
                 var parentTyped = parent.Length == 0 || parentType.Length > 0;
                 if (parentTyped && !allowed.Contains((parentType, type)))
                 {
-                    var where = parent.Length == 0 ? "در بالاترین سطح" : $"زیر «{byCode[parent].Code.Trim()}» ({byCode[parent].TypeCode!.Trim()})";
+                    var where = parent.Length == 0 ? "در بالاترین سطح" : $"زیر «{byCode[parent].Code.Trim()}» از نوع {TypeText(byCode[parent].TypeCode)}";
                     errors.Add(new(StructureErrorKind.TypeNotAllowedHere, code, node.Row,
-                        $"{At(node.Row)}گره «{code}» از نوع «{node.TypeCode!.Trim()}» را نمی‌شود {where} گذاشت."));
+                        $"{At(node.Row)}گره «{code}» از نوع {TypeText(node.TypeCode)} را نمی‌شود {where} گذاشت."));
                 }
             }
 
@@ -113,7 +121,7 @@ public static class OrgStructureValidator
         return errors.OrderBy(error => error.Row ?? int.MaxValue).ThenBy(error => error.Kind).ToList();
     }
 
-    /// <summary>Each loop is reported once, on the first of its nodes in the given order, with the whole path.</summary>
+    /// <summary>Each loop is reported on every one of its rows: the first with the whole path, the others pointing to it.</summary>
     private static void FindCycles(List<StructureNodeInput> nodes, Dictionary<string, StructureNodeInput> byCode, HashSet<string> cyclic, List<StructureError> errors)
     {
         var done = new HashSet<string>();
@@ -130,8 +138,14 @@ public static class OrgStructureValidator
                     loop.ForEach(code => cyclic.Add(code));
                     var members = nodes.Where(node => loop.Contains(Normalize(node.Code))).ToList();
                     var first = members[0];
-                    errors.Add(new(StructureErrorKind.Cycle, first.Code.Trim(), first.Row,
-                        $"{At(first.Row)}حلقه در والدها: {string.Join(" ← ", members.Select(node => node.Code.Trim()).Append(first.Code.Trim()))}."));
+                    var loopText = string.Join(" ← ", members.Select(node => node.Code.Trim()).Append(first.Code.Trim()));
+                    errors.Add(new(StructureErrorKind.Cycle, first.Code.Trim(), first.Row, $"{At(first.Row)}حلقه در والدها: {loopText}."));
+                    // Every other row of the loop too, so each is seen where it is.
+                    foreach (var other in members.Skip(1))
+                    {
+                        errors.Add(new(StructureErrorKind.Cycle, other.Code.Trim(), other.Row, $"{At(other.Row)}گره «{other.Code.Trim()}» در همان حلقه‌ی والدهاست: {loopText}."));
+                    }
+
                     break;
                 }
 

@@ -217,6 +217,15 @@ public static class OrgNodeEndpoints
                 InTenant(user, tenant => service.EndAppointmentAsync(tenant, id, request ?? new EndAppointmentRequest(), ct)))
             .RequireAuthorization(OrgStructurePermissions.ManageAssignments);
 
+        // Cancelling the appointment that has not started yet (both forms).
+        group.MapPost("/unit-positions/{id:guid}/appointment/cancel", (Guid id, ICurrentUserContext user, IOrgAppointmentService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.CancelUpcomingAppointmentAsync(tenant, id, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ManageAssignments);
+
+        group.MapDelete("/unit-positions/{id:guid}/appointment", (Guid id, ICurrentUserContext user, IOrgAppointmentService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.CancelUpcomingAppointmentAsync(tenant, id, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ManageAssignments);
+
         group.MapGet("/unit-positions/{id:guid}/history", (Guid id, ICurrentUserContext user, IOrgAppointmentService service, CancellationToken ct) =>
                 InTenant(user, tenant => service.GetPostHistoryAsync(tenant, id, ct)))
             .RequireAuthorization(OrgStructurePermissions.ReadPolicy);

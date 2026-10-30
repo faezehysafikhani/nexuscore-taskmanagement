@@ -22,11 +22,11 @@ internal static class ProfileRules
 {
     public const int MaxAvatarLength = 1_500_000;
 
-    public const string UsernameMessage = "Username must be a national code: exactly 10 digits.";
-    public const string PhoneMessage = "Enter a valid mobile number (for example 09121234567 or +98 912 123 4567).";
+    public const string UsernameMessage = "نام کاربری باید کد ملی معتبر ۱۰ رقمی باشد.";
+    public const string PhoneMessage = "شماره تلفن همراه معتبر وارد کنید (مثلاً ۰۹۱۲۱۲۳۴۵۶۷ یا ‎+98 912 123 4567‎).";
 
     public static IRuleBuilderOptions<T, string?> ValidUsername<T>(this IRuleBuilder<T, string?> rule) =>
-        rule.Must(Username.IsValid).WithMessage(UsernameMessage);
+        rule.Must(Username.IsValidNationalCode).WithMessage(UsernameMessage);
 
     /// <summary>data:image/(png|jpeg|webp|gif);base64,... or an https:// address. Never svg, html or another scheme.</summary>
     private static readonly System.Text.RegularExpressions.Regex AvatarPattern = new(
@@ -36,7 +36,7 @@ internal static class ProfileRules
 
     public static IRuleBuilderOptions<T, string?> ValidAvatar<T>(this IRuleBuilder<T, string?> rule) =>
         rule.Must(value => string.IsNullOrWhiteSpace(value) || AvatarPattern.IsMatch(value.Trim()))
-            .WithMessage("The avatar must be a PNG, JPEG, WebP or GIF image.");
+            .WithMessage("تصویر پروفایل باید PNG، JPEG، WebP یا GIF باشد.");
 
     public static IRuleBuilderOptions<T, string?> ValidPhoneNumber<T>(this IRuleBuilder<T, string?> rule) =>
         rule.Must(PhoneNumber.IsValid).WithMessage(PhoneMessage);
@@ -101,7 +101,7 @@ public sealed class UpdateMyProfileRequestValidator : AbstractValidator<UpdateMy
         RuleFor(x => x.LastName).MaximumLength(80);
         RuleFor(x => x.PhoneNumber).ValidPhoneNumber().When(x => !string.IsNullOrWhiteSpace(x.PhoneNumber));
         RuleFor(x => x.AvatarUrl).MaximumLength(ProfileRules.MaxAvatarLength)
-            .WithMessage("The avatar image is too large.");
+            .WithMessage("حجم تصویر پروفایل بیش از حد مجاز است.");
         RuleFor(x => x.AvatarUrl).ValidAvatar();
     }
 }

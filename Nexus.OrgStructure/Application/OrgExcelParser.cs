@@ -39,7 +39,8 @@ public static class OrgExcelParser
     public static ExcelParseResult Parse(
         IEnumerable<ExcelStructureRow> rows,
         IReadOnlyCollection<string>? knownTypeCodes = null,
-        IReadOnlyCollection<StructureTypeRule>? rules = null)
+        IReadOnlyCollection<StructureTypeRule>? rules = null,
+        IReadOnlyDictionary<string, string>? typeNames = null)
     {
         var errors = new List<StructureError>();
         var inputs = new List<StructureNodeInput>();
@@ -60,7 +61,7 @@ public static class OrgExcelParser
             extra[row.Row] = row;
         }
 
-        errors.AddRange(OrgStructureValidator.Validate(inputs, knownTypeCodes, rules));
+        errors.AddRange(OrgStructureValidator.Validate(inputs, knownTypeCodes, rules, typeNames));
         if (errors.Count > 0)
         {
             return new ExcelParseResult([], errors.OrderBy(error => error.Row ?? int.MaxValue).ThenBy(error => error.Kind).ToList());

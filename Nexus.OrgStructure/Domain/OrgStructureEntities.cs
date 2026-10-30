@@ -288,6 +288,9 @@ public sealed class UserPosition : AuditableEntity<Guid>
 
     public void End(DateTimeOffset at) => EndDate = at;
 
+    /// <summary>The appointment that was to end when a later one starts goes on (that later one was cancelled).</summary>
+    public void Reopen() => EndDate = null;
+
     public bool IsActiveAt(DateTimeOffset at) => (StartDate is not { } from || from <= at) && (EndDate is not { } to || at < to);
 }
 

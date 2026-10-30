@@ -50,13 +50,21 @@ public sealed class OrgStructureValidatorTests
     }
 
     [Fact]
-    public void ALoop_IsReportedOnce_WithThePath_AndNodesLeadingIntoItAreNot()
+    public void ALoop_IsReportedOnEachOfItsRows_WithThePath_AndNodesLeadingIntoItAreNot()
     {
         var errors = OrgStructureValidator.Validate([N("A", "C", row: 2), N("B", "A", row: 3), N("C", "B", row: 4), N("D", "C", row: 5)]);
-        var error = Assert.Single(errors);
-        Assert.Equal(StructureErrorKind.Cycle, error.Kind);
-        Assert.Equal(2, error.Row);
-        Assert.Contains("A ← B ← C ← A", error.Message);
+        Assert.Equal([2, 3, 4], errors.Select(error => error.Row!.Value));
+        Assert.All(errors, error => Assert.Equal(StructureErrorKind.Cycle, error.Kind));
+        Assert.All(errors, error => Assert.Contains("A ← B ← C ← A", error.Message));
+    }
+
+    [Fact]
+    public void AType_IsNamedAsPeopleKnowIt_WithItsCode()
+    {
+        var rules = new StructureTypeRule[] { new(null, "board") };
+        var errors = OrgStructureValidator.Validate([N("D", null, "deputy", row: 2)], ["board", "deputy"], rules,
+            new Dictionary<string, string> { ["deputy"] = "معاونت", ["board"] = "هیأت مدیره" });
+        Assert.Contains("«معاونت» (deputy)", Assert.Single(errors).Message);
     }
 
     [Fact]
@@ -70,7 +78,7 @@ public sealed class OrgStructureValidatorTests
     public void TwoSeparateLoops_AreTwoErrors()
     {
         var errors = OrgStructureValidator.Validate([N("A", "B"), N("B", "A"), N("X", "Y"), N("Y", "X")]);
-        Assert.Equal([StructureErrorKind.Cycle, StructureErrorKind.Cycle], Kinds(errors));
+        Assert.Equal([StructureErrorKind.Cycle, StructureErrorKind.Cycle, StructureErrorKind.Cycle, StructureErrorKind.Cycle], Kinds(errors));
     }
 
     [Fact]
@@ -117,6 +125,6 @@ public sealed class OrgStructureValidatorTests
     public void EveryFaultIsListed_InRowOrder()
     {
         var errors = OrgStructureValidator.Validate([N("A", "ZZ", row: 2), N("A", null, row: 3), N("B", "C", row: 4), N("C", "B", row: 5), N("D", "A", linked: true, row: 6)]);
-        Assert.Equal([StructureErrorKind.MissingParent, StructureErrorKind.DuplicateCode, StructureErrorKind.Cycle, StructureErrorKind.LinkNotOnTopNode], Kinds(errors));
+        Assert.Equal([StructureErrorKind.MissingParent, StructureErrorKind.DuplicateCode, StructureErrorKind.Cycle, StructureErrorKind.Cycle, StructureErrorKind.LinkNotOnTopNode], Kinds(errors));
     }
 }

@@ -127,4 +127,25 @@ public sealed partial class OrgNodeApiTests
         Assert.Equal(person, await HolderAsync(w, post));
         Assert.True(row.IsActiveAt(DateTimeOffset.MinValue.AddDays(1)));
     }
+
+    [Fact]
+    public async Task AnAppointmentFromALaterDay_CanBeCancelled_AndThePresentHolderStaysOn()
+    {
+        var (w, clock, appointments, post, old, fresh) = await PostWithHolderAsync();
+        Assert.Equal("not_found", (await appointments.CancelUpcomingAppointmentAsync(Tenant, post, default)).Error.Code);
+        var start = clock.At.AddDays(7);
+        await w.Ok(appointments.AppointAsync(Tenant, post, new AppointRequest(fresh, start), default));
+
+        var cancelled = await w.Ok(appointments.CancelUpcomingAppointmentAsync(Tenant, post, default));
+        Assert.Equal(fresh, cancelled.Person.UserId);
+        var history = await w.Ok(appointments.GetPostHistoryAsync(Tenant, post, default));
+        var present = Assert.Single(history);
+        Assert.Equal(old, present.Person.UserId);
+        Assert.Null(present.EndDate); // stays on
+
+        // After the day it would have started: still the same holder; and a new one can be set.
+        clock.At = start.AddDays(1);
+        Assert.Equal(old, await HolderAsync(w, post));
+        await w.Ok(appointments.AppointAsync(Tenant, post, new AppointRequest(fresh, clock.At.AddDays(3)), default));
+    }
 }

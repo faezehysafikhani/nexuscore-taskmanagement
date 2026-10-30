@@ -70,6 +70,7 @@ public sealed class OrgExcelParserTests
                 (8, StructureErrorKind.UnknownType),
                 (9, StructureErrorKind.TypeNotAllowedHere),
                 (10, StructureErrorKind.Cycle),
+                (11, StructureErrorKind.Cycle),
             ],
             result.Errors.Select(error => (error.Row!.Value, error.Kind)).ToList());
     }

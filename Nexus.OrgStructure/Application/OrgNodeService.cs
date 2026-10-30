@@ -205,6 +205,11 @@ public sealed partial class OrgNodeService(
             return Result.Failure<OrgNodeDto>(codeProblem);
         }
 
+        if (SiblingNameProblem(state, name, request.ParentNodeId, request.ParentNodeId is null ? companyId : null, null) is { } sameName)
+        {
+            return Result.Failure<OrgNodeDto>(sameName);
+        }
+
         var unit = new OrganizationUnit(Guid.NewGuid(), tenantId, name);
         unit.SetNodeCode(request.Code);
         unit.SetParent(request.ParentNodeId);
@@ -259,6 +264,12 @@ public sealed partial class OrgNodeService(
             if (typeId != unit.NodeTypeId && RulesProblem(state, unit, unit.ParentUnitId, typeId, isNew: false) is { } ruleProblem)
             {
                 return Task.FromResult<(Error?, object?)>((ruleProblem, null));
+            }
+
+            if (Normalize(name) != Normalize(unit.Name)
+                && SiblingNameProblem(state, name, state.Graph.ParentOf(unit.Id), state.Graph.ParentOf(unit.Id) is null ? state.Graph.CompanyOfUnit(unit.Id) : null, unit.Id) is { } sameName)
+            {
+                return Task.FromResult<(Error?, object?)>((sameName, null));
             }
 
             var before = new { name = unit.Name, type = unit.NodeTypeId };
@@ -372,6 +383,11 @@ public sealed partial class OrgNodeService(
             if (RulesProblem(state, unit, request.ParentNodeId, unit.NodeTypeId, isNew: false) is { } ruleProblem)
             {
                 return (ruleProblem, null);
+            }
+
+            if (SiblingNameProblem(state, unit.Name, request.ParentNodeId, request.ParentNodeId is null ? newCompany : null, unit.Id) is { } sameName)
+            {
+                return (sameName, null);
             }
 
             var before = new { parent = unit.ParentUnitId, company = oldCompany };
@@ -638,7 +654,7 @@ public sealed partial class OrgNodeService(
         if (used > 0 || inRules || elsewhere)
         {
             return Result.Failure(Error.Conflict(used > 0
-                ? $"{used} گره از نوع «{nodeType.Name}» است؛ به‌جای حذف، آن را غیرفعال کنید."
+                ? $"{FaDigits.Of(used)} گره از نوع «{nodeType.Name}» است؛ به‌جای حذف، آن را غیرفعال کنید."
                 : $"نوع «{nodeType.Name}» در قاعده‌ها به‌کار رفته است؛ اول آن قاعده‌ها را بردارید."));
         }
 
@@ -807,6 +823,18 @@ public sealed partial class OrgNodeService(
         : request.Phone?.Trim().Length > 40 ? Error.Validation("شماره تماس حداکثر ۴۰ نویسه است.")
         : request.Address?.Trim().Length > 500 ? Error.Validation("نشانی حداکثر ۵۰۰ نویسه است.")
         : null;
+
+    /// <summary>
+    /// Two active nodes beside each other (the same parent, or the same company's top) may not have
+    /// the same name (compared loosely). Only new names are checked: what is there already stays.
+    /// </summary>
+    private static Error? SiblingNameProblem(NodeState state, string name, Guid? parentId, Guid? companyId, Guid? exceptId)
+    {
+        var key = Normalize(name);
+        var same = state.Units.Values.FirstOrDefault(other => other.Id != exceptId && other.IsActive && Normalize(other.Name) == key
+            && (parentId is { } p ? other.ParentUnitId == p : state.Graph.ParentOf(other.Id) is null && state.Graph.CompanyOfUnit(other.Id) == companyId));
+        return same is null ? null : Error.Conflict($"گره‌ی هم‌سطحی با نام «{same.Name}» همین‌جا هست؛ نام دیگری بدهید.");
+    }
 
     private static Error? NameProblem(string name) =>
         name.Length == 0 ? Error.Validation("نام گره را وارد کنید.")

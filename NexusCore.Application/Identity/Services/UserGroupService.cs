@@ -35,7 +35,7 @@ public sealed class UserGroupService(
         var group = await repository.GetByIdAsync(groupId, cancellationToken);
         if (group is null || !currentUser.CanAccessTenant(group.TenantId))
         {
-            return Result.Failure<UserGroupDto>(Error.NotFound("User group was not found."));
+            return Result.Failure<UserGroupDto>(Error.NotFound("گروه کاربری یافت نشد."));
         }
 
         var users = await LoadMemberUsersAsync([group], cancellationToken);
@@ -46,18 +46,18 @@ public sealed class UserGroupService(
     {
         if (string.IsNullOrWhiteSpace(request.Name))
         {
-            return Result.Failure<UserGroupDto>(Error.Validation("Group name is required."));
+            return Result.Failure<UserGroupDto>(Error.Validation("نام گروه را وارد کنید."));
         }
 
         if (!currentUser.CanAccessTenant(request.TenantId))
         {
-            return Result.Failure<UserGroupDto>(Error.NotFound("Tenant was not found."));
+            return Result.Failure<UserGroupDto>(Error.NotFound("سازمان یافت نشد."));
         }
 
         var normalized = request.Name.Trim().ToUpperInvariant();
         if (await repository.NameExistsAsync(request.TenantId, normalized, null, cancellationToken))
         {
-            return Result.Failure<UserGroupDto>(Error.Conflict("A group with this name already exists."));
+            return Result.Failure<UserGroupDto>(Error.Conflict("گروهی با این نام قبلاً ثبت شده است."));
         }
 
         var group = new UserGroup(Guid.NewGuid(), request.TenantId, request.Name, request.Description);
@@ -73,18 +73,18 @@ public sealed class UserGroupService(
         var group = await repository.GetByIdAsync(groupId, cancellationToken);
         if (group is null || !currentUser.CanAccessTenant(group.TenantId))
         {
-            return Result.Failure<UserGroupDto>(Error.NotFound("User group was not found."));
+            return Result.Failure<UserGroupDto>(Error.NotFound("گروه کاربری یافت نشد."));
         }
 
         if (string.IsNullOrWhiteSpace(request.Name))
         {
-            return Result.Failure<UserGroupDto>(Error.Validation("Group name is required."));
+            return Result.Failure<UserGroupDto>(Error.Validation("نام گروه را وارد کنید."));
         }
 
         var normalized = request.Name.Trim().ToUpperInvariant();
         if (await repository.NameExistsAsync(group.TenantId, normalized, group.Id, cancellationToken))
         {
-            return Result.Failure<UserGroupDto>(Error.Conflict("A group with this name already exists."));
+            return Result.Failure<UserGroupDto>(Error.Conflict("گروهی با این نام قبلاً ثبت شده است."));
         }
 
         group.Update(request.Name, request.Description, request.IsActive);
@@ -100,25 +100,25 @@ public sealed class UserGroupService(
         var group = await repository.GetByIdAsync(groupId, cancellationToken);
         if (group is null || !currentUser.CanAccessTenant(group.TenantId))
         {
-            return Result.Failure(Error.NotFound("User group was not found."));
+            return Result.Failure(Error.NotFound("گروه کاربری یافت نشد."));
         }
 
         // A personal work team is managed by its owner; letting it carry permissions would let any
         // user grant themselves access by joining their own team.
         if (group.IsPersonalTeam)
         {
-            return Result.Failure(Error.Validation("A personal work team cannot carry permissions."));
+            return Result.Failure(Error.Validation("به تیم کاری شخصی نمی‌توان مجوز داد."));
         }
 
         if (request.PermissionIds is null)
         {
-            return Result.Failure(Error.Validation("PermissionIds is required."));
+            return Result.Failure(Error.Validation("فهرست مجوزها را بفرستید."));
         }
 
         var known = (await identityRepository.ListPermissionsAsync(cancellationToken)).ToDictionary(permission => permission.Id);
         if (request.PermissionIds.Any(id => !known.ContainsKey(id)))
         {
-            return Result.Failure(Error.Validation("One or more permissions do not exist."));
+            return Result.Failure(Error.Validation("یک یا چند مجوز انتخاب‌شده وجود ندارد."));
         }
 
         var unmanaged = request.PermissionIds.Distinct().Select(id => known[id]).Where(permission => !_managed.IsManaged(permission)).Select(permission => permission.Name).ToList();
@@ -164,19 +164,19 @@ public sealed class UserGroupService(
         var group = await repository.GetByIdAsync(groupId, cancellationToken);
         if (group is null || !currentUser.CanAccessTenant(group.TenantId))
         {
-            return Result.Failure(Error.NotFound("User group was not found."));
+            return Result.Failure(Error.NotFound("گروه کاربری یافت نشد."));
         }
 
         var users = await repository.ListUsersAsync(request.UserIds, cancellationToken);
         if (users.Count != request.UserIds.Distinct().Count())
         {
-            return Result.Failure(Error.Validation("One or more users do not exist."));
+            return Result.Failure(Error.Validation("یک یا چند کاربر انتخاب‌شده وجود ندارد."));
         }
 
         // A group belongs to one tenant; its members must too.
         if (users.Any(user => user.TenantId != group.TenantId))
         {
-            return Result.Failure(Error.Validation("All members must belong to the same tenant as the group."));
+            return Result.Failure(Error.Validation("همه اعضا باید از سازمان همین گروه باشند."));
         }
 
         var previousMemberIds = group.Members.Select(member => member.UserId).ToList();
@@ -211,7 +211,7 @@ public sealed class UserGroupService(
         var group = await repository.GetByIdAsync(groupId, cancellationToken);
         if (group is null || !currentUser.CanAccessTenant(group.TenantId))
         {
-            return Result.Failure(Error.NotFound("User group was not found."));
+            return Result.Failure(Error.NotFound("گروه کاربری یافت نشد."));
         }
 
         return await RemoveAsync(group, "groups.delete", cancellationToken);
@@ -244,7 +244,7 @@ public sealed class UserGroupService(
 
         if (await repository.NameExistsAsync(tenantId, request.Name.Trim().ToUpperInvariant(), null, cancellationToken, ownerId))
         {
-            return Result.Failure<UserGroupDto>(Error.Conflict("You already have a team with this name."));
+            return Result.Failure<UserGroupDto>(Error.Conflict("شما قبلاً تیمی با این نام ساخته‌اید."));
         }
 
         // The owner is always the first member of their own team.
@@ -275,7 +275,7 @@ public sealed class UserGroupService(
 
         if (await repository.NameExistsAsync(team.TenantId, request.Name.Trim().ToUpperInvariant(), team.Id, cancellationToken, team.OwnerUserId))
         {
-            return Result.Failure<UserGroupDto>(Error.Conflict("You already have a team with this name."));
+            return Result.Failure<UserGroupDto>(Error.Conflict("شما قبلاً تیمی با این نام ساخته‌اید."));
         }
 
         team.Update(request.Name, request.Description, team.IsActive);
@@ -300,12 +300,12 @@ public sealed class UserGroupService(
         var users = await repository.ListUsersAsync(memberIds, cancellationToken);
         if (users.Count != memberIds.Count)
         {
-            return Result.Failure<UserGroupDto>(Error.Validation("One or more users do not exist."));
+            return Result.Failure<UserGroupDto>(Error.Validation("یک یا چند کاربر انتخاب‌شده وجود ندارد."));
         }
 
         if (users.Any(user => user.TenantId != team.TenantId))
         {
-            return Result.Failure<UserGroupDto>(Error.Validation("All members must belong to the same tenant as the team."));
+            return Result.Failure<UserGroupDto>(Error.Validation("همه اعضا باید از سازمان همین تیم باشند."));
         }
 
         var previousMemberIds = team.Members.Select(member => member.UserId).ToList();
@@ -317,8 +317,8 @@ public sealed class UserGroupService(
             && added.Any(userId => !limit.AllowedUserIds.Contains(userId)))
         {
             return Result.Failure<UserGroupDto>(Error.Forbidden(limit.IsCompany
-                ? "Only people of your own company can be added to your team."
-                : "Only members of your own deputy can be added to your team."));
+                ? "فقط افراد شرکت خودتان را می‌توانید به تیم اضافه کنید."
+                : "فقط افراد معاونت خودتان را می‌توانید به تیم اضافه کنید؛ برای افزودن افراد سایر معاونت‌ها دسترسی لازم را ندارید."));
         }
 
         team.SetMembers(memberIds);
@@ -389,7 +389,7 @@ public sealed class UserGroupService(
 
         var team = await repository.GetByIdAsync(groupId, cancellationToken);
         return team is null || team.TenantId != tenantId || team.OwnerUserId != ownerId
-            ? Result.Failure<UserGroup>(Error.NotFound("Team was not found."))
+            ? Result.Failure<UserGroup>(Error.NotFound("تیم یافت نشد."))
             : Result.Success(team);
     }
 
@@ -403,7 +403,7 @@ public sealed class UserGroupService(
         catch (Microsoft.EntityFrameworkCore.DbUpdateException)
         {
             // Other modules (e.g. tasks assigned to this team) still point at the group.
-            return Result.Failure(Error.Conflict("The team is still in use (for example, tasks are assigned to it). Reassign them first."));
+            return Result.Failure(Error.Conflict("این تیم هنوز در حال استفاده است (مثلاً فعالیت‌هایی به آن واگذار شده). ابتدا آن‌ها را به تیم دیگری واگذار کنید."));
         }
 
         await platformService.AuditAsync(auditAction, nameof(UserGroup), group.Id.ToString(), group.Name, cancellationToken);
@@ -412,9 +412,9 @@ public sealed class UserGroupService(
 
     private static Result ValidateTeamName(string? name) =>
         string.IsNullOrWhiteSpace(name)
-            ? Result.Failure(Error.Validation("Team name is required."))
+            ? Result.Failure(Error.Validation("نام تیم را وارد کنید."))
             : name.Trim().Length > 128
-                ? Result.Failure(Error.Validation("Team name must be at most 128 characters."))
+                ? Result.Failure(Error.Validation("نام تیم نباید بیشتر از ۱۲۸ کاراکتر باشد."))
                 : Result.Success();
 
     private async Task<IReadOnlyList<User>> LoadMemberUsersAsync(IReadOnlyList<UserGroup> groups, CancellationToken cancellationToken)

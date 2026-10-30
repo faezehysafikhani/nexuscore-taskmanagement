@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Nexus.OrgStructure.Application.Dtos;
 
 // The node API (/api/org-structure/nodes, /node-types, /node-type-rules). RowVersion is the node's
@@ -39,7 +41,9 @@ public sealed record SetNodeDetailsRequest(
 public sealed record UpdateNodeRequest(string Name, Guid? NodeTypeId = null, string? RowVersion = null);
 
 /// <summary>ParentNodeId null: to the top of CompanyId (or of its present company when CompanyId is null too).</summary>
-public sealed record MoveNodeRequest(Guid? ParentNodeId, Guid? CompanyId = null, string? RowVersion = null);
+/// parentNodeId must be in the body (null: to the top), so an empty or misspelt body is refused, not taken as «to the top».
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record MoveNodeRequest([property: JsonRequired] Guid? ParentNodeId, Guid? CompanyId = null, string? RowVersion = null);
 
 /// <summary>Position: its new place among the nodes beside it, from 0.</summary>
 public sealed record ReorderNodeRequest(int Position, string? RowVersion = null);
@@ -87,9 +91,13 @@ public sealed record NodeTypeRulesDto(IReadOnlyList<NodeTypeRuleDto> Rules, IRea
 /// <summary>A kind of secondary link. LineStyle: solid, dotted or dashed. A dotted one never counts as manager.</summary>
 public sealed record LinkTypeDto(Guid Id, string Code, string Name, string LineStyle, bool CountsAsManager, bool IsActive, int LinkCount);
 
-public sealed record CreateLinkTypeRequest(string Name, string? Code = null, string LineStyle = "dotted", bool CountsAsManager = false);
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record CreateLinkTypeRequest([property: JsonRequired] string Name, string? Code = null, string LineStyle = "dotted", bool CountsAsManager = false);
 
-public sealed record UpdateLinkTypeRequest(string Name, string LineStyle, bool CountsAsManager, bool IsActive);
+/// <summary>Code: accepted and ignored (a type's code does not change).</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record UpdateLinkTypeRequest(
+    [property: JsonRequired] string Name, [property: JsonRequired] string LineStyle, bool CountsAsManager, bool IsActive, string? Code = null);
 
 /// <summary>A node of the source type, when made, is linked to the one node of the target type (in its company).</summary>
 public sealed record AutoLinkRuleDto(Guid SourceNodeTypeId, Guid TargetNodeTypeId, Guid LinkTypeId);
@@ -148,7 +156,8 @@ public sealed record ImportResultDto(IReadOnlyList<OrgNodeDto> Nodes, int Links,
 public sealed record NodeValidityRequest(DateTimeOffset? ValidFrom = null, DateTimeOffset? ValidTo = null, string? RowVersion = null);
 
 /// <summary>The node goes into TargetNodeId (same company). EffectiveDate: the day it ends (null: now). RowVersion: the source's.</summary>
-public sealed record MergeNodeRequest(Guid TargetNodeId, DateTimeOffset? EffectiveDate = null, string? RowVersion = null);
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record MergeNodeRequest([property: JsonRequired] Guid TargetNodeId, DateTimeOffset? EffectiveDate = null, string? RowVersion = null);
 
 /// <summary>One change of a node, newest first. Details: what changed (JSON). CanUndo: the kind of change can be undone (only the last one is).</summary>
 public sealed record NodeChangeDto(Guid Id, string Action, Guid? UserId, DateTimeOffset AtUtc, string? Details, bool CanUndo);

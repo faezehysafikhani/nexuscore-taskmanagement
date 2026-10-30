@@ -85,7 +85,8 @@ public sealed partial class OrgNodeService
             rules.Add(new StructureTypeRule(null, CodeOf(parent.NodeTypeId)));
         }
 
-        var parsed = OrgExcelParser.Parse(sheet, types.Select(type => type.Code).ToList(), rules.Count > 0 ? rules : null);
+        var parsed = OrgExcelParser.Parse(sheet, types.Select(type => type.Code).ToList(), rules.Count > 0 ? rules : null,
+            types.ToDictionary(type => type.Code, type => type.Name));
         var errors = parsed.Errors
             .Where(error => error.NodeCode != ParentSentinel && error.Row != 0)
             .Select(error => new ImportErrorDto(error.Row, error.NodeCode, error.Message))
@@ -156,6 +157,30 @@ public sealed partial class OrgNodeService
             }
 
             Walk(parsed.Roots, null, 0);
+
+            // No two nodes beside each other with the same name: among the sheet's own, and its top rows
+            // beside the nodes already at the import's place.
+            var existingBeside = state.Units.Values
+                .Where(unit => unit.IsActive && (parent is not null ? unit.ParentUnitId == parent.Id : state.Graph.ParentOf(unit.Id) is null && state.Graph.CompanyOfUnit(unit.Id) == companyId))
+                .Select(unit => Normalize(unit.Name)).ToHashSet();
+            foreach (var group in items.GroupBy(item => item.ParentCode?.ToUpperInvariant()))
+            {
+                var seen = new Dictionary<string, int>();
+                foreach (var item in group.OrderBy(item => item.Row))
+                {
+                    var key = Normalize(item.Name);
+                    if (seen.TryGetValue(key, out var firstRow))
+                    {
+                        errors.Add(new ImportErrorDto(item.Row, item.Code, $"سطر {FaDigits.Of(item.Row)}: نام «{item.Name}» در همین سطح تکراری است (اولین بار در سطر {FaDigits.Of(firstRow)})."));
+                    }
+                    else if (group.Key is null && existingBeside.Contains(key))
+                    {
+                        errors.Add(new ImportErrorDto(item.Row, item.Code, $"سطر {FaDigits.Of(item.Row)}: گره‌ای با نام «{item.Name}» همین‌جا هست."));
+                    }
+
+                    seen.TryAdd(key, item.Row);
+                }
+            }
 
         }
 

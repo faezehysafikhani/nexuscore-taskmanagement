@@ -39,13 +39,20 @@ public sealed class TestUserContext : ICurrentUserContext
 /// </summary>
 public sealed class SqlServerFixture : IAsyncLifetime
 {
-    private const string MasterConnectionString =
-        "Server=.;Database=master;Trusted_Connection=True;TrustServerCertificate=True";
+    /// <summary>
+    /// The server: NEXUS_TEST_SQLSERVER when set (a connection string without a database, as the other
+    /// test projects take it), else the local default instance with Windows sign-in.
+    /// </summary>
+    private static readonly string Server =
+        Environment.GetEnvironmentVariable("NEXUS_TEST_SQLSERVER") is { Length: > 0 } configured
+            ? configured.TrimEnd(';')
+            : "Server=.;Trusted_Connection=True;TrustServerCertificate=True";
+
+    private static string MasterConnectionString => $"{Server};Database=master";
 
     public string DatabaseName { get; } = $"TaskMgmt_IT_{Guid.NewGuid():N}";
 
-    public string ConnectionString =>
-        $"Server=.;Database={DatabaseName};Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True";
+    public string ConnectionString => $"{Server};Database={DatabaseName};MultipleActiveResultSets=true";
 
     public bool Available { get; private set; }
 

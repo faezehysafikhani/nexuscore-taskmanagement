@@ -44,10 +44,10 @@ public sealed class IdentityService(
 
     // One message for every way sign-in can fail on the credentials, so the answer never tells
     // whether a username or mobile number is registered.
-    private const string InvalidCredentials = "Invalid username/mobile number or password.";
+    private const string InvalidCredentials = "نام کاربری، شماره تلفن یا رمز عبور صحیح نیست.";
 
     /// <summary>Sign-in with the right password to a disabled account (HTTP 403).</summary>
-    public static readonly Error AccountDisabled = new("account.disabled", "This account has been disabled. Contact the system administrator.");
+    public static readonly Error AccountDisabled = new("account.disabled", "حساب کاربری شما غیرفعال شده است. لطفاً با مدیر سامانه تماس بگیرید.");
 
     public async Task<Result<AuthResponse>> LoginAsync(LoginRequest request, CancellationToken cancellationToken)
     {
@@ -105,10 +105,10 @@ public sealed class IdentityService(
     {
         if (string.IsNullOrWhiteSpace(request.RefreshToken))
         {
-            return Result.Failure<AuthResponse>(Error.Unauthorized("Invalid refresh token."));
+            return Result.Failure<AuthResponse>(Error.Unauthorized("نشست کاربری معتبر نیست؛ دوباره وارد شوید."));
         }
 
-        var invalid = Result.Failure<AuthResponse>(Error.Unauthorized("Invalid refresh token."));
+        var invalid = Result.Failure<AuthResponse>(Error.Unauthorized("نشست کاربری معتبر نیست؛ دوباره وارد شوید."));
         var refreshToken = await repository.FindRefreshTokenAsync(passwordHasher.HashToken(request.RefreshToken), cancellationToken);
         var now = DateTimeOffset.UtcNow;
         if (refreshToken?.User is null || !refreshToken.User.IsActive || refreshToken.ExpiresAtUtc <= now)
@@ -198,7 +198,7 @@ public sealed class IdentityService(
         var user = await repository.GetUserByIdAsync(userId, cancellationToken);
         if (user is null)
         {
-            return Result.Failure<CurrentUserResponse>(Error.NotFound("User was not found."));
+            return Result.Failure<CurrentUserResponse>(Error.NotFound("کاربر یافت نشد."));
         }
 
         var permissions = await repository.GetUserPermissionNamesAsync(user.Id, cancellationToken);
@@ -239,7 +239,7 @@ public sealed class IdentityService(
         if (!currentUser.CanAccessTenant(request.TenantId)
             || await repository.GetTenantByIdAsync(request.TenantId, cancellationToken) is null)
         {
-            return Result.Failure<UserDto>(Error.NotFound("Tenant was not found."));
+            return Result.Failure<UserDto>(Error.NotFound("سازمان یافت نشد."));
         }
 
         var taken = await FindTakenSignInDetailAsync(request.TenantId, null, request.Username, request.PhoneNumber, request.Email, cancellationToken);
@@ -271,7 +271,7 @@ public sealed class IdentityService(
         // Another organization's user does not exist for this caller.
         if (user is null || !currentUser.CanAccessTenant(user.TenantId))
         {
-            return Result.Failure<UserDto>(Error.NotFound("User was not found."));
+            return Result.Failure<UserDto>(Error.NotFound("کاربر یافت نشد."));
         }
 
         var usernameChanges = request.Username is not null && !string.Equals(request.Username.Trim(), user.Username, StringComparison.OrdinalIgnoreCase);
@@ -290,18 +290,18 @@ public sealed class IdentityService(
                 || !string.IsNullOrWhiteSpace(request.Password);
             if (changesIdentity)
             {
-                return Result.Failure<UserDto>(Error.Forbidden("The built-in system administrator cannot be changed here. It changes its own password from its profile."));
+                return Result.Failure<UserDto>(Error.Forbidden("مشخصات مدیر اصلی سامانه از این بخش قابل تغییر نیست. رمز عبور آن فقط از پروفایل خودش تغییر می‌کند."));
             }
         }
 
-        if (usernameChanges && !Username.IsValid(request.Username!.Trim()))
+        if (usernameChanges && !Username.IsValidNationalCode(request.Username!.Trim()))
         {
-            return Result.Failure<UserDto>(Error.Validation("Username must be a national code: exactly 10 digits."));
+            return Result.Failure<UserDto>(Error.Validation("نام کاربری باید کد ملی معتبر ۱۰ رقمی باشد."));
         }
 
         if (currentUser.UserId == user.Id && !request.IsActive)
         {
-            return Result.Failure<UserDto>(Error.Validation("You cannot disable your own account."));
+            return Result.Failure<UserDto>(Error.Validation("نمی‌توانید حساب کاربری خودتان را غیرفعال کنید."));
         }
 
         // Enabling or disabling is users.change_status, also when it comes in with an edit.
@@ -309,7 +309,7 @@ public sealed class IdentityService(
         if (statusChanges && currentUser.UserId is { } callerId
             && !(await repository.GetUserPermissionNamesAsync(callerId, cancellationToken)).Contains(IdentityPermissions.UsersChangeStatus))
         {
-            return Result.Failure<UserDto>(Error.Forbidden("Enabling or disabling users needs the users.change_status permission."));
+            return Result.Failure<UserDto>(Error.Forbidden("برای فعال یا غیرفعال کردن کاربران، مجوز «تغییر وضعیت کاربران» لازم است."));
         }
 
         // Password, mobile number (which is how a password is recovered) and status of someone who
@@ -389,17 +389,17 @@ public sealed class IdentityService(
         // Another organization's user does not exist for this caller.
         if (user is null || !currentUser.CanAccessTenant(user.TenantId))
         {
-            return Result.Failure<UserDto>(Error.NotFound("User was not found."));
+            return Result.Failure<UserDto>(Error.NotFound("کاربر یافت نشد."));
         }
 
         if (user.IsSystem && !request.IsActive)
         {
-            return Result.Failure<UserDto>(Error.Forbidden("The built-in system administrator cannot be disabled."));
+            return Result.Failure<UserDto>(Error.Forbidden("مدیر اصلی سامانه قابل غیرفعال‌سازی نیست."));
         }
 
         if (currentUser.UserId == user.Id && !request.IsActive)
         {
-            return Result.Failure<UserDto>(Error.Validation("You cannot disable your own account."));
+            return Result.Failure<UserDto>(Error.Validation("نمی‌توانید حساب کاربری خودتان را غیرفعال کنید."));
         }
 
         var outranked = await GuardAgainstHigherPrivilegeAsync(user, cancellationToken);
@@ -441,17 +441,17 @@ public sealed class IdentityService(
         // Another organization's user does not exist for this caller.
         if (user is null || !currentUser.CanAccessTenant(user.TenantId))
         {
-            return Result.Failure(Error.NotFound("User was not found."));
+            return Result.Failure(Error.NotFound("کاربر یافت نشد."));
         }
 
         if (user.IsSystem)
         {
-            return Result.Failure(Error.Forbidden("The built-in system administrator cannot be deleted."));
+            return Result.Failure(Error.Forbidden("مدیر اصلی سامانه قابل حذف نیست."));
         }
 
         if (currentUser.UserId == user.Id)
         {
-            return Result.Failure(Error.Validation("You cannot delete your own account."));
+            return Result.Failure(Error.Validation("نمی‌توانید حساب کاربری خودتان را حذف کنید."));
         }
 
         var outranked = await GuardAgainstHigherPrivilegeAsync(user, cancellationToken);
@@ -470,7 +470,7 @@ public sealed class IdentityService(
         {
             // Other data (tasks they own, a team of theirs assigned to tasks) still points at the
             // user. That is a conflict to resolve first, not a server error.
-            return Result.Failure(Error.Conflict("The user is still referenced by other records (for example tasks they own). Deactivate the account instead, or reassign that data first."));
+            return Result.Failure(Error.Conflict("این کاربر هنوز به اطلاعات دیگری (مثلاً فعالیت‌هایش) متصل است. به‌جای حذف، حساب را غیرفعال کنید یا ابتدا آن اطلاعات را واگذار کنید."));
         }
         await platformService.AuditAsync("users.delete", nameof(User), user.Id.ToString(), auditDetails, cancellationToken);
         return Result.Success();
@@ -482,7 +482,7 @@ public sealed class IdentityService(
         // Another organization's user does not exist for this caller.
         if (user is null || !currentUser.CanAccessTenant(user.TenantId))
         {
-            return Result.Failure(Error.NotFound("User was not found."));
+            return Result.Failure(Error.NotFound("کاربر یافت نشد."));
         }
 
         var guard = GuardAccessChange(user);
@@ -493,14 +493,14 @@ public sealed class IdentityService(
 
         if (request.RoleIds is null)
         {
-            return Result.Failure(Error.Validation("RoleIds is required."));
+            return Result.Failure(Error.Validation("فهرست نقش‌ها را بفرستید."));
         }
 
         var requestedRoles = request.RoleIds.Distinct().ToList();
         var tenantRoles = (await repository.ListRolesAsync(user.TenantId, cancellationToken)).ToDictionary(role => role.Id);
         if (requestedRoles.Any(id => !tenantRoles.ContainsKey(id)))
         {
-            return Result.Failure(Error.Validation("One or more roles do not exist in the user's organization."));
+            return Result.Failure(Error.Validation("یک یا چند نقش در سازمان این کاربر وجود ندارد."));
         }
 
         var currentRoles = user.Roles.Select(role => role.RoleId).ToHashSet();
@@ -534,7 +534,7 @@ public sealed class IdentityService(
         // Another organization's user does not exist for this caller.
         if (user is null || !currentUser.CanAccessTenant(user.TenantId))
         {
-            return Result.Failure<UserPermissionsDto>(Error.NotFound("User was not found."));
+            return Result.Failure<UserPermissionsDto>(Error.NotFound("کاربر یافت نشد."));
         }
 
         var permissions = _managed.Managed(await repository.ListPermissionsAsync(cancellationToken));
@@ -587,7 +587,7 @@ public sealed class IdentityService(
         // Another organization's user does not exist for this caller.
         if (user is null || !currentUser.CanAccessTenant(user.TenantId))
         {
-            return Result.Failure(Error.NotFound("User was not found."));
+            return Result.Failure(Error.NotFound("کاربر یافت نشد."));
         }
 
         var guard = GuardAccessChange(user);
@@ -598,14 +598,14 @@ public sealed class IdentityService(
 
         if (request.PermissionIds is null)
         {
-            return Result.Failure(Error.Validation("PermissionIds is required."));
+            return Result.Failure(Error.Validation("فهرست مجوزها را بفرستید."));
         }
 
         var requested = request.PermissionIds.Distinct().ToList();
         var requestedDenied = request.DeniedPermissionIds?.Distinct().ToList();
         if (requestedDenied is not null && requestedDenied.Intersect(requested).Any())
         {
-            return Result.Failure(Error.Validation("A permission cannot be both granted and denied to the same user."));
+            return Result.Failure(Error.Validation("یک مجوز را نمی‌شود هم‌زمان به یک کاربر داد و از او گرفت."));
         }
 
         var named = requested.Concat(requestedDenied ?? []).Distinct().ToList();
@@ -615,7 +615,7 @@ public sealed class IdentityService(
             .ToDictionary(permission => permission.Id);
         if (named.Any(id => !byId.ContainsKey(id)))
         {
-            return Result.Failure(Error.Validation("One or more permissions do not exist."));
+            return Result.Failure(Error.Validation("یک یا چند مجوز انتخاب‌شده وجود ندارد."));
         }
 
         var unmanaged = named.Select(id => byId[id]).Where(permission => !_managed.IsManaged(permission)).Select(permission => permission.Name).ToList();
@@ -712,12 +712,12 @@ public sealed class IdentityService(
     {
         if (target.IsSystem)
         {
-            return Result.Failure(Error.Forbidden("The access of the built-in system administrator cannot be changed."));
+            return Result.Failure(Error.Forbidden("دسترسی مدیر اصلی سامانه قابل تغییر نیست."));
         }
 
         if (currentUser.UserId == target.Id)
         {
-            return Result.Failure(Error.Forbidden("You cannot change your own roles or permissions."));
+            return Result.Failure(Error.Forbidden("نمی‌توانید نقش‌ها یا مجوزهای خودتان را تغییر دهید."));
         }
 
         return Result.Success();
@@ -739,12 +739,12 @@ public sealed class IdentityService(
 
         if (!currentUser.CanAccessTenant(request.TenantId))
         {
-            return Result.Failure<RoleDto>(Error.NotFound("Tenant was not found."));
+            return Result.Failure<RoleDto>(Error.NotFound("سازمان یافت نشد."));
         }
 
         if (await repository.RoleNameExistsAsync(request.TenantId, request.Name, cancellationToken))
         {
-            return Result.Failure<RoleDto>(Error.Conflict("A role with this name already exists in the tenant."));
+            return Result.Failure<RoleDto>(Error.Conflict("نقشی با این نام قبلاً ثبت شده است."));
         }
 
         var role = new Role(Guid.NewGuid(), request.TenantId, request.Name, request.Description);
@@ -759,12 +759,12 @@ public sealed class IdentityService(
         var role = await repository.GetRoleByIdAsync(roleId, cancellationToken);
         if (role is null || !currentUser.CanAccessTenant(role.TenantId))
         {
-            return Result.Failure<RoleDto>(Error.NotFound("Role was not found."));
+            return Result.Failure<RoleDto>(Error.NotFound("نقش یافت نشد."));
         }
 
         if (role.IsSystem)
         {
-            return Result.Failure<RoleDto>(Error.Forbidden("The built-in Administrator role cannot be changed."));
+            return Result.Failure<RoleDto>(Error.Forbidden("نقش مدیر سامانه قابل تغییر نیست."));
         }
 
         role.Update(request.Name, request.Description);
@@ -778,26 +778,26 @@ public sealed class IdentityService(
         var role = await repository.GetRoleByIdAsync(roleId, cancellationToken);
         if (role is null || !currentUser.CanAccessTenant(role.TenantId))
         {
-            return Result.Failure(Error.NotFound("Role was not found."));
+            return Result.Failure(Error.NotFound("نقش یافت نشد."));
         }
 
         // The Administrator role always carries every permission (the seeder restores it);
         // editing it could only lock administrators out.
         if (role.IsSystem)
         {
-            return Result.Failure(Error.Forbidden("The permissions of the built-in Administrator role cannot be changed."));
+            return Result.Failure(Error.Forbidden("مجوزهای نقش مدیر سامانه قابل تغییر نیست."));
         }
 
         if (request.PermissionIds is null)
         {
-            return Result.Failure(Error.Validation("PermissionIds is required."));
+            return Result.Failure(Error.Validation("فهرست مجوزها را بفرستید."));
         }
 
         var requested = request.PermissionIds.Distinct().ToList();
         var known = await repository.GetPermissionsByIdsAsync(requested, cancellationToken);
         if (known.Count != requested.Count)
         {
-            return Result.Failure(Error.Validation("One or more permissions do not exist."));
+            return Result.Failure(Error.Validation("یک یا چند مجوز انتخاب‌شده وجود ندارد."));
         }
 
         var unmanaged = known.Where(permission => !_managed.IsManaged(permission)).Select(permission => permission.Name).ToList();
@@ -876,7 +876,7 @@ public sealed class IdentityService(
 
         if (await repository.TenantSlugExistsAsync(request.Slug, cancellationToken))
         {
-            return Result.Failure<TenantDto>(Error.Conflict("A tenant with this slug already exists."));
+            return Result.Failure<TenantDto>(Error.Conflict("سازمانی با این شناسه قبلاً ثبت شده است."));
         }
 
         var tenant = new Tenant(Guid.NewGuid(), request.Name, request.Slug);
@@ -897,19 +897,19 @@ public sealed class IdentityService(
         if (!string.IsNullOrWhiteSpace(username)
             && await repository.UsernameExistsAsync(tenantId, username, exceptUserId, cancellationToken))
         {
-            return Error.Conflict("A user with this username already exists in the tenant.");
+            return Error.Conflict("کاربری با این نام کاربری (کد ملی) قبلاً ثبت شده است.");
         }
 
         if (!string.IsNullOrWhiteSpace(phoneNumber)
             && await repository.PhoneNumberExistsAsync(tenantId, phoneNumber, exceptUserId, cancellationToken))
         {
-            return Error.Conflict("A user with this mobile number already exists in the tenant.");
+            return Error.Conflict("کاربری با این شماره تلفن همراه قبلاً ثبت شده است.");
         }
 
         if (!string.IsNullOrWhiteSpace(email)
             && await repository.UserEmailExistsAsync(tenantId, email, exceptUserId, cancellationToken))
         {
-            return Error.Conflict("A user with this email already exists in the tenant.");
+            return Error.Conflict("کاربری با این ایمیل قبلاً ثبت شده است.");
         }
 
         return null;

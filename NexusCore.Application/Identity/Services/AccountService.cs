@@ -285,7 +285,7 @@ public sealed class AccountService(
         var user = await repository.GetUserByIdAsync(userId, cancellationToken);
         if (user is null)
         {
-            return Result.Failure<UserDto>(Error.NotFound("User was not found."));
+            return Result.Failure<UserDto>(Error.NotFound("کاربر یافت نشد."));
         }
 
         // The mobile number is how a forgotten password is recovered, so it is not changed by a
@@ -306,7 +306,7 @@ public sealed class AccountService(
             || (!string.IsNullOrWhiteSpace(request.LastName)
                 && !string.Equals(request.LastName.Trim(), user.LastName, StringComparison.Ordinal)))
         {
-            return Result.Failure<UserDto>(Error.Forbidden("Identity details cannot be changed from the personal profile."));
+            return Result.Failure<UserDto>(Error.Forbidden("اطلاعات هویتی از پروفایل شخصی تغییر نمی‌کند."));
         }
 
         user.UpdateContactDetails(user.Username, user.PhoneNumber, request.NotifySms);
@@ -326,7 +326,7 @@ public sealed class AccountService(
         var user = await repository.GetUserByIdAsync(userId, cancellationToken);
         if (user is null)
         {
-            return Result.Failure<UserDto>(Error.NotFound("User was not found."));
+            return Result.Failure<UserDto>(Error.NotFound("کاربر یافت نشد."));
         }
 
         user.SetPreferences(Limit(request.Theme, 40), Limit(request.ColorPalette, 40), Limit(request.ThemeMode, 10));
@@ -354,12 +354,12 @@ public sealed class AccountService(
         var user = await repository.GetUserByIdAsync(userId, cancellationToken);
         if (user is null)
         {
-            return Result.Failure(Error.NotFound("User was not found."));
+            return Result.Failure(Error.NotFound("کاربر یافت نشد."));
         }
 
         if (!passwordHasher.Verify(request.CurrentPassword, user.PasswordHash))
         {
-            return Result.Failure(Error.Validation("The current password is not correct."));
+            return Result.Failure(Error.Validation("رمز عبور فعلی صحیح نیست."));
         }
 
         user.ChangePassword(passwordHasher.HashPassword(request.NewPassword));
@@ -410,13 +410,13 @@ public sealed class AccountService(
         var user = await repository.GetUserByIdAsync(userId, cancellationToken);
         if (user is null)
         {
-            return Result.Failure<PhoneChangeRequestedResponse>(Error.NotFound("User was not found."));
+            return Result.Failure<PhoneChangeRequestedResponse>(Error.NotFound("کاربر یافت نشد."));
         }
 
         var newPhone = PhoneNumber.Normalize(request.NewPhoneNumber);
         if (newPhone is null)
         {
-            return Result.Failure<PhoneChangeRequestedResponse>(Error.Validation("Enter a valid mobile number (for example 09121234567 or +98 912 123 4567)."));
+            return Result.Failure<PhoneChangeRequestedResponse>(Error.Validation("شماره تلفن همراه معتبر وارد کنید (مثلاً ۰۹۱۲۱۲۳۴۵۶۷ یا ‎+98 912 123 4567‎)."));
         }
 
         var throttled = await loginProtection.ThrottleAsync(AuthAction.PhoneChange, cancellationToken);
@@ -433,12 +433,12 @@ public sealed class AccountService(
 
         if (newPhone == user.PhoneNumber)
         {
-            return Result.Failure<PhoneChangeRequestedResponse>(Error.Validation("This is already your mobile number."));
+            return Result.Failure<PhoneChangeRequestedResponse>(Error.Validation("این شماره همین حالا شماره‌ی تلفن همراه شماست."));
         }
 
         if (await repository.PhoneNumberExistsAsync(user.TenantId, newPhone, user.Id, cancellationToken))
         {
-            return Result.Failure<PhoneChangeRequestedResponse>(Error.Conflict("This mobile number cannot be used. Enter another one."));
+            return Result.Failure<PhoneChangeRequestedResponse>(Error.Conflict("این شماره تلفن همراه قابل استفاده نیست. شماره دیگری وارد کنید."));
         }
 
         var limited = await loginProtection.BeforeResetCodeRequestAsync(PhoneChangeKey(userId), cancellationToken);
@@ -463,7 +463,7 @@ public sealed class AccountService(
         {
             await phoneChangeCodes.ClearAsync(userId, cancellationToken);
             logger.LogWarning("Phone change code for user {UserId} could not be sent by SMS ({ErrorCode}).", userId, sent.Error.Code);
-            return Result.Failure<PhoneChangeRequestedResponse>(new Error("sms.unavailable", "The verification code could not be sent. Try again later."));
+            return Result.Failure<PhoneChangeRequestedResponse>(new Error("sms.unavailable", "کد تأیید ارسال نشد؛ کمی بعد دوباره تلاش کنید."));
         }
 
         await platformService.AuditAsync("users.phone_change_code_sent", nameof(User), userId.ToString(), null, cancellationToken);
@@ -485,7 +485,7 @@ public sealed class AccountService(
         var user = await repository.GetUserByIdAsync(userId, cancellationToken);
         if (user is null)
         {
-            return Result.Failure<UserDto>(Error.NotFound("User was not found."));
+            return Result.Failure<UserDto>(Error.NotFound("کاربر یافت نشد."));
         }
 
         var newPhone = PhoneNumber.Normalize(request.NewPhoneNumber);
@@ -522,7 +522,7 @@ public sealed class AccountService(
         // Someone else may have taken the number since the code was sent.
         if (await repository.PhoneNumberExistsAsync(user.TenantId, newPhone, user.Id, cancellationToken))
         {
-            return Result.Failure<UserDto>(Error.Conflict("This mobile number cannot be used. Enter another one."));
+            return Result.Failure<UserDto>(Error.Conflict("این شماره تلفن همراه قابل استفاده نیست. شماره دیگری وارد کنید."));
         }
 
         var previous = user.PhoneNumber;
@@ -551,7 +551,7 @@ public sealed class AccountService(
         if (string.IsNullOrEmpty(password) || !passwordHasher.Verify(password, user.PasswordHash))
         {
             await loginProtection.RecordFailedResetCodeAsync(key, cancellationToken);
-            return Result.Failure(Error.Validation("The current password is not correct."));
+            return Result.Failure(Error.Validation("رمز عبور فعلی صحیح نیست."));
         }
 
         await loginProtection.ClearResetCodeFailuresAsync(key, cancellationToken);

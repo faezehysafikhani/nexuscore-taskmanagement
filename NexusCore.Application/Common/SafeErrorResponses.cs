@@ -18,6 +18,42 @@ public static class SafeErrorResponses
     public const string ServerErrorMessage = "خطایی در انجام عملیات رخ داد. لطفاً دوباره تلاش کنید.";
     public const string BadRequestMessage = "اطلاعات ارسال‌شده معتبر نیست.";
 
+    /// <summary>
+    /// What was wrong with a body the framework could not read, in Persian and without internals:
+    /// a field it does not know, a field it needs, a value of the wrong kind, or not a JSON object.
+    /// </summary>
+    public static string DescribeBadBody(BadHttpRequestException badRequest)
+    {
+        if (badRequest.InnerException is not System.Text.Json.JsonException json)
+        {
+            return BadRequestMessage;
+        }
+
+        var message = json.Message;
+        var unknown = System.Text.RegularExpressions.Regex.Match(message, @"The JSON property '([^']{1,60})' could not be mapped");
+        if (unknown.Success)
+        {
+            return $"{BadRequestMessage} فیلد «{unknown.Groups[1].Value}» شناخته نیست.";
+        }
+
+        var missing = System.Text.RegularExpressions.Regex.Match(message, @"missing required properties[^:]*: ([A-Za-z0-9_, ]{1,200})");
+        if (missing.Success)
+        {
+            return $"{BadRequestMessage} این فیلد لازم است: «{missing.Groups[1].Value.Trim().TrimEnd('.')}».";
+        }
+
+        var path = json.Path;
+        if (string.IsNullOrEmpty(path) || path == "$")
+        {
+            return $"{BadRequestMessage} بدنه‌ی درخواست باید یک شیء JSON با فیلدهای همین درخواست باشد.";
+        }
+
+        var field = path.StartsWith("$.", StringComparison.Ordinal) ? path[2..] : path;
+        return field.Length <= 80
+            ? $"{BadRequestMessage} مقدار فیلد «{field}» درست نیست."
+            : BadRequestMessage;
+    }
+
     public static IApplicationBuilder UseSafeErrorResponses(this IApplicationBuilder app) =>
         app.UseExceptionHandler(handler => handler.Run(async context =>
         {
@@ -26,7 +62,7 @@ public static class SafeErrorResponses
             // A request the framework could not read (malformed JSON, wrong value types).
             if (exception is BadHttpRequestException badRequest)
             {
-                await Results.Problem(BadRequestMessage, statusCode: badRequest.StatusCode, title: "validation.error").ExecuteAsync(context);
+                await Results.Problem(DescribeBadBody(badRequest), statusCode: badRequest.StatusCode, title: "validation.error").ExecuteAsync(context);
                 return;
             }
 

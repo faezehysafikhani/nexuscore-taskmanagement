@@ -134,7 +134,7 @@ public sealed partial class OrgNodeService : IOrgLinkService
         if (used > 0 || state.AutoLinkRules.Any(rule => rule.LinkTypeId == id))
         {
             return Result.Failure(Error.Conflict(used > 0
-                ? $"{used} رابطه از نوع «{linkType.Name}» است؛ به‌جای حذف، آن را غیرفعال کنید."
+                ? $"{FaDigits.Of(used)} رابطه از نوع «{linkType.Name}» است؛ به‌جای حذف، آن را غیرفعال کنید."
                 : $"نوع رابطه‌ی «{linkType.Name}» در قاعده‌های خودکار به‌کار رفته است."));
         }
 

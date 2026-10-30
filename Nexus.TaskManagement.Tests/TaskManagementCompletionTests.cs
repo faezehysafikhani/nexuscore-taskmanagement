@@ -17,8 +17,9 @@ public sealed class TaskManagementCompletionTests(SqlServerFixture fixture)
 {
     private bool Skip => !fixture.Available;
 
-    private static CreateTaskRequest PlainTask(string title) =>
-        new(title, new DateOnly(2026, 10, 1));
+    // Every new task has someone responsible (the product's rule): the fixture's owner.
+    private CreateTaskRequest PlainTask(string title) =>
+        new(title, new DateOnly(2026, 10, 1), AssignedUserId: fixture.OwnerUserId);
 
     [Fact]
     public async Task UploadedFileContentComesBackOnDownload_AndIsGoneAfterDelete()
@@ -26,16 +27,16 @@ public sealed class TaskManagementCompletionTests(SqlServerFixture fixture)
         if (Skip) return;
 
         var task = await fixture.ScopedAsync(sp => sp.GetRequiredService<ITaskService>().CreateAsync(PlainTask("Has content"), default));
-        var bytes = Enumerable.Range(0, 1000).Select(i => (byte)(i % 251)).ToArray();
+        var bytes = TestFiles.Pdf(1000);
 
         var upload = await fixture.ScopedAsync(sp => sp.GetRequiredService<ITaskFileService>()
-            .UploadToTaskAsync(task.Value!.Id, new UploadFileRequest("data.bin", "application/octet-stream", bytes), default));
+            .UploadToTaskAsync(task.Value!.Id, new UploadFileRequest("data.pdf", "application/pdf", bytes), default));
         Assert.True(upload.IsSuccess, upload.IsFailure ? upload.Error.Message : null);
 
         var download = await fixture.ScopedAsync(sp => sp.GetRequiredService<ITaskFileService>().DownloadAsync(upload.Value!.FileId, default));
         Assert.True(download.IsSuccess, download.IsFailure ? download.Error.Message : null);
         Assert.Equal(bytes, download.Value!.Content);
-        Assert.Equal("data.bin", download.Value.FileName);
+        Assert.Equal("data.pdf", download.Value.FileName);
 
         var storageKey = await fixture.ScopedAsync(sp => sp.GetRequiredService<TaskManagementDbContext>()
             .Files.Where(f => f.Id == upload.Value!.FileId).Select(f => f.StoragePath).SingleAsync());
@@ -57,11 +58,11 @@ public sealed class TaskManagementCompletionTests(SqlServerFixture fixture)
         Assert.Equal("Owner", comment.Value!.UserDisplayName);
 
         var mine = await fixture.ScopedAsync(sp => sp.GetRequiredService<ITaskFileService>()
-            .UploadToCommentAsync(comment.Value!.Id, new UploadFileRequest("a.txt", "text/plain", new byte[10]), default), fixture.OwnerUserId);
+            .UploadToCommentAsync(comment.Value!.Id, new UploadFileRequest("a.pdf", "application/pdf", TestFiles.Pdf(10)), default), fixture.OwnerUserId);
         Assert.True(mine.IsSuccess);
 
         var someoneElse = await fixture.ScopedAsync(sp => sp.GetRequiredService<ITaskFileService>()
-            .UploadToCommentAsync(comment.Value!.Id, new UploadFileRequest("b.txt", "text/plain", new byte[10]), default), fixture.OtherUserId);
+            .UploadToCommentAsync(comment.Value!.Id, new UploadFileRequest("b.pdf", "application/pdf", TestFiles.Pdf(10)), default), fixture.OtherUserId);
         Assert.True(someoneElse.IsFailure);
         Assert.Equal("forbidden", someoneElse.Error.Code);
 
@@ -76,7 +77,7 @@ public sealed class TaskManagementCompletionTests(SqlServerFixture fixture)
         var listed = await fixture.ScopedAsync(sp => sp.GetRequiredService<ITaskCommentService>().ListAsync(task.Value!.Id, default));
         var files = Assert.Single(listed.Value!).Files;
         Assert.NotNull(files);
-        Assert.Equal("a.txt", Assert.Single(files!).FileName);
+        Assert.Equal("a.pdf", Assert.Single(files!).FileName);
 
         // Deleting the comment takes its attachment with it - row and content.
         var removed = await fixture.ScopedAsync(sp => sp.GetRequiredService<ITaskCommentService>().DeleteAsync(comment.Value!.Id, default), fixture.OwnerUserId);
@@ -111,11 +112,11 @@ public sealed class TaskManagementCompletionTests(SqlServerFixture fixture)
 
         var task = await fixture.ScopedAsync(sp => sp.GetRequiredService<ITaskService>().CreateAsync(PlainTask("Goes with its files"), default));
         var taskFile = await fixture.ScopedAsync(sp => sp.GetRequiredService<ITaskFileService>()
-            .UploadToTaskAsync(task.Value!.Id, new UploadFileRequest("t.txt", "text/plain", new byte[5]), default));
+            .UploadToTaskAsync(task.Value!.Id, new UploadFileRequest("t.pdf", "application/pdf", TestFiles.Pdf(5)), default));
         var comment = await fixture.ScopedAsync(sp => sp.GetRequiredService<ITaskCommentService>()
             .CreateAsync(task.Value!.Id, new CreateTaskCommentRequest("with file"), default));
         var commentFile = await fixture.ScopedAsync(sp => sp.GetRequiredService<ITaskFileService>()
-            .UploadToCommentAsync(comment.Value!.Id, new UploadFileRequest("c.txt", "text/plain", new byte[5]), default));
+            .UploadToCommentAsync(comment.Value!.Id, new UploadFileRequest("c.pdf", "application/pdf", TestFiles.Pdf(5)), default));
 
         var keys = await fixture.ScopedAsync(sp => sp.GetRequiredService<TaskManagementDbContext>().Files
             .Where(f => f.Id == taskFile.Value!.FileId || f.Id == commentFile.Value!.FileId)

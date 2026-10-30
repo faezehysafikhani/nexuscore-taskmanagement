@@ -17,6 +17,12 @@ public interface IOrgAppointmentService
 
     Task<Result<AppointmentDto>> EndAppointmentAsync(Guid tenantId, Guid unitPositionId, EndAppointmentRequest request, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Cancels the post's appointment that has not started yet: it goes (it never was), and the present
+    /// holder, who was to end when it started, stays on. Returns the cancelled appointment.
+    /// </summary>
+    Task<Result<AppointmentDto>> CancelUpcomingAppointmentAsync(Guid tenantId, Guid unitPositionId, CancellationToken cancellationToken);
+
     Task<Result<IReadOnlyList<AppointmentDto>>> GetPostHistoryAsync(Guid tenantId, Guid unitPositionId, CancellationToken cancellationToken);
 
     Task<Result<IReadOnlyList<AppointmentDto>>> GetUserHistoryAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken);
@@ -129,7 +135,7 @@ public sealed partial class OrgStructureService : IOrgAppointmentService
         var history = await repository.ListUserPositionHistoryAsync(tenantId, null, unitPositionId, cancellationToken);
         if (history.Any(a => a.StartDate > now))
         {
-            return Result.Failure<AppointmentDto>(Error.Conflict("این پست یک انتصاب آینده دارد؛ اول آن را لغو کنید."));
+            return Result.Failure<AppointmentDto>(Error.Conflict("این پست یک انتصاب آینده دارد؛ اول آن را لغو کنید (لغو انتصاب آینده)."));
         }
 
         // Whoever is on it then (open, or ending after the new start) ends when the new one starts.
@@ -218,6 +224,45 @@ public sealed partial class OrgStructureService : IOrgAppointmentService
         }
 
         return Result.Success(await AppointmentDtoAsync(tenantId, snapshot, current, cancellationToken));
+    }
+
+    public async Task<Result<AppointmentDto>> CancelUpcomingAppointmentAsync(Guid tenantId, Guid unitPositionId, CancellationToken cancellationToken)
+    {
+        var (turn, busy) = await AppointmentTurnAsync(tenantId, cancellationToken);
+        if (busy is not null)
+        {
+            return Result.Failure<AppointmentDto>(busy);
+        }
+
+        await using var _ = turn;
+        var now = Now;
+        var snapshot = await LoadAsync(tenantId, cancellationToken);
+        var seat = snapshot.Seats.FirstOrDefault(s => s.Id == unitPositionId);
+        if (seat is null || !await IsMineAsync(tenantId, seat.CompanyId, cancellationToken))
+        {
+            return Result.Failure<AppointmentDto>(Error.NotFound("پست پیدا نشد."));
+        }
+
+        var history = await repository.ListUserPositionHistoryAsync(tenantId, null, unitPositionId, cancellationToken);
+        if (history.FirstOrDefault(a => a.StartDate > now) is not { } upcoming)
+        {
+            return Result.Failure<AppointmentDto>(Error.NotFound("این پست انتصاب آینده‌ای ندارد."));
+        }
+
+        // Its record for the answer, before it goes.
+        var cancelled = await AppointmentDtoAsync(tenantId, snapshot, upcoming, cancellationToken);
+        foreach (var current in history.Where(a => a.IsActiveAt(now) && a.EndDate == upcoming.StartDate))
+        {
+            current.Reopen();
+        }
+
+        repository.RemoveUserPosition(upcoming); // not started: removed, not ended
+        if (!await SaveAppointmentsAsync(turn, cancellationToken))
+        {
+            return Result.Failure<AppointmentDto>(ChangedMeanwhile());
+        }
+
+        return Result.Success(cancelled);
     }
 
     public async Task<Result<IReadOnlyList<AppointmentDto>>> GetPostHistoryAsync(Guid tenantId, Guid unitPositionId, CancellationToken cancellationToken)

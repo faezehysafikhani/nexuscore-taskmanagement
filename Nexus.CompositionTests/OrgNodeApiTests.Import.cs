@@ -31,12 +31,29 @@ public sealed partial class OrgNodeApiTests
         return OrgSheetReader.Read(stream, "x.csv").Rows;
     }
 
-    private static async Task<(World W, Guid Company, IOrgImportService Import)> BankCompanyAsync()
+    /// <summary>
+    /// The bank's types, rules and positions (from the template, in a first company), and the company the
+    /// sheet goes to: empty (the default), with every position for it too; or the template's company itself.
+    /// </summary>
+    private static async Task<(World W, Guid Company, IOrgImportService Import)> BankCompanyAsync(bool empty = true)
     {
         var w = new World();
-        // The bank's types, rules and positions come with the template (an empty bank: no nodes kept).
-        var company = await w.Ok(w.Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("بانک", "B", null, OrgNodeService.SystemTemplateId("bank")), default));
-        return (w, company.Id, new OrgImportService((OrgNodeService)w.Nodes, (OrgStructureService)w.Service));
+        var template = await w.Ok(w.Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("بانک نمونه", "B0", null, OrgNodeService.SystemTemplateId("bank")), default));
+        var company = template.Id;
+        if (empty)
+        {
+            company = (await w.Ok(w.Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("بانک", "B", null), default))).Id;
+            // Superiors first: a position's superior must be for each of its companies.
+            var positions = (await w.Ok(w.Service.ListPositionsAsync(Tenant, default))).ToDictionary(p => p.Id);
+            int Depth(PositionDto p) => p.ParentPositionId is { } up && positions.TryGetValue(up, out var parent) ? 1 + Depth(parent) : 0;
+            foreach (var position in positions.Values.OrderBy(Depth))
+            {
+                await w.Ok(w.Service.UpdatePositionAsync(Tenant, position.Id,
+                    new UpdatePositionRequest(position.Title, true, position.ParentPositionId, [.. position.CompanyIds ?? [], company]), default));
+            }
+        }
+
+        return (w, company, new OrgImportService((OrgNodeService)w.Nodes, (OrgStructureService)w.Service));
     }
 
     [Fact]
@@ -45,7 +62,7 @@ public sealed partial class OrgNodeApiTests
         var (w, company, import) = await BankCompanyAsync();
         var before = (await w.Ok(w.Nodes.ListNodesAsync(Tenant, null, default))).Count;
         var preview = await w.Ok(import.PreviewAsync(Tenant, new ImportTargetRequest(company), Sample("bank-structure-faulty.csv"), default));
-        Assert.Equal([5, 6, 7, 8, 9, 10], preview.Errors.Select(e => e.Row!.Value).Distinct().Order());
+        Assert.Equal([5, 6, 7, 8, 9, 10, 11], preview.Errors.Select(e => e.Row!.Value).Distinct().Order());
         Assert.Empty(preview.Nodes);
         Assert.Equal("validation.error", (await import.CommitAsync(Tenant, new ImportTargetRequest(company), Sample("bank-structure-faulty.csv"), default)).Error.Code);
         Assert.Equal(before, (await w.Ok(w.Nodes.ListNodesAsync(Tenant, null, default))).Count);
@@ -75,7 +92,7 @@ public sealed partial class OrgNodeApiTests
 
         // Again: every code is already there, so nothing is made.
         var again = await w.Ok(import.PreviewAsync(Tenant, new ImportTargetRequest(company), rows, default));
-        Assert.Equal(40, again.Errors.Count);
+        Assert.Equal(40, again.Errors.Select(e => e.Row).Distinct().Count()); // every row: its code is there (the top one: its name too)
         Assert.Equal("validation.error", (await import.CommitAsync(Tenant, new ImportTargetRequest(company), rows, default)).Error.Code);
     }
 
@@ -93,8 +110,9 @@ public sealed partial class OrgNodeApiTests
         var result = await w.Ok(import.CommitAsync(Tenant, new ImportTargetRequest(company), rows, default));
         clock.Stop();
         Assert.Equal(412, result.Nodes.Count);
-        // The five committees: the company now has two boards (the template's and the sheet's), so they are left to choose.
-        Assert.Equal(5, result.AutoLinkChoices.Count);
+        // The five committees: one board in the company (the sheet's), so each is linked to it at once.
+        Assert.Empty(result.AutoLinkChoices);
+        Assert.Equal(5, result.Links);
         _output?.WriteLine($"412 rows: preview {previewTime.TotalMilliseconds:F0} ms, preview+commit {clock.Elapsed.TotalMilliseconds:F0} ms, {result.Posts} posts");
         Assert.True(clock.Elapsed < TimeSpan.FromSeconds(30), $"took {clock.Elapsed}");
     }
@@ -102,7 +120,7 @@ public sealed partial class OrgNodeApiTests
     [Fact]
     public async Task ASheetUnderANode_AndTheRules_AndTheSwitch()
     {
-        var (w, company, import) = await BankCompanyAsync();
+        var (w, company, import) = await BankCompanyAsync(empty: false);
         var deputy = (await w.Ok(w.Nodes.ListNodesAsync(Tenant, company, default))).First(n => n.NodeTypeName == "معاونت");
         var sheet = Csv("کد,نام,کد والد,نوع,سمت مدیر\nX1,اداره کل تازه,,general-department,مدیر کل\nX2,اداره‌ی تازه,X1,office,\n");
         var made = await w.Ok(import.CommitAsync(Tenant, new ImportTargetRequest(ParentNodeId: deputy.Id), sheet, default));

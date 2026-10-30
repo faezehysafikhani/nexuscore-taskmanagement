@@ -292,7 +292,7 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
 
         var create = await host.SendAsync(host.AdminB, HttpMethod.Post, "/api/identity/users", new
         {
-            tenantId = host.TenantA, username = "0077777777", firstName = "Planted", lastName = "User",
+            tenantId = host.TenantA, username = "0077777778", firstName = "Planted", lastName = "User",
             phoneNumber = "09127777777", password = "Correct-Pass-1"
         });
         Assert.Equal(HttpStatusCode.NotFound, create.StatusCode);

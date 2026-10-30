@@ -83,7 +83,7 @@ public sealed class AccountStatusTests
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         var problem = await Json(response);
         Assert.Equal("unauthorized", problem.GetProperty("title").GetString());
-        Assert.Equal("Invalid username/mobile number or password.", problem.GetProperty("detail").GetString());
+        Assert.Equal("نام کاربری، شماره تلفن یا رمز عبور صحیح نیست.", problem.GetProperty("detail").GetString());
     }
 
     // ---------------------------------------------------------------- disabled accounts
