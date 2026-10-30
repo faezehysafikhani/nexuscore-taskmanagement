@@ -146,7 +146,7 @@ public sealed partial class OrgNodeService : IOrgLinkService
 
     private static Error? LinkTypeProblem(string name, string style, bool countsAsManager) =>
         name.Length == 0 ? Error.Validation("نام نوع رابطه را وارد کنید.")
-        : name.Length > MaxTypeNameLength ? Error.Validation($"نام نوع رابطه حداکثر {MaxTypeNameLength} نویسه است.")
+        : name.Length > MaxTypeNameLength ? Error.Validation($"نام نوع رابطه حداکثر {FaDigits.Of(MaxTypeNameLength)} نویسه است.")
         : !LineStyles.Contains(style) ? Error.Validation("سبک خط یکی از solid، dotted یا dashed است.")
         : style == "dotted" && countsAsManager ? Error.Validation("خط نقطه‌چین هیچ‌وقت مدیر حساب نمی‌شود؛ برای رابطه‌ای که مدیر حساب شود خط ممتد یا خط‌چین بگذارید.")
         : null;

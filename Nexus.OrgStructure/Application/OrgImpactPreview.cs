@@ -15,7 +15,8 @@ namespace Nexus.OrgStructure.Application;
 /// "add" (a new empty node: Name, ParentNodeId or CompanyId), "manager" (NodeId gets ManagerUserId;
 /// null: none), "unlink" (NodeId loses its company link), "link" (a secondary link from NodeId to
 /// ToNodeId of LinkTypeId), "unlink-link" (the secondary link LinkId goes) or "merge" (NodeId goes
-/// into ToNodeId: its children, posts and people move there and it becomes inactive).
+/// into ToNodeId: its children, posts and people move there and it becomes inactive; TargetNodeId is the
+/// same field under the name the merge endpoint uses).
 /// </summary>
 public sealed record ImpactChangeRequest(
     string Kind,
@@ -26,7 +27,8 @@ public sealed record ImpactChangeRequest(
     string? Name = null,
     Guid? ToNodeId = null,
     Guid? LinkTypeId = null,
-    Guid? LinkId = null);
+    Guid? LinkId = null,
+    Guid? TargetNodeId = null);
 
 /// <summary>The changes, applied together in this order.</summary>
 public sealed record ImpactPreviewRequest(IReadOnlyList<ImpactChangeRequest> Changes);
@@ -171,6 +173,14 @@ public sealed class OrgImpactPreview(
     private static async Task<Error?> ApplyAsync(
         ImpactData data, StructureOverlay overlay, ImpactChangeRequest change, IReadOnlySet<Guid>? mine, Guid tenantId, CancellationToken cancellationToken)
     {
+        // The merge endpoint calls its target TargetNodeId: either name is accepted here.
+        change = change with { ToNodeId = change.ToNodeId ?? change.TargetNodeId };
+        if (string.Equals(change.Kind?.Trim(), "move", StringComparison.OrdinalIgnoreCase) && change.ParentNodeId is null && change.ToNodeId is not null)
+        {
+            // Not silently «to the top»: a move names its new parent in ParentNodeId.
+            return Error.Validation("برای جابه‌جایی، گره‌ی بالاتر جدید را در parentNodeId بدهید (خالی: بالاترین سطح).");
+        }
+
         var view = data.Units(overlay);
         var all = (await view.ListAsync(tenantId, cancellationToken)).ToDictionary(unit => unit.Id);
         var graph = OrgGraph.Build(all.Values, await data.Structure(overlay).ListNodeTypesAsync(tenantId, cancellationToken),

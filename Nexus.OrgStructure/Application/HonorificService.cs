@@ -57,7 +57,7 @@ public sealed class HonorificService(
         var honorific = await repository.GetHonorificAsync(tenantId, id, cancellationToken);
         if (honorific is null)
         {
-            return Result.Failure<HonorificDto>(Error.NotFound("Title was not found."));
+            return Result.Failure<HonorificDto>(Error.NotFound("عنوان پیدا نشد."));
         }
 
         var invalid = await ValidateAsync(tenantId, id, request.Title, cancellationToken);
@@ -88,12 +88,12 @@ public sealed class HonorificService(
         var honorific = await repository.GetHonorificAsync(tenantId, id, cancellationToken);
         if (honorific is null)
         {
-            return Result.Failure(Error.NotFound("Title was not found."));
+            return Result.Failure(Error.NotFound("عنوان پیدا نشد."));
         }
 
         if ((await repository.ListUserHonorificsAsync(tenantId, cancellationToken)).Any(h => h.HonorificId == id))
         {
-            return Result.Failure(Error.Conflict("Some users have this title. Change their title first, or deactivate it instead."));
+            return Result.Failure(Error.Conflict("چند کاربر این عنوان را دارند؛ اول عنوان آن‌ها را عوض کنید، یا به‌جای حذف، آن را غیرفعال کنید."));
         }
 
         repository.RemoveHonorific(honorific);
@@ -112,7 +112,7 @@ public sealed class HonorificService(
     {
         if (!(await users.GetUsersAsync([userId], cancellationToken)).Any(u => u.Id == userId && u.TenantId == tenantId))
         {
-            return Result.Failure<UserTitleDto>(Error.NotFound("User was not found."));
+            return Result.Failure<UserTitleDto>(Error.NotFound("کاربر پیدا نشد."));
         }
 
         Honorific? title = null;
@@ -121,7 +121,7 @@ public sealed class HonorificService(
             title = await repository.GetHonorificAsync(tenantId, honorificId, cancellationToken);
             if (title is null)
             {
-                return Result.Failure<UserTitleDto>(Error.Validation("Title was not found."));
+                return Result.Failure<UserTitleDto>(Error.Validation("عنوان پیدا نشد."));
             }
         }
 
@@ -131,7 +131,7 @@ public sealed class HonorificService(
         // An inactive title is kept by whoever has it, but cannot be newly given.
         if (title is { IsActive: false } && title.Id != previous?.Id)
         {
-            return Result.Failure<UserTitleDto>(Error.Validation("This title is inactive."));
+            return Result.Failure<UserTitleDto>(Error.Validation("این عنوان غیرفعال است."));
         }
 
         // The name first: if it cannot change (the system administrator), nothing is saved.
@@ -165,16 +165,16 @@ public sealed class HonorificService(
     {
         if (string.IsNullOrWhiteSpace(title))
         {
-            return Error.Validation("Title is required.");
+            return Error.Validation("عنوان را وارد کنید.");
         }
 
         if (title.Trim().Length > MaxTitleLength)
         {
-            return Error.Validation("Title is too long.");
+            return Error.Validation("عنوان بیش از حد بلند است.");
         }
 
         return await repository.HonorificTitleExistsAsync(tenantId, title.Trim(), id, cancellationToken)
-            ? Error.Conflict("This title already exists.")
+            ? Error.Conflict("این عنوان از قبل هست.")
             : null;
     }
 

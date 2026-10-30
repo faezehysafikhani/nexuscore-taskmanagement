@@ -108,17 +108,17 @@ public sealed partial class OrgNodeService
             var code = row.Code!.Trim();
             if (usedCodes.Contains(Normalize(code)))
             {
-                errors.Add(new ImportErrorDto(row.Row, code, $"سطر {row.Row}: کد «{code}» در این شرکت هست؛ ورود فقط گره‌ی تازه می‌سازد."));
+                errors.Add(new ImportErrorDto(row.Row, code, $"سطر {FaDigits.Of(row.Row)}: کد «{code}» در این شرکت هست؛ ورود فقط گره‌ی تازه می‌سازد."));
             }
 
             if (code.Length > MaxNodeCodeLength)
             {
-                errors.Add(new ImportErrorDto(row.Row, code, $"سطر {row.Row}: کد گره حداکثر {MaxNodeCodeLength} نویسه است."));
+                errors.Add(new ImportErrorDto(row.Row, code, $"سطر {FaDigits.Of(row.Row)}: کد گره حداکثر {FaDigits.Of(MaxNodeCodeLength)} نویسه است."));
             }
 
             if (row.Name?.Trim().Length > MaxNodeNameLength)
             {
-                errors.Add(new ImportErrorDto(row.Row, code, $"سطر {row.Row}: نام گره حداکثر {MaxNodeNameLength} نویسه است."));
+                errors.Add(new ImportErrorDto(row.Row, code, $"سطر {FaDigits.Of(row.Row)}: نام گره حداکثر {FaDigits.Of(MaxNodeNameLength)} نویسه است."));
             }
 
             if (!string.IsNullOrWhiteSpace(row.ManagerPostName))
@@ -130,7 +130,7 @@ public sealed partial class OrgNodeService
                 }
                 else
                 {
-                    errors.Add(new ImportErrorDto(row.Row, code, $"سطر {row.Row}: سمت مدیر «{title}» برای این شرکت تعریف نشده است."));
+                    errors.Add(new ImportErrorDto(row.Row, code, $"سطر {FaDigits.Of(row.Row)}: سمت مدیر «{title}» برای این شرکت تعریف نشده است."));
                 }
             }
         }
@@ -192,7 +192,7 @@ public sealed partial class OrgNodeService
         if (plan.Errors.Count > 0)
         {
             return Result.Failure<(List<(OrganizationUnit, Guid?)>, List<AutoLinkChoiceDto>, int)>(
-                Error.Validation($"فایل {plan.Errors.Count} خطا دارد و هیچ گره‌ای ساخته نشد؛ پیش‌نمایش را ببینید."));
+                Error.Validation($"فایل {FaDigits.Of(plan.Errors.Count)} خطا دارد و هیچ گره‌ای ساخته نشد؛ پیش‌نمایش را ببینید."));
         }
 
         var made = new List<(OrganizationUnit Unit, Guid? ManagerPositionId)>();

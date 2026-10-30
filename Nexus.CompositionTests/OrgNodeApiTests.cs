@@ -323,7 +323,8 @@ public sealed partial class OrgNodeApiTests
                 Microsoft.Extensions.Options.Options.Create(new OrgStructureOptions { AssignTasksToPosts = true }),
                 new ServiceCollection().AddSingleton<ITaskPeopleUpdater>(Updater).BuildServiceProvider());
             Service = new OrgStructureService(Repo, _structure, new OrganizationUnitRepository(_organization), _users, new NoTeams(),
-                clock is null ? null : TaskPosts, templates: (IOrgTemplateService)Nodes, clock: clock);
+                clock is null ? null : TaskPosts, templates: (IOrgTemplateService)Nodes, clock: clock,
+                writeLock: new InProcessOrgStructureWriteLock());
             Preview = new OrgImpactPreview(Repo, new OrganizationUnitRepository(_organization), _users, new NoTeams(), Options());
             // As upgrade-10 leaves every organization: the «company» and plain «unit» types, no rules.
             _structure.NodeTypes.Add(new Nexus.OrgStructure.Domain.NodeType(Guid.NewGuid(), Tenant, "company", "شرکت", true, 0));

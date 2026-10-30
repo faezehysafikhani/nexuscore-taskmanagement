@@ -113,13 +113,13 @@ public sealed class SubstitutionService(
         if (!state.Posts.TryGetValue(request.ActingPostId, out var acting) || acting.HolderUserId is not { } actingHolder
             || request.ActingPostId == vacantPostId || state.CompanyOf(request.ActingPostId) != state.CompanyOf(vacantPostId))
         {
-            return Result.Failure(Error.Validation("The post put in charge must be another post of the company that someone holds."));
+            return Result.Failure(Error.Validation("پستی که سرپرست می‌شود باید پست دیگری از همین شرکت باشد که کسی آن را دارد."));
         }
 
         // Not one of the managers above the vacant post: a stand-in is someone at its level or below.
         if (state.SuperiorsOf(vacantPostId).Contains(actingHolder))
         {
-            return Result.Failure(Error.Validation("A manager above the vacant post can't be put in charge of it."));
+            return Result.Failure(Error.Validation("مدیرِ بالای پست خالی را نمی‌شود سرپرست همان پست کرد."));
         }
 
         var current = state.Actings.FirstOrDefault(a => a.VacantPostId == vacantPostId);
@@ -147,7 +147,7 @@ public sealed class SubstitutionService(
 
         if (state.Actings.FirstOrDefault(a => a.VacantPostId == vacantPostId) is not { } acting)
         {
-            return Result.Failure(Error.NotFound("Nobody is in charge of this post."));
+            return Result.Failure(Error.NotFound("کسی سرپرست این پست نیست."));
         }
 
         // Take the view back first, then forget the stand-in.
@@ -163,18 +163,18 @@ public sealed class SubstitutionService(
     {
         if (!taskPosts.Enabled)
         {
-            return Result.Failure(Error.Validation("Tasks are not given to posts here."));
+            return Result.Failure(Error.Validation("در اینجا وظیفه به پست داده نمی‌شود."));
         }
 
         if (state.Vacant.All(post => post.PostId != vacantPostId))
         {
-            return Result.Failure(Error.Validation("This post is not vacant."));
+            return Result.Failure(Error.Validation("این پست خالی نیست."));
         }
 
         return currentUser.HasPermission(OrgStructurePermissions.ManageSubstitution)
             || (currentUser.UserId is { } me && state.SuperiorsOf(vacantPostId).Contains(me))
             ? null
-            : Result.Failure(Error.Forbidden("Only the managers above a post may put someone in charge of it."));
+            : Result.Failure(Error.Forbidden("فقط مدیرهای بالای یک پست می‌توانند برایش سرپرست بگذارند."));
     }
 
     /// <summary>For the impact preview: each vacant post and the managers above it (whose inbox shows it).</summary>

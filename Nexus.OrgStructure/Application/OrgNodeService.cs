@@ -355,7 +355,7 @@ public sealed partial class OrgNodeService(
                 var posts = state.Seats.Count(seat => seat.UnitId is { } u && subtree.Contains(u));
                 if (people > 0 || posts > 0)
                 {
-                    return (Error.Conflict($"این گره و زیرمجموعه‌اش {posts} پست و {people} نفر دارند؛ برای بردن به شرکت دیگر اول آن‌ها را جابه‌جا کنید."), null);
+                    return (Error.Conflict($"این گره و زیرمجموعه‌اش {FaDigits.Of(posts)} پست و {FaDigits.Of(people)} نفر دارند؛ برای بردن به شرکت دیگر اول آن‌ها را جابه‌جا کنید."), null);
                 }
 
                 // Node codes are unique in a company: none of the branch's may already be used there.
@@ -431,13 +431,13 @@ public sealed partial class OrgNodeService(
             var posts = state.Seats.Count(seat => seat.UnitId == unit.Id);
             if (posts > 0)
             {
-                blockers.Add($"{posts} پست");
+                blockers.Add($"{FaDigits.Of(posts)} پست");
             }
 
             var people = state.Assignments.Count(a => a.UnitId == unit.Id);
             if (people > 0)
             {
-                blockers.Add($"{people} نفر که در آن قرار دارند");
+                blockers.Add($"{FaDigits.Of(people)} نفر که در آن قرار دارند");
             }
 
             if (blockers.Count > 0)
@@ -791,7 +791,7 @@ public sealed partial class OrgNodeService(
 
         if (text.Length > MaxNodeCodeLength)
         {
-            return Error.Validation($"کد گره حداکثر {MaxNodeCodeLength} نویسه است.");
+            return Error.Validation($"کد گره حداکثر {FaDigits.Of(MaxNodeCodeLength)} نویسه است.");
         }
 
         var key = Normalize(text);
@@ -810,12 +810,12 @@ public sealed partial class OrgNodeService(
 
     private static Error? NameProblem(string name) =>
         name.Length == 0 ? Error.Validation("نام گره را وارد کنید.")
-        : name.Length > MaxNodeNameLength ? Error.Validation($"نام گره حداکثر {MaxNodeNameLength} نویسه است.")
+        : name.Length > MaxNodeNameLength ? Error.Validation($"نام گره حداکثر {FaDigits.Of(MaxNodeNameLength)} نویسه است.")
         : null;
 
     private static Error? TypeProblem(string name, string? color, string? icon) =>
         name.Length == 0 ? Error.Validation("نام نوع را وارد کنید.")
-        : name.Length > MaxTypeNameLength ? Error.Validation($"نام نوع حداکثر {MaxTypeNameLength} نویسه است.")
+        : name.Length > MaxTypeNameLength ? Error.Validation($"نام نوع حداکثر {FaDigits.Of(MaxTypeNameLength)} نویسه است.")
         : color is not null && !ColorPattern().IsMatch(color.Trim()) ? Error.Validation("رنگ باید به شکل ‎#2563eb‎ باشد.")
         : icon is not null && (!CodePattern().IsMatch(icon.Trim()) || icon.Trim().Length > 40) ? Error.Validation("نام آیکون درست نیست.")
         : null;

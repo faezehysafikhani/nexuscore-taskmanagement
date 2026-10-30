@@ -22,7 +22,7 @@ public static class OrgSheetReader
             var lines = fileName?.EndsWith(".csv", StringComparison.OrdinalIgnoreCase) == true ? Csv(content) : Xlsx(content);
             if (lines.Count - 1 > MaxRows)
             {
-                return ([], $"فایل حداکثر {MaxRows} سطر می‌تواند داشته باشد.");
+                return ([], $"فایل حداکثر {FaDigits.Of(MaxRows)} سطر می‌تواند داشته باشد.");
             }
 
             var rows = lines.Skip(1)

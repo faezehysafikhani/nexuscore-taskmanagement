@@ -40,7 +40,7 @@ public sealed partial class OrgStructureService : IOrgAppointmentService
     /// requests for one post never race to the unique «one open appointment per post» index: the second one sees
     /// what the first did. Without a lock registered (some tests) it is not taken.
     /// </summary>
-    private async Task<(IAsyncDisposable? Turn, Error? Busy)> AppointmentTurnAsync(Guid tenantId, CancellationToken cancellationToken)
+    private async Task<(IOrgStructureWrite? Turn, Error? Busy)> AppointmentTurnAsync(Guid tenantId, CancellationToken cancellationToken)
     {
         if (writeLock is null)
         {
@@ -51,6 +51,37 @@ public sealed partial class OrgStructureService : IOrgAppointmentService
         return turn is null
             ? (null, Error.Conflict("ساختار سازمانی همین حالا در حال تغییر است؛ چند لحظه بعد دوباره امتحان کنید."))
             : (turn, null);
+    }
+
+    /// <summary>Nothing of the units' own context to save here (the appointments are this module's only).</summary>
+    private sealed class NoUnitChanges : NexusCore.SharedKernel.Interfaces.IUnitOfWork
+    {
+        public static readonly NoUnitChanges Instance = new();
+
+        public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) => Task.FromResult(0);
+    }
+
+    /// <summary>
+    /// Saves inside the organization's turn when there is one: on SQL Server the turn is a transaction of this module's
+    /// context and only its SaveAsync commits it (saving the context directly would be rolled back when the turn ends).
+    /// False: someone changed it first, or another server took the unique «one open appointment per post» index.
+    /// </summary>
+    private async Task<bool> SaveAppointmentsAsync(IOrgStructureWrite? turn, CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (turn is null)
+            {
+                await unitOfWork.SaveChangesAsync(cancellationToken);
+                return true;
+            }
+
+            return await turn.SaveAsync(unitOfWork, NoUnitChanges.Instance, cancellationToken);
+        }
+        catch (Microsoft.EntityFrameworkCore.DbUpdateException)
+        {
+            return false;
+        }
     }
 
     private static Error ChangedMeanwhile() => Error.Conflict("این پست را کس دیگری همین حالا تغییر داده است؛ چارت را دوباره بارگذاری کنید و دوباره امتحان کنید.");
@@ -126,13 +157,8 @@ public sealed partial class OrgStructureService : IOrgAppointmentService
 
         var added = new UserPosition(Guid.NewGuid(), tenantId, request.UserId, unitPositionId, start);
         await repository.AddUserPositionAsync(added, cancellationToken);
-        try
+        if (!await SaveAppointmentsAsync(turn, cancellationToken))
         {
-            await unitOfWork.SaveChangesAsync(cancellationToken);
-        }
-        catch (Microsoft.EntityFrameworkCore.DbUpdateException)
-        {
-            // Another server won the unique index between our read and our save (the turn is per server without the SQL lock).
             return Result.Failure<AppointmentDto>(ChangedMeanwhile());
         }
 
@@ -181,7 +207,11 @@ public sealed partial class OrgStructureService : IOrgAppointmentService
         }
 
         current.End(end);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        if (!await SaveAppointmentsAsync(turn, cancellationToken))
+        {
+            return Result.Failure<AppointmentDto>(ChangedMeanwhile());
+        }
+
         if (end <= now && taskPosts is not null)
         {
             await taskPosts.SyncHoldersAsync(tenantId, [unitPositionId], cancellationToken);

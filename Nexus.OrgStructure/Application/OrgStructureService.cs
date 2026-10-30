@@ -84,7 +84,7 @@ public sealed partial class OrgStructureService(
         var company = await repository.GetCompanyAsync(tenantId, id, cancellationToken);
         if (company is null || !await IsMineAsync(tenantId, company.Id, cancellationToken))
         {
-            return Result.Failure<CompanyDto>(Error.NotFound("Company was not found."));
+            return Result.Failure<CompanyDto>(Error.NotFound("شرکت پیدا نشد."));
         }
 
         return Result.Success(await ToDtoAsync(tenantId, company, cancellationToken));
@@ -144,7 +144,7 @@ public sealed partial class OrgStructureService(
         var company = await repository.GetCompanyAsync(tenantId, id, cancellationToken);
         if (company is null || !await IsMineAsync(tenantId, company.Id, cancellationToken))
         {
-            return Result.Failure<CompanyDto>(Error.NotFound("Company was not found."));
+            return Result.Failure<CompanyDto>(Error.NotFound("شرکت پیدا نشد."));
         }
 
         var invalid = await ValidateCompanyAsync(tenantId, id, request.Name, request.Code, request.Description, cancellationToken);
@@ -163,7 +163,7 @@ public sealed partial class OrgStructureService(
         var company = await repository.GetCompanyAsync(tenantId, id, cancellationToken);
         if (company is null || !await IsMineAsync(tenantId, company.Id, cancellationToken))
         {
-            return Result.Failure(Error.NotFound("Company was not found."));
+            return Result.Failure(Error.NotFound("شرکت پیدا نشد."));
         }
 
         var inUse = (await repository.ListCompanyUnitsAsync(tenantId, cancellationToken)).Any(link => link.CompanyId == id)
@@ -171,7 +171,7 @@ public sealed partial class OrgStructureService(
             || (await repository.ListUnitPositionsAsync(tenantId, cancellationToken)).Any(seat => seat.CompanyId == id);
         if (inUse)
         {
-            return Result.Failure(Error.Conflict("The company still has units or people. Move them first, or deactivate the company instead."));
+            return Result.Failure(Error.Conflict("شرکت هنوز واحد یا فرد دارد؛ اول آن‌ها را جابه‌جا کنید، یا به‌جای حذف، شرکت را غیرفعال کنید."));
         }
 
         repository.RemoveCompany(company);
@@ -189,17 +189,17 @@ public sealed partial class OrgStructureService(
     {
         if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(code))
         {
-            return Error.Validation("Name and code are required.");
+            return Error.Validation("نام و کد را وارد کنید.");
         }
 
         if (name.Trim().Length > MaxNameLength || code.Trim().Length > 40 || (description?.Trim().Length ?? 0) > MaxDescriptionLength)
         {
-            return Error.Validation("Name, code or description is too long.");
+            return Error.Validation("نام، کد یا توضیحات بیش از حد بلند است.");
         }
 
         if (await repository.CompanyCodeExistsAsync(tenantId, code.Trim(), id, cancellationToken))
         {
-            return Error.Conflict("A company with this code already exists.");
+            return Error.Conflict("شرکتی با این کد از قبل هست.");
         }
 
         return null;
@@ -223,7 +223,7 @@ public sealed partial class OrgStructureService(
         var snapshot = await LoadAsync(tenantId, cancellationToken);
         if (!snapshot.Units.ContainsKey(unitId))
         {
-            return Result.Failure<CompanyUnitDto>(Error.NotFound("Organization unit was not found."));
+            return Result.Failure<CompanyUnitDto>(Error.NotFound("واحد سازمانی پیدا نشد."));
         }
 
         // Only the top unit of a branch is linked: one under another belongs to that one's company.
@@ -236,7 +236,7 @@ public sealed partial class OrgStructureService(
         var company = snapshot.Companies.GetValueOrDefault(request.CompanyId);
         if (company is null || !await IsMineAsync(tenantId, company.Id, cancellationToken))
         {
-            return Result.Failure<CompanyUnitDto>(Error.NotFound("Company was not found."));
+            return Result.Failure<CompanyUnitDto>(Error.NotFound("شرکت پیدا نشد."));
         }
 
         // A unit of another company stays with it.
@@ -248,7 +248,7 @@ public sealed partial class OrgStructureService(
 
         if (!company.IsActive)
         {
-            return Result.Failure<CompanyUnitDto>(Error.Validation("The company is inactive."));
+            return Result.Failure<CompanyUnitDto>(Error.Validation("شرکت غیرفعال است."));
         }
 
         var resolver = snapshot.Resolver();
@@ -256,7 +256,7 @@ public sealed partial class OrgStructureService(
         var subtree = resolver.SubtreeOf(unitId);
         if (snapshot.Links.Any(link => link.UnitId != unitId && subtree.Contains(link.UnitId)))
         {
-            return Result.Failure<CompanyUnitDto>(Error.Validation("Units below this one are linked to a company. Unlink them first."));
+            return Result.Failure<CompanyUnitDto>(Error.Validation("واحدهای زیر این واحد به شرکت وصل‌اند؛ اول آن‌ها را جدا کنید."));
         }
 
         if (snapshot.Assignments.Any(a => a.UnitId is { } u && subtree.Contains(u) && a.CompanyId != request.CompanyId))
@@ -301,19 +301,19 @@ public sealed partial class OrgStructureService(
         var link = await repository.GetCompanyUnitAsync(tenantId, unitId, cancellationToken);
         if (link is null || !await IsMineAsync(tenantId, link.CompanyId, cancellationToken))
         {
-            return Result.Failure(Error.NotFound("This unit is not linked to a company."));
+            return Result.Failure(Error.NotFound("این واحد به شرکتی وصل نیست."));
         }
 
         var snapshot = await LoadAsync(tenantId, cancellationToken);
         var subtree = snapshot.Resolver().SubtreeOf(unitId);
         if (snapshot.Assignments.Any(a => a.UnitId is { } u && subtree.Contains(u)))
         {
-            return Result.Failure(Error.Conflict("People are assigned to this unit or a unit below it. Move them first."));
+            return Result.Failure(Error.Conflict("به این واحد یا واحدهای زیرش فرد داده شده است؛ اول آن‌ها را جابه‌جا کنید."));
         }
 
         if (snapshot.Seats.Any(seat => seat.UnitId is { } u && subtree.Contains(u)))
         {
-            return Result.Failure(Error.Conflict("The unit has posts. Remove them first."));
+            return Result.Failure(Error.Conflict("واحد پست دارد؛ اول آن‌ها را بردارید."));
         }
 
         repository.RemoveCompanyUnit(link);
@@ -345,7 +345,7 @@ public sealed partial class OrgStructureService(
         var snapshot = await LoadAsync(tenantId, cancellationToken);
         if (request.ParentPositionId is { } parentId && !snapshot.Positions.ContainsKey(parentId))
         {
-            return Result.Failure<PositionDto>(Error.Validation("Parent position was not found."));
+            return Result.Failure<PositionDto>(Error.Validation("سمت بالاتر پیدا نشد."));
         }
 
         var companyIds = (request.CompanyIds ?? []).Distinct().ToList();
@@ -376,7 +376,7 @@ public sealed partial class OrgStructureService(
         var position = await repository.GetPositionAsync(tenantId, id, cancellationToken);
         if (position is null)
         {
-            return Result.Failure<PositionDto>(Error.NotFound("Position was not found."));
+            return Result.Failure<PositionDto>(Error.NotFound("سمت پیدا نشد."));
         }
 
         var invalid = await ValidatePositionAsync(tenantId, id, request.Title, cancellationToken);
@@ -387,13 +387,13 @@ public sealed partial class OrgStructureService(
 
         if (request.ParentPositionId == id)
         {
-            return Result.Failure<PositionDto>(Error.Validation("A position cannot be its own parent."));
+            return Result.Failure<PositionDto>(Error.Validation("سمت را نمی‌شود زیر خودش گذاشت."));
         }
 
         var snapshot = await LoadAsync(tenantId, cancellationToken);
         if (request.ParentPositionId is { } parentId && !snapshot.Positions.ContainsKey(parentId))
         {
-            return Result.Failure<PositionDto>(Error.Validation("Parent position was not found."));
+            return Result.Failure<PositionDto>(Error.Validation("سمت بالاتر پیدا نشد."));
         }
 
         // Prevent cycles: walk up from the new parent and ensure we never hit this position.
@@ -406,7 +406,7 @@ public sealed partial class OrgStructureService(
                 if (!visited.Add(current)) break;
                 if (current == id)
                 {
-                    return Result.Failure<PositionDto>(Error.Conflict("This change would create a position hierarchy loop."));
+                    return Result.Failure<PositionDto>(Error.Conflict("این تغییر در سلسله‌مراتب سمت‌ها حلقه می‌سازد."));
                 }
 
                 var parent = snapshot.Positions.GetValueOrDefault(current)?.ParentPositionId;
@@ -486,24 +486,24 @@ public sealed partial class OrgStructureService(
     {
         if (companyIds.Count == 0)
         {
-            return Error.Validation("Choose at least one company for the position.");
+            return Error.Validation("برای سمت دست‌کم یک شرکت انتخاب کنید.");
         }
 
         if (!companyIds.All(snapshot.Companies.ContainsKey))
         {
-            return Error.Validation("Company was not found.");
+            return Error.Validation("شرکت پیدا نشد.");
         }
 
         if (parentId is { } parent && !companyIds.All(companyId => snapshot.IsFor(parent, companyId)))
         {
-            return Error.Validation("The superior position must be for every company of this position.");
+            return Error.Validation("سمت مافوق باید برای همه‌ی شرکت‌های این سمت باشد.");
         }
 
         if (parentId is null && checkRootIn.Any(companyId => snapshot.PositionCompanies.Any(link =>
                 link.CompanyId == companyId && link.PositionId != positionId
                 && snapshot.Positions.GetValueOrDefault(link.PositionId) is { ParentPositionId: null })))
         {
-            return Error.Conflict("This company already has a position with no superior (its head's). Choose a superior for this position.");
+            return Error.Conflict("این شرکت از قبل سمتی بدون مافوق (سمت رئیس کل) دارد؛ برای این سمت مافوق انتخاب کنید.");
         }
 
         return null;
@@ -514,7 +514,7 @@ public sealed partial class OrgStructureService(
         var position = await repository.GetPositionAsync(tenantId, id, cancellationToken);
         if (position is null)
         {
-            return Result.Failure(Error.NotFound("Position was not found."));
+            return Result.Failure(Error.NotFound("سمت پیدا نشد."));
         }
 
         var snapshot = await LoadAsync(tenantId, cancellationToken);
@@ -526,17 +526,17 @@ public sealed partial class OrgStructureService(
 
         if (snapshot.Positions.Values.Any(p => p.ParentPositionId == id))
         {
-            return Result.Failure(Error.Conflict("This position has child positions. Reassign or remove them first."));
+            return Result.Failure(Error.Conflict("این سمت زیرمجموعه دارد؛ اول آن‌ها را به سمت دیگری بدهید یا بردارید."));
         }
 
         if (snapshot.Assignments.Any(a => a.PositionId == id))
         {
-            return Result.Failure(Error.Conflict("People hold this position. Change their position first, or deactivate it instead."));
+            return Result.Failure(Error.Conflict("افرادی این سمت را دارند؛ اول سمتشان را عوض کنید، یا به‌جای حذف، آن را غیرفعال کنید."));
         }
 
         if (snapshot.Seats.Any(seat => seat.PositionId == id))
         {
-            return Result.Failure(Error.Conflict("Units have this position. Remove it from them first, or deactivate it instead."));
+            return Result.Failure(Error.Conflict("واحدهایی این سمت را دارند؛ اول از آن‌ها بردارید، یا به‌جای حذف، آن را غیرفعال کنید."));
         }
 
         repository.RemovePosition(position);
@@ -553,16 +553,16 @@ public sealed partial class OrgStructureService(
     {
         if (string.IsNullOrWhiteSpace(title))
         {
-            return Error.Validation("Title is required.");
+            return Error.Validation("عنوان را وارد کنید.");
         }
 
         if (title.Trim().Length > MaxTitleLength)
         {
-            return Error.Validation("Title is too long.");
+            return Error.Validation("عنوان بیش از حد بلند است.");
         }
 
         return await repository.PositionTitleExistsAsync(tenantId, title.Trim(), id, cancellationToken)
-            ? Error.Conflict("A position with this title already exists.")
+            ? Error.Conflict("سمتی با این عنوان از قبل هست.")
             : null;
     }
 
@@ -594,12 +594,12 @@ public sealed partial class OrgStructureService(
         var snapshot = await LoadAsync(tenantId, cancellationToken);
         if (!snapshot.Units.ContainsKey(unitId))
         {
-            return Result.Failure<UnitPositionDto>(Error.NotFound("Organization unit was not found."));
+            return Result.Failure<UnitPositionDto>(Error.NotFound("واحد سازمانی پیدا نشد."));
         }
 
         if (snapshot.Resolver().CompanyOfUnit(unitId) is not { } unitCompany)
         {
-            return Result.Failure<UnitPositionDto>(Error.Validation("Link the unit to a company first."));
+            return Result.Failure<UnitPositionDto>(Error.Validation("اول واحد را به یک شرکت وصل کنید."));
         }
 
         return await AddPostAsync(tenantId, snapshot, unitCompany, unitId, request, cancellationToken);
@@ -612,14 +612,14 @@ public sealed partial class OrgStructureService(
         var snapshot = await LoadAsync(tenantId, cancellationToken);
         if (!snapshot.Companies.ContainsKey(companyId))
         {
-            return Result.Failure<UnitPositionDto>(Error.NotFound("Company was not found."));
+            return Result.Failure<UnitPositionDto>(Error.NotFound("شرکت پیدا نشد."));
         }
 
         // The head's post: one per company.
         if (snapshot.Positions.GetValueOrDefault(request.PositionId) is { ParentPositionId: null }
             && snapshot.Seats.Any(seat => seat.CompanyId == companyId && snapshot.IsHeadPost(seat)))
         {
-            return Result.Failure<UnitPositionDto>(Error.Conflict("The company already has the head's post."));
+            return Result.Failure<UnitPositionDto>(Error.Conflict("شرکت از قبل پست رئیس کل را دارد."));
         }
 
         return await AddPostAsync(tenantId, snapshot, companyId, null, request, cancellationToken);
@@ -630,12 +630,12 @@ public sealed partial class OrgStructureService(
     {
         if (!await IsMineAsync(tenantId, companyId, cancellationToken))
         {
-            return Result.Failure<UnitPositionDto>(unitId is null ? Error.NotFound("Company was not found.") : OtherCompany());
+            return Result.Failure<UnitPositionDto>(unitId is null ? Error.NotFound("شرکت پیدا نشد.") : OtherCompany());
         }
 
         if (snapshot.Positions.GetValueOrDefault(request.PositionId) is not { IsActive: true })
         {
-            return Result.Failure<UnitPositionDto>(Error.Validation("Position was not found or is inactive."));
+            return Result.Failure<UnitPositionDto>(Error.Validation("سمت پیدا نشد یا غیرفعال است."));
         }
 
         if (!snapshot.IsFor(request.PositionId, companyId))
@@ -655,12 +655,12 @@ public sealed partial class OrgStructureService(
         {
             if (snapshot.Seats.FirstOrDefault(seat => seat.Id == parentId) is not { } parent)
             {
-                return Result.Failure<UnitPositionDto>(Error.Validation("The post above was not found."));
+                return Result.Failure<UnitPositionDto>(Error.Validation("پست بالاتر پیدا نشد."));
             }
 
             if (parent.CompanyId != companyId || parent.UnitId != unitId)
             {
-                return Result.Failure<UnitPositionDto>(Error.Validation("The post above must be in the same place (the same unit, or directly in the company)."));
+                return Result.Failure<UnitPositionDto>(Error.Validation("پست بالاتر باید در همان جا باشد (همان واحد، یا مستقیم در شرکت)."));
             }
         }
 
@@ -685,7 +685,7 @@ public sealed partial class OrgStructureService(
         }
         if (seat is null)
         {
-            return Result.Failure<UnitPositionDto>(Error.NotFound("Unit position was not found."));
+            return Result.Failure<UnitPositionDto>(Error.NotFound("پست پیدا نشد."));
         }
 
         var code = request.Code?.Trim() ?? string.Empty;
@@ -715,19 +715,19 @@ public sealed partial class OrgStructureService(
         }
         if (seat is null)
         {
-            return Result.Failure<UnitPositionDto>(Error.NotFound("Unit position was not found."));
+            return Result.Failure<UnitPositionDto>(Error.NotFound("پست پیدا نشد."));
         }
 
         if (request.ParentPostId is { } parentId)
         {
             if (snapshot.Seats.FirstOrDefault(s => s.Id == parentId) is not { } parent)
             {
-                return Result.Failure<UnitPositionDto>(Error.Validation("The post above was not found."));
+                return Result.Failure<UnitPositionDto>(Error.Validation("پست بالاتر پیدا نشد."));
             }
 
             if (parent.CompanyId != seat.CompanyId || parent.UnitId != seat.UnitId)
             {
-                return Result.Failure<UnitPositionDto>(Error.Validation("The post above must be in the same place (the same unit, or directly in the company)."));
+                return Result.Failure<UnitPositionDto>(Error.Validation("پست بالاتر باید در همان جا باشد (همان واحد، یا مستقیم در شرکت)."));
             }
 
             // Not itself, nor a post below it.
@@ -736,7 +736,7 @@ public sealed partial class OrgStructureService(
             {
                 if (id == seat.Id)
                 {
-                    return Result.Failure<UnitPositionDto>(Error.Conflict("A post can't be put under itself or under a post below it."));
+                    return Result.Failure<UnitPositionDto>(Error.Conflict("پست را نمی‌شود زیر خودش یا زیر پستی که زیر اوست گذاشت."));
                 }
             }
         }
@@ -744,7 +744,7 @@ public sealed partial class OrgStructureService(
         var after = snapshot.Resolver(parentOverride: (seat.Id, request.ParentPostId));
         if (snapshot.Resolver().FindLoop() is null && after.FindLoop() is not null)
         {
-            return Result.Failure<UnitPositionDto>(Error.Conflict("This change would create a management loop."));
+            return Result.Failure<UnitPositionDto>(Error.Conflict("این تغییر حلقه‌ی مدیریتی می‌سازد."));
         }
 
         seat.PlaceUnder(request.ParentPostId);
@@ -759,19 +759,19 @@ public sealed partial class OrgStructureService(
         var snapshot = await LoadAsync(tenantId, cancellationToken);
         if (!snapshot.Units.ContainsKey(unitId))
         {
-            return Result.Failure<IReadOnlyList<UnitPositionDto>>(Error.NotFound("Organization unit was not found."));
+            return Result.Failure<IReadOnlyList<UnitPositionDto>>(Error.NotFound("واحد سازمانی پیدا نشد."));
         }
 
         if (snapshot.Resolver().CompanyOfUnit(unitId) is { } unitCompany && !await IsMineAsync(tenantId, unitCompany, cancellationToken))
         {
-            return Result.Failure<IReadOnlyList<UnitPositionDto>>(Error.NotFound("Organization unit was not found."));
+            return Result.Failure<IReadOnlyList<UnitPositionDto>>(Error.NotFound("واحد سازمانی پیدا نشد."));
         }
 
         var seats = snapshot.Seats.Where(seat => seat.UnitId == unitId).ToDictionary(seat => seat.Id);
         var order = request.UnitPositionIds ?? [];
         if (order.Count != seats.Count || order.Distinct().Count() != order.Count || !order.All(seats.ContainsKey))
         {
-            return Result.Failure<IReadOnlyList<UnitPositionDto>>(Error.Validation("Send every position of the unit once, in the new order."));
+            return Result.Failure<IReadOnlyList<UnitPositionDto>>(Error.Validation("همه‌ی پست‌های واحد را یک‌بار و به ترتیب تازه بفرستید."));
         }
 
         for (var i = 0; i < order.Count; i++)
@@ -793,17 +793,17 @@ public sealed partial class OrgStructureService(
         }
         if (seat is null)
         {
-            return Result.Failure(Error.NotFound("Unit position was not found."));
+            return Result.Failure(Error.NotFound("پست پیدا نشد."));
         }
 
         if (snapshot.Holdings.Any(h => h.UnitPositionId == unitPositionId))
         {
-            return Result.Failure(Error.Conflict("People hold this position. Change their positions first."));
+            return Result.Failure(Error.Conflict("افرادی این پست را دارند؛ اول پست آن‌ها را عوض کنید."));
         }
 
         if (snapshot.Seats.Any(other => other.ParentPostId == unitPositionId))
         {
-            return Result.Failure(Error.Conflict("Posts are under this one. Move them first."));
+            return Result.Failure(Error.Conflict("پست‌هایی زیر این پست‌اند؛ اول آن‌ها را جابه‌جا کنید."));
         }
 
         repository.RemoveUnitPosition(seat);
@@ -836,11 +836,11 @@ public sealed partial class OrgStructureService(
     {
         if (string.IsNullOrWhiteSpace(code) || code.Length > MaxCodeLength)
         {
-            return Error.Validation("A post's code is required (at most 40 characters).");
+            return Error.Validation("کد پست لازم است (حداکثر ۴۰ نویسه).");
         }
 
         return snapshot.Seats.Any(seat => seat.CompanyId == companyId && seat.Id != exceptSeatId && string.Equals(seat.Code, code, StringComparison.OrdinalIgnoreCase))
-            ? Error.Conflict("Another post of the company has this code.")
+            ? Error.Conflict("پست دیگری از شرکت این کد را دارد.")
             : null;
     }
 
@@ -870,7 +870,7 @@ public sealed partial class OrgStructureService(
         var assignment = snapshot.Assignments.FirstOrDefault(a => a.UserId == userId);
         if (assignment is null || !await IsMineAsync(tenantId, assignment.CompanyId, cancellationToken))
         {
-            return Result.Failure<UserAssignmentDto>(Error.NotFound("This user has no place in the organization structure yet."));
+            return Result.Failure<UserAssignmentDto>(Error.NotFound("این کاربر هنوز جایگاهی در ساختار سازمانی ندارد."));
         }
 
         return Result.Success(await ToDtoAsync(assignment, snapshot, cancellationToken));
@@ -881,14 +881,14 @@ public sealed partial class OrgStructureService(
     {
         if (!await IsUserOfTenantAsync(tenantId, userId, cancellationToken))
         {
-            return Result.Failure<UserAssignmentDto>(Error.NotFound("User was not found."));
+            return Result.Failure<UserAssignmentDto>(Error.NotFound("کاربر پیدا نشد."));
         }
 
         var snapshot = await LoadAsync(tenantId, cancellationToken);
         var company = snapshot.Companies.GetValueOrDefault(request.CompanyId);
         if (company is null || !await IsMineAsync(tenantId, company.Id, cancellationToken))
         {
-            return Result.Failure<UserAssignmentDto>(Error.Validation("Company was not found."));
+            return Result.Failure<UserAssignmentDto>(Error.Validation("شرکت پیدا نشد."));
         }
 
         // Kept to one's own company: its people (or those with no place yet), and a manager from it.
@@ -906,7 +906,7 @@ public sealed partial class OrgStructureService(
 
         if (!company.IsActive)
         {
-            return Result.Failure<UserAssignmentDto>(Error.Validation("The company is inactive."));
+            return Result.Failure<UserAssignmentDto>(Error.Validation("شرکت غیرفعال است."));
         }
 
         var resolver = snapshot.Resolver();
@@ -914,12 +914,12 @@ public sealed partial class OrgStructureService(
         {
             if (!snapshot.Units.ContainsKey(unitId))
             {
-                return Result.Failure<UserAssignmentDto>(Error.Validation("Organization unit was not found."));
+                return Result.Failure<UserAssignmentDto>(Error.Validation("واحد سازمانی پیدا نشد."));
             }
 
             if (resolver.CompanyOfUnit(unitId) != request.CompanyId)
             {
-                return Result.Failure<UserAssignmentDto>(Error.Validation("The unit does not belong to this company."));
+                return Result.Failure<UserAssignmentDto>(Error.Validation("این واحد جزو این شرکت نیست."));
             }
         }
 
@@ -929,12 +929,12 @@ public sealed partial class OrgStructureService(
         {
             if (snapshot.Positions.GetValueOrDefault(positionId) is not { } position || !position.IsActive)
             {
-                return Result.Failure<UserAssignmentDto>(Error.Validation("Position was not found or is inactive."));
+                return Result.Failure<UserAssignmentDto>(Error.Validation("سمت پیدا نشد یا غیرفعال است."));
             }
 
             if (!snapshot.IsFor(positionId, request.CompanyId))
             {
-                return Result.Failure<UserAssignmentDto>(Error.Validation("This position is not for the person's company."));
+                return Result.Failure<UserAssignmentDto>(Error.Validation("این سمت برای شرکت این فرد نیست."));
             }
         }
 
@@ -942,12 +942,12 @@ public sealed partial class OrgStructureService(
         {
             if (managerId == userId)
             {
-                return Result.Failure<UserAssignmentDto>(Error.Validation("A user cannot be their own manager."));
+                return Result.Failure<UserAssignmentDto>(Error.Validation("کاربر نمی‌تواند مدیر خودش باشد."));
             }
 
             if (!await IsUserOfTenantAsync(tenantId, managerId, cancellationToken))
             {
-                return Result.Failure<UserAssignmentDto>(Error.Validation("The manager was not found in this organization."));
+                return Result.Failure<UserAssignmentDto>(Error.Validation("مدیر در این سازمان پیدا نشد."));
             }
         }
 
@@ -959,12 +959,12 @@ public sealed partial class OrgStructureService(
         {
             if (seatIds.Distinct().Count() != seatIds.Count)
             {
-                return Result.Failure<UserAssignmentDto>(Error.Validation("A position is listed more than once."));
+                return Result.Failure<UserAssignmentDto>(Error.Validation("یک سمت بیش از یک بار آمده است."));
             }
 
             if (!seatIds.All(id => byId.TryGetValue(id, out var seat) && snapshot.IsShown(seat)))
             {
-                return Result.Failure<UserAssignmentDto>(Error.Validation("Unit position was not found."));
+                return Result.Failure<UserAssignmentDto>(Error.Validation("پست پیدا نشد."));
             }
 
             seats = seatIds.Select(id => byId[id]).ToList();
@@ -973,13 +973,13 @@ public sealed partial class OrgStructureService(
             if (seats.Any(seat => !held.Contains(seat.Id)
                 && snapshot.Positions.GetValueOrDefault(seat.PositionId) is not { IsActive: true }))
             {
-                return Result.Failure<UserAssignmentDto>(Error.Validation("Position was not found or is inactive."));
+                return Result.Failure<UserAssignmentDto>(Error.Validation("سمت پیدا نشد یا غیرفعال است."));
             }
 
             // One person per post.
             if (seats.Any(seat => !held.Contains(seat.Id) && snapshot.HolderOf(seat.Id) is not null))
             {
-                return Result.Failure<UserAssignmentDto>(Error.Conflict("Someone already holds this post. Free it first."));
+                return Result.Failure<UserAssignmentDto>(Error.Conflict("کسی این پست را دارد؛ اول آن را خالی کنید."));
             }
 
             // Nor a post someone is already appointed to from a later day.
@@ -1073,7 +1073,7 @@ public sealed partial class OrgStructureService(
         if ((after.ManagementChainOf(userId).Count > 0 && LoopsBackTo(after, userId))
             || (snapshot.Resolver().FindLoop() is null && after.FindLoop() is not null))
         {
-            return Result.Failure<UserAssignmentDto>(Error.Conflict("This change would create a management loop."));
+            return Result.Failure<UserAssignmentDto>(Error.Conflict("این تغییر حلقه‌ی مدیریتی می‌سازد."));
         }
 
         var assignment = await repository.GetAssignmentAsync(tenantId, userId, cancellationToken);
@@ -1117,7 +1117,7 @@ public sealed partial class OrgStructureService(
         var assignment = await repository.GetAssignmentAsync(tenantId, userId, cancellationToken);
         if (assignment is null || !await IsMineAsync(tenantId, assignment.CompanyId, cancellationToken))
         {
-            return Result.Failure(Error.NotFound("This user has no place in the organization structure."));
+            return Result.Failure(Error.NotFound("این کاربر جایگاهی در ساختار سازمانی ندارد."));
         }
 
         repository.RemoveAssignment(assignment);
@@ -1144,7 +1144,7 @@ public sealed partial class OrgStructureService(
     {
         if (!await CanReachAsync(tenantId, userId, cancellationToken))
         {
-            return Result.Failure<ManagerDto?>(Error.NotFound("User was not found."));
+            return Result.Failure<ManagerDto?>(Error.NotFound("کاربر پیدا نشد."));
         }
 
         var resolver = (await LoadAsync(tenantId, cancellationToken)).Resolver();
@@ -1162,7 +1162,7 @@ public sealed partial class OrgStructureService(
     {
         if (!await CanReachAsync(tenantId, userId, cancellationToken))
         {
-            return Result.Failure<IReadOnlyList<SubordinateDto>>(Error.NotFound("User was not found."));
+            return Result.Failure<IReadOnlyList<SubordinateDto>>(Error.NotFound("کاربر پیدا نشد."));
         }
 
         var snapshot = await LoadAsync(tenantId, cancellationToken);
@@ -1412,7 +1412,7 @@ public sealed partial class OrgStructureService(
         companyReach is null || currentUser?.UserId is not { } me
         || await companyReach.GetReachAsync(tenantId, me, cancellationToken) is not { } reach || reach.Contains(userId);
 
-    private static Error OtherCompany() => Error.Forbidden("You can only see and change your own company.");
+    private static Error OtherCompany() => Error.Forbidden("فقط شرکت خودتان را می‌توانید ببینید و تغییر دهید.");
 
     /// <summary>The unit of the person who built the team; a team shows under it.</summary>
     private static Guid? UnitOfOwner(Snapshot snapshot, WorkTeamInfo team) =>

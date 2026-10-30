@@ -216,7 +216,7 @@ public sealed partial class OrgNodeService : IOrgNodeHistoryService
             if (source.IsActive || moved > 0)
             {
                 return Task.FromResult<(Error?, object?)>((Error.Conflict(
-                    $"از زمان ادغام {moved} گره، پست یا فرد جابه‌جا شده یا گره دوباره فعال شده است؛ ادغام برنمی‌گردد."), null));
+                    $"از زمان ادغام {FaDigits.Of(moved)} گره، پست یا فرد جابه‌جا شده یا گره دوباره فعال شده است؛ ادغام برنمی‌گردد."), null));
             }
 
             foreach (var (childId, order) in children)

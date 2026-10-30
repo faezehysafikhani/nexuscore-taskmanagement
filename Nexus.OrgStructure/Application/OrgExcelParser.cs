@@ -49,11 +49,11 @@ public static class OrgExcelParser
         {
             if (string.IsNullOrWhiteSpace(row.Name))
             {
-                errors.Add(new(StructureErrorKind.MissingName, row.Code?.Trim(), row.Row, $"سطر {row.Row}: نام گره خالی است."));
+                errors.Add(new(StructureErrorKind.MissingName, row.Code?.Trim(), row.Row, $"سطر {FaDigits.Of(row.Row)}: نام گره خالی است."));
             }
             else if (row.Name.Trim().Length > MaxNameLength)
             {
-                errors.Add(new(StructureErrorKind.NameTooLong, row.Code?.Trim(), row.Row, $"سطر {row.Row}: نام گره بیشتر از {MaxNameLength} نویسه است."));
+                errors.Add(new(StructureErrorKind.NameTooLong, row.Code?.Trim(), row.Row, $"سطر {FaDigits.Of(row.Row)}: نام گره بیشتر از {FaDigits.Of(MaxNameLength)} نویسه است."));
             }
 
             inputs.Add(new StructureNodeInput(row.Code ?? string.Empty, row.Name ?? string.Empty, row.ParentCode, row.TypeCode, false, row.Row));

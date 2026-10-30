@@ -146,7 +146,7 @@ public static class OrgStructureValidator
 
     private static string Normalize(string? value) => (value ?? string.Empty).Trim().ToUpperInvariant();
 
-    private static string At(int? row) => row is null ? string.Empty : $"سطر {row}: ";
+    private static string At(int? row) => row is null ? string.Empty : $"سطر {FaDigits.Of(row)}: ";
 
-    private static string FirstAt(int? row) => row is null ? string.Empty : $" (اولین بار در سطر {row})";
+    private static string FirstAt(int? row) => row is null ? string.Empty : $" (اولین بار در سطر {FaDigits.Of(row)})";
 }

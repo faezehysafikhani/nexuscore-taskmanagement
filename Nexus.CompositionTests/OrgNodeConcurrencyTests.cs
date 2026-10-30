@@ -135,6 +135,28 @@ public sealed class OrgNodeConcurrencyTests
     }
 
     [SqlServerFact]
+    public async Task DetailsOverAnOlderVersion_AreRefused()
+    {
+        await using var db = new Db();
+        await db.CreateAsync();
+        var (a, _) = await SeedAsync(db);
+
+        var (first, firstScope) = db.Request();
+        var (second, secondScope) = db.Request();
+        await using (firstScope)
+        await using (secondScope)
+        {
+            var read1 = await Ok(first.GetNodeAsync(Tenant, a, default));
+            var read2 = await Ok(second.GetNodeAsync(Tenant, a, default));
+
+            var saved = await Ok(first.SetDetailsAsync(Tenant, a, new SetNodeDetailsRequest(Phone: "021", RowVersion: read1.RowVersion), default));
+            Assert.NotEqual(read1.RowVersion, saved.RowVersion);
+            var refused = await second.SetDetailsAsync(Tenant, a, new SetNodeDetailsRequest(Phone: "031", RowVersion: read2.RowVersion), default);
+            Assert.Equal("conflict", refused.Error.Code);
+        }
+    }
+
+    [SqlServerFact]
     public async Task TwoMovesAtTheSameMoment_NeverMakeALoop()
     {
         await using var db = new Db();

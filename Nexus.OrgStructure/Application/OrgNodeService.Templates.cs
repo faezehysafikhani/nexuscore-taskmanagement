@@ -95,7 +95,7 @@ public sealed partial class OrgNodeService : IOrgTemplateService
         var name = request.Name?.Trim() ?? string.Empty;
         if (name.Length == 0 || name.Length > MaxTypeNameLength)
         {
-            return Result.Failure<StructureTemplateDto>(Error.Validation($"نام قالب را وارد کنید (حداکثر {MaxTypeNameLength} نویسه)."));
+            return Result.Failure<StructureTemplateDto>(Error.Validation($"نام قالب را وارد کنید (حداکثر {FaDigits.Of(MaxTypeNameLength)} نویسه)."));
         }
 
         var description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
