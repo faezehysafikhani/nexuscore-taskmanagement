@@ -90,7 +90,7 @@ public sealed partial class OrgStructureService : IOrgAppointmentService
         }
     }
 
-    private static Error ChangedMeanwhile() => Error.Conflict("این پست را کس دیگری همین حالا تغییر داده است؛ چارت را دوباره بارگذاری کنید و دوباره امتحان کنید.");
+    private static Error ChangedMeanwhile() => new(OrgNodeService.ChangedCode, "این پست را کس دیگری همین حالا تغییر داده است؛ چارت را دوباره بارگذاری کنید و دوباره امتحان کنید.");
 
     public async Task<Result<AppointmentDto>> AppointAsync(Guid tenantId, Guid unitPositionId, AppointRequest request, CancellationToken cancellationToken)
     {

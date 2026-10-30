@@ -124,7 +124,7 @@ public sealed class OrgNodeConcurrencyTests
             var saved = await Ok(first.UpdateNodeAsync(Tenant, a, new UpdateNodeRequest("الف (اول)", null, read1.RowVersion), default));
             Assert.NotEqual(read1.RowVersion, saved.RowVersion);
             var refused = await second.UpdateNodeAsync(Tenant, a, new UpdateNodeRequest("الف (دوم)", null, read2.RowVersion), default);
-            Assert.Equal("conflict", refused.Error.Code);
+            Assert.Equal("conflict.changed", refused.Error.Code);
         }
 
         var (check, checkScope) = db.Request();
@@ -152,7 +152,7 @@ public sealed class OrgNodeConcurrencyTests
             var saved = await Ok(first.SetDetailsAsync(Tenant, a, new SetNodeDetailsRequest(Phone: "021", RowVersion: read1.RowVersion), default));
             Assert.NotEqual(read1.RowVersion, saved.RowVersion);
             var refused = await second.SetDetailsAsync(Tenant, a, new SetNodeDetailsRequest(Phone: "031", RowVersion: read2.RowVersion), default);
-            Assert.Equal("conflict", refused.Error.Code);
+            Assert.Equal("conflict.changed", refused.Error.Code);
         }
     }
 

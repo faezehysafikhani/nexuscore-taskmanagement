@@ -126,7 +126,7 @@ public sealed partial class OrgNodeApiTests
         var it = await w.Ok(w.Nodes.CreateNodeAsync(Tenant, new CreateNodeRequest("معاونت فناوری", CompanyId: w.Company, NodeTypeId: w.Type("deputy")), default));
         var stale = Convert.ToBase64String([1, 2, 3, 4, 5, 6, 7, 8]);
         var refused = await w.Nodes.UpdateNodeAsync(Tenant, it.Id, new UpdateNodeRequest("نام تازه", null, stale), default);
-        Assert.Equal("conflict", refused.Error.Code);
+        Assert.Equal("conflict.changed", refused.Error.Code);
         Assert.Contains("تغییر داده", refused.Error.Message);
         Assert.Equal("validation.error", (await w.Nodes.UpdateNodeAsync(Tenant, it.Id, new UpdateNodeRequest("نام تازه", null, "not base64!"), default)).Error.Code);
         // The version it was read with: saved.

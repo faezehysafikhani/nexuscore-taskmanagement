@@ -850,9 +850,12 @@ public sealed partial class OrgNodeService(
 
     private static Error NodeNotFound() => Error.NotFound("گره پیدا نشد.");
 
-    private static Error Busy() => Error.Conflict("ساختار سازمانی همین حالا در حال تغییر است؛ چند لحظه بعد دوباره امتحان کنید.");
+    /// <summary>Code of the conflicts that a fresh read and a retry resolve (the screens offer «reload» only for these).</summary>
+    public const string ChangedCode = "conflict.changed";
 
-    private static Error ChangedMeanwhile() => Error.Conflict("این گره را کس دیگری همین حالا تغییر داده است؛ صفحه را تازه کنید و دوباره امتحان کنید.");
+    private static Error Busy() => new(ChangedCode, "ساختار سازمانی همین حالا در حال تغییر است؛ چند لحظه بعد دوباره امتحان کنید.");
+
+    private static Error ChangedMeanwhile() => new(ChangedCode, "این گره را کس دیگری همین حالا تغییر داده است؛ صفحه را تازه کنید و دوباره امتحان کنید.");
 
     [GeneratedRegex("^#[0-9a-fA-F]{6}$")]
     private static partial Regex ColorPattern();
