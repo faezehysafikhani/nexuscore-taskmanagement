@@ -50,8 +50,8 @@ namespace Nexus.OrgStructure.Infrastructure.Migrations.OrgStructure
                 schema: "org_structure",
                 table: "UserPositions");
 
-            // Back to one row per post: the ended and not yet started appointments (the history) go.
-            migrationBuilder.Sql("DELETE FROM [org_structure].[UserPositions] WHERE [EndDate] IS NOT NULL OR [StartDate] > SYSDATETIMEOFFSET();");
+            // Back to one row per post: the ended and not yet started appointments (the history) go; the one on now stays.
+            migrationBuilder.Sql("DELETE FROM [org_structure].[UserPositions] WHERE [StartDate] > SYSDATETIMEOFFSET() OR [EndDate] <= SYSDATETIMEOFFSET();");
 
             migrationBuilder.DropColumn(
                 name: "EndDate",
