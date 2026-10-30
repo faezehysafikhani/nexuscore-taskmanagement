@@ -35,8 +35,35 @@ public sealed partial class OrgStructureService : IOrgAppointmentService
         return (await repository.ListUserPositionHistoryAsync(tenantId, null, null, cancellationToken)).Where(a => a.StartDate > now).ToList();
     }
 
+    /// <summary>
+    /// Appointments of one organization go one at a time (the organization's turn, as the node changes do), so two
+    /// requests for one post never race to the unique «one open appointment per post» index: the second one sees
+    /// what the first did. Without a lock registered (some tests) it is not taken.
+    /// </summary>
+    private async Task<(IAsyncDisposable? Turn, Error? Busy)> AppointmentTurnAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        if (writeLock is null)
+        {
+            return (null, null);
+        }
+
+        var turn = await writeLock.BeginAsync(tenantId, cancellationToken);
+        return turn is null
+            ? (null, Error.Conflict("ساختار سازمانی همین حالا در حال تغییر است؛ چند لحظه بعد دوباره امتحان کنید."))
+            : (turn, null);
+    }
+
+    private static Error ChangedMeanwhile() => Error.Conflict("این پست را کس دیگری همین حالا تغییر داده است؛ چارت را دوباره بارگذاری کنید و دوباره امتحان کنید.");
+
     public async Task<Result<AppointmentDto>> AppointAsync(Guid tenantId, Guid unitPositionId, AppointRequest request, CancellationToken cancellationToken)
     {
+        var (turn, busy) = await AppointmentTurnAsync(tenantId, cancellationToken);
+        if (busy is not null)
+        {
+            return Result.Failure<AppointmentDto>(busy);
+        }
+
+        await using var _ = turn;
         var now = Now;
         var start = request.StartDate ?? now;
         if (start < now - Slack)
@@ -99,7 +126,15 @@ public sealed partial class OrgStructureService : IOrgAppointmentService
 
         var added = new UserPosition(Guid.NewGuid(), tenantId, request.UserId, unitPositionId, start);
         await repository.AddUserPositionAsync(added, cancellationToken);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (Microsoft.EntityFrameworkCore.DbUpdateException)
+        {
+            // Another server won the unique index between our read and our save (the turn is per server without the SQL lock).
+            return Result.Failure<AppointmentDto>(ChangedMeanwhile());
+        }
 
         // Open tasks of the post go to its new holder (now; a later start: when it starts).
         if (start <= now && taskPosts is not null)
@@ -112,6 +147,13 @@ public sealed partial class OrgStructureService : IOrgAppointmentService
 
     public async Task<Result<AppointmentDto>> EndAppointmentAsync(Guid tenantId, Guid unitPositionId, EndAppointmentRequest request, CancellationToken cancellationToken)
     {
+        var (turn, busy) = await AppointmentTurnAsync(tenantId, cancellationToken);
+        if (busy is not null)
+        {
+            return Result.Failure<AppointmentDto>(busy);
+        }
+
+        await using var _ = turn;
         var now = Now;
         var end = request.EndDate ?? now;
         if (end < now - Slack)

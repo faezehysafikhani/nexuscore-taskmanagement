@@ -60,7 +60,8 @@ public sealed partial class OrgStructureService(
     CompanyReachScope? companyReach = null,
     ICurrentUserContext? currentUser = null,
     IOrgTemplateService? templates = null,
-    TimeProvider? clock = null) : IOrgStructureService
+    TimeProvider? clock = null,
+    IOrgStructureWriteLock? writeLock = null) : IOrgStructureService
 {
     private const int MaxNameLength = 200;
     private const int MaxTitleLength = 120;

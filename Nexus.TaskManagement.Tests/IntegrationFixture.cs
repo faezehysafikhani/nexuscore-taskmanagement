@@ -111,6 +111,8 @@ public sealed class SqlServerFixture : IAsyncLifetime
         services.AddScoped<ITaskFileRepository, TaskFileRepository>();
         services.AddScoped<INoteRepository, NoteRepository>();
         services.AddScoped<ITaskCommentRepository, TaskCommentRepository>();
+        // The services below take the notice publisher; these tests do not look at notices, so the null one.
+        services.AddScoped<ITaskNoticePublisher, NullTaskNoticePublisher>();
         services.AddScoped<ITaskActivityService, TaskActivityService>();
         services.AddSingleton<IRecurrenceCalculator, RecurrenceCalculator>();
         services.AddScoped<ITaskService, TaskService>();
