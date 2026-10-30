@@ -134,22 +134,6 @@ public sealed record StructureTemplateDetailDto(StructureTemplateDto Template, S
 /// <summary>Saves a company's structure as a template of this organization (a copy).</summary>
 public sealed record SaveStructureTemplateRequest(Guid CompanyId, string Name, string? Code = null, string? Description = null);
 
-// ---------------------------------------------------------------- import from a sheet (phase 6.2)
-
-/// <summary>Where the sheet's top rows go: the top of CompanyId, or under ParentNodeId (one of the two).</summary>
-public sealed record ImportTargetRequest(Guid? CompanyId = null, Guid? ParentNodeId = null);
-
-/// <summary>A fault of the sheet; Row: its row in the sheet (null: the file as a whole).</summary>
-public sealed record ImportErrorDto(int? Row, string? Code, string Message);
-
-public sealed record ImportNodePreviewDto(int Row, string Code, string Name, string? ParentCode, string TypeName, string? ManagerPosition, int Depth);
-
-/// <summary>What the sheet would make. Nothing is made while Errors is not empty (all or nothing).</summary>
-public sealed record ImportPreviewDto(int RowCount, IReadOnlyList<ImportNodePreviewDto> Nodes, IReadOnlyList<ImportErrorDto> Errors);
-
-/// <summary>What was made: nodes, automatic links, posts (manager posts of the sheet and each type's posts), and links left to choose.</summary>
-public sealed record ImportResultDto(IReadOnlyList<OrgNodeDto> Nodes, int Links, int Posts, IReadOnlyList<AutoLinkChoiceDto> AutoLinkChoices, IReadOnlyList<SkippedPostDto> SkippedPosts);
-
 // ---------------------------------------------------------------- dates, merge, log (phase 6.4)
 
 /// <summary>From when and until when the node exists (each null: no limit). Only for the chart on a day (asOf).</summary>

@@ -199,15 +199,6 @@ public static class OrgNodeEndpoints
                 InTenant(user, tenant => service.ApplyPostTemplatesAsync(tenant, request, ct)))
             .RequireAuthorization(OrgStructurePermissions.ManagePositions);
 
-        // --- import from a sheet (phase 6.2): multipart form with "file" (.xlsx or .csv) and companyId or parentNodeId
-        group.MapPost("/import/preview", (HttpRequest http, ICurrentUserContext user, IOrgImportService service, CancellationToken ct) =>
-                ImportAsync(http, user, (tenant, target, rows) => service.PreviewAsync(tenant, target, rows, ct), ct))
-            .RequireAuthorization(OrgStructurePermissions.NodeCreate);
-
-        group.MapPost("/import/commit", (HttpRequest http, ICurrentUserContext user, IOrgImportService service, CancellationToken ct) =>
-                ImportAsync(http, user, (tenant, target, rows) => service.CommitAsync(tenant, target, rows, ct), ct))
-            .RequireAuthorization(OrgStructurePermissions.NodeCreate);
-
         // --- appointments over time (phase 9)
         group.MapPost("/unit-positions/{id:guid}/appointment", (Guid id, AppointRequest request, ICurrentUserContext user, IOrgAppointmentService service, CancellationToken ct) =>
                 InTenant(user, tenant => service.AppointAsync(tenant, id, request, ct)))
@@ -255,48 +246,6 @@ public static class OrgNodeEndpoints
 
     private static async Task<IResult> InTenant(ICurrentUserContext user, Func<Guid, Task<Result>> action) =>
         user.TenantId is { } tenant ? (await action(tenant)).ToApiResult() : Results.Unauthorized();
-
-    public const long MaxImportFileBytes = 5 * 1024 * 1024;
-
-    /// <summary>Reads the uploaded sheet and where its nodes go, then runs the import step.</summary>
-    private static async Task<IResult> ImportAsync<T>(
-        HttpRequest http, ICurrentUserContext user, Func<Guid, ImportTargetRequest, IReadOnlyList<ExcelStructureRow>, Task<Result<T>>> step, CancellationToken ct)
-    {
-        if (user.TenantId is not { } tenant)
-        {
-            return Results.Unauthorized();
-        }
-
-        if (!http.HasFormContentType)
-        {
-            return Result.Failure<T>(Error.Validation("فایل را به‌صورت multipart/form-data با نام file بفرستید.")).ToApiResult();
-        }
-
-        var form = await http.ReadFormAsync(ct);
-        var file = form.Files.GetFile("file");
-        if (file is null || file.Length == 0)
-        {
-            return Result.Failure<T>(Error.Validation("فایلی فرستاده نشد.")).ToApiResult();
-        }
-
-        if (file.Length > MaxImportFileBytes)
-        {
-            return Result.Failure<T>(Error.Validation("حجم فایل حداکثر ۵ مگابایت است.")).ToApiResult();
-        }
-
-        static Guid? Id(string? value) => Guid.TryParse(value, out var id) ? id : null;
-        await using var content = new MemoryStream();
-        await file.CopyToAsync(content, ct);
-        content.Position = 0;
-        var (rows, problem) = OrgSheetReader.Read(content, file.FileName);
-        if (problem is not null)
-        {
-            return Result.Failure<T>(Error.Validation(problem)).ToApiResult();
-        }
-
-        var target = new ImportTargetRequest(Id(form["companyId"]), Id(form["parentNodeId"]));
-        return (await step(tenant, target, rows)).ToApiResult();
-    }
 
     /// <summary>Null when the caller may read this user's place: it is themselves, or they hold a read permission.</summary>
     private static Task<IResult>? SelfOrReader(ICurrentUserContext user, Guid userId) =>

@@ -56,3 +56,5 @@
 - امضای درگاه‌های Core، نام مجوزها و endpointهای فعلی و نام جدول `organization.OrganizationUnits` بدون اجازه عوض نمی‌شود؛ فقط فیلد اختیاری اضافه می‌شود.
 - قبل از هر commit تست‌ها اجرا می‌شود و نتیجه نباید بدتر از پایه‌ی بالا باشد.
 - push فقط با تأیید صاحب کار.
+
+- **حذف «ورود از اکسل»:** endpointهای `/import/preview` و `/import/commit`، `OrgImportService`، `OrgSheetReader`، `OrgExcelParser`، `OrgNodeService.Import`، DTOهای ورود، ساخت پست بعد از ورود (`MakeImportPostsAsync`)، فایل‌های نمونه‌ی CSV/JSON و تست‌هایشان برداشته شد. جدول یا migration تغییر نکرد؛ ورودی اکسل جدولی جدا نداشت (گره‌ها در `OrganizationUnits` ماندند). `OrgStructureValidator` و بقیه‌ی API دست‌نخورده‌اند.

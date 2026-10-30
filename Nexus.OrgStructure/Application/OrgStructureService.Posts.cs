@@ -261,39 +261,4 @@ public sealed partial class OrgStructureService : IOrgPostTemplateService
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }
-
-    /// <summary>
-    /// After an import: each node's manager post from the sheet (its position), then its type's
-    /// posts. Saved apart from the nodes; running it again makes nothing twice.
-    /// </summary>
-    internal async Task<(int Made, List<SkippedPostDto> Skipped)> MakeImportPostsAsync(
-        Guid tenantId, IReadOnlyList<(Guid UnitId, Guid? ManagerPositionId)> nodes, CancellationToken cancellationToken)
-    {
-        var snapshot = await LoadAsync(tenantId, cancellationToken);
-        var codes = new Dictionary<Guid, List<string>>();
-        var made = 0;
-        var seats = snapshot.Seats.ToList();
-        foreach (var (unitId, positionId) in nodes)
-        {
-            if (positionId is not { } position || snapshot.Graph.CompanyOfUnit(unitId) is not { } companyId || ManagerPostOf(seats, unitId) is not null)
-            {
-                continue;
-            }
-
-            var taken = codes.TryGetValue(companyId, out var list) ? list : codes[companyId] = [];
-            var code = NextCode(snapshot, companyId, taken);
-            taken.Add(code);
-            var seat = new UnitPosition(Guid.NewGuid(), tenantId, companyId, unitId, position, 0, code);
-            seat.SetManagerPost(true);
-            await repository.AddUnitPositionAsync(seat, cancellationToken);
-            seats.Add(seat);
-            made++;
-        }
-
-        var withManagers = snapshot with { Seats = seats };
-        var units = nodes.Select(n => snapshot.Units[n.UnitId]).ToList();
-        var (patterned, skipped) = await MakeTemplatePostsAsync(tenantId, withManagers, units, await repository.ListNodeTypePostTemplatesAsync(tenantId, cancellationToken), cancellationToken, codes);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-        return (made + patterned.Count, skipped);
-    }
 }
