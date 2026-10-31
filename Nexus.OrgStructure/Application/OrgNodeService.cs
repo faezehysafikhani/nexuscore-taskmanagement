@@ -170,7 +170,7 @@ public sealed partial class OrgNodeService(
         var typeId = request.NodeTypeId ?? state.NodeTypes.Values.FirstOrDefault(type => type.Code == PlainUnitCode)?.Id;
         if (request.NodeTypeId is { } askedType && (!state.NodeTypes.TryGetValue(askedType, out var type) || !type.IsActive))
         {
-            return Result.Failure<OrgNodeDto>(Error.Validation("نوع گره پیدا نشد یا غیرفعال است."));
+            return Result.Failure<OrgNodeDto>(Error.Validation("جزء چارت پیدا نشد یا غیرفعال است."));
         }
 
         Guid? companyId = request.CompanyId;
@@ -258,7 +258,7 @@ public sealed partial class OrgNodeService(
             if (request.NodeTypeId is { } askedType && askedType != unit.NodeTypeId
                 && (!state.NodeTypes.TryGetValue(askedType, out var type) || !type.IsActive))
             {
-                return Task.FromResult<(Error?, object?)>((Error.Validation("نوع گره پیدا نشد یا غیرفعال است."), null));
+                return Task.FromResult<(Error?, object?)>((Error.Validation("جزء چارت پیدا نشد یا غیرفعال است."), null));
             }
 
             if (typeId != unit.NodeTypeId && RulesProblem(state, unit, unit.ParentUnitId, typeId, isNew: false) is { } ruleProblem)
@@ -617,7 +617,7 @@ public sealed partial class OrgNodeService(
         var state = await LoadAsync(tenantId, cancellationToken);
         if (!state.NodeTypes.TryGetValue(id, out var nodeType))
         {
-            return Result.Failure<NodeTypeDto>(Error.NotFound("نوع گره پیدا نشد."));
+            return Result.Failure<NodeTypeDto>(Error.NotFound("جزء چارت پیدا نشد."));
         }
 
         if (state.NodeTypes.Values.Any(type => type.Id != id && string.Equals(type.Name, name, StringComparison.OrdinalIgnoreCase)))
@@ -644,7 +644,7 @@ public sealed partial class OrgNodeService(
         var state = await LoadAsync(tenantId, cancellationToken);
         if (!state.NodeTypes.TryGetValue(id, out var nodeType))
         {
-            return Result.Failure(Error.NotFound("نوع گره پیدا نشد."));
+            return Result.Failure(Error.NotFound("جزء چارت پیدا نشد."));
         }
 
         var used = state.Units.Values.Count(unit => unit.NodeTypeId == id);
@@ -721,7 +721,7 @@ public sealed partial class OrgNodeService(
         {
             return parentId is null
                 ? null
-                : Error.Validation("هنوز قاعده‌ای برای «چه زیر چه» تعریف نشده؛ گره فقط در سطح اول شرکت ممکن است.");
+                : Error.Validation("هنوز قاعده‌ای برای «سلسله‌مراتب مجاز» تعریف نشده؛ گره فقط در سطح اول شرکت ممکن است.");
         }
 
         string Key(Guid id) => id.ToString("N");
@@ -747,7 +747,7 @@ public sealed partial class OrgNodeService(
         return problem.Kind switch
         {
             StructureErrorKind.Cycle => Error.Validation("این جابه‌جایی در ساختار حلقه می‌سازد."),
-            StructureErrorKind.UnknownType => Error.Validation("نوع گره پیدا نشد."),
+            StructureErrorKind.UnknownType => Error.Validation("جزء چارت پیدا نشد."),
             StructureErrorKind.TypeNotAllowedHere when problem.NodeCode == Key(unit.Id) => Error.Validation(parentId is { } pid && state.Units.TryGetValue(pid, out var parent)
                 ? $"گره‌ی «{TypeName(typeId)}» را طبق قاعده‌ها نمی‌شود زیر «{parent.Name}» ({TypeName(parent.NodeTypeId)}) گذاشت."
                 : $"گره‌ی «{TypeName(typeId)}» را طبق قاعده‌ها نمی‌شود در سطح اول شرکت گذاشت."),

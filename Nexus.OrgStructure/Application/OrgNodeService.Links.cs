@@ -174,7 +174,7 @@ public sealed partial class OrgNodeService : IOrgLinkService
         if (wanted.Any(rule => !state.NodeTypes.ContainsKey(rule.SourceNodeTypeId) || !state.NodeTypes.ContainsKey(rule.TargetNodeTypeId)
                                || !state.LinkTypes.ContainsKey(rule.LinkTypeId)))
         {
-            return Result.Failure<IReadOnlyList<AutoLinkRuleDto>>(Error.Validation("قاعده به نوع گره یا نوع رابطه‌ای اشاره می‌کند که وجود ندارد."));
+            return Result.Failure<IReadOnlyList<AutoLinkRuleDto>>(Error.Validation("قاعده به جزء چارت یا نوع رابطه‌ای اشاره می‌کند که وجود ندارد."));
         }
 
         if (wanted.GroupBy(rule => (rule.SourceNodeTypeId, rule.TargetNodeTypeId)).Any(group => group.Count() > 1))

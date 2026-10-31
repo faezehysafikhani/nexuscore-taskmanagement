@@ -96,11 +96,11 @@ public static class OrgStructurePermissions
         new(ManageAssignments, "Organization", "تعیین شرکت، معاونت، سمت و مدیر کاربران"),
         new(NodeView, "Organization", "مشاهده گره‌های ساختار سازمانی"),
         new(NodeCreate, "Organization", "ایجاد گره در ساختار سازمانی"),
-        new(NodeUpdate, "Organization", "ویرایش نام و نوع گره‌های ساختار سازمانی"),
+        new(NodeUpdate, "Organization", "ویرایش نام و جزء چارتِ گره‌های ساختار سازمانی"),
         new(NodeMove, "Organization", "جابه‌جایی گره‌ها و ترتیب آن‌ها در ساختار سازمانی"),
         new(NodeDeactivate, "Organization", "غیرفعال و فعال کردن گره‌های ساختار سازمانی"),
         new(NodeAssign, "Organization", "تعیین مدیر گره‌های ساختار سازمانی"),
-        new(ManageRules, "Organization", "مدیریت نوع گره‌ها و قاعده‌ی «چه زیر چه»"),
+        new(ManageRules, "Organization", "مدیریت اجزای چارت و «سلسله‌مراتب مجاز»"),
         new(ManageTemplates, "Organization", "ذخیره‌ی ساختار شرکت به‌عنوان قالب و حذف قالب‌های ذخیره‌شده")
     ];
 
