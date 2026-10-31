@@ -366,3 +366,32 @@ development default) and authorize with the access token. A typical first run:
    the rest under it, each with its `companyIds`.
 5. `PUT /api/org-structure/assignments/{userId}` — place users.
 6. `GET /api/org-structure/chart`, `/users/{id}/manager`, `/users/{id}/subordinates?all=true`.
+
+## The simple chart: org / unit / position (`/api/org-structure/kinds`)
+
+The organization chart screen has one way to build a structure, with three kinds (`OrgNodeKinds.cs`; the UI has the
+same table in `kinds/orgKinds.ts`):
+
+| Kind | Is | May hold | May sit under |
+|---|---|---|---|
+| سازمان `org` | the company itself (the root; a holding's subsidiary is a company with `parentCompanyId`) | units, positions | - |
+| واحد سازمانی `unit` | a node (node type `kind_unit`), no people, may have a head | units, positions | the organization, a unit |
+| سمت / پست سازمانی `position` | a node (node type `kind_position`), one or more people | positions only | the organization, a unit, a position |
+
+Both kinds are ordinary node types with fixed codes and the usual «what may sit under what» rules, so `/nodes` makes,
+renames, moves and deactivates them. The kind of a node cannot be changed after it is made (`PUT /nodes/{id}` refuses).
+The older codes `org_post` / `org_role` (the first version) count as unit / position.
+
+| | |
+|---|---|
+| `POST /kinds/ensure` | makes the two node types and the five rules when missing (permission `node.create`); returns their ids |
+| `GET /kinds/chart` | every node as `{ id, name, kind, parentNodeId, companyId, isActive, sortOrder, rowVersion, headNodeId, persons[] }` |
+| `POST /kinds/nodes/{id}/persons` `{ userId }`, `DELETE .../persons/{userId}` | the people of a position (many to many); only a position takes people |
+| `PUT /kinds/nodes/{id}/persons/{userId}/primary` | the official person of a position (the one who counts as manager when several) |
+| `PUT /kinds/nodes/{id}/head` `{ headNodeId }` | a unit's head: one of its direct positions (null: none) |
+
+Kept in step with the rest of the structure: a position's manager is its official person; a unit's manager is its head's
+official person; a person's place (assignment) is the first position they were put in. So managers, tasks and chat see the
+same people. Table `org_structure.NodePersons` and `NodeHeads`; `db/upgrade-19-org-kinds.sql` maps what exists (every node
+becomes a unit; every post becomes a position node with its holder; the manager post becomes the unit's head) and
+`db/upgrade-19-rollback.sql` undoes it. Posts, appointments and assignments are not removed.
