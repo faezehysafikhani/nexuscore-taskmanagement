@@ -176,6 +176,8 @@ public sealed class ImpactData(IOrgStructureRepository real, IOrganizationUnitRe
         }
         public Task<IReadOnlyList<UserPosition>> ListUserPositionsAsync(Guid t, CancellationToken ct) => R("holdings", () => real.ListUserPositionsAsync(t, ct));
         public Task<IReadOnlyList<UserPosition>> ListUserPositionHistoryAsync(Guid t, Guid? userId, Guid? unitPositionId, CancellationToken ct) => real.ListUserPositionHistoryAsync(t, userId, unitPositionId, ct);
+        public Task<IReadOnlyList<NodePerson>> ListNodePersonsAsync(Guid t, CancellationToken ct) => real.ListNodePersonsAsync(t, ct);
+        public Task<IReadOnlyList<NodeHead>> ListNodeHeadsAsync(Guid t, CancellationToken ct) => real.ListNodeHeadsAsync(t, ct);
         public Task<IReadOnlyList<Honorific>> ListHonorificsAsync(Guid t, CancellationToken ct) => real.ListHonorificsAsync(t, ct);
         public Task<Honorific?> GetHonorificAsync(Guid t, Guid id, CancellationToken ct) => real.GetHonorificAsync(t, id, ct);
         public Task<bool> HonorificTitleExistsAsync(Guid t, string title, Guid? excludeId, CancellationToken ct) => real.HonorificTitleExistsAsync(t, title, excludeId, ct);
@@ -188,6 +190,10 @@ public sealed class ImpactData(IOrgStructureRepository real, IOrganizationUnitRe
         public Task AddNodeTypeRuleAsync(NodeTypeRule rule, CancellationToken ct) => throw ReadOnly();
         public void RemoveNodeTypeRule(NodeTypeRule rule) => throw ReadOnly();
         public Task AddOrgChangeLogAsync(OrgChangeLog entry, CancellationToken ct) => throw ReadOnly();
+        public Task AddNodePersonAsync(NodePerson person, CancellationToken ct) => throw ReadOnly();
+        public void RemoveNodePerson(NodePerson person) => throw ReadOnly();
+        public Task AddNodeHeadAsync(NodeHead head, CancellationToken ct) => throw ReadOnly();
+        public void RemoveNodeHead(NodeHead head) => throw ReadOnly();
         public Task AddLinkTypeAsync(LinkType linkType, CancellationToken ct) => throw ReadOnly();
         public void RemoveLinkType(LinkType linkType) => throw ReadOnly();
         public Task AddAutoLinkRuleAsync(AutoLinkRule rule, CancellationToken ct) => throw ReadOnly();
