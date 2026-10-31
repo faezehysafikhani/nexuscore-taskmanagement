@@ -439,7 +439,11 @@ $integrationProjects = @(
 
     "Nexus.Integrations.ProjectStrategyAlignment.Infrastructure/Nexus.Integrations.ProjectStrategyAlignment.Infrastructure.csproj",
 
-    "Nexus.Integrations.TaskReporting/Nexus.Integrations.TaskReporting.csproj"
+    "Nexus.Integrations.TaskReporting/Nexus.Integrations.TaskReporting.csproj",
+
+    "Nexus.Integrations.CalendarTasks/Nexus.Integrations.CalendarTasks.csproj",
+
+    "Nexus.Integrations.CalendarOrgStructure/Nexus.Integrations.CalendarOrgStructure.csproj"
 
 )
 
