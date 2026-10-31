@@ -376,7 +376,7 @@ same table in `kinds/orgKinds.ts`):
 |---|---|---|---|
 | سازمان `org` | the company itself (the root; a holding's subsidiary is a company with `parentCompanyId`) | units, positions | - |
 | واحد سازمانی `unit` | a node (node type `kind_unit`), no people, may have a head | units, positions | the organization, a unit |
-| سمت / پست سازمانی `position` | a node (node type `kind_position`), one or more people | positions only | the organization, a unit, a position |
+| سمت / پست سازمانی `position` | a node (node type `kind_position`), one or more people | positions and units (a CEO with deputies) | the organization, a unit, a position |
 
 Both kinds are ordinary node types with fixed codes and the usual «what may sit under what» rules, so `/nodes` makes,
 renames, moves and deactivates them. The kind of a node cannot be changed after it is made (`PUT /nodes/{id}` refuses).
