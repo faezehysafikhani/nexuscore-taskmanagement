@@ -19,6 +19,14 @@ public sealed class CompanyConfiguration : IEntityTypeConfiguration<Company>
         builder.Property(x => x.Name).HasMaxLength(200).IsRequired();
         builder.Property(x => x.Code).HasMaxLength(40).IsRequired();
         builder.Property(x => x.Description).HasMaxLength(1000);
+        builder.Property(x => x.Phone).HasMaxLength(40);
+        builder.Property(x => x.Email).HasMaxLength(200);
+        builder.Property(x => x.Website).HasMaxLength(200);
+        builder.Property(x => x.NationalId).HasMaxLength(20);
+        builder.Property(x => x.EconomicCode).HasMaxLength(20);
+        builder.Property(x => x.Address).HasMaxLength(500);
+        builder.Property(x => x.HeadTitle).HasMaxLength(100);
+        builder.Property(x => x.Logo).HasMaxLength(500);
         builder.HasIndex(x => new { x.TenantId, x.Code }).IsUnique();
         builder.HasIndex(x => x.ParentCompanyId);
     }

@@ -61,7 +61,8 @@ public sealed partial class OrgStructureService(
     ICurrentUserContext? currentUser = null,
     IOrgTemplateService? templates = null,
     TimeProvider? clock = null,
-    IOrgStructureWriteLock? writeLock = null) : IOrgStructureService
+    IOrgStructureWriteLock? writeLock = null,
+    NexusCore.Application.Files.IFileStorage? files = null) : IOrgStructureService
 {
     private const int MaxNameLength = 200;
     private const int MaxTitleLength = 120;
@@ -98,19 +99,36 @@ public sealed partial class OrgStructureService(
             return Result.Failure<CompanyDto>(OtherCompany());
         }
 
-        var invalid = await ValidateCompanyAsync(tenantId, null, request.Name, request.Code, request.Description, cancellationToken);
+        // No code given: the next free automatic one.
+        var code = string.IsNullOrWhiteSpace(request.Code) ? await NextCompanyCodeAsync(tenantId, cancellationToken) : request.Code;
+        var invalid = await ValidateCompanyAsync(tenantId, null, request.Name, code, request.Description, cancellationToken);
         if (invalid is not null)
         {
             return Result.Failure<CompanyDto>(invalid);
         }
 
+        if (request.Details is { } details && DetailsProblem(details) is { } detailsProblem)
+        {
+            return Result.Failure<CompanyDto>(detailsProblem);
+        }
+
+        var unitIds = request.UnitIds ?? [];
+        if (unitIds.Count > 0 && NewCompanyUnitsProblem(await LoadAsync(tenantId, cancellationToken), unitIds) is { } unitsProblem)
+        {
+            return Result.Failure<CompanyDto>(unitsProblem);
+        }
+
         // No head yet: whoever is given the company's position with no superior becomes it.
-        var company = new Company(Guid.NewGuid(), tenantId, request.Name, request.Code, request.Description, managerUserId: null);
+        var company = new Company(Guid.NewGuid(), tenantId, request.Name, code, request.Description, managerUserId: null);
+        if (request.Details is { } given)
+        {
+            Apply(company, given);
+        }
         if (request.ParentCompanyId is { } parentCompanyId)
         {
             if (await repository.GetCompanyAsync(tenantId, parentCompanyId, cancellationToken) is null)
             {
-                return Result.Failure<CompanyDto>(Error.Validation("شرکت مادر پیدا نشد."));
+                return Result.Failure<CompanyDto>(Error.Validation("سازمان بالادستی پیدا نشد."));
             }
 
             company.SetGroup(parentCompanyId, company.TemplateId);
@@ -131,10 +149,17 @@ public sealed partial class OrgStructureService(
 
             // Its posts: the company's own and each node's (from its type's pattern).
             await MakeTemplateCompanyPostsAsync(tenantId, company.Id, made.Value!, cancellationToken);
+            if (unitIds.Count > 0)
+            {
+                await LinkNewCompanyUnitsAsync(tenantId, company.Id, unitIds, cancellationToken);
+                await unitOfWork.SaveChangesAsync(cancellationToken);
+            }
+
             return Result.Success(await ToDtoAsync(tenantId, company, cancellationToken));
         }
 
         await repository.AddCompanyAsync(company, cancellationToken);
+        await LinkNewCompanyUnitsAsync(tenantId, company.Id, unitIds, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success(await ToDtoAsync(tenantId, company, cancellationToken));
     }
@@ -1344,7 +1369,9 @@ public sealed partial class OrgStructureService(
                     topUnits.Select(unit => BuildUnit(unit, visited)).ToList(),
                     snapshot.Assignments.Count(a => a.CompanyId == company.Id),
                     companyPosts.Select(PostOf).ToList(),
-                    company.UiLevel.ToString().ToLowerInvariant());
+                    company.UiLevel.ToString().ToLowerInvariant(),
+                    company.HeadTitle,
+                    LogoUrlOf(company));
             })
             .ToList();
 
@@ -1534,7 +1561,16 @@ public sealed partial class OrgStructureService(
         company.ManagerUserId is { } m ? Person(m, people) : null,
         company.IsActive,
         links.Where(link => link.CompanyId == company.Id).Select(link => link.UnitId).ToList(),
-        company.ParentCompanyId);
+        company.ParentCompanyId,
+        company.Phone,
+        company.Email,
+        company.Website,
+        company.NationalId,
+        company.EconomicCode,
+        company.Address,
+        company.HeadTitle,
+        LogoUrlOf(company),
+        company.UiLevel.ToString().ToLowerInvariant());
 
     private static CompanyUnitDto ToDto(CompanyUnit link, Snapshot snapshot) => new(
         link.UnitId,

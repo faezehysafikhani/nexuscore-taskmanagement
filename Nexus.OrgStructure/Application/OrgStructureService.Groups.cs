@@ -27,7 +27,7 @@ public sealed partial class OrgStructureService : IOrgCompanyGroupService
         {
             if (!companies.ContainsKey(parentId) || !await IsMineAsync(tenantId, parentId, cancellationToken))
             {
-                return Result.Failure<CompanyDto>(Error.Validation("شرکت مادر پیدا نشد."));
+                return Result.Failure<CompanyDto>(Error.Validation("سازمان بالادستی پیدا نشد."));
             }
 
             // Not itself, nor a company below it.

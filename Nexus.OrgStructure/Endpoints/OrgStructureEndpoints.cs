@@ -5,6 +5,7 @@ using Nexus.OrgStructure.Application;
 using Nexus.OrgStructure.Application.Dtos;
 using Nexus.OrgStructure.Permissions;
 using NexusCore.Application.Common;
+using NexusCore.Application.Files;
 using NexusCore.SharedKernel.Interfaces;
 
 namespace Nexus.OrgStructure.Endpoints;
@@ -39,6 +40,49 @@ public static class OrgStructureEndpoints
 
         group.MapDelete("/companies/{id:guid}", (Guid id, ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
                 InTenant(user, tenant => service.DeleteCompanyAsync(tenant, id, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ManageCompanies);
+
+        // --- a company's profile: details, what its head is called, logo
+        group.MapPut("/companies/{id:guid}/details", (Guid id, SetCompanyDetailsRequest request, ICurrentUserContext user, IOrgCompanyProfileService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.SetCompanyDetailsAsync(tenant, id, request, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ManageCompanies);
+
+        group.MapGet("/companies/{id:guid}/logo", async (Guid id, HttpContext http, ICurrentUserContext user, IOrgCompanyProfileService service, CancellationToken ct) =>
+            {
+                if (user.TenantId is not { } tenant || await service.OpenCompanyLogoAsync(tenant, id, ct) is not { } logo)
+                {
+                    return Results.NotFound();
+                }
+
+                // The address carries the logo's version (?v=), so a changed logo is a new address.
+                http.Response.Headers.CacheControl = "private, max-age=86400";
+                http.Response.Headers["Content-Security-Policy"] = "default-src 'none'";
+                return Results.Stream(logo.Content, logo.ContentType);
+            })
+            .RequireAuthorization(OrgStructurePermissions.ReadPolicy);
+
+        group.MapPut("/companies/{id:guid}/logo", async (Guid id, HttpRequest http, ICurrentUserContext user, IOrgCompanyProfileService service, CancellationToken ct) =>
+            {
+                if (!http.HasFormContentType)
+                {
+                    return Results.BadRequest();
+                }
+
+                var form = await http.ReadFormAsync(ct);
+                if (form.Files.GetFile("logo") is not { Length: > 0 } file)
+                {
+                    return Results.BadRequest();
+                }
+
+                return await InTenant(user, tenant => service.SetCompanyLogoAsync(tenant, id, new CompanyLogoUpload(file.FileName, file.OpenReadStream(), file.Length), ct));
+            })
+            .DisableAntiforgery()
+            .WithUploadSizeLimit()
+            .RequireAuthorization(OrgStructurePermissions.ManageCompanies)
+            .WithSummary("A company's logo (multipart: logo; PNG, JPEG or WebP, at most 512 KB)");
+
+        group.MapDelete("/companies/{id:guid}/logo", (Guid id, ICurrentUserContext user, IOrgCompanyProfileService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.RemoveCompanyLogoAsync(tenant, id, ct)))
             .RequireAuthorization(OrgStructurePermissions.ManageCompanies);
 
         // --- which company each unit (deputy) belongs to

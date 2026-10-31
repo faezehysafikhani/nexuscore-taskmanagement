@@ -11,14 +11,45 @@ public sealed record CompanyDto(
     PersonRef? Manager,
     bool IsActive,
     IReadOnlyList<Guid> LinkedUnitIds,
-    Guid? ParentCompanyId = null);
+    Guid? ParentCompanyId = null,
+    string? Phone = null,
+    string? Email = null,
+    string? Website = null,
+    string? NationalId = null,
+    string? EconomicCode = null,
+    string? Address = null,
+    string? HeadTitle = null,
+    string? LogoUrl = null,
+    string? UiLevel = null);
 
 /// <summary>
 /// The head is not chosen here: see <see cref="PositionDto"/>. TemplateId (optional): a structure
 /// template (GET /api/org-structure/templates) whose types, rules, positions, nodes and links the
-/// new company gets a copy of.
+/// new company gets a copy of. Code (optional): empty makes one (C-001, C-002, ...). Details
+/// (optional): as in <see cref="SetCompanyDetailsRequest"/>. UnitIds (optional): top units with no
+/// company yet to link to the new one.
 /// </summary>
-public sealed record CreateCompanyRequest(string Name, string Code, string? Description, Guid? TemplateId = null, Guid? ParentCompanyId = null);
+public sealed record CreateCompanyRequest(
+    string Name,
+    string? Code = null,
+    string? Description = null,
+    Guid? TemplateId = null,
+    Guid? ParentCompanyId = null,
+    SetCompanyDetailsRequest? Details = null,
+    IReadOnlyList<Guid>? UnitIds = null);
+
+/// <summary>
+/// The company's optional details; replaces all of them (empty means none). HeadTitle: what the
+/// chart calls the company's head (e.g. «مدیرعامل»); empty: «رئیس کل».
+/// </summary>
+public sealed record SetCompanyDetailsRequest(
+    string? Phone = null,
+    string? Email = null,
+    string? Website = null,
+    string? NationalId = null,
+    string? EconomicCode = null,
+    string? Address = null,
+    string? HeadTitle = null);
 
 /// <summary>The company's parent in a group (holding); null: a company of its own.</summary>
 public sealed record SetParentCompanyRequest(Guid? ParentCompanyId);
@@ -197,7 +228,9 @@ public sealed record OrgChartCompanyDto(
     IReadOnlyList<OrgChartUnitDto> Units,
     int PeopleCount = 0,
     IReadOnlyList<OrgChartPositionDto>? Positions = null,
-    string? UiLevel = null);
+    string? UiLevel = null,
+    string? HeadTitle = null,
+    string? LogoUrl = null);
 
 /// <summary>Someone of the organization who has no place in the structure yet.</summary>
 public sealed record UnplacedUserDto(Guid UserId, string DisplayName, string? AvatarUrl);

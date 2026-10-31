@@ -22,6 +22,7 @@ public sealed class Company : AuditableEntity<Guid>
         Description = Normalize(description);
         ManagerUserId = managerUserId;
         IsActive = true;
+        UiLevel = OrgUiLevel.Advanced;
     }
 
     public Guid TenantId { get; private set; }
@@ -64,6 +65,33 @@ public sealed class Company : AuditableEntity<Guid>
     }
 
     public void SetHead(Guid? userId) => ManagerUserId = userId;
+
+    public string? Phone { get; private set; }
+    public string? Email { get; private set; }
+    public string? Website { get; private set; }
+    public string? NationalId { get; private set; }
+    public string? EconomicCode { get; private set; }
+    public string? Address { get; private set; }
+
+    /// <summary>What the chart calls the company's head (e.g. «مدیرعامل»); null: «رئیس کل».</summary>
+    public string? HeadTitle { get; private set; }
+
+    /// <summary>The logo in the file storage: "storageKey|contentType"; null: none.</summary>
+    public string? Logo { get; private set; }
+
+    /// <summary>Replaces all the optional details at once (empty means none).</summary>
+    public void SetDetails(string? phone, string? email, string? website, string? nationalId, string? economicCode, string? address, string? headTitle)
+    {
+        Phone = Normalize(phone);
+        Email = Normalize(email);
+        Website = Normalize(website);
+        NationalId = Normalize(nationalId);
+        EconomicCode = Normalize(economicCode);
+        Address = Normalize(address);
+        HeadTitle = Normalize(headTitle);
+    }
+
+    public void SetLogo(string? logo) => Logo = Normalize(logo);
 
     private static string? Normalize(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

@@ -147,7 +147,9 @@ The built-in administrator role gets all of them automatically.
 
 | | |
 |---|---|
-| `GET/POST /companies`, `GET/PUT/DELETE /companies/{id}` | companies |
+| `GET/POST /companies`, `GET/PUT/DELETE /companies/{id}` | companies (`POST`: `code` optional - empty makes `C-001`, `C-002`...; optional `details` and `unitIds`, top units with no company, people or posts yet, linked at once; a new company starts at the «advanced» level) |
+| `PUT /companies/{id}/details` | `{ phone, email, website, nationalId, economicCode, address, headTitle }`, all optional, replaces all of them; `headTitle` is what the chart calls the head (empty: «رئیس کل») |
+| `GET/PUT/DELETE /companies/{id}/logo` | the company's logo (`PUT`: multipart `logo`, PNG/JPEG/WebP up to 512 KB); `CompanyDto.logoUrl` and the chart's company carry its address with a version |
 | `GET /company-units`, `PUT/DELETE /company-units/{unitId}` | link a unit (and its branch) to a company: `{ "companyId": ... }` |
 | `GET/POST /positions`, `PUT/DELETE /positions/{id}` | positions |
 | `GET /assignments?companyId=&unitId=`, `GET/PUT/DELETE /assignments/{userId}` | a user's place: `{ "companyId", "unitId", "positionId", "managerUserId" }` |
