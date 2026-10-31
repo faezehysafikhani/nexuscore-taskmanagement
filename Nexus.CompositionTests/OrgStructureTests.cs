@@ -260,7 +260,8 @@ public sealed class OrgStructureTests
         {
             var name = Path.GetFileNameWithoutExtension(csproj);
             // Optional integrations built on the module (and the tests) may reference it.
-            if (name.StartsWith("Nexus.OrgStructure", StringComparison.Ordinal) || name is "Nexus.CompositionTests" or "Nexus.Integrations.TaskReporting")
+            if (name.StartsWith("Nexus.OrgStructure", StringComparison.Ordinal)
+                || name is "Nexus.CompositionTests" or "Nexus.Integrations.TaskReporting" or "Nexus.Integrations.CalendarOrgStructure")
             {
                 continue;
             }

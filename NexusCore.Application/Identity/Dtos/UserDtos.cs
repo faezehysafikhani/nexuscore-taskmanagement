@@ -17,7 +17,7 @@ public sealed record UserDto(
     string? ThemeMode = null,
     string? FirstName = null,
     string? LastName = null,
-    bool IsSystem = false);
+    bool IsSystem = false, string? Address = null, string? FatherName = null, DateOnly? BirthDate = null);
 
 /// <summary>
 /// A new account, created by an administrator (there is no self-registration). Username is the
@@ -33,7 +33,7 @@ public sealed record CreateUserRequest(
     string Password,
     bool IsActive = true,
     string? Email = null,
-    bool NotifySms = true);
+    bool NotifySms = true, string? Address = null, string? FatherName = null, DateOnly? BirthDate = null, string? AvatarUrl = null);
 
 /// <summary>
 /// DisplayName and IsActive keep their original meaning. Every other field is optional:
@@ -50,7 +50,7 @@ public sealed record UpdateUserRequest(
     string? PhoneNumber = null,
     bool? NotifySms = null,
     string? FirstName = null,
-    string? LastName = null);
+    string? LastName = null, string? Address = null, string? FatherName = null, DateOnly? BirthDate = null, string? AvatarUrl = null, bool ClearBirthDate = false);
 
 public sealed record SetUserStatusRequest(bool IsActive);
 

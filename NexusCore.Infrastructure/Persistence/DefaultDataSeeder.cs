@@ -42,6 +42,14 @@ public sealed class DefaultDataSeeder(
             "ALTER TABLE [identity].[RefreshTokens] ADD [UsedAtUtc] datetimeoffset NULL",
             null, cancellationToken);
 
+        // Existing installations use the module initializer rather than the full Core migration chain.
+        await ModuleSchemaInitializer.EnsureColumnAsync(dbContext, "identity.Users", "Address",
+            "ALTER TABLE [identity].[Users] ADD [Address] nvarchar(1000) NULL", null, cancellationToken);
+        await ModuleSchemaInitializer.EnsureColumnAsync(dbContext, "identity.Users", "FatherName",
+            "ALTER TABLE [identity].[Users] ADD [FatherName] nvarchar(80) NULL", null, cancellationToken);
+        await ModuleSchemaInitializer.EnsureColumnAsync(dbContext, "identity.Users", "BirthDate",
+            "ALTER TABLE [identity].[Users] ADD [BirthDate] date NULL", null, cancellationToken);
+
         if (!await dbContext.Tenants.AnyAsync(cancellationToken))
         {
             await dbContext.Tenants.AddAsync(new Tenant(DefaultTenantId, "Default Organization", "default"), cancellationToken);

@@ -42,6 +42,17 @@ public sealed class User : AuditableEntity<Guid>
     /// The built-in system administrator created by the seeder (like Role.IsSystem). It cannot be
     /// deleted, disabled, re-roled or renamed through the API, and no API can set this flag.
     /// </summary>
+    public string? Address { get; private set; }
+    public string? FatherName { get; private set; }
+    public DateOnly? BirthDate { get; private set; }
+
+    public void SetPersonalDetails(string? address, string? fatherName, DateOnly? birthDate)
+    {
+        Address = Normalize(address);
+        FatherName = Normalize(fatherName);
+        BirthDate = birthDate;
+    }
+
     public bool IsSystem { get; private set; }
 
     public string PasswordHash { get; private set; }

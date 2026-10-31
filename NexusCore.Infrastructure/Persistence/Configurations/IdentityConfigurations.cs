@@ -30,6 +30,9 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
         // Optional contact address; unique when present.
         builder.Property(x => x.Email).HasMaxLength(256);
         builder.Property(x => x.DisplayName).HasMaxLength(160).IsRequired();
+        builder.Property(x => x.Address).HasMaxLength(1000);
+        builder.Property(x => x.FatherName).HasMaxLength(80);
+        builder.Property(x => x.BirthDate).HasColumnType("date");
         builder.Property(x => x.FirstName).HasMaxLength(80);
         builder.Property(x => x.LastName).HasMaxLength(80);
         builder.Property(x => x.IsSystem).HasDefaultValue(false);

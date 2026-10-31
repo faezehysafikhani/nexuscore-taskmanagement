@@ -252,6 +252,8 @@ public sealed class IdentityService(
         var user = new User(Guid.NewGuid(), request.TenantId, request.Email, $"{request.FirstName} {request.LastName}", passwordHasher.HashPassword(request.Password), request.IsActive);
         user.SetName(request.FirstName, request.LastName);
         user.UpdateContactDetails(request.Username, request.PhoneNumber, request.NotifySms);
+        user.SetPersonalDetails(request.Address, request.FatherName, request.BirthDate);
+        user.SetAvatar(request.AvatarUrl);
         await repository.AddUserAsync(user, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await platformService.AuditAsync("users.create", nameof(User), user.Id.ToString(), user.Username, cancellationToken);
@@ -331,6 +333,8 @@ public sealed class IdentityService(
             return Result.Failure<UserDto>(taken);
         }
 
+        user.SetPersonalDetails(request.Address ?? user.Address, request.FatherName ?? user.FatherName, request.ClearBirthDate ? null : request.BirthDate ?? user.BirthDate);
+        if (request.AvatarUrl is not null) user.SetAvatar(request.AvatarUrl);
         var previousPhone = user.PhoneNumber;
         user.UpdateProfile(request.DisplayName, request.IsActive);
         if (request.FirstName is not null || request.LastName is not null)

@@ -879,6 +879,12 @@ public sealed partial class OrgStructureService(
     public async Task<Result<UserAssignmentDto>> SetAssignmentAsync(
         Guid tenantId, Guid userId, SetUserAssignmentRequest request, CancellationToken cancellationToken)
     {
+        var appointmentStart = request.StartDate ?? Now;
+        if (appointmentStart > Now)
+            return Result.Failure<UserAssignmentDto>(Error.Validation("تاریخ شروع جایگاه باید امروز یا قبل از امروز باشد؛ انتصاب آینده از ابزار انتصاب پست ثبت می‌شود."));
+        if (request.EndDate is { } endDate && endDate <= appointmentStart)
+            return Result.Failure<UserAssignmentDto>(Error.Validation("تاریخ پایان باید بعد از تاریخ شروع باشد."));
+
         if (!await IsUserOfTenantAsync(tenantId, userId, cancellationToken))
         {
             return Result.Failure<UserAssignmentDto>(Error.NotFound("کاربر پیدا نشد."));
@@ -1076,6 +1082,17 @@ public sealed partial class OrgStructureService(
             return Result.Failure<UserAssignmentDto>(Error.Conflict("این تغییر حلقه‌ی مدیریتی می‌سازد."));
         }
 
+        // A dated request is a new appointment, never an edit of an old history row.
+        if ((request.StartDate is not null || request.EndDate is not null) && mainSeat is not null && held.Contains(mainSeat.Id))
+            return Result.Failure<UserAssignmentDto>(Error.Conflict("این فرد همین حالا این پست را دارد؛ برای انتصاب مجدد ابتدا انتصاب فعلی را پایان دهید."));
+        foreach (var seat in finalSeats.Where(seat => !held.Contains(seat.Id)))
+        {
+            var past = await repository.ListUserPositionHistoryAsync(tenantId, null, seat.Id, cancellationToken);
+            if (past.Any(a => (a.EndDate is null || a.EndDate > appointmentStart)
+                && (request.EndDate is null || a.StartDate is null || a.StartDate < request.EndDate)))
+                return Result.Failure<UserAssignmentDto>(Error.Conflict("بازه انتصاب با سابقه این پست هم‌پوشانی دارد."));
+        }
+
         var assignment = await repository.GetAssignmentAsync(tenantId, userId, cancellationToken);
         if (assignment is null)
         {
@@ -1095,10 +1112,17 @@ public sealed partial class OrgStructureService(
         }
 
         var wanted = finalSeats.Select(seat => seat.Id).ToHashSet();
-        holdings.Where(h => !wanted.Contains(h.UnitPositionId)).ToList().ForEach(repository.RemoveUserPosition);
+        foreach (var old in holdings.Where(h => !wanted.Contains(h.UnitPositionId)))
+        {
+            // Keep the old appointment until the replacement starts; never delete its history.
+            if (request.StartDate is not null && (old.StartDate is null || old.StartDate <= appointmentStart)) old.End(appointmentStart);
+            else repository.RemoveUserPosition(old);
+        }
         foreach (var seat in finalSeats.Where(seat => !held.Contains(seat.Id)))
         {
-            await repository.AddUserPositionAsync(new UserPosition(Guid.NewGuid(), tenantId, userId, seat.Id), cancellationToken);
+            var appointment = new UserPosition(Guid.NewGuid(), tenantId, userId, seat.Id, appointmentStart);
+            if (request.EndDate is { } end) appointment.End(end);
+            await repository.AddUserPositionAsync(appointment, cancellationToken);
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);

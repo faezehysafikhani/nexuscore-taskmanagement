@@ -52,7 +52,7 @@ public sealed class TaskPostDirectory(
         foreach (var userId in userIds.Distinct())
         {
             var held = state.Holdings.Where(h => h.UserId == userId).Select(h => h.UnitPositionId).ToHashSet();
-            var seats = state.Seats.Where(seat => held.Contains(seat.Id) && state.Posts.Any(post => post.PostId == seat.Id)).ToList();
+            var seats = state.Seats.Where(seat => held.Contains(seat.Id) && state.Posts.Any(post => post.PostId == seat.Id && post.IsActive)).ToList();
             if (seats.Count == 0)
             {
                 continue;

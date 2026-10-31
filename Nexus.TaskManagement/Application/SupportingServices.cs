@@ -749,6 +749,10 @@ public sealed class TaskCommentService(
     IFileStorage fileStorage,
     ITaskNoticePublisher notices) : ITaskCommentService
 {
+    private bool CanUseConversation(TaskItem task) => currentUser.UserId is { } userId
+        && (task.OwnerUserId == userId || task.IsResponsible(userId)
+            || task.Assignees.Any(a => a.UserId == userId && a.IsActing));
+
     public async Task<Result<IReadOnlyList<TaskCommentDto>>> ListAsync(Guid taskId, CancellationToken cancellationToken)
     {
         if (currentUser.TenantId is null)
@@ -758,7 +762,8 @@ public sealed class TaskCommentService(
 
         var tenantId = currentUser.TenantId.Value;
         // A task the user cannot see answers "not found", as its other endpoints do.
-        if (await taskRepository.GetForUpdateAsync(tenantId, taskId, cancellationToken) is null)
+        var task = await taskRepository.GetForUpdateAsync(tenantId, taskId, cancellationToken);
+        if (task is null || !CanUseConversation(task))
         {
             return Result.Failure<IReadOnlyList<TaskCommentDto>>(Error.NotFound("Task not found."));
         }
@@ -788,7 +793,7 @@ public sealed class TaskCommentService(
         var tenantId = currentUser.TenantId.Value;
         // With its people: they are told of the comment.
         var task = await taskRepository.GetByIdAsync(tenantId, taskId, cancellationToken);
-        if (task is null)
+        if (task is null || !CanUseConversation(task))
         {
             return Result.Failure<TaskCommentDto>(Error.NotFound("Task not found."));
         }
@@ -831,6 +836,10 @@ public sealed class TaskCommentService(
             return Result.Failure<TaskCommentDto>(Error.NotFound("Comment not found."));
         }
 
+        var task = await taskRepository.GetForUpdateAsync(tenantId, comment.TaskId, cancellationToken);
+        if (task is null || !CanUseConversation(task))
+            return Result.Failure<TaskCommentDto>(Error.NotFound("Comment not found."));
+
         if (comment.UserId != currentUser.UserId.Value)
         {
             return Result.Failure<TaskCommentDto>(Error.Forbidden("You can only edit your own comments."));
@@ -855,6 +864,10 @@ public sealed class TaskCommentService(
         {
             return Result.Failure(Error.NotFound("Comment not found."));
         }
+
+        var task = await taskRepository.GetForUpdateAsync(currentUser.TenantId.Value, comment.TaskId, cancellationToken);
+        if (task is null || !CanUseConversation(task))
+            return Result.Failure(Error.NotFound("Comment not found."));
 
         if (comment.UserId != currentUser.UserId.Value)
         {

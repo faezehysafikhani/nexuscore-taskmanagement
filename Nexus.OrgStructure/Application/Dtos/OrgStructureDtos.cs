@@ -74,7 +74,7 @@ public sealed record UserAssignmentDto(
 /// their other positions stay as they are.
 /// </summary>
 public sealed record SetUserAssignmentRequest(
-    Guid CompanyId, Guid? UnitId, Guid? PositionId, Guid? ManagerUserId, IReadOnlyList<Guid>? UnitPositionIds = null);
+    Guid CompanyId, Guid? UnitId, Guid? PositionId, Guid? ManagerUserId, IReadOnlyList<Guid>? UnitPositionIds = null, DateTimeOffset? StartDate = null, DateTimeOffset? EndDate = null);
 
 /// <summary>A post someone holds. UnitId null: directly in the company (UnitName is then the company's).</summary>
 public sealed record HeldPositionDto(Guid UnitPositionId, Guid? UnitId, string UnitName, Guid PositionId, string Title, string? Code = null);

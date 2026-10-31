@@ -35,6 +35,29 @@ public sealed class AccountStatusTests
     private const string UserName = "0012345678";
     private const string UserPhone = "09121234567";
 
+    [Fact]
+    public async Task AdminUserProfile_SavesAndClearsPersonalFieldsAndPhoto_OverHttp()
+    {
+        await using var api = await Api.StartAsync();
+        var response = await api.SendAsync(HttpMethod.Put, $"/api/identity/users/{api.UserId}", api.AdminToken,
+            new { displayName = "کاربر نمونه", isActive = true, address = "تهران", fatherName = "علی", birthDate = "1990-03-21", avatarUrl = "data:image/png;base64,aGVsbG8=" });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var saved = await Json(response);
+        Assert.Equal("تهران", saved.GetProperty("address").GetString());
+        Assert.Equal("علی", saved.GetProperty("fatherName").GetString());
+        Assert.Equal("1990-03-21", saved.GetProperty("birthDate").GetString());
+        Assert.StartsWith("data:image/png", saved.GetProperty("avatarUrl").GetString());
+        var oversized = await api.SendAsync(HttpMethod.Put, $"/api/identity/users/{api.UserId}", api.AdminToken,
+            new { displayName = "کاربر نمونه", isActive = true, avatarUrl = "data:image/png;base64," + Convert.ToBase64String(new byte[300 * 1024 + 1]) });
+        Assert.Equal(HttpStatusCode.BadRequest, oversized.StatusCode);
+        var clearedResponse = await api.SendAsync(HttpMethod.Put, $"/api/identity/users/{api.UserId}", api.AdminToken,
+            new { displayName = "کاربر نمونه", isActive = true, address = "", fatherName = "", clearBirthDate = true, avatarUrl = "" });
+        Assert.Equal(HttpStatusCode.OK, clearedResponse.StatusCode);
+        var cleared = await Json(clearedResponse);
+        Assert.Equal(JsonValueKind.Null, cleared.GetProperty("birthDate").ValueKind);
+        Assert.Equal(JsonValueKind.Null, cleared.GetProperty("avatarUrl").ValueKind);
+    }
+
     // ---------------------------------------------------------------- sign-in names
 
     [Fact]
