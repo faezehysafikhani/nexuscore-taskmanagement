@@ -252,11 +252,11 @@ public sealed class StructureTemplateFileTests
     }
 
     [Fact]
-    public void Bank_FollowsThePostBankChart_AndTheCeoStaysTop()
+    public void Bank_IsAGenericStartingPoint_AndTheCeoStaysTop()
     {
         var template = Load("bank");
         var nodes = Nodes(template);
-        Assert.Equal(52, nodes.Count);
+        Assert.Equal(31, nodes.Count);
 
         // مجمع عمومی → هیأت مدیره → مدیریت عامل; the committees beside, linked to the board automatically.
         Assert.Equal(("general-assembly", (string?)null), nodes.Where(n => n.Key == "general-assembly").Select(n => (n.Type, n.ParentKey)).Single());
@@ -267,12 +267,14 @@ public sealed class StructureTemplateFileTests
         Assert.All(committees, committee => Assert.Null(committee.ParentKey));
         Assert.Contains(Items(template, "autoLinkRules"), rule => Str(rule, "sourceType") == "committee" && Str(rule, "targetType") == "board");
 
-        // Under the CEO: 8 staff units, 5 deputies and 4 affairs managements (with their 25 general
-        // departments and the digital branch), and the provincial branch management.
-        Assert.Equal(8, nodes.Count(n => n.Type == "staff-unit" && n.ParentKey == "ceo-office"));
-        Assert.Equal(5, nodes.Count(n => n.Type == "deputy" && n.ParentKey == "ceo-office"));
-        Assert.Equal(4, nodes.Count(n => n.Type == "affairs-management" && n.ParentKey == "ceo-office"));
-        Assert.Equal(25, nodes.Count(n => n.Type == "general-department"));
+        // Under the CEO (a generic sample, not one bank's chart): 6 common staff units, 4 deputies and
+        // 2 affairs managements (with 10 sample general departments), and the provincial branch management.
+        Assert.Equal(6, nodes.Count(n => n.Type == "staff-unit" && n.ParentKey == "ceo-office"));
+        Assert.Equal(4, nodes.Count(n => n.Type == "deputy" && n.ParentKey == "ceo-office"));
+        Assert.Equal(2, nodes.Count(n => n.Type == "affairs-management" && n.ParentKey == "ceo-office"));
+        Assert.Equal(10, nodes.Count(n => n.Type == "general-department"));
+        Assert.DoesNotContain(nodes, n => n.Name.Contains("پست بانک") || n.Name.Contains("باجه"));
+        Assert.DoesNotContain("پست بانک", Str(template, "description"));
         Assert.Single(nodes, n => n.Type == "branch-management" && n.ParentKey == "ceo-office");
 
         // The governance bodies have no posts (so no manager): nobody becomes the CEO's manager.

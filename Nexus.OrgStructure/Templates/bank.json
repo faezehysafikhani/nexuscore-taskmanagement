@@ -3,7 +3,7 @@
   "schemaVersion": 1,
   "key": "bank",
   "name": "بانکی",
-  "description": "ساختار بانک دولتی بر اساس دستورالعمل حاکمیت شرکتی (نمونه: نمودار سازمانی پست بانک ایران): مجمع عمومی، هیأت مدیره و کمیته‌های آن با خط نقطه‌چین، مدیرعامل و قائم‌مقام، واحدهای ستادی، معاونت‌ها و مدیریت‌های امور با اداره‌های کل، و مدیریت شعب. مجمع، هیأت مدیره و کمیته‌ها مدیر ندارند و پستی برایشان ساخته نمی‌شود، پس مدیرعامل همچنان بالاترین فرد زنجیره‌ی مدیریت است.",
+  "description": "نمونه‌ی عمومی ساختار یک بانک بر پایه‌ی دستورالعمل حاکمیت شرکتی: مجمع عمومی، هیأت مدیره و کمیته‌های آن (با خط نقطه‌چین)، مدیریت عامل با واحدهای ستادی رایج، چند معاونت و مدیریت امور با اداره‌های کل نمونه، و مدیریت شعب. فقط نقطه‌ی شروع است: بعد از ساخت، نام‌ها را مطابق سازمان خود تغییر دهید و بخش‌ها را اضافه یا حذف کنید. مجمع، هیأت مدیره و کمیته‌ها مدیر ندارند و پستی برایشان ساخته نمی‌شود، پس مدیرعامل بالاترین فرد زنجیره‌ی مدیریت است.",
   "uiLevel": "advanced",
   "nodeTypes": [
     { "key": "general-assembly", "name": "مجمع عمومی", "color": "#475569", "icon": "landmark", "isDomainBoundary": true },
@@ -128,23 +128,18 @@
               "type": "ceo-office",
               "children": [
                 { "key": "internal-audit", "name": "اداره کل حسابرسی داخلی", "type": "staff-unit" },
-                { "key": "management-office", "name": "اداره کل حوزه مدیریت", "type": "staff-unit" },
-                { "key": "public-relations", "name": "اداره کل روابط عمومی", "type": "staff-unit" },
                 { "key": "legal", "name": "اداره کل حقوقی", "type": "staff-unit" },
+                { "key": "public-relations", "name": "اداره کل روابط عمومی", "type": "staff-unit" },
                 { "key": "risk-management", "name": "اداره کل مدیریت ریسک", "type": "staff-unit" },
-                { "key": "compliance", "name": "اداره کل رعایت قوانین و مقررات (تطبیق)", "type": "staff-unit" },
-                { "key": "selection-core", "name": "هسته گزینش", "type": "staff-unit" },
-                { "key": "anti-money-laundering", "name": "اداره کل مبارزه با پولشویی و تأمین مالی تروریسم", "type": "staff-unit" },
+                { "key": "compliance", "name": "اداره کل تطبیق و رعایت قوانین", "type": "staff-unit" },
+                { "key": "anti-money-laundering", "name": "اداره کل مبارزه با پولشویی", "type": "staff-unit" },
                 {
-                  "key": "credit-international",
-                  "name": "معاونت اعتباری و بین‌الملل",
+                  "key": "finance",
+                  "name": "معاونت مالی",
                   "type": "deputy",
                   "children": [
-                    { "key": "credits", "name": "اداره کل اعتبارات", "type": "general-department" },
-                    { "key": "project-review", "name": "اداره کل بررسی و نظارت بر طرح‌ها", "type": "general-department" },
-                    { "key": "international-affairs", "name": "اداره کل امور بین‌الملل", "type": "general-department" },
-                    { "key": "claims-collection", "name": "اداره کل پیگیری وصول مطالبات", "type": "general-department" },
-                    { "key": "innovative-financing", "name": "اداره کل تأمین مالی طرح‌های نوآورانه", "type": "general-department" }
+                    { "key": "accounting", "name": "اداره کل حسابداری", "type": "general-department" },
+                    { "key": "budget", "name": "اداره کل بودجه", "type": "general-department" }
                   ]
                 },
                 {
@@ -152,76 +147,42 @@
                   "name": "معاونت فناوری اطلاعات",
                   "type": "deputy",
                   "children": [
-                    { "key": "software-systems", "name": "اداره کل تأمین و نظارت بر سامانه‌های نرم‌افزاری", "type": "general-department" },
-                    { "key": "electronic-banking", "name": "اداره کل توسعه بانکداری الکترونیک", "type": "general-department" },
-                    { "key": "security-infrastructure", "name": "اداره کل امنیت و زیرساخت", "type": "general-department" }
-                  ]
-                },
-                {
-                  "key": "finance-investment",
-                  "name": "معاونت مالی و سرمایه‌گذاری",
-                  "type": "deputy",
-                  "children": [
-                    { "key": "accounting-shares", "name": "اداره کل حسابداری و امور سهام", "type": "general-department" },
-                    { "key": "treasury-payments", "name": "اداره کل خزانه‌داری و نظام‌های پرداخت", "type": "general-department" },
-                    { "key": "statistics-budget", "name": "اداره کل آمار و بودجه", "type": "general-department" }
-                  ]
-                },
-                {
-                  "key": "provinces-regions",
-                  "name": "مدیریت امور استان‌ها و مناطق",
-                  "type": "affairs-management",
-                  "children": [
-                    { "key": "branch-affairs", "name": "اداره کل امور شعب", "type": "general-department" },
-                    { "key": "rural-counters", "name": "اداره کل امور باجه‌های بانکی روستایی", "type": "general-department" },
-                    { "key": "digital-branch", "name": "شعبه مستقل متمرکز (دیجیتال)", "type": "branch" }
-                  ]
-                },
-                {
-                  "key": "corporate-banking",
-                  "name": "مدیریت امور بانکداری شرکتی و بازاریابی",
-                  "type": "affairs-management",
-                  "children": [
-                    { "key": "corporate-customers", "name": "اداره کل بانکداری شرکتی و امور مشتریان حقوقی", "type": "general-department" },
-                    { "key": "retail-marketing", "name": "اداره کل بازاریابی و امور مشتریان حقیقی", "type": "general-department" }
-                  ]
-                },
-                {
-                  "key": "inspection",
-                  "name": "مدیریت امور بازرسی، نظارت و صیانت از مشتریان",
-                  "type": "affairs-management",
-                  "children": [
-                    { "key": "inspection-supervision", "name": "اداره کل بازرسی و نظارت", "type": "general-department" },
-                    { "key": "customer-protection", "name": "اداره کل صیانت از مشتریان و سلامت اداری", "type": "general-department" }
-                  ]
-                },
-                {
-                  "key": "protection",
-                  "name": "مدیریت امور حراست",
-                  "type": "affairs-management",
-                  "children": [
-                    { "key": "personnel-protection", "name": "اداره کل حفاظت پرسنلی", "type": "general-department" },
-                    { "key": "it-documents-protection", "name": "اداره کل حفاظت فناوری اطلاعات و اسناد", "type": "general-department" },
-                    { "key": "physical-protection", "name": "اداره کل حفاظت فیزیکی", "type": "general-department" }
-                  ]
-                },
-                {
-                  "key": "organization-planning",
-                  "name": "معاونت سازمان و برنامه‌ریزی",
-                  "type": "deputy",
-                  "children": [
-                    { "key": "organization-methods", "name": "اداره کل سازمان و بهبود روش‌ها", "type": "general-department" },
-                    { "key": "planning-monitoring", "name": "اداره کل برنامه‌ریزی، کنترل برنامه‌ها و پایش عملکرد واحدها", "type": "general-department" }
+                    { "key": "software-systems", "name": "اداره کل سامانه‌ها", "type": "general-department" },
+                    { "key": "security-infrastructure", "name": "اداره کل زیرساخت و امنیت", "type": "general-department" }
                   ]
                 },
                 {
                   "key": "human-capital",
-                  "name": "معاونت توسعه سرمایه انسانی و پشتیبانی",
+                  "name": "معاونت منابع انسانی و پشتیبانی",
                   "type": "deputy",
                   "children": [
-                    { "key": "human-capital-welfare", "name": "اداره کل سرمایه انسانی و رفاه", "type": "general-department" },
-                    { "key": "training-research", "name": "اداره کل آموزش و تحقیقات", "type": "general-department" },
-                    { "key": "support-properties", "name": "اداره کل پشتیبانی و املاک", "type": "general-department" }
+                    { "key": "human-resources", "name": "اداره کل منابع انسانی", "type": "general-department" },
+                    { "key": "support", "name": "اداره کل پشتیبانی", "type": "general-department" }
+                  ]
+                },
+                {
+                  "key": "credit",
+                  "name": "معاونت اعتباری",
+                  "type": "deputy",
+                  "children": [
+                    { "key": "credits", "name": "اداره کل اعتبارات", "type": "general-department" },
+                    { "key": "claims-collection", "name": "اداره کل وصول مطالبات", "type": "general-department" }
+                  ]
+                },
+                {
+                  "key": "branch-affairs-management",
+                  "name": "مدیریت امور شعب",
+                  "type": "affairs-management",
+                  "children": [
+                    { "key": "branch-affairs", "name": "اداره کل امور شعب", "type": "general-department" }
+                  ]
+                },
+                {
+                  "key": "inspection",
+                  "name": "مدیریت امور بازرسی",
+                  "type": "affairs-management",
+                  "children": [
+                    { "key": "inspection-supervision", "name": "اداره کل بازرسی و نظارت", "type": "general-department" }
                   ]
                 },
                 { "key": "branch-management", "name": "مدیریت شعب استان / منطقه", "type": "branch-management" }
