@@ -737,6 +737,41 @@ public sealed class OrgChartTeamsAndTitlesTests
     }
 
     [Fact]
+    public async Task DirectChat_CountsEveryPostSomeoneHolds_NotOnlyTheMainOne()
+    {
+        var world = new World();
+        var (boss1, boss2, two, three, six) = (world.User("مدیر یک"), world.User("مدیر دو"), world.User("دو"), world.User("سه"), world.User("شش"));
+        var u1 = world.Unit("واحد یک");
+        var u2 = world.Unit("واحد دو");
+        var company = await world.CompanyAsync("C1");
+        await world.Service.LinkUnitAsync(Tenant, u1.Id, new LinkUnitRequest(company), default);
+        await world.Service.LinkUnitAsync(Tenant, u2.Id, new LinkUnitRequest(company), default);
+        async Task<Guid> Seat(Guid unit, string title, Guid? parent) =>
+            (await world.Service.AddUnitPositionAsync(Tenant, unit, new AddUnitPositionRequest(await world.PositionAsync(title), null, parent), default)).Value!.Id;
+        var head1 = await Seat(u1.Id, "مدیر کل", null);
+        var head2 = await Seat(u2.Id, "مدیر", null);
+        var expert1 = await Seat(u1.Id, "کارشناس", head1);
+        var expert1b = await Seat(u1.Id, "کارشناس ارشد", head1);
+        var expert2 = await Seat(u2.Id, "کارشناس دوم", head2);
+        await world.Service.SetAssignmentAsync(Tenant, boss1, new SetUserAssignmentRequest(company, u1.Id, null, null, [head1]), default);
+        await world.Service.SetAssignmentAsync(Tenant, boss2, new SetUserAssignmentRequest(company, u2.Id, null, null, [head2]), default);
+        await world.Service.SetAssignmentAsync(Tenant, six, new SetUserAssignmentRequest(company, u1.Id, null, null, [expert1]), default);
+        // «سه»'s main place is unit two, but he also holds a post in unit one.
+        await world.Service.SetAssignmentAsync(Tenant, three, new SetUserAssignmentRequest(company, u2.Id, null, null, [expert2, expert1b]), default);
+
+        var scope = world.ChatScope(on: true);
+        Assert.Contains(three, (await scope.GetPartnersAsync(Tenant, six, default))!);   // same manager, same unit through his second post
+        Assert.Contains(three, (await scope.GetPartnersAsync(Tenant, boss1, default))!); // below boss1 through that post
+        Assert.Contains(boss1, (await scope.GetPartnersAsync(Tenant, three, default))!);
+        Assert.Contains(boss2, (await scope.GetPartnersAsync(Tenant, three, default))!);
+        Assert.DoesNotContain(boss2, (await scope.GetPartnersAsync(Tenant, six, default))!);
+
+        // He gives the post in unit two up: its manager is no longer his.
+        Assert.True((await world.Service.SetAssignmentAsync(Tenant, three, new SetUserAssignmentRequest(company, u1.Id, null, null, [expert1b]), default)).IsSuccess);
+        Assert.DoesNotContain(boss2, (await world.ChatScope(on: true).GetPartnersAsync(Tenant, three, default))!);
+    }
+
+    [Fact]
     public async Task AFilledPost_GetsAStandIn_OnlyForASetTime_FromItsOwnUnit()
     {
         var world = new World();
@@ -770,9 +805,15 @@ public sealed class OrgChartTeamsAndTitlesTests
         Assert.Equal((standIn, worker, until), (shown.Acting!.HolderUserId, shown.HolderUserId, shown.ActingUntil));
         Assert.Contains((await substitution.GetInboxAsync(Tenant, default)).Value!.Posts, p => p.PostId == post);
 
+        // A task given to the post afterwards reaches the stand-in too.
+        var later = Guid.NewGuid();
+        await world.TaskPosts.SetTaskPostsAsync(Tenant, later, null, [post], [], default);
+        Assert.Contains(new TaskPersonChange(later, TaskPostRole.Acting, null, standIn, "جانشین کارشناس · کد 1"), world.Updater.Applied);
+
         // Starting later: not on yet.
         Assert.True((await substitution.SetActingAsync(Tenant, post, new SetActingRequest(accountant, DateTimeOffset.UtcNow.AddDays(1), until), default)).IsSuccess);
-        Assert.Equal(new TaskPersonChange(task, TaskPostRole.Acting, standIn, null, "جانشین کارشناس · کد 1"), world.Updater.Applied[^1]);
+        Assert.Contains(new TaskPersonChange(task, TaskPostRole.Acting, standIn, null, "جانشین کارشناس · کد 1"), world.Updater.Applied);
+        Assert.Contains(new TaskPersonChange(later, TaskPostRole.Acting, standIn, null, "جانشین کارشناس · کد 1"), world.Updater.Applied);
 
         // Cleared: gone.
         Assert.True((await substitution.ClearActingAsync(Tenant, post, default)).IsSuccess);
