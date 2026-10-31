@@ -712,11 +712,14 @@ public sealed class OrgChartTeamsAndTitlesTests
         var world = new World();
         var (top, m, a, b, c, d, x, nobody) = (world.User("بالا"), world.User("مدیر"), world.User("الف"), world.User("ب"),
             world.User("ج"), world.User("د"), world.User("دیگر"), world.User("بی‌جا"));
+        var y = world.User("واحد دیگر");
         var unit = world.Unit("معاونت");
+        var unit2 = world.Unit("معاونت دوم");
         var company = await world.CompanyAsync("C1");
         await world.Service.LinkUnitAsync(Tenant, unit.Id, new LinkUnitRequest(company), default);
-        async Task Place(Guid user, Guid? manager) =>
-            Assert.True((await world.Service.SetAssignmentAsync(Tenant, user, new SetUserAssignmentRequest(company, unit.Id, null, manager), default)).IsSuccess);
+        await world.Service.LinkUnitAsync(Tenant, unit2.Id, new LinkUnitRequest(company), default);
+        async Task Place(Guid user, Guid? manager, Guid? where = null) =>
+            Assert.True((await world.Service.SetAssignmentAsync(Tenant, user, new SetUserAssignmentRequest(company, where ?? unit.Id, null, manager), default)).IsSuccess);
         await Place(top, null);
         await Place(m, top);
         await Place(x, top);
@@ -724,6 +727,7 @@ public sealed class OrgChartTeamsAndTitlesTests
         await Place(b, m);
         await Place(c, a);
         await Place(d, c);
+        await Place(y, m, unit2.Id); // same manager, another unit: not at a's level
 
         var scope = world.ChatScope(on: true);
         Assert.Equal(new[] { b, c, d, m, top }.Order(), (await scope.GetPartnersAsync(Tenant, a, default))!.Order());

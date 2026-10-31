@@ -7,7 +7,8 @@ namespace Nexus.OrgStructure.Application;
 /// <summary>
 /// With <see cref="OrgStructureOptions.LimitChatToHierarchy"/> on, a user chats only with: the
 /// people at their level (the same direct manager), everyone below them (any depth), their
-/// manager and their manager's manager. A user with no place in the structure is not limited.
+/// manager and their manager's manager. The people at their level are those with the same manager in the
+/// same unit (not everyone a vacant post above hands to the same head). A user with no place is not limited.
 /// Worked out once per request (it is scoped) for each user asked about.
 /// </summary>
 public sealed class HierarchyChatScope(
@@ -16,7 +17,7 @@ public sealed class HierarchyChatScope(
     IOptions<OrgStructureOptions> options,
     IOrgGraphProvider? graphs = null) : IChatPartnerScope
 {
-    private (HierarchyResolver Resolver, IReadOnlySet<Guid> Placed)? _resolver;
+    private (HierarchyResolver Resolver, IReadOnlySet<Guid> Placed, IReadOnlyDictionary<Guid, Guid?> UnitOf)? _resolver;
     private Guid _tenant;
     private readonly Dictionary<Guid, IReadOnlySet<Guid>?> _cache = [];
 
@@ -39,14 +40,14 @@ public sealed class HierarchyChatScope(
             return cached;
         }
 
-        var (resolver, placed) = _resolver!.Value;
-        var partners = PartnersOf(resolver, placed, userId);
+        var (resolver, placed, unitOf) = _resolver!.Value;
+        var partners = PartnersOf(resolver, placed, unitOf, userId);
         _cache[userId] = partners;
         return partners;
     }
 
     /// <summary>The people the user may chat with, or null when they have no place.</summary>
-    public static IReadOnlySet<Guid>? PartnersOf(HierarchyResolver resolver, IReadOnlySet<Guid> placed, Guid userId)
+    public static IReadOnlySet<Guid>? PartnersOf(HierarchyResolver resolver, IReadOnlySet<Guid> placed, IReadOnlyDictionary<Guid, Guid?> unitOf, Guid userId)
     {
         if (!placed.Contains(userId))
         {
@@ -58,14 +59,15 @@ public sealed class HierarchyChatScope(
         partners.UnionWith(chain.Take(2));
         if (chain.Count > 0)
         {
-            partners.UnionWith(resolver.DirectSubordinatesOf(chain[0]));
+            var unit = unitOf.GetValueOrDefault(userId);
+            partners.UnionWith(resolver.DirectSubordinatesOf(chain[0]).Where(peer => unitOf.GetValueOrDefault(peer) == unit));
         }
 
         partners.Remove(userId);
         return partners;
     }
 
-    private async Task<(HierarchyResolver Resolver, IReadOnlySet<Guid> Placed)?> BuildAsync(Guid tenantId, CancellationToken cancellationToken)
+    private async Task<(HierarchyResolver Resolver, IReadOnlySet<Guid> Placed, IReadOnlyDictionary<Guid, Guid?> UnitOf)?> BuildAsync(Guid tenantId, CancellationToken cancellationToken)
     {
         var companies = await repository.ListCompaniesAsync(tenantId, cancellationToken);
         var assignments = await repository.ListAssignmentsAsync(tenantId, cancellationToken);
@@ -81,6 +83,6 @@ public sealed class HierarchyChatScope(
             graph,
             companies.ToDictionary(company => company.Id, company => company.ManagerUserId),
             assignments.Select(a => new AssignmentNode(a.UserId, a.CompanyId, a.UnitId, a.ManagerUserId, postSuperiors.TryGetValue(a.UserId, out var superior) ? superior : null)));
-        return (resolver, placed);
+        return (resolver, placed, assignments.GroupBy(a => a.UserId).ToDictionary(g => g.Key, g => g.First().UnitId));
     }
 }
