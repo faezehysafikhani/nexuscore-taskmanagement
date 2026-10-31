@@ -62,7 +62,7 @@ public sealed partial class OrgStructureService : IOrgPostTemplateService
     {
         if ((await repository.ListNodeTypesAsync(tenantId, cancellationToken)).All(type => type.Id != nodeTypeId))
         {
-            return Result.Failure<IReadOnlyList<NodeTypePostDto>>(Error.NotFound("نوع گره پیدا نشد."));
+            return Result.Failure<IReadOnlyList<NodeTypePostDto>>(Error.NotFound("جزء چارت پیدا نشد."));
         }
 
         var positions = (await repository.ListPositionsAsync(tenantId, cancellationToken)).ToDictionary(p => p.Id);
@@ -73,7 +73,7 @@ public sealed partial class OrgStructureService : IOrgPostTemplateService
     {
         if ((await repository.ListNodeTypesAsync(tenantId, cancellationToken)).All(type => type.Id != nodeTypeId))
         {
-            return Result.Failure<IReadOnlyList<NodeTypePostDto>>(Error.NotFound("نوع گره پیدا نشد."));
+            return Result.Failure<IReadOnlyList<NodeTypePostDto>>(Error.NotFound("جزء چارت پیدا نشد."));
         }
 
         var wanted = request.Posts ?? [];
@@ -85,7 +85,7 @@ public sealed partial class OrgStructureService : IOrgPostTemplateService
 
         if (wanted.Count(post => post.IsManagerPost) > 1)
         {
-            return Result.Failure<IReadOnlyList<NodeTypePostDto>>(Error.Validation("هر نوع گره حداکثر یک پست مدیر دارد."));
+            return Result.Failure<IReadOnlyList<NodeTypePostDto>>(Error.Validation("هر جزء چارت حداکثر یک پست مدیر دارد."));
         }
 
         var all = await repository.ListNodeTypePostTemplatesAsync(tenantId, cancellationToken);
@@ -117,7 +117,7 @@ public sealed partial class OrgStructureService : IOrgPostTemplateService
     {
         if (request.NodeId is null == request.NodeTypeId is null)
         {
-            return Result.Failure<ApplyPostTemplatesResultDto>(Error.Validation("یا یک گره بدهید یا یک نوع گره (نه هر دو)."));
+            return Result.Failure<ApplyPostTemplatesResultDto>(Error.Validation("یا یک گره بدهید یا یک جزء چارت (نه هر دو)."));
         }
 
         var snapshot = await LoadAsync(tenantId, cancellationToken);

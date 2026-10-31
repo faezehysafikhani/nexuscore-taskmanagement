@@ -46,7 +46,7 @@ public sealed partial class OrgNodeApiTests
         var chart = Assert.Single((await w.Service.GetChartAsync(Tenant, null, default)).Value!);
         Assert.Equal(["معاونت فناوری", "معاونت مالی"], chart.Units.Select(u => u.Name));
         Assert.All(chart.Units, unit => Assert.Empty(unit.Children));
-        Assert.Equal("normal", chart.UiLevel);
+        Assert.Equal("advanced", chart.UiLevel); // a new company starts «advanced»
     }
 
     [Fact]

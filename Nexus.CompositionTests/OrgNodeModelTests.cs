@@ -70,7 +70,7 @@ public sealed class OrgNodeModelTests
         var c = await db.Companies.SingleAsync();
         Assert.Null(c.ParentCompanyId);
         Assert.Null(c.TemplateId);
-        Assert.Equal(OrgUiLevel.Normal, c.UiLevel);
+        Assert.Equal(OrgUiLevel.Advanced, c.UiLevel); // a new company starts «advanced»; existing rows keep their stored level
         var p = await db.UnitPositions.SingleAsync();
         Assert.False(p.IsManagerPost);
         Assert.False(p.IsCompanyHead);
