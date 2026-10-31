@@ -772,6 +772,43 @@ public sealed class OrgChartTeamsAndTitlesTests
     }
 
     [Fact]
+    public async Task DirectChat_AsInTheQaRound_APostWithNoParent_AndSomeoneReplaced()
+    {
+        var world = new World();
+        var (two, three, four, six, one) = (world.User("دو"), world.User("سه"), world.User("چهار"), world.User("شش"), world.User("یک"));
+        var credit = world.Unit("اعتبارات");
+        var review = world.Unit("بررسی و نظارت");
+        var company = await world.CompanyAsync("C1");
+        await world.Service.LinkUnitAsync(Tenant, credit.Id, new LinkUnitRequest(company), default);
+        await world.Service.LinkUnitAsync(Tenant, review.Id, new LinkUnitRequest(company), default);
+        async Task<Guid> Seat(Guid unit, string title, Guid? parent) =>
+            (await world.Service.AddUnitPositionAsync(Tenant, unit, new AddUnitPositionRequest(await world.PositionAsync(title), null, parent), default)).Value!.Id;
+        var deputy = await Seat(credit.Id, "معاون", null);            // vacant
+        var p5 = await Seat(credit.Id, "مدیر کل", deputy);
+        var p6 = await Seat(credit.Id, "کارشناس", p5);
+        var p85 = await Seat(credit.Id, "کارشناس ب", null);           // made as «پست تازه»: no parent post
+        var reviewHead = await Seat(review.Id, "رئیس", null);
+        var p22 = await Seat(review.Id, "کارشناس بررسی", reviewHead);
+        await ((OrgStructureService)world.Service).SetManagerPostAsync(Tenant, p5, new SetManagerPostRequest(true), default);
+        await world.Service.SetAssignmentAsync(Tenant, two, new SetUserAssignmentRequest(company, credit.Id, null, null, [p5]), default);
+        await world.Service.SetAssignmentAsync(Tenant, three, new SetUserAssignmentRequest(company, credit.Id, null, null, [p6]), default);
+        await world.Service.SetAssignmentAsync(Tenant, four, new SetUserAssignmentRequest(company, review.Id, null, null, [reviewHead]), default);
+        await world.Service.SetAssignmentAsync(Tenant, one, new SetUserAssignmentRequest(company, credit.Id, null, null, [p85]), default);
+        await world.Service.SetAssignmentAsync(Tenant, six, new SetUserAssignmentRequest(company, review.Id, null, null, [p22]), default);
+        // «شش» replaces «یک» on post 85 and keeps post 22.
+        Assert.True((await ((OrgStructureService)world.Service).AppointAsync(Tenant, p85, new AppointRequest(six), default)).IsSuccess);
+
+        var scope = world.ChatScope(on: true);
+        Assert.Equal(new[] { three, six }.Order(), (await scope.GetPartnersAsync(Tenant, two, default))!.Order());
+        Assert.Equal(new[] { two, six }.Order(), (await scope.GetPartnersAsync(Tenant, three, default))!.Order());
+        Assert.Equal(new[] { two, three, four }.Order(), (await scope.GetPartnersAsync(Tenant, six, default))!.Order());
+
+        // «یک» left his only post: his place has no position any more.
+        var place = (await world.Service.GetAssignmentAsync(Tenant, one, default)).Value!;
+        Assert.Null(place.PositionId);
+    }
+
+    [Fact]
     public async Task AFilledPost_GetsAStandIn_OnlyForASetTime_FromItsOwnUnit()
     {
         var world = new World();

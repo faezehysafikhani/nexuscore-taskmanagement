@@ -46,6 +46,58 @@ public sealed partial class OrgStructureService : IOrgAppointmentService
     /// requests for one post never race to the unique «one open appointment per post» index: the second one sees
     /// what the first did. Without a lock registered (some tests) it is not taken.
     /// </summary>
+    /// <summary>
+    /// Keeps each person's place in step with the posts they hold now: when the post of their main
+    /// position is no longer theirs, another post they hold in the same company becomes the main one
+    /// (its unit and position); with none left, they stay in their unit without a position. So the
+    /// chart's «جایگاه», their direct manager and whom they may chat with never point at a post they left.
+    /// </summary>
+    public async Task RehomeAsync(Guid tenantId, IReadOnlyCollection<Guid>? userIds, CancellationToken cancellationToken)
+    {
+        var seats = (await repository.ListUnitPositionsAsync(tenantId, cancellationToken)).ToDictionary(seat => seat.Id);
+        var held = (await repository.ListUserPositionsAsync(tenantId, cancellationToken)).ToLookup(h => h.UserId, h => h.UnitPositionId);
+        var changed = false;
+        foreach (var assignment in await repository.ListAssignmentsAsync(tenantId, cancellationToken))
+        {
+            if ((userIds is not null && !userIds.Contains(assignment.UserId)) || assignment.PositionId is null)
+            {
+                continue;
+            }
+
+            var mine = held[assignment.UserId].Select(id => seats.GetValueOrDefault(id)).OfType<UnitPosition>()
+                .Where(seat => seat.CompanyId == assignment.CompanyId).ToList();
+            if (mine.Any(seat => seat.UnitId == assignment.UnitId && seat.PositionId == assignment.PositionId)
+                || (mine.Count == 0 && !await HadPostAsync(tenantId, assignment, cancellationToken)))
+            {
+                continue;
+            }
+
+            var tracked = await repository.GetAssignmentAsync(tenantId, assignment.UserId, cancellationToken);
+            if (tracked is null)
+            {
+                continue;
+            }
+
+            var next = mine.OrderBy(seat => seat.SortOrder).FirstOrDefault();
+            tracked.Set(tracked.CompanyId, next is null ? tracked.UnitId : next.UnitId, next?.PositionId, tracked.ManagerUserId);
+            changed = true;
+        }
+
+        if (changed)
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    /// <summary>Whether the person's main position was ever held by them as a post (a place set without posts stays as it is).</summary>
+    private async Task<bool> HadPostAsync(Guid tenantId, UserAssignment assignment, CancellationToken cancellationToken)
+    {
+        var seats = (await repository.ListUnitPositionsAsync(tenantId, cancellationToken))
+            .Where(seat => seat.CompanyId == assignment.CompanyId && seat.UnitId == assignment.UnitId && seat.PositionId == assignment.PositionId)
+            .Select(seat => seat.Id).ToHashSet();
+        return (await repository.ListUserPositionHistoryAsync(tenantId, assignment.UserId, null, cancellationToken)).Any(a => seats.Contains(a.UnitPositionId));
+    }
+
     private async Task<(IOrgStructureWrite? Turn, Error? Busy)> AppointmentTurnAsync(Guid tenantId, CancellationToken cancellationToken)
     {
         if (writeLock is null)
@@ -177,6 +229,11 @@ public sealed partial class OrgStructureService : IOrgAppointmentService
             await taskPosts.SyncHoldersAsync(tenantId, [unitPositionId], cancellationToken);
         }
 
+        if (start <= now)
+        {
+            await RehomeAsync(tenantId, current.Select(a => a.UserId).Append(request.UserId).ToList(), cancellationToken);
+        }
+
         return Result.Success(await AppointmentDtoAsync(tenantId, snapshot, added, cancellationToken));
     }
 
@@ -224,6 +281,11 @@ public sealed partial class OrgStructureService : IOrgAppointmentService
         if (end <= now && taskPosts is not null)
         {
             await taskPosts.SyncHoldersAsync(tenantId, [unitPositionId], cancellationToken);
+        }
+
+        if (end <= now)
+        {
+            await RehomeAsync(tenantId, [current.UserId], cancellationToken);
         }
 
         return Result.Success(await AppointmentDtoAsync(tenantId, snapshot, current, cancellationToken));

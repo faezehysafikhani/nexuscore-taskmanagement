@@ -20,6 +20,15 @@ public sealed class AppointmentActivationService(IServiceScopeFactory scopes, IL
     {
         // TaskPostsStartup brings every post up to date at start-up: only what happens after it counts.
         var since = Now;
+        try
+        {
+            await RehomeAllAsync(stoppingToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Putting people's places in step with their posts failed at start-up.");
+        }
+
         using var timer = new PeriodicTimer(Interval);
         while (await timer.WaitForNextTickAsync(stoppingToken))
         {
@@ -37,6 +46,21 @@ public sealed class AppointmentActivationService(IServiceScopeFactory scopes, IL
     }
 
     private DateTimeOffset Now => (clock ?? TimeProvider.System).GetUtcNow();
+
+    /// <summary>Everyone's place in step with the posts they hold (see OrgStructureService.RehomeAsync).</summary>
+    private async Task RehomeAllAsync(CancellationToken cancellationToken)
+    {
+        using var scope = scopes.CreateScope();
+        if (scope.ServiceProvider.GetService<OrgStructureService>() is not { } service)
+        {
+            return;
+        }
+
+        foreach (var tenantId in await scope.ServiceProvider.GetRequiredService<IOrgStructureRepository>().ListTenantIdsAsync(cancellationToken))
+        {
+            await service.RehomeAsync(tenantId, null, cancellationToken);
+        }
+    }
 
     /// <summary>One look: the posts whose appointments started or ended in (since, until].</summary>
     public async Task RunOnceAsync(DateTimeOffset since, DateTimeOffset until, CancellationToken cancellationToken)
@@ -58,6 +82,10 @@ public sealed class AppointmentActivationService(IServiceScopeFactory scopes, IL
             if (posts.Count > 0)
             {
                 await directory.SyncHoldersAsync(tenantId, posts, cancellationToken);
+                if (scope.ServiceProvider.GetService<OrgStructureService>() is { } service)
+                {
+                    await service.RehomeAsync(tenantId, null, cancellationToken);
+                }
             }
             else
             {

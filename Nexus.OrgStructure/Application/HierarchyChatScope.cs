@@ -47,7 +47,7 @@ public sealed class HierarchyChatScope(
     }
 
     /// <summary>Each placed person's managers and units, and who may chat with whom.</summary>
-    public sealed class Model(IReadOnlyDictionary<Guid, HashSet<Guid>> managersOf, IReadOnlyDictionary<Guid, HashSet<Guid?>> unitsOf)
+    public sealed class Model(IReadOnlyDictionary<Guid, HashSet<Guid>> managersOf, IReadOnlyDictionary<Guid, HashSet<Guid?>> unitsOf, IReadOnlySet<Guid> withoutPost)
     {
         public IReadOnlySet<Guid>? PartnersOf(Guid userId)
         {
@@ -63,7 +63,8 @@ public sealed class HierarchyChatScope(
             }
 
             // Below: everyone whose managers lead back to the user, at any depth.
-            var reportsOf = managersOf.SelectMany(pair => pair.Value.Select(manager => (manager, report: pair.Key)))
+            var reportsOf = managersOf.Where(pair => !withoutPost.Contains(pair.Key))
+                .SelectMany(pair => pair.Value.Select(manager => (manager, report: pair.Key)))
                 .ToLookup(x => x.manager, x => x.report);
             var pending = new Queue<Guid>([userId]);
             var below = new HashSet<Guid> { userId };
@@ -110,13 +111,32 @@ public sealed class HierarchyChatScope(
             .Concat(postsOf.Keys)
             .ToHashSet();
 
+        var heads = companies.ToDictionary(c => c.Id, c => c.ManagerUserId);
+        Guid? UnitManagerOf(Domain.UnitPosition seat, Guid person)
+        {
+            var visited = new HashSet<Guid>();
+            for (var current = seat.UnitId; current is { } unitId && visited.Add(unitId) && graph.Node(unitId) is { } unit; current = unit.ParentId)
+            {
+                if (unit.ManagerUserId is { } manager && manager != person)
+                {
+                    return manager;
+                }
+
+                if (resolver.LinkedAncestorOf(unitId) == unitId)
+                {
+                    break;
+                }
+            }
+
+            return heads.GetValueOrDefault(seat.CompanyId) is { } head && head != person ? head : null;
+        }
+
         var managersOf = new Dictionary<Guid, HashSet<Guid>>();
         var unitsOf = new Dictionary<Guid, HashSet<Guid?>>();
         foreach (var person in placed)
         {
             var managers = new HashSet<Guid>();
             var personUnits = new HashSet<Guid?>();
-            var fallback = false;
             foreach (var postId in postsOf.GetValueOrDefault(person) ?? [])
             {
                 if (!seats.TryGetValue(postId, out var seat))
@@ -136,34 +156,34 @@ public sealed class HierarchyChatScope(
                     }
                 }
 
+                // Only vacant posts above (or none): the manager of the post's own unit, or of the
+                // nearest unit above it in the company, else the company's head.
+                above ??= UnitManagerOf(seat, person);
                 if (above is { } found)
                 {
                     managers.Add(found);
                 }
-                else
-                {
-                    fallback = true;
-                }
             }
 
-            // No post, or a post with only vacant posts above: the manager from the chart.
-            if (fallback || !postsOf.ContainsKey(person))
+            // No post: the manager from their place in the chart.
+            if (!postsOf.ContainsKey(person))
             {
                 if (resolver.ManagerOf(person)?.ManagerUserId is { } manager && manager != person)
                 {
                     managers.Add(manager);
                 }
 
-                if (!postsOf.ContainsKey(person))
-                {
-                    personUnits.Add(assignments.FirstOrDefault(a => a.UserId == person)?.UnitId);
-                }
+                personUnits.Add(assignments.FirstOrDefault(a => a.UserId == person)?.UnitId);
             }
 
             managersOf[person] = managers;
             unitsOf[person] = personUnits;
         }
 
-        return new Model(managersOf, unitsOf);
+        // In a company where people hold posts, someone with no post now (e.g. replaced on their last
+        // one) is nobody's colleague or subordinate any more; they still reach their own manager.
+        var postCompanies = holdings.Select(h => seats.GetValueOrDefault(h.UnitPositionId)?.CompanyId).OfType<Guid>().ToHashSet();
+        var withoutPost = assignments.Where(a => !postsOf.ContainsKey(a.UserId) && postCompanies.Contains(a.CompanyId)).Select(a => a.UserId).ToHashSet();
+        return new Model(managersOf, unitsOf, withoutPost);
     }
 }
