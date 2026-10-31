@@ -11,6 +11,7 @@ public static class CalendarPermissions
     public const string ViewMeetings = "Meetings.View";
     public const string CreateMeetings = "Meetings.Create";
     public const string EditMeetings = "Meetings.Edit";
+    public const string DeleteMeetings = "Meetings.Delete";
     public const string InviteHigherToMeetings = "Meetings.InviteHigher";
     public const string AccessAllMeetingPeople = "Meetings.AccessAllPeople";
 
@@ -21,7 +22,8 @@ public static class CalendarPermissions
         new(Update, "Calendar", "ویرایش تقویم‌های کاری و استثناهای آن‌ها"),
         new(ViewMeetings, "Meetings", "مشاهده جلسات در محدوده مجاز چارت سازمانی"),
         new(CreateMeetings, "Meetings", "ایجاد جلسه"),
-        new(EditMeetings, "Meetings", "ویرایش و حذف جلسه‌های مجاز"),
+        new(EditMeetings, "Meetings", "ویرایش جلسه‌های مجاز"),
+        new(DeleteMeetings, "Meetings", "حذف جلسه‌های مجاز"),
         new(InviteHigherToMeetings, "Meetings", "دعوت از بالادست‌های زنجیره سازمانی خود در جلسه"),
         new(AccessAllMeetingPeople, "Meetings", "دسترسی به همه افراد و همه جلسات سازمان در بخش جلسات")
     ];
@@ -35,6 +37,7 @@ public static class MeetingPermissions
     public const string View = CalendarPermissions.ViewMeetings;
     public const string Create = CalendarPermissions.CreateMeetings;
     public const string Edit = CalendarPermissions.EditMeetings;
+    public const string Delete = CalendarPermissions.DeleteMeetings;
     public const string InviteHigher = CalendarPermissions.InviteHigherToMeetings;
     public const string AccessAllPeople = CalendarPermissions.AccessAllMeetingPeople;
 }

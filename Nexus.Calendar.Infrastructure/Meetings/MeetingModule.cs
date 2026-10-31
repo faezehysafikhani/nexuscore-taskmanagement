@@ -76,7 +76,7 @@ public sealed class MeetingService(MeetingDbContext db, NexusCoreDbContext ident
         people.Contains(meeting.CreatedByUserId) || people.Contains(meeting.OrganizerUserId) || meeting.Participants.Any(p => people.Contains(p.UserId));
     private MeetingDto Dto(MeetingRecord m, string? notice = null) => new(m.Id, m.CreatedByUserId, m.Version,
         JsonSerializer.Deserialize<MeetingInput>(m.Content, Json)!, Editable(m) && current.HasPermission(MeetingPermissions.Edit),
-        Editable(m) && current.HasPermission(MeetingPermissions.Edit), notice);
+        Editable(m) && current.HasPermission(MeetingPermissions.Delete), notice);
 
     public async Task<Result<MeetingTaskPage>> SearchTasksAsync(string? search, int pageNumber, int pageSize, string? ids, CancellationToken ct)
     {
@@ -227,7 +227,7 @@ public sealed class MeetingService(MeetingDbContext db, NexusCoreDbContext ident
 
     public async Task<Result> DeleteAsync(Guid id, int version, CancellationToken ct)
     {
-        if (!current.HasPermission(MeetingPermissions.Edit)) return Result.Failure(Error.Forbidden());
+        if (!current.HasPermission(MeetingPermissions.Delete)) return Result.Failure(Error.Forbidden());
         var row = await db.Meetings.Include(m => m.Participants).FirstOrDefaultAsync(m => m.TenantId == current.TenantId && m.Id == id, ct);
         if (row is null) return Result.Failure(Error.NotFound("جلسه پیدا نشد."));
         var visible = await VisiblePeopleAsync(ct);
@@ -279,7 +279,7 @@ services.AddAuthorization(options =>
         group.MapPut("/{id:guid}", async (Guid id, MeetingInput input, MeetingService service, CancellationToken ct) =>
             (await service.SaveAsync(id, input, ct)).ToApiResult()).RequireAuthorization(MeetingPermissions.Edit);
         group.MapDelete("/{id:guid}", async (Guid id, int version, MeetingService service, CancellationToken ct) =>
-            (await service.DeleteAsync(id, version, ct)).ToApiResult()).RequireAuthorization(MeetingPermissions.Edit);
+            (await service.DeleteAsync(id, version, ct)).ToApiResult()).RequireAuthorization(MeetingPermissions.Delete);
     }
 }
 
