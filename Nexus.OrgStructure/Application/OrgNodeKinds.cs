@@ -6,7 +6,7 @@ namespace Nexus.OrgStructure.Application;
 /// <list type="bullet">
 /// <item><b>org</b> («سازمان») - the company itself, the one root; nobody sits in it. Not a node.</item>
 /// <item><b>unit</b> («واحد سازمانی», e.g. a deputy) - no person; may have a head (one of its direct positions).</item>
-/// <item><b>position</b> («سمت / پست سازمانی») - one or more people; only positions sit under it.</item>
+/// <item><b>position</b> («سمت / پست سازمانی») - one or more people; positions and units may sit under it (a position may head a branch of units, e.g. a CEO with deputies).</item>
 /// </list>
 /// A kind is a node type with a fixed code. The kind of a node cannot change after it is made.
 /// </summary>
@@ -40,7 +40,7 @@ public static class OrgNodeKinds
     {
         null => child is Unit or Position,
         Unit => child is Unit or Position,
-        Position => child == Position,
+        Position => child is Position or Unit,
         _ => false,
     };
 
@@ -55,6 +55,6 @@ public static class OrgNodeKinds
     [
         (null, Unit), (null, Position),
         (Unit, Unit), (Unit, Position),
-        (Position, Position),
+        (Position, Position), (Position, Unit),
     ];
 }

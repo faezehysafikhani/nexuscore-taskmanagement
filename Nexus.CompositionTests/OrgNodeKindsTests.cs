@@ -16,7 +16,9 @@ public sealed class OrgNodeKindsTests
     [InlineData("unit", "unit", true)]
     [InlineData("unit", "position", true)]
     [InlineData("position", "position", true)]
-    [InlineData("position", "unit", false)]
+    [InlineData("position", "unit", true)]
+    [InlineData("unit", "org", false)]
+    [InlineData("position", "org", false)]
     [InlineData("other", "unit", false)]
     public void CanContain_FollowsTheKindTable(string? parent, string child, bool allowed) =>
         Assert.Equal(allowed, OrgNodeKinds.CanContain(parent, child));
@@ -28,7 +30,18 @@ public sealed class OrgNodeKindsTests
         var children = new[] { OrgNodeKinds.Unit, OrgNodeKinds.Position };
         var expected = all.SelectMany(parent => children.Where(child => OrgNodeKinds.CanContain(parent, child)).Select(child => (parent, child))).ToHashSet();
         Assert.Equal(expected, OrgNodeKinds.Pairs.ToHashSet());
-        Assert.Equal(5, OrgNodeKinds.Pairs.Count);
+        Assert.Equal(6, OrgNodeKinds.Pairs.Count);
+    }
+
+    [Fact]
+    public void ABankChain_IsAllowedLevelByLevel()
+    {
+        // مجمع عمومی ← هیأت مدیره ← مدیرعامل ← معاونت ← اداره کل (positions, then units under the CEO)
+        string?[] chain = [null, OrgNodeKinds.Position, OrgNodeKinds.Position, OrgNodeKinds.Position, OrgNodeKinds.Unit, OrgNodeKinds.Unit];
+        for (var level = 1; level < chain.Length; level++)
+        {
+            Assert.True(OrgNodeKinds.CanContain(chain[level - 1], chain[level]!), $"level {level}");
+        }
     }
 
     [Fact]
