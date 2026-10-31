@@ -62,6 +62,13 @@ public sealed class HierarchyChatScope(
                 partners.UnionWith(managersOf.GetValueOrDefault(manager) ?? []);
             }
 
+            // No post (in a company of posts): only their own manager and the manager's manager.
+            if (withoutPost.Contains(userId))
+            {
+                partners.Remove(userId);
+                return partners;
+            }
+
             // Below: everyone whose managers lead back to the user, at any depth.
             var reportsOf = managersOf.Where(pair => !withoutPost.Contains(pair.Key))
                 .SelectMany(pair => pair.Value.Select(manager => (manager, report: pair.Key)))

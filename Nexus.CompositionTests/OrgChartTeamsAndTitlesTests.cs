@@ -806,6 +806,7 @@ public sealed class OrgChartTeamsAndTitlesTests
         // «یک» left his only post: his place has no position any more.
         var place = (await world.Service.GetAssignmentAsync(Tenant, one, default)).Value!;
         Assert.Null(place.PositionId);
+        Assert.Equal([two], (await world.ChatScope(on: true).GetPartnersAsync(Tenant, one, default))!);
     }
 
     [Fact]
