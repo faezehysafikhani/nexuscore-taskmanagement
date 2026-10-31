@@ -90,6 +90,14 @@ public interface IOrgStructureRepository
     /// <summary>Ends the appointment now (it stays as history); one not started yet is removed.</summary>
     void RemoveUserPosition(UserPosition userPosition);
 
+    // The simple chart: people of position nodes, and the head of each unit.
+    Task<IReadOnlyList<NodePerson>> ListNodePersonsAsync(Guid tenantId, CancellationToken cancellationToken);
+    Task AddNodePersonAsync(NodePerson person, CancellationToken cancellationToken);
+    void RemoveNodePerson(NodePerson person);
+    Task<IReadOnlyList<NodeHead>> ListNodeHeadsAsync(Guid tenantId, CancellationToken cancellationToken);
+    Task AddNodeHeadAsync(NodeHead head, CancellationToken cancellationToken);
+    void RemoveNodeHead(NodeHead head);
+
     Task<IReadOnlyList<Honorific>> ListHonorificsAsync(Guid tenantId, CancellationToken cancellationToken);
     Task<Honorific?> GetHonorificAsync(Guid tenantId, Guid id, CancellationToken cancellationToken);
     Task<bool> HonorificTitleExistsAsync(Guid tenantId, string title, Guid? excludeId, CancellationToken cancellationToken);

@@ -30,6 +30,7 @@ public static class DependencyInjection
         services.AddScoped<IOrgLinkService>(sp => sp.GetRequiredService<OrgNodeService>());
         services.AddScoped<IOrgNodeHistoryService>(sp => sp.GetRequiredService<OrgNodeService>());
         services.AddScoped<IOrgTemplateService>(sp => sp.GetRequiredService<OrgNodeService>());
+        services.AddScoped<IOrgKindsService, OrgKindsService>();
         services.AddScoped<IOrgImpactPreview, OrgImpactPreview>();
         services.AddScoped<IHonorificService, HonorificService>();
         services.AddSingleton<IPermissionCatalog, OrgStructurePermissionCatalog>();

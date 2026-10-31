@@ -121,3 +121,26 @@ public sealed class OrgChangeLogConfiguration : IEntityTypeConfiguration<OrgChan
         builder.HasIndex(x => new { x.TenantId, x.EntityId, x.AtUtc });
     }
 }
+
+public sealed class NodePersonConfiguration : IEntityTypeConfiguration<NodePerson>
+{
+    public void Configure(EntityTypeBuilder<NodePerson> builder)
+    {
+        builder.ToTable("NodePersons", OrgStructureSchema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.HasIndex(x => new { x.TenantId, x.UnitId, x.UserId }).IsUnique();
+        builder.HasIndex(x => new { x.TenantId, x.UserId });
+    }
+}
+
+public sealed class NodeHeadConfiguration : IEntityTypeConfiguration<NodeHead>
+{
+    public void Configure(EntityTypeBuilder<NodeHead> builder)
+    {
+        builder.ToTable("NodeHeads", OrgStructureSchema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.HasIndex(x => new { x.TenantId, x.UnitId }).IsUnique();
+    }
+}

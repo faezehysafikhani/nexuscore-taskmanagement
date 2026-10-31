@@ -34,6 +34,8 @@ public sealed class OrgStructureDbContext(DbContextOptions<OrgStructureDbContext
     public DbSet<StructureTemplate> StructureTemplates => Set<StructureTemplate>();
     public DbSet<StructureTemplateItem> StructureTemplateItems => Set<StructureTemplateItem>();
     public DbSet<OrgChangeLog> OrgChangeLogs => Set<OrgChangeLog>();
+    public DbSet<NodePerson> NodePersons => Set<NodePerson>();
+    public DbSet<NodeHead> NodeHeads => Set<NodeHead>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

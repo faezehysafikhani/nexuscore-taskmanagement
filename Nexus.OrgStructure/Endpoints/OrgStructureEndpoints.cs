@@ -239,6 +239,7 @@ public static class OrgStructureEndpoints
 
         // --- the dynamic structure's nodes, types, rules and impact preview
         app.MapOrgNodeEndpoints();
+        app.MapOrgKindEndpoints();
 
         return app;
     }

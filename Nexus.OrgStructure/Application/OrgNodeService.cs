@@ -261,6 +261,12 @@ public sealed partial class OrgNodeService(
                 return Task.FromResult<(Error?, object?)>((Error.Validation("جزء چارت پیدا نشد یا غیرفعال است."), null));
             }
 
+            if (typeId != unit.NodeTypeId && unit.NodeTypeId is { } currentTypeId
+                && state.NodeTypes.TryGetValue(currentTypeId, out var currentType) && OrgNodeKinds.IsKindTypeCode(currentType.Code))
+            {
+                return Task.FromResult<(Error?, object?)>((Error.Validation("نوع گره بعد از ساخت قابل تغییر نیست."), null));
+            }
+
             if (typeId != unit.NodeTypeId && RulesProblem(state, unit, unit.ParentUnitId, typeId, isNew: false) is { } ruleProblem)
             {
                 return Task.FromResult<(Error?, object?)>((ruleProblem, null));

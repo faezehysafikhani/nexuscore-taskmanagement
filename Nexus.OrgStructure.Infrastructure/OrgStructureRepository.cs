@@ -9,6 +9,22 @@ public sealed class OrgStructureRepository(OrgStructureDbContext dbContext, Time
     public async Task<IReadOnlyList<NodeType>> ListNodeTypesAsync(Guid tenantId, CancellationToken cancellationToken) =>
         await dbContext.NodeTypes.Where(x => x.TenantId == tenantId).OrderBy(x => x.SortOrder).ThenBy(x => x.Name).ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<NodePerson>> ListNodePersonsAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        await dbContext.NodePersons.Where(x => x.TenantId == tenantId).OrderBy(x => x.AddedAtUtc).ToListAsync(cancellationToken);
+
+    public async Task AddNodePersonAsync(NodePerson person, CancellationToken cancellationToken) =>
+        await dbContext.NodePersons.AddAsync(person, cancellationToken);
+
+    public void RemoveNodePerson(NodePerson person) => dbContext.NodePersons.Remove(person);
+
+    public async Task<IReadOnlyList<NodeHead>> ListNodeHeadsAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        await dbContext.NodeHeads.Where(x => x.TenantId == tenantId).ToListAsync(cancellationToken);
+
+    public async Task AddNodeHeadAsync(NodeHead head, CancellationToken cancellationToken) =>
+        await dbContext.NodeHeads.AddAsync(head, cancellationToken);
+
+    public void RemoveNodeHead(NodeHead head) => dbContext.NodeHeads.Remove(head);
+
     public async Task<IReadOnlyList<NodeTypeRule>> ListNodeTypeRulesAsync(Guid tenantId, CancellationToken cancellationToken) =>
         await dbContext.NodeTypeRules.Where(x => x.TenantId == tenantId).ToListAsync(cancellationToken);
 
