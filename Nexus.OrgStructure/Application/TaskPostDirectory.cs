@@ -173,9 +173,9 @@ public sealed class TaskPostDirectory(
     }
 
     /// <summary>
-    /// Brings stand-ins (سرپرستی) up to date: the acting post's holder sees the vacant post's tasks
-    /// as its stand-in (جانشین); a post that got a holder, or a vacant post that no longer exists,
-    /// ends its stand-in and takes the view back.
+    /// Brings stand-ins (سرپرستی) up to date: the acting post's holder sees the post's tasks as its
+    /// stand-in (جانشین). An undated stand-in ends when the post gets a holder; a dated one (also for a
+    /// post with a holder) is on from its start until its end; a post that no longer exists ends it.
     /// </summary>
     public async Task SyncActingAsync(Guid tenantId, CancellationToken cancellationToken)
     {
@@ -194,10 +194,14 @@ public sealed class TaskPostDirectory(
         var taskPosts = await repository.ListTaskPostsAsync(tenantId, null, actings.Select(a => a.VacantPostId).ToList(), cancellationToken);
         var changes = new List<TaskPersonChange>();
         var ended = new List<PostActing>();
+        var now = DateTimeOffset.UtcNow;
         foreach (var acting in actings)
         {
-            var stillVacant = posts.TryGetValue(acting.VacantPostId, out var vacant) && vacant.HolderUserId is null;
-            var desired = stillVacant ? posts.GetValueOrDefault(acting.ActingPostId)?.HolderUserId : null;
+            var exists = posts.TryGetValue(acting.VacantPostId, out var vacant);
+            var isVacant = exists && vacant!.HolderUserId is null;
+            // A dated stand-in is on in its time (the post may have a holder); an undated one while the post is vacant.
+            var on = exists && acting.IsOnAt(now, isVacant);
+            var desired = on ? posts.GetValueOrDefault(acting.ActingPostId)?.HolderUserId : null;
             if (desired != acting.AppliedUserId)
             {
                 var note = vacant is null ? "جانشین" : $"جانشین {vacant.Title} · کد {vacant.Code}";
@@ -206,7 +210,7 @@ public sealed class TaskPostDirectory(
                 acting.Applied(desired);
             }
 
-            if (!stillVacant)
+            if (!exists || acting.IsOverAt(now, isVacant))
             {
                 ended.Add(acting);
             }

@@ -254,6 +254,12 @@ public sealed class IdentityService(
         user.UpdateContactDetails(request.Username, request.PhoneNumber, request.NotifySms);
         user.SetPersonalDetails(request.Address, request.FatherName, request.BirthDate);
         user.SetAvatar(request.AvatarUrl);
+        // Every new user starts with «کاربر عادی» (when the organization has it); roles chosen on the form are set afterwards.
+        if (await repository.GetRoleByNameAsync(request.TenantId, DefaultUserRole.Name, cancellationToken) is { } defaultRole)
+        {
+            user.AssignRole(defaultRole.Id);
+        }
+
         await repository.AddUserAsync(user, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await platformService.AuditAsync("users.create", nameof(User), user.Id.ToString(), user.Username, cancellationToken);
@@ -905,9 +911,11 @@ public sealed class IdentityService(
         }
 
         if (!string.IsNullOrWhiteSpace(phoneNumber)
-            && await repository.PhoneNumberExistsAsync(tenantId, phoneNumber, exceptUserId, cancellationToken))
+            && await repository.FindPhoneNumberOwnerAsync(tenantId, phoneNumber, exceptUserId, cancellationToken) is { } owner)
         {
-            return Error.Conflict("کاربری با این شماره تلفن همراه قبلاً ثبت شده است.");
+            return Error.Conflict(string.IsNullOrWhiteSpace(owner)
+                ? "کاربری با این شماره تلفن همراه قبلاً ثبت شده است."
+                : $"این شماره تلفن همراه قبلاً برای کاربر «{owner.Trim()}» ثبت شده است.");
         }
 
         if (!string.IsNullOrWhiteSpace(email)

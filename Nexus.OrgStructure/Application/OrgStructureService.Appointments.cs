@@ -122,9 +122,12 @@ public sealed partial class OrgStructureService : IOrgAppointmentService
             return Result.Failure<AppointmentDto>(Error.Validation("فرد باید از کاربران فعال همین سازمان باشد."));
         }
 
-        if (snapshot.Assignments.FirstOrDefault(a => a.UserId == request.UserId) is not { } place || place.CompanyId != seat.CompanyId)
+        var place = snapshot.Assignments.FirstOrDefault(a => a.UserId == request.UserId);
+        if (place is null || place.CompanyId != seat.CompanyId)
         {
-            return Result.Failure<AppointmentDto>(Error.Validation("فرد اول باید در شرکت همین پست جایگاه داشته باشد."));
+            return Result.Failure<AppointmentDto>(Error.Validation(place is null
+                ? "این فرد هنوز در این شرکت جایگاه ندارد؛ اول یک جایگاه فعلی (از امروز) به او بدهید، بعد انتصاب آینده را ثبت کنید."
+                : "این فرد در شرکت دیگری جایگاه دارد؛ اول جایگاهش را به همین شرکت ببرید، بعد او را در این پست بگذارید."));
         }
 
         if (snapshot.Positions.GetValueOrDefault(seat.PositionId) is not { IsActive: true })

@@ -442,7 +442,29 @@ public sealed class PostActing : AuditableEntity<Guid>
     public Guid ActingPostId { get; private set; }
     public Guid? AppliedUserId { get; private set; }
 
+    /// <summary>
+    /// A stand-in for a set time (from StartDate, null: now, until EndDate): also while the post has
+    /// a holder (leave, a mission). Without an end it lasts while the post is vacant.
+    /// </summary>
+    public DateTimeOffset? StartDate { get; private set; }
+    public DateTimeOffset? EndDate { get; private set; }
+
+    public bool IsDated => EndDate is not null;
+
+    /// <summary>Whether it is on at <paramref name="at"/>: a dated one in its time, else while the post is vacant.</summary>
+    public bool IsOnAt(DateTimeOffset at, bool postVacant) =>
+        IsDated ? (StartDate is not { } start || start <= at) && at < EndDate!.Value : postVacant;
+
+    /// <summary>Whether it is over: a dated one after its end, else once the post has a holder.</summary>
+    public bool IsOverAt(DateTimeOffset at, bool postVacant) => IsDated ? at >= EndDate!.Value : !postVacant;
+
     public void ActBy(Guid actingPostId) => ActingPostId = actingPostId;
+
+    public void SetPeriod(DateTimeOffset? start, DateTimeOffset? end)
+    {
+        StartDate = start;
+        EndDate = end;
+    }
 
     public void Applied(Guid? userId) => AppliedUserId = userId;
 }

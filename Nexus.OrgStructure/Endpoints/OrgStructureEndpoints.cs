@@ -150,6 +150,10 @@ public static class OrgStructureEndpoints
                 InTenant(user, tenant => service.GetInboxAsync(tenant, ct)))
             .RequireAuthorization();
 
+        group.MapGet("/substitution/{postId:guid}", (Guid postId, ICurrentUserContext user, ISubstitutionService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.GetPostAsync(tenant, postId, ct)))
+            .RequireAuthorization();
+
         group.MapPut("/substitution/{postId:guid}", (Guid postId, SetActingRequest request, ICurrentUserContext user, ISubstitutionService service, CancellationToken ct) =>
                 InTenant(user, tenant => service.SetActingAsync(tenant, postId, request, ct)))
             .RequireAuthorization();

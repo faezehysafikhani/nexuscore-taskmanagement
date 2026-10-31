@@ -20,7 +20,8 @@ public sealed class DirectConversationService(
     IChatDbContext db,
     ICurrentUserContext currentUser,
     IUserDirectory userDirectory,
-    IUserReachScope? reachScope = null)
+    IUserReachScope? reachScope = null,
+    IChatPartnerScope? partnerScope = null)
 {
     public const int MaxTextLength = 4000;
 
@@ -53,6 +54,21 @@ public sealed class DirectConversationService(
         }
 
         return Result.Success((me, other));
+    }
+
+    /// <summary>
+    /// Whether the signed-in user may send to this person (see IChatPartnerScope): either of the two
+    /// may chat with the other, so whoever is written to from above can always answer.
+    /// </summary>
+    public async Task<bool> MayChatWithAsync(Guid otherUserId, CancellationToken cancellationToken)
+    {
+        if (partnerScope is null || currentUser.UserId is not { } meId || currentUser.TenantId is not { } tenantId)
+        {
+            return true;
+        }
+
+        return await partnerScope.GetPartnersAsync(tenantId, meId, cancellationToken) is not { } mine || mine.Contains(otherUserId)
+            || await partnerScope.GetPartnersAsync(tenantId, otherUserId, cancellationToken) is not { } theirs || theirs.Contains(meId);
     }
 
     /// <summary>Whether the signed-in user may reach all of these people (see IUserReachScope).</summary>
@@ -121,7 +137,8 @@ public sealed class DirectConversationService(
 public sealed class GetChatDirectoryQueryHandler(
     ICurrentUserContext currentUser,
     IUserDirectory userDirectory,
-    IUserReachScope? reachScope = null)
+    IUserReachScope? reachScope = null,
+    IChatPartnerScope? partnerScope = null)
     : IRequestHandler<GetChatDirectoryQuery, Result<List<ChatContactDto>>>
 {
     public async Task<Result<List<ChatContactDto>>> Handle(GetChatDirectoryQuery request, CancellationToken cancellationToken)
@@ -134,8 +151,10 @@ public sealed class GetChatDirectoryQueryHandler(
         var users = await userDirectory.GetActiveUsersInTenantAsync(tenantId, cancellationToken);
         // Kept to one's own company: only its people are listed.
         var reach = reachScope is null ? null : await reachScope.GetReachAsync(tenantId, meId, cancellationToken);
+        // And to one's hierarchy (see IChatPartnerScope), where the product limits it.
+        var partners = partnerScope is null ? null : await partnerScope.GetPartnersAsync(tenantId, meId, cancellationToken);
         return Result.Success(users
-            .Where(user => user.Id != meId && (reach is null || reach.Contains(user.Id)))
+            .Where(user => user.Id != meId && (reach is null || reach.Contains(user.Id)) && (partners is null || partners.Contains(user.Id)))
             .Select(user => new ChatContactDto(user.Id, user.DisplayName, user.AvatarUrl))
             .ToList());
     }
@@ -249,6 +268,11 @@ public sealed class SendDirectMessageCommandHandler(
         if (pair.IsFailure)
         {
             return Result.Failure<DirectMessageDto>(pair.Error);
+        }
+
+        if (!await conversations.MayChatWithAsync(request.OtherUserId, cancellationToken))
+        {
+            return Result.Failure<DirectMessageDto>(Error.Forbidden("گفتگو فقط با هم‌رده‌ها، زیرمجموعه، مدیر خود و مدیرِ مدیر ممکن است."));
         }
 
         var (me, other) = pair.Value;

@@ -62,6 +62,15 @@ public sealed class IdentityRepository(
             cancellationToken);
     }
 
+    public Task<string?> FindPhoneNumberOwnerAsync(Guid tenantId, string phoneNumber, Guid? exceptUserId, CancellationToken cancellationToken)
+    {
+        var value = PhoneNumber.Normalize(phoneNumber) ?? phoneNumber.Trim();
+        return dbContext.Users
+            .Where(user => user.TenantId == tenantId && user.PhoneNumber == value && (exceptUserId == null || user.Id != exceptUserId))
+            .Select(user => user.DisplayName)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
     public Task<bool> UsernameExistsAsync(Guid tenantId, string username, Guid? exceptUserId, CancellationToken cancellationToken)
     {
         var value = username.Trim();

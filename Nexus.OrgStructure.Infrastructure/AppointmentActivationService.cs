@@ -9,7 +9,7 @@ namespace Nexus.OrgStructure.Infrastructure;
 /// With tasks given to posts: an appointment from a later day (or one ending on a later day) changes
 /// who holds the post when that day comes. Every few minutes this moves the open tasks of the posts
 /// whose appointments started or ended since the last look to their holders then, as a change made
-/// at once does. Does nothing when tasks are not given to posts; a failure is logged and never stops the host.
+/// at once does; stand-ins for a set time start and end the same way. Does nothing when tasks are not given to posts; a failure is logged and never stops the host.
 /// </summary>
 public sealed class AppointmentActivationService(IServiceScopeFactory scopes, ILogger<AppointmentActivationService> logger, TimeProvider? clock = null)
     : BackgroundService
@@ -58,6 +58,11 @@ public sealed class AppointmentActivationService(IServiceScopeFactory scopes, IL
             if (posts.Count > 0)
             {
                 await directory.SyncHoldersAsync(tenantId, posts, cancellationToken);
+            }
+            else
+            {
+                // Stand-ins for a set time start and end on their own days.
+                await directory.SyncActingAsync(tenantId, cancellationToken);
             }
         }
     }

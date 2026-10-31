@@ -22,13 +22,21 @@ public sealed record VacantPostDto(
     string Place,
     ActingPostDto? Acting,
     IReadOnlyList<SubstitutionTaskDto> Tasks,
-    IReadOnlyList<ActingPostDto> Candidates);
+    IReadOnlyList<ActingPostDto> Candidates,
+    Guid? HolderUserId = null,
+    string? HolderName = null,
+    DateTimeOffset? ActingFrom = null,
+    DateTimeOffset? ActingUntil = null);
 
 public sealed record ActingPostDto(Guid PostId, string Title, string Code, string Place, Guid? HolderUserId, string? HolderName);
 
 public sealed record SubstitutionTaskDto(Guid TaskId, string Title, DateOnly DueDate, string Status);
 
-public sealed record SetActingRequest(Guid ActingPostId);
+/// <summary>
+/// StartDate/EndDate: a stand-in for a set time (EndDate required for a post that has a holder);
+/// without them it lasts while the post is vacant.
+/// </summary>
+public sealed record SetActingRequest(Guid ActingPostId, DateTimeOffset? StartDate = null, DateTimeOffset? EndDate = null);
 
 /// <summary>
 /// The substitution inbox (کارتابل جانشینی), where tasks are given to posts: the open tasks of
@@ -41,6 +49,9 @@ public interface ISubstitutionService
     Task<Result<SubstitutionInboxDto>> GetInboxAsync(Guid tenantId, CancellationToken cancellationToken);
     Task<Result> SetActingAsync(Guid tenantId, Guid vacantPostId, SetActingRequest request, CancellationToken cancellationToken);
     Task<Result> ClearActingAsync(Guid tenantId, Guid vacantPostId, CancellationToken cancellationToken);
+
+    /// <summary>One post (vacant or not) for «تعیین جانشین»: its stand-in and the posts that may stand in.</summary>
+    Task<Result<VacantPostDto>> GetPostAsync(Guid tenantId, Guid postId, CancellationToken cancellationToken);
 }
 
 public sealed class SubstitutionService(
@@ -62,8 +73,11 @@ public sealed class SubstitutionService(
         }
 
         var state = await LoadAsync(tenantId, cancellationToken);
-        var rows = await repository.ListTaskPostsAsync(tenantId, null, state.Vacant.Select(p => p.PostId).ToList(), cancellationToken);
-        var visible = state.Vacant.Where(post => canManageAll || state.SuperiorsOf(post.PostId).Contains(me)).ToList();
+        // Vacant posts, and posts with a holder that have a stand-in for a set time.
+        var listed = state.Vacant.Concat(state.Posts.Values.Where(post => post.HolderUserId is not null
+            && state.Actings.Any(a => a.VacantPostId == post.PostId))).ToList();
+        var rows = await repository.ListTaskPostsAsync(tenantId, null, listed.Select(p => p.PostId).ToList(), cancellationToken);
+        var visible = listed.Where(post => canManageAll || state.SuperiorsOf(post.PostId).Contains(me)).ToList();
         var taskIds = rows.Where(row => visible.Any(post => post.PostId == row.PostId)).Select(row => row.TaskId).Distinct().ToList();
         var summaries = taskIds.Count == 0 || services.GetService<ITaskPeopleUpdater>() is not { } updater
             ? []
@@ -75,45 +89,87 @@ public sealed class SubstitutionService(
             post.HolderUserId is { } holder ? names.GetValueOrDefault(holder) : null);
 
         var inbox = visible
-            .Select(post =>
-            {
-                var tasks = rows.Where(row => row.PostId == post.PostId).Select(row => row.TaskId).Distinct()
-                    .Where(summaries.ContainsKey).Select(id => summaries[id])
-                    .OrderBy(task => task.DueDate)
-                    .Select(task => new SubstitutionTaskDto(task.TaskId, task.Title, task.DueDate, task.Status))
-                    .ToList();
-                var acting = state.Actings.FirstOrDefault(a => a.VacantPostId == post.PostId);
-                var company = state.CompanyOf(post.PostId);
-                var above = state.SuperiorsOf(post.PostId).ToHashSet();
-                var candidates = state.Posts.Values
-                    .Where(other => other.HolderUserId is { } holder && !above.Contains(holder)
-                        && other.PostId != post.PostId && state.CompanyOf(other.PostId) == company)
-                    .OrderBy(other => other.Place).ThenBy(other => other.Title)
-                    .Select(Ref)
-                    .ToList();
-                return new VacantPostDto(
-                    post.PostId, post.Title, post.Code, post.Place,
-                    acting is not null && state.Posts.TryGetValue(acting.ActingPostId, out var by) ? Ref(by) : null,
-                    tasks, candidates);
-            })
+            .Select(post => ToDto(state, post, rows.Where(row => row.PostId == post.PostId).Select(row => row.TaskId).Distinct()
+                .Where(summaries.ContainsKey).Select(id => summaries[id])
+                .OrderBy(task => task.DueDate)
+                .Select(task => new SubstitutionTaskDto(task.TaskId, task.Title, task.DueDate, task.Status))
+                .ToList(), Ref))
             .Where(post => post.Tasks.Count > 0 || post.Acting is not null)
             .OrderBy(post => post.Place).ThenBy(post => post.Title)
             .ToList();
         return Result.Success(new SubstitutionInboxDto(true, canManageAll, inbox));
     }
 
+    public async Task<Result<VacantPostDto>> GetPostAsync(Guid tenantId, Guid postId, CancellationToken cancellationToken)
+    {
+        var state = await LoadAsync(tenantId, cancellationToken);
+        if (CheckRights(state, postId, dated: true) is { } refused)
+        {
+            return Result.Failure<VacantPostDto>(refused.Error);
+        }
+
+        var names = await NamesAsync(state.Posts.Values.Select(p => p.HolderUserId), cancellationToken);
+        ActingPostDto Ref(WorkPost post) => new(
+            post.PostId, post.Title, post.Code, post.Place, post.HolderUserId,
+            post.HolderUserId is { } holder ? names.GetValueOrDefault(holder) : null);
+        return Result.Success(ToDto(state, state.Posts[postId], [], Ref));
+    }
+
+    /// <summary>A post with its stand-in and the posts that may stand in for it.</summary>
+    private static VacantPostDto ToDto(State state, WorkPost post, IReadOnlyList<SubstitutionTaskDto> tasks, Func<WorkPost, ActingPostDto> toRef)
+    {
+        var acting = state.Actings.FirstOrDefault(a => a.VacantPostId == post.PostId);
+        var candidates = state.Posts.Values
+            .Where(other => state.MayStandIn(post.PostId, other))
+            .OrderBy(other => other.Place).ThenBy(other => other.Title)
+            .Select(toRef)
+            .ToList();
+        var holder = post.HolderUserId is not null ? toRef(post).HolderName : null;
+        return new VacantPostDto(
+            post.PostId, post.Title, post.Code, post.Place,
+            acting is not null && state.Posts.TryGetValue(acting.ActingPostId, out var by) ? toRef(by) : null,
+            tasks, candidates, post.HolderUserId, holder, acting?.StartDate, acting?.EndDate);
+    }
+
     public async Task<Result> SetActingAsync(Guid tenantId, Guid vacantPostId, SetActingRequest request, CancellationToken cancellationToken)
     {
         var state = await LoadAsync(tenantId, cancellationToken);
-        if (CheckRights(state, vacantPostId) is { } refused)
+        var dated = request.EndDate is not null;
+        if (CheckRights(state, vacantPostId, dated) is { } refused)
         {
             return refused;
+        }
+
+        if (request.StartDate is { } from && request.EndDate is { } until && until <= from)
+        {
+            return Result.Failure(Error.Validation("پایان جانشینی باید بعد از شروع آن باشد."));
+        }
+
+        if (request.EndDate is { } end && end <= DateTimeOffset.UtcNow)
+        {
+            return Result.Failure(Error.Validation("پایان جانشینی نباید گذشته باشد."));
+        }
+
+        if (request.StartDate is not null && !dated)
+        {
+            return Result.Failure(Error.Validation("برای جانشینی از یک تاریخ، تاریخ پایان را هم بدهید."));
         }
 
         if (!state.Posts.TryGetValue(request.ActingPostId, out var acting) || acting.HolderUserId is not { } actingHolder
             || request.ActingPostId == vacantPostId || state.CompanyOf(request.ActingPostId) != state.CompanyOf(vacantPostId))
         {
             return Result.Failure(Error.Validation("پستی که سرپرست می‌شود باید پست دیگری از همین شرکت باشد که کسی آن را دارد."));
+        }
+
+        if (state.Posts.GetValueOrDefault(vacantPostId)?.HolderUserId == actingHolder)
+        {
+            return Result.Failure(Error.Validation("دارنده‌ی خود این پست نمی‌تواند جانشین آن باشد."));
+        }
+
+        // Only a post of the same unit (or a unit below it) may stand in.
+        if (!state.InPlaceOf(vacantPostId, request.ActingPostId))
+        {
+            return Result.Failure(Error.Validation("جانشین باید از همین واحد (یا زیرمجموعه‌ی آن) باشد."));
         }
 
         // Not one of the managers above the vacant post: a stand-in is someone at its level or below.
@@ -125,12 +181,15 @@ public sealed class SubstitutionService(
         var current = state.Actings.FirstOrDefault(a => a.VacantPostId == vacantPostId);
         if (current is null)
         {
-            await repository.AddPostActingAsync(new PostActing(Guid.NewGuid(), tenantId, vacantPostId, request.ActingPostId), cancellationToken);
+            current = new PostActing(Guid.NewGuid(), tenantId, vacantPostId, request.ActingPostId);
+            await repository.AddPostActingAsync(current, cancellationToken);
         }
         else
         {
             current.ActBy(request.ActingPostId);
         }
+
+        current.SetPeriod(dated ? request.StartDate : null, request.EndDate);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await taskPosts.SyncActingAsync(tenantId, cancellationToken);
@@ -140,7 +199,7 @@ public sealed class SubstitutionService(
     public async Task<Result> ClearActingAsync(Guid tenantId, Guid vacantPostId, CancellationToken cancellationToken)
     {
         var state = await LoadAsync(tenantId, cancellationToken);
-        if (CheckRights(state, vacantPostId) is { } refused)
+        if (CheckRights(state, vacantPostId, dated: true) is { } refused)
         {
             return refused;
         }
@@ -150,25 +209,29 @@ public sealed class SubstitutionService(
             return Result.Failure(Error.NotFound("کسی سرپرست این پست نیست."));
         }
 
-        // Take the view back first, then forget the stand-in.
-        acting.ActBy(vacantPostId);
+        // Ended now: the sync takes the view back and forgets the stand-in (the post may have a holder).
+        acting.SetPeriod(null, DateTimeOffset.UtcNow.AddTicks(-1));
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await taskPosts.SyncActingAsync(tenantId, cancellationToken);
-        repository.RemovePostActing(acting);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }
 
-    private Result? CheckRights(State state, Guid vacantPostId)
+    /// <summary>Who may set a post's stand-in. A post with a holder only for a set time (<paramref name="dated"/>).</summary>
+    private Result? CheckRights(State state, Guid vacantPostId, bool dated = false)
     {
         if (!taskPosts.Enabled)
         {
             return Result.Failure(Error.Validation("در اینجا وظیفه به پست داده نمی‌شود."));
         }
 
-        if (state.Vacant.All(post => post.PostId != vacantPostId))
+        if (!state.Posts.ContainsKey(vacantPostId))
         {
-            return Result.Failure(Error.Validation("این پست خالی نیست."));
+            return Result.Failure(Error.NotFound("پست پیدا نشد."));
+        }
+
+        if (!dated && state.Vacant.All(post => post.PostId != vacantPostId))
+        {
+            return Result.Failure(Error.Validation("این پست مسئول دارد؛ برای جانشینی‌اش تاریخ شروع و پایان بدهید."));
         }
 
         return currentUser.HasPermission(OrgStructurePermissions.ManageSubstitution)
@@ -230,6 +293,33 @@ public sealed class SubstitutionService(
         public IEnumerable<WorkPost> Vacant => Posts.Values.Where(post => post.HolderUserId is null);
 
         public Guid? CompanyOf(Guid postId) => Seats.GetValueOrDefault(postId)?.CompanyId;
+
+        /// <summary>
+        /// Whether <paramref name="other"/> may stand in for the post: someone holds it, it is in the
+        /// post's unit or below (a post directly in the company: the company's), and its holder is
+        /// neither above the post nor the post's own holder.
+        /// </summary>
+        public bool MayStandIn(Guid postId, WorkPost other)
+        {
+            if (other.HolderUserId is not { } holder || other.PostId == postId || CompanyOf(other.PostId) != CompanyOf(postId)
+                || Posts.GetValueOrDefault(postId)?.HolderUserId == holder)
+            {
+                return false;
+            }
+
+            return InPlaceOf(postId, other.PostId) && !SuperiorsOf(postId).Contains(holder);
+        }
+
+        /// <summary>Whether the other post is in the post's unit or a unit below it (directly in the company: anywhere in it).</summary>
+        public bool InPlaceOf(Guid postId, Guid otherPostId)
+        {
+            if (Seats.GetValueOrDefault(postId) is not { } seat || Seats.GetValueOrDefault(otherPostId) is not { } other)
+            {
+                return false;
+            }
+
+            return seat.UnitId is not { } unitId || (other.UnitId is { } otherUnit && Resolver.SubtreeOf(unitId).Contains(otherUnit));
+        }
 
         /// <summary>
         /// The managers above a post: the holder of the nearest post above it that someone holds,

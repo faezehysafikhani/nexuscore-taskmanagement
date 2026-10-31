@@ -28,6 +28,12 @@ public sealed class OrgStructureOptions
     /// Holders of OrgStructurePermissions.AllCompanies are not limited. Off unless the product turns it on.
     /// </summary>
     public bool LimitToOwnCompany { get; set; }
+
+    /// <summary>
+    /// Whether direct chat is kept to one's hierarchy (<see cref="HierarchyChatScope"/>): the people
+    /// at one's level, below, one's manager and the manager's manager. Off unless the product turns it on.
+    /// </summary>
+    public bool LimitChatToHierarchy { get; set; }
 }
 
 /// <summary>

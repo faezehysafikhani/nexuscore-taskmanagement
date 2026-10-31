@@ -42,6 +42,8 @@ public static class DependencyInjection
         // Everyone kept to their own company - when OrgStructure:LimitToOwnCompany is on.
         services.AddScoped<CompanyReachScope>();
         services.AddScoped<IUserReachScope>(provider => provider.GetRequiredService<CompanyReachScope>());
+        // Direct chat kept to one's hierarchy - when OrgStructure:LimitChatToHierarchy is on.
+        services.AddScoped<IChatPartnerScope, HierarchyChatScope>();
         // Tasks given to posts - when OrgStructure:AssignTasksToPosts is on (wins over the Core's default like the scopes above).
         services.AddScoped<TaskPostDirectory>();
         services.AddScoped<ITaskPosts>(provider => provider.GetRequiredService<TaskPostDirectory>());

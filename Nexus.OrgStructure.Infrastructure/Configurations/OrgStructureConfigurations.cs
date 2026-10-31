@@ -95,6 +95,7 @@ public sealed class PostActingConfiguration : IEntityTypeConfiguration<PostActin
         builder.Property(x => x.Id).ValueGeneratedNever();
         builder.HasIndex(x => new { x.TenantId, x.VacantPostId }).IsUnique();
         builder.HasIndex(x => x.ActingPostId);
+        builder.Ignore(x => x.IsDated);
     }
 }
 
