@@ -105,6 +105,17 @@ public sealed class SessionRepository(NexusCoreDbContext dbContext) : ISessionRe
             return false;
         }
 
+        // A session whose idle or absolute limit already passed ended by itself: that stays its
+        // reason (and its end time), whoever "closes" it afterwards. Only a live session ends for
+        // the reason given.
+        if (session.EndReasonAt(nowUtc) is { } natural && session.RevokedAtUtc is null)
+        {
+            var endedAt = session.AbsoluteExpiresAtUtc < session.IdleExpiresAtUtc ? session.AbsoluteExpiresAtUtc : session.IdleExpiresAtUtc;
+            session.Revoke(natural, endedAt, null);
+            await RevokeTokensOfAsync([sessionId], nowUtc, cancellationToken);
+            return false;
+        }
+
         var wasAlive = session.IsActiveAt(nowUtc);
         session.Revoke(reason, nowUtc, byUserId);
         await RevokeTokensOfAsync([sessionId], nowUtc, cancellationToken);
@@ -132,7 +143,16 @@ public sealed class SessionRepository(NexusCoreDbContext dbContext) : ISessionRe
         var ended = new List<Guid>();
         foreach (var session in sessions)
         {
-            session.Revoke(reason, nowUtc, byUserId);
+            // Sessions that already ended by themselves keep their own reason (see RevokeSessionAsync).
+            if (session.EndReasonAt(nowUtc) is { } natural)
+            {
+                session.Revoke(natural, session.AbsoluteExpiresAtUtc < session.IdleExpiresAtUtc ? session.AbsoluteExpiresAtUtc : session.IdleExpiresAtUtc, null);
+            }
+            else
+            {
+                session.Revoke(reason, nowUtc, byUserId);
+            }
+
             ended.Add(session.Id);
         }
 
