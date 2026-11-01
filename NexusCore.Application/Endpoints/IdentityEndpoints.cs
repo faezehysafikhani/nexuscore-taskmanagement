@@ -7,6 +7,7 @@ using NexusCore.Application.Identity.Interfaces;
 using NexusCore.Application.Identity.Permissions;
 using NexusCore.Application.Identity.Security;
 using NexusCore.Application.Identity.Services;
+using NexusCore.Application.Identity.Sessions;
 using NexusCore.Application.Ldap;
 using NexusCore.Application.Messaging;
 using NexusCore.Application.Platform.Dtos;
@@ -46,7 +47,7 @@ public static class IdentityEndpoints
             {
                 var token = SessionCookies.ReadRefreshToken(http, session.Value, request?.RefreshToken);
                 var result = await identityService.RefreshTokenAsync(new RefreshTokenRequest(token), cancellationToken);
-                if (result.IsFailure && result.Error.Code == "unauthorized")
+                if (result.IsFailure && (result.Error.Code == "unauthorized" || result.Error.Code.StartsWith("session.", StringComparison.Ordinal)))
                 {
                     // A refresh token that no longer works must not stay in the browser.
                     SessionCookies.Clear(http, session.Value);
@@ -73,6 +74,78 @@ public static class IdentityEndpoints
             .RequireRateLimiting(NexusRateLimitPolicies.Auth)
             .WithName("Logout")
             .WithSummary("Sign out: the refresh token stops working at once");
+
+        // Step 2 of a sign-in that reached the concurrent-session limit: the ticket (valid two
+        // minutes, once) and the sessions the user chose to close.
+        auth.MapPost("/login/complete", async (CompleteLoginRequest request, HttpContext http, IIdentityService identityService, IOptions<SignInSessionOptions> session, CancellationToken cancellationToken) =>
+            {
+                var result = await identityService.CompleteLoginAsync(request, cancellationToken);
+                return result.IsSuccess ? WithSessionCookie(http, session.Value, result).ToApiResult() : result.ToApiResult();
+            })
+            .AllowAnonymous()
+            .RequireRateLimiting(NexusRateLimitPolicies.Auth)
+            .WithName("CompleteLogin");
+
+        // --- Sessions of the signed-in user ---------------------------------------------------
+
+        auth.MapGet("/sessions", async (ISessionService sessions, CancellationToken cancellationToken) =>
+                (await sessions.ListMineAsync(cancellationToken)).ToApiResult())
+            .RequireAuthorization()
+            .WithName("ListMySessions")
+            .WithSummary("Your active sessions and the ones that ended recently, with the current one marked");
+
+        auth.MapGet("/sessions/current", async (ISessionService sessions, CancellationToken cancellationToken) =>
+                (await sessions.GetCurrentStatusAsync(cancellationToken)).ToApiResult())
+            .RequireAuthorization()
+            .WithName("GetCurrentSession")
+            .WithSummary("Seconds left before this session ends from inactivity and in all (never counts as activity)");
+
+        auth.MapPost("/sessions/current/activity", async (ISessionService sessions, CancellationToken cancellationToken) =>
+                (await sessions.RecordActivityAsync(cancellationToken)).ToApiResult())
+            .RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
+            .WithName("KeepSessionAlive")
+            .WithSummary("'Stay signed in': real activity; resets the idle clock");
+
+        auth.MapDelete("/sessions/{sessionId:guid}", async (Guid sessionId, HttpContext http, ISessionService sessions, ICurrentUserContext currentUser, IOptions<SignInSessionOptions> session, CancellationToken cancellationToken) =>
+            {
+                var closesCurrent = currentUser.SessionId == sessionId;
+                var result = await sessions.RevokeMineAsync(sessionId, cancellationToken);
+                if (result.IsSuccess && closesCurrent)
+                {
+                    SessionCookies.Clear(http, session.Value);
+                }
+
+                return result.ToApiResult();
+            })
+            .RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
+            .WithName("RevokeMySession")
+            .WithSummary("Close one of your sessions (another user's session answers 404)");
+
+        auth.MapPost("/sessions/revoke-others", async (ISessionService sessions, CancellationToken cancellationToken) =>
+                (await sessions.RevokeMyOthersAsync(cancellationToken)).ToApiResult())
+            .RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
+            .WithName("RevokeMyOtherSessions");
+
+        auth.MapPost("/logout-all", async (HttpContext http, ISessionService sessions, IOptions<SignInSessionOptions> session, CancellationToken cancellationToken) =>
+            {
+                var result = await sessions.LogoutAllAsync(cancellationToken);
+                SessionCookies.Clear(http, session.Value);
+                return result.ToApiResult();
+            })
+            .RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
+            .WithName("LogoutEverywhere")
+            .WithSummary("Sign out of every session, this one included");
+
+        auth.MapPut("/me/session-preferences", async (UpdateSessionPreferencesRequest request, ISessionService sessions, CancellationToken cancellationToken) =>
+                (await sessions.UpdateMyPreferencesAsync(request, cancellationToken)).ToApiResult())
+            .RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
+            .WithName("UpdateMySessionPreferences")
+            .WithSummary("How many sessions you want open at once (up to the organization's limit) and whether to be told of every sign-in by SMS");
 
         auth.MapGet("/me", async (ICurrentUserContext currentUser, IIdentityService identityService, CancellationToken cancellationToken) =>
             {
@@ -193,6 +266,42 @@ public static class IdentityEndpoints
             .WithSummary("Enable or disable a user (not the built-in system administrator, not yourself)");
 
         // Access of one user: every permission and where it comes from (direct, role, group).
+        // Sessions of other users (two permissions: looking, and closing).
+        users.MapGet("/{userId:guid}/sessions", async (Guid userId, ISessionService sessions, CancellationToken cancellationToken) =>
+                (await sessions.ListForUserAsync(userId, cancellationToken)).ToApiResult())
+            .RequireAuthorization(IdentityPermissions.SessionsView);
+
+        users.MapDelete("/{userId:guid}/sessions/{sessionId:guid}", async (Guid userId, Guid sessionId, ISessionService sessions, CancellationToken cancellationToken) =>
+                (await sessions.RevokeUserSessionAsync(userId, sessionId, cancellationToken)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
+            .RequireAuthorization(IdentityPermissions.SessionsRevoke);
+
+        users.MapDelete("/{userId:guid}/sessions", async (Guid userId, ISessionService sessions, CancellationToken cancellationToken) =>
+                (await sessions.RevokeUserSessionsAsync(userId, cancellationToken)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
+            .RequireAuthorization(IdentityPermissions.SessionsRevoke);
+
+        var sessionAdmin = app.MapGroup("/api/identity/sessions")
+            .WithTags("Sessions")
+            .RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi);
+
+        // The emergency button: every session of the organization except the caller's own. Needs
+        // the caller's password and a reason, and is written to the audit log.
+        sessionAdmin.MapPost("/revoke-all", async (RevokeAllSessionsRequest request, ISessionService sessions, CancellationToken cancellationToken) =>
+                (await sessions.RevokeAllInOrganizationAsync(request, cancellationToken)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
+            .RequireAuthorization(IdentityPermissions.SessionsRevokeAll);
+
+        sessionAdmin.MapGet("/policy", async (Guid? tenantId, ISessionService sessions, CancellationToken cancellationToken) =>
+                (await sessions.GetPolicySettingsAsync(tenantId, cancellationToken)).ToApiResult())
+            .RequireAuthorization(IdentityPermissions.SettingsView);
+
+        sessionAdmin.MapPut("/policy", async (Guid? tenantId, SessionPolicySettingsDto request, ISessionService sessions, CancellationToken cancellationToken) =>
+                (await sessions.UpdatePolicySettingsAsync(tenantId, request, cancellationToken)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
+            .RequireAuthorization(IdentityPermissions.SettingsUpdate);
+
         users.MapGet("/{userId:guid}/permissions", async (Guid userId, IIdentityService identityService, CancellationToken cancellationToken) =>
                 (await identityService.GetUserAccessAsync(userId, cancellationToken)).ToApiResult())
             .RequireAuthorization(IdentityPermissions.UsersView);
@@ -413,12 +522,12 @@ public static class IdentityEndpoints
     private static NexusCore.SharedKernel.Results.Result<AuthResponse> WithSessionCookie(
         HttpContext http, SignInSessionOptions options, NexusCore.SharedKernel.Results.Result<AuthResponse> result, bool forceCookie = false)
     {
-        if (!(forceCookie || SessionCookies.WantsCookie(http, options)) || result.Value is not { } response)
+        // No token is issued while the sign-in waits for the user to pick a session to close.
+        if (!(forceCookie || SessionCookies.WantsCookie(http, options)) || result.Value is not { } response || response.SessionLimit is not null)
         {
             return result;
         }
 
-        var expires = response.RefreshTokenExpiresAtUtc ?? DateTimeOffset.UtcNow.AddDays(Math.Max(1, options.RefreshTokenDays));
-        return NexusCore.SharedKernel.Results.Result.Success(SessionCookies.Attach(http, options, response, expires));
+        return NexusCore.SharedKernel.Results.Result.Success(SessionCookies.Attach(http, options, response));
     }
 }

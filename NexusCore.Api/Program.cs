@@ -200,9 +200,9 @@ app.MapChatEndpoints();
 app.MapTicketEndpoints();
 app.MapNotificationEndpoints();
 app.MapEventEndpoints();
-app.MapHub<ChatHub>("/hubs/chat")
+app.MapHub<ChatHub>("/hubs/chat", options => options.CloseOnAuthenticationExpiration = true)
     .RequireRateLimiting(NexusRateLimitPolicies.Realtime);
-app.MapHub<NotificationHub>("/hubs/notifications")
+app.MapHub<NotificationHub>("/hubs/notifications", options => options.CloseOnAuthenticationExpiration = true)
     .RequireRateLimiting(NexusRateLimitPolicies.Realtime);
 
 app.MapGet("/", () => Results.Redirect("/swagger")).ExcludeFromDescription();

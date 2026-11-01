@@ -51,6 +51,9 @@ public sealed class DefaultDataSeeder(
         await ModuleSchemaInitializer.EnsureColumnAsync(dbContext, "identity.Users", "BirthDate",
             "ALTER TABLE [identity].[Users] ADD [BirthDate] date NULL", null, cancellationToken);
 
+        // Sessions (db/upgrade-sessions.sql): their tables, and the columns they added.
+        await SessionSchema.EnsureAsync(dbContext, cancellationToken);
+
         if (!await dbContext.Tenants.AnyAsync(cancellationToken))
         {
             await dbContext.Tenants.AddAsync(new Tenant(DefaultTenantId, "Default Organization", "default"), cancellationToken);

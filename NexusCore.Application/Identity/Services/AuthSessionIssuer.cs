@@ -1,7 +1,6 @@
 using NexusCore.Application.Identity.Dtos;
-using Microsoft.Extensions.Options;
 using NexusCore.Application.Identity.Interfaces;
-using NexusCore.Application.Identity.Options;
+using NexusCore.Application.Identity.Sessions;
 using NexusCore.Application.Platform.Interfaces;
 using NexusCore.Application.Security;
 using NexusCore.Domain.Identity;
@@ -21,26 +20,41 @@ public sealed class AuthSessionIssuer(
     IUnitOfWork unitOfWork,
     IPlatformService platformService,
     ICurrentUserContext currentUser,
-    IOptions<SignInSessionOptions> sessionOptions)
+    ISessionService sessionService)
 {
-    public async Task<AuthResponse> IssueAsync(User user, CancellationToken cancellationToken)
+    /// <summary>
+    /// Starts a session for the user and hands out its tokens. At the concurrent-session limit
+    /// no token is issued: the answer carries a ticket and the user's sessions instead, and the
+    /// sign-in is completed through <c>/auth/login/complete</c> (<paramref name="skipLimit"/>
+    /// is true there, after the chosen sessions were closed).
+    /// </summary>
+    public async Task<AuthResponse> IssueAsync(User user, CancellationToken cancellationToken, bool skipLimit = false)
     {
         var permissions = await repository.GetUserPermissionNamesAsync(user.Id, cancellationToken);
-        var accessToken = jwtTokenService.CreateAccessToken(user, permissions);
+        var start = await sessionService.BeginAsync(user, permissions, skipLimit, cancellationToken);
+        if (start.Session is not { } session)
+        {
+            return new AuthResponse(string.Empty, string.Empty, DateTimeOffset.UtcNow, IdentityMappings.ToUserDto(user), null, start.Pending);
+        }
+
+        var accessToken = jwtTokenService.CreateAccessToken(user, permissions, session.Id);
         var refreshToken = jwtTokenService.CreateRefreshToken();
-        // A new sign-in starts a new family of refresh tokens and fixes the day the session ends.
+        // A new sign-in starts a new family of refresh tokens (its id is the session's) that ends with the session.
         var refreshTokenEntity = user.AddRefreshToken(
             passwordHasher.HashToken(refreshToken),
-            DateTimeOffset.UtcNow.AddDays(Math.Max(1, sessionOptions.Value.RefreshTokenDays)),
-            currentUser.IpAddress);
+            session.AbsoluteExpiresAtUtc,
+            currentUser.IpAddress,
+            session.Id);
         await repository.AddRefreshTokenAsync(refreshTokenEntity, cancellationToken);
         user.MarkLoggedIn(DateTimeOffset.UtcNow);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
         // Sign-in is an anonymous request: the tenant and user are named explicitly so the entry
         // shows up in that user's sign-in history.
-        await platformService.AuditForAsync(user.TenantId, user.Id, "identity.login", nameof(User), user.Id.ToString(), user.Username ?? user.PhoneNumber, cancellationToken);
+        await platformService.AuditForAsync(user.TenantId, user.Id, "identity.login", nameof(User), user.Id.ToString(), user.Username ?? user.PhoneNumber, cancellationToken, sessionId: session.Id);
 
-        return new AuthResponse(accessToken.Token, refreshToken, accessToken.ExpiresAtUtc, IdentityMappings.ToUserDto(user), refreshTokenEntity.ExpiresAtUtc);
+        var status = new SessionStatusDto(session.Id, session.IdleTimeoutSeconds, session.IdleTimeoutSeconds,
+            Math.Max(0, (int)(session.AbsoluteExpiresAtUtc - DateTimeOffset.UtcNow).TotalSeconds), DateTimeOffset.UtcNow);
+        return new AuthResponse(accessToken.Token, refreshToken, accessToken.ExpiresAtUtc, IdentityMappings.ToUserDto(user), refreshTokenEntity.ExpiresAtUtc, null, status);
     }
 }

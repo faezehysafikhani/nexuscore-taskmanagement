@@ -127,7 +127,8 @@ public sealed class SessionSecurityTests
         Assert.Contains("httponly", cookie, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("samesite=strict", cookie, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("path=/api/identity/auth", cookie, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("expires=", cookie, StringComparison.OrdinalIgnoreCase);
+        // A session cookie: it goes when the browser closes; the server decides how long the session lives.
+        Assert.DoesNotContain("expires=", cookie, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -356,6 +357,229 @@ public sealed class SessionSecurityTests
         Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
     }
 
+    // ---------------------------------------------------------------- sessions (sid, idle, limit)
+
+    private static string Access(JsonElement login) => login.GetProperty("accessToken").GetString()!;
+
+    private static Guid SidOf(string accessToken) =>
+        Guid.Parse(new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler().ReadJwtToken(accessToken).Claims.Single(claim => claim.Type == "sid").Value);
+
+    private static async Task SetSessionAsync(Api api, Guid sid, Action<Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry<UserSession>> change)
+    {
+        using var scope = api.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<NexusCoreDbContext>();
+        var session = await db.UserSessions.IgnoreQueryFilters().SingleAsync(row => row.Id == sid);
+        change(db.Entry(session));
+        await db.SaveChangesAsync();
+    }
+
+    private static string? ReasonOf(HttpResponseMessage response) =>
+        response.Headers.TryGetValues("X-Nexus-Session-Reason", out var values) ? values.Single() : null;
+
+    [Fact]
+    public async Task TheAccessToken_CarriesTheSession_AndStopsWorkingTheMomentTheSessionEnds()
+    {
+        await using var api = await Api.StartAsync();
+        var login = await Json(await api.LoginAsync(UserName, Password));
+        var access = Access(login);
+        Assert.Equal(HttpStatusCode.OK, (await api.SendAsync(HttpMethod.Get, "/api/identity/auth/me", access, null)).StatusCode);
+
+        await api.SendAsync(HttpMethod.Post, "/api/identity/auth/logout", null, new { refreshToken = login.GetProperty("refreshToken").GetString() });
+
+        // Not "within fifteen minutes": now.
+        var after = await api.SendAsync(HttpMethod.Get, "/api/identity/auth/me", access, null);
+        Assert.Equal(HttpStatusCode.Unauthorized, after.StatusCode);
+        Assert.Equal("session.logged_out", ReasonOf(after));
+    }
+
+    [Fact]
+    public async Task ATokenWithoutASession_IsRefused()
+    {
+        await using var api = await Api.StartAsync();
+        using var scope = api.Services.CreateScope();
+        var user = await scope.ServiceProvider.GetRequiredService<NexusCore.Application.Identity.Interfaces.IIdentityRepository>().GetUserByIdAsync(api.UserId, default);
+        var token = scope.ServiceProvider.GetRequiredService<IJwtTokenService>().CreateAccessToken(user!, []);
+
+        var response = await api.SendAsync(HttpMethod.Get, "/api/identity/auth/me", token.Token, null);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Equal("session.missing", ReasonOf(response));
+    }
+
+    [Fact]
+    public async Task ClosingAnotherSession_EndsItAtOnce_AndSomeoneElsesSessionIsNotFound()
+    {
+        await using var api = await Api.StartAsync();
+        var first = await Json(await api.LoginAsync(UserName, Password));
+        var second = await Json(await api.LoginAsync(UserName, Password));
+        var admin = await Json(await api.LoginAsync(Api.AdminName, Password));
+
+        var close = await api.SendAsync(HttpMethod.Delete, $"/api/identity/auth/sessions/{SidOf(Access(first))}", Access(second), null);
+        var foreign = await api.SendAsync(HttpMethod.Delete, $"/api/identity/auth/sessions/{SidOf(Access(admin))}", Access(second), null);
+
+        Assert.Equal(HttpStatusCode.NoContent, close.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, foreign.StatusCode);
+        var rejected = await api.SendAsync(HttpMethod.Get, "/api/identity/auth/me", Access(first), null);
+        Assert.Equal(HttpStatusCode.Unauthorized, rejected.StatusCode);
+        Assert.Equal("session.revoked", ReasonOf(rejected));
+        Assert.Equal(HttpStatusCode.Unauthorized, (await api.RefreshAsync(first.GetProperty("refreshToken").GetString()!)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await api.SendAsync(HttpMethod.Get, "/api/identity/auth/me", Access(second), null)).StatusCode);
+    }
+
+    [Fact]
+    public async Task AfterTheIdleTimeout_RequestsAndRefreshAreRefused_WithTheReason()
+    {
+        await using var api = await Api.StartAsync();
+        var login = await Json(await api.LoginAsync(UserName, Password));
+        var sid = SidOf(Access(login));
+        await SetSessionAsync(api, sid, entry => entry.Property(nameof(UserSession.LastActivityAtUtc)).CurrentValue = DateTimeOffset.UtcNow.AddHours(-1));
+
+        var request = await api.SendAsync(HttpMethod.Get, "/api/identity/auth/me", Access(login), null);
+        var refresh = await api.RefreshAsync(login.GetProperty("refreshToken").GetString()!);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, request.StatusCode);
+        Assert.Equal("session.idle_expired", ReasonOf(request));
+        Assert.Equal(HttpStatusCode.Unauthorized, refresh.StatusCode);
+        Assert.Equal("session.idle_expired", (await Json(refresh)).GetProperty("title").GetString());
+    }
+
+    [Fact]
+    public async Task OnlyARequestMarkedAsActivity_MovesTheIdleClock_PollingAndRefreshDoNot()
+    {
+        await using var api = await Api.StartAsync();
+        var login = await Json(await api.LoginAsync(UserName, Password));
+        var sid = SidOf(Access(login));
+        var old = DateTimeOffset.UtcNow.AddMinutes(-5);
+        await SetSessionAsync(api, sid, entry =>
+        {
+            entry.Property(nameof(UserSession.LastActivityAtUtc)).CurrentValue = old;
+            entry.Property(nameof(UserSession.LastSeenAtUtc)).CurrentValue = old;
+        });
+
+        await api.SendAsync(HttpMethod.Get, "/api/identity/auth/me", Access(login), null);
+        await api.RefreshAsync(login.GetProperty("refreshToken").GetString()!);
+        Assert.Equal(old, await LastActivityAsync(api, sid));
+
+        using var activity = new HttpRequestMessage(HttpMethod.Get, "/api/identity/auth/me");
+        activity.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Access(login));
+        activity.Headers.Add("X-Nexus-Activity", "1");
+        await api.RawAsync(activity);
+
+        Assert.True(await LastActivityAsync(api, sid) > old.AddMinutes(4));
+    }
+
+    private static async Task<DateTimeOffset> LastActivityAsync(Api api, Guid sid)
+    {
+        using var scope = api.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<NexusCoreDbContext>();
+        return (await db.UserSessions.IgnoreQueryFilters().AsNoTracking().SingleAsync(row => row.Id == sid)).LastActivityAtUtc;
+    }
+
+    [Fact]
+    public async Task AtTheConcurrentSessionLimit_NoTokenIsIssued_UntilTheUserChoosesWhichToClose()
+    {
+        await using var api = await Api.StartAsync();
+        var sessions = new List<JsonElement>();
+        for (var i = 0; i < 3; i++)
+        {
+            sessions.Add(await Json(await api.LoginAsync(UserName, Password)));
+        }
+
+        var blocked = await Json(await api.LoginAsync(UserName, Password));
+
+        Assert.True(string.IsNullOrEmpty(blocked.GetProperty("accessToken").GetString()));
+        var limit = blocked.GetProperty("sessionLimit");
+        Assert.Equal(3, limit.GetProperty("maxConcurrent").GetInt32());
+        Assert.Equal(1, limit.GetProperty("mustClose").GetInt32());
+        Assert.Equal(3, limit.GetProperty("sessions").GetArrayLength());
+        var ticket = limit.GetProperty("ticket").GetString()!;
+
+        // Closing nothing does not complete it, and does not spend the ticket.
+        var none = await api.SendAsync(HttpMethod.Post, "/api/identity/auth/login/complete", null, new { ticket });
+        Assert.Equal(HttpStatusCode.BadRequest, none.StatusCode);
+
+        var chosen = SidOf(Access(sessions[1]));
+        var complete = await Json(await api.SendAsync(HttpMethod.Post, "/api/identity/auth/login/complete", null, new { ticket, closeSessionIds = new[] { chosen } }));
+
+        Assert.False(string.IsNullOrEmpty(Access(complete)));
+        Assert.Equal(HttpStatusCode.Unauthorized, (await api.SendAsync(HttpMethod.Get, "/api/identity/auth/me", Access(sessions[1]), null)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await api.SendAsync(HttpMethod.Get, "/api/identity/auth/me", Access(sessions[0]), null)).StatusCode);
+        // The ticket works once.
+        Assert.Equal(HttpStatusCode.Unauthorized, (await api.SendAsync(HttpMethod.Post, "/api/identity/auth/login/complete", null, new { ticket, closeOldest = true })).StatusCode);
+    }
+
+    [Fact]
+    public async Task ClosingOldest_CompletesTheSignIn_AndTheOldestSessionEnds()
+    {
+        await using var api = await Api.StartAsync();
+        var first = await Json(await api.LoginAsync(UserName, Password));
+        await api.LoginAsync(UserName, Password);
+        await api.LoginAsync(UserName, Password);
+        var blocked = await Json(await api.LoginAsync(UserName, Password));
+
+        var complete = await api.SendAsync(HttpMethod.Post, "/api/identity/auth/login/complete", null,
+            new { ticket = blocked.GetProperty("sessionLimit").GetProperty("ticket").GetString(), closeOldest = true });
+
+        Assert.Equal(HttpStatusCode.OK, complete.StatusCode);
+        var rejected = await api.SendAsync(HttpMethod.Get, "/api/identity/auth/me", Access(first), null);
+        Assert.Equal(HttpStatusCode.Unauthorized, rejected.StatusCode);
+        Assert.Equal("session.concurrent_limit", ReasonOf(rejected));
+    }
+
+    [Fact]
+    public async Task ChangingThePassword_EndsTheOtherSessions_AndKeepsTheCurrentOne()
+    {
+        await using var api = await Api.StartAsync();
+        var current = await Json(await api.LoginAsync(UserName, Password));
+        var other = await Json(await api.LoginAsync(UserName, Password));
+
+        var change = await api.SendAsync(HttpMethod.Put, "/api/identity/auth/me/password", Access(current), new { currentPassword = Password, newPassword = "Another-Pass-2", confirmNewPassword = "Another-Pass-2" });
+
+        Assert.True(change.IsSuccessStatusCode, await change.Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.OK, (await api.SendAsync(HttpMethod.Get, "/api/identity/auth/me", Access(current), null)).StatusCode);
+        var rejected = await api.SendAsync(HttpMethod.Get, "/api/identity/auth/me", Access(other), null);
+        Assert.Equal(HttpStatusCode.Unauthorized, rejected.StatusCode);
+        Assert.Equal("session.credentials_changed", ReasonOf(rejected));
+    }
+
+    [Fact]
+    public async Task TheEmergencyButton_NeedsThePasswordAndAReason_AndKeepsTheCallersSession()
+    {
+        await using var api = await Api.StartAsync();
+        var admin = await Json(await api.LoginAsync(Api.AdminName, Password));
+        var user = await Json(await api.LoginAsync(UserName, Password));
+
+        var noPassword = await api.SendAsync(HttpMethod.Post, "/api/identity/sessions/revoke-all", Access(admin), new { password = "wrong", reason = "incident" });
+        var noReason = await api.SendAsync(HttpMethod.Post, "/api/identity/sessions/revoke-all", Access(admin), new { password = Password, reason = " " });
+        Assert.Equal(HttpStatusCode.BadRequest, noPassword.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, noReason.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await api.SendAsync(HttpMethod.Get, "/api/identity/auth/me", Access(user), null)).StatusCode);
+
+        var revoke = await api.SendAsync(HttpMethod.Post, "/api/identity/sessions/revoke-all", Access(admin), new { password = Password, reason = "security incident" });
+
+        Assert.Equal(HttpStatusCode.OK, revoke.StatusCode);
+        var rejected = await api.SendAsync(HttpMethod.Get, "/api/identity/auth/me", Access(user), null);
+        Assert.Equal(HttpStatusCode.Unauthorized, rejected.StatusCode);
+        Assert.Equal("session.administrator", ReasonOf(rejected));
+        Assert.Equal(HttpStatusCode.OK, (await api.SendAsync(HttpMethod.Get, "/api/identity/auth/me", Access(admin), null)).StatusCode);
+    }
+
+    [Fact]
+    public async Task TheSessionList_MarksTheCurrentOne_AndStatusDoesNotCountAsActivity()
+    {
+        await using var api = await Api.StartAsync();
+        var first = await Json(await api.LoginAsync(UserName, Password));
+        await api.LoginAsync(UserName, Password);
+
+        var list = await Json(await api.SendAsync(HttpMethod.Get, "/api/identity/auth/sessions", Access(first), null));
+
+        Assert.Equal(2, list.GetProperty("active").GetArrayLength());
+        Assert.Single(list.GetProperty("active").EnumerateArray(), item => item.GetProperty("isCurrent").GetBoolean());
+        var status = await Json(await api.SendAsync(HttpMethod.Get, "/api/identity/auth/sessions/current", Access(first), null));
+        Assert.True(status.GetProperty("idleRemainingSeconds").GetInt32() > 0);
+        Assert.True(status.GetProperty("absoluteRemainingSeconds").GetInt32() > status.GetProperty("idleRemainingSeconds").GetInt32());
+    }
+
     private sealed class Api : IAsyncDisposable
     {
         public const string AdminName = "0000000001";
@@ -528,6 +752,8 @@ public sealed class SessionSecurityTests
 
             return _client.SendAsync(request);
         }
+
+        public Task<HttpResponseMessage> RawAsync(HttpRequestMessage request) => _client.SendAsync(request);
 
         public async Task<HttpResponseMessage> SendAsync(HttpMethod method, string path, string? accessToken, object? body)
         {

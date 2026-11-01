@@ -1,3 +1,4 @@
+using NexusCore.Application.Identity.Sessions;
 using System.Security.Cryptography;
 using FluentValidation;
 using Microsoft.Extensions.Logging;
@@ -47,6 +48,7 @@ public sealed class AccountService(
     IValidator<UpdateMyProfileRequest> profileValidator,
     IValidator<ChangeMyPasswordRequest> changePasswordValidator,
     IPhoneChangeCodes phoneChangeCodes,
+    ISessionService sessionService,
     ILogger<AccountService> logger) : IAccountService
 {
     /// <summary>The answer to every well-formed recovery request, whether or not an account matches.</summary>
@@ -241,6 +243,7 @@ public sealed class AccountService(
         await repository.InvalidatePasswordResetTokensAsync(token.UserId, now, cancellationToken);
         // The new password signs the user out of every existing session.
         await repository.RevokeRefreshTokensAsync(token.UserId, cancellationToken);
+        await sessionService.EndUserSessionsAsync(token.UserId, null, SessionEndReason.CredentialsChanged, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await platformService.AuditForAsync(token.User.TenantId, token.UserId, "users.password_reset", nameof(User), token.UserId.ToString(), null, cancellationToken);
         return Result.Success();
@@ -378,17 +381,28 @@ public sealed class AccountService(
     /// </summary>
     private async Task EndOtherSessionsAsync(Guid userId, string? currentRefreshToken, CancellationToken cancellationToken)
     {
-        var current = string.IsNullOrWhiteSpace(currentRefreshToken)
-            ? null
-            : await repository.FindRefreshTokenAsync(passwordHasher.HashToken(currentRefreshToken), cancellationToken);
-        if (current is not null && current.UserId == userId && current.RevokedAtUtc is null && current.ExpiresAtUtc > DateTimeOffset.UtcNow)
+        // The caller's own session is the access token's sid; the cookie is only the fallback for a
+        // token that has none.
+        Guid? keep = currentUser.SessionId;
+        if (keep is null && !string.IsNullOrWhiteSpace(currentRefreshToken))
         {
-            await repository.RevokeRefreshTokensExceptFamilyAsync(userId, current.Family, cancellationToken);
+            var current = await repository.FindRefreshTokenAsync(passwordHasher.HashToken(currentRefreshToken), cancellationToken);
+            if (current is not null && current.UserId == userId && current.RevokedAtUtc is null && current.ExpiresAtUtc > DateTimeOffset.UtcNow)
+            {
+                keep = current.Family;
+            }
+        }
+
+        if (keep is { } keepId)
+        {
+            await repository.RevokeRefreshTokensExceptFamilyAsync(userId, keepId, cancellationToken);
         }
         else
         {
             await repository.RevokeRefreshTokensAsync(userId, cancellationToken);
         }
+
+        await sessionService.EndUserSessionsAsync(userId, keep, SessionEndReason.CredentialsChanged, cancellationToken);
     }
 
     // ---------------------------------------------------------------- changing the mobile number

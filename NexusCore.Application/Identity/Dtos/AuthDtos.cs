@@ -22,7 +22,9 @@ public sealed record RefreshTokenRequest(string? RefreshToken = null);
 /// RefreshToken is empty when the refresh token was set as a cookie instead of being returned.
 /// RefreshTokenExpiresAtUtc is when the sign-in ends for good (the last day of the session).
 /// </summary>
-public sealed record AuthResponse(string AccessToken, string RefreshToken, DateTimeOffset AccessTokenExpiresAtUtc, UserDto User, DateTimeOffset? RefreshTokenExpiresAtUtc = null);
+public sealed record AuthResponse(string AccessToken, string RefreshToken, DateTimeOffset AccessTokenExpiresAtUtc, UserDto User, DateTimeOffset? RefreshTokenExpiresAtUtc = null,
+    NexusCore.Application.Identity.Sessions.PendingSignInDto? SessionLimit = null,
+    NexusCore.Application.Identity.Sessions.SessionStatusDto? Session = null);
 public sealed record CurrentUserResponse(UserDto User, IReadOnlyList<string> Permissions);
 
 /// <summary>
