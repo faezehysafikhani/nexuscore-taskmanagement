@@ -268,6 +268,71 @@ public sealed class TaskPost : AuditableEntity<Guid>
 }
 
 /// <summary>
+/// One stretch of time someone was on a task through one of its posts (where tasks are given to
+/// posts): as its creator (Role 0), responsible (1) or the stand-in for its vacant responsible
+/// post (3, جانشین) - from StartedAtUtc until EndedAtUtc (null: still). What the post and the
+/// person's own position were then is kept as it was, so a report shows each person's position
+/// on the dates they were on the task, not their position today.
+/// </summary>
+public sealed class TaskPostPeriod : AuditableEntity<Guid>
+{
+    private TaskPostPeriod() : base(Guid.Empty)
+    {
+        PostTitle = string.Empty;
+        PostCode = string.Empty;
+        Place = string.Empty;
+        PositionTitle = string.Empty;
+    }
+
+    public TaskPostPeriod(
+        Guid id, Guid tenantId, Guid taskId, Guid postId, int role, Guid userId,
+        string postTitle, string postCode, string place, Guid positionId, string positionTitle, Guid? actingPostId,
+        DateTimeOffset startedAtUtc) : base(id)
+    {
+        TenantId = tenantId;
+        TaskId = taskId;
+        PostId = postId;
+        Role = role;
+        UserId = userId;
+        PostTitle = postTitle;
+        PostCode = postCode;
+        Place = place;
+        PositionId = positionId;
+        PositionTitle = positionTitle;
+        ActingPostId = actingPostId;
+        StartedAtUtc = startedAtUtc;
+    }
+
+    public Guid TenantId { get; private set; }
+    public Guid TaskId { get; private set; }
+
+    /// <summary>The task's post: for a stand-in, the vacant post they stand in for.</summary>
+    public Guid PostId { get; private set; }
+
+    /// <summary>NexusCore's TaskPostRole: 0 owner, 1 responsible, 3 acting (stand-in).</summary>
+    public int Role { get; private set; }
+
+    public Guid UserId { get; private set; }
+
+    /// <summary>The task's post then: its position's title («کارشناس»), its code and where it was.</summary>
+    public string PostTitle { get; private set; }
+    public string PostCode { get; private set; }
+    public string Place { get; private set; }
+
+    /// <summary>The person's own position then: the post's own, or for a stand-in their own post's.</summary>
+    public Guid PositionId { get; private set; }
+    public string PositionTitle { get; private set; }
+
+    /// <summary>A stand-in's own post (the one put in charge of the vacant post).</summary>
+    public Guid? ActingPostId { get; private set; }
+
+    public DateTimeOffset StartedAtUtc { get; private set; }
+    public DateTimeOffset? EndedAtUtc { get; private set; }
+
+    public void End(DateTimeOffset atUtc) => EndedAtUtc ??= atUtc;
+}
+
+/// <summary>
 /// A post standing in for a vacant one (سرپرستی): its holder sees the vacant post's tasks and
 /// comments on them as its stand-in (جانشین), nothing more, until someone takes the vacant post.
 /// AppliedUserId: who was last given that view of the tasks.

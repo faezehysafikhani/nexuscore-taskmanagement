@@ -86,6 +86,43 @@ public sealed class OrgStructureRepository(OrgStructureDbContext dbContext) : IO
 
     public void RemoveTaskPost(TaskPost taskPost) => dbContext.TaskPosts.Remove(taskPost);
 
+    public async Task<IReadOnlyList<TaskPostPeriod>> ListTaskPostPeriodsAsync(
+        Guid tenantId, IReadOnlyCollection<Guid>? taskIds, bool openOnly, CancellationToken cancellationToken)
+    {
+        var query = dbContext.TaskPostPeriods.Where(x => x.TenantId == tenantId);
+        if (taskIds is not null)
+        {
+            query = query.Where(x => taskIds.Contains(x.TaskId));
+        }
+
+        if (openOnly)
+        {
+            query = query.Where(x => x.EndedAtUtc == null);
+        }
+
+        return await query.OrderBy(x => x.StartedAtUtc).ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<TaskPostPeriod>> FindTaskPostPeriodsAsync(
+        Guid tenantId, IReadOnlyCollection<Guid>? userIds, Guid? positionId, CancellationToken cancellationToken)
+    {
+        var query = dbContext.TaskPostPeriods.AsNoTracking().Where(x => x.TenantId == tenantId);
+        if (userIds is not null)
+        {
+            query = query.Where(x => userIds.Contains(x.UserId));
+        }
+
+        if (positionId is { } position)
+        {
+            query = query.Where(x => x.PositionId == position);
+        }
+
+        return await query.ToListAsync(cancellationToken);
+    }
+
+    public async Task AddTaskPostPeriodAsync(TaskPostPeriod period, CancellationToken cancellationToken) =>
+        await dbContext.TaskPostPeriods.AddAsync(period, cancellationToken);
+
     public async Task<IReadOnlyList<PostActing>> ListPostActingsAsync(Guid tenantId, CancellationToken cancellationToken) =>
         await dbContext.PostActings.Where(x => x.TenantId == tenantId).ToListAsync(cancellationToken);
 

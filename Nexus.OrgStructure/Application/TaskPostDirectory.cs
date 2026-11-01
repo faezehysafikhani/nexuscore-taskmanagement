@@ -114,6 +114,7 @@ public sealed class TaskPostDirectory(
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        await RecordPeriodsAsync(tenantId, [taskId], fillIn: false, cancellationToken);
     }
 
     /// <summary>
@@ -168,6 +169,7 @@ public sealed class TaskPostDirectory(
 
         stale.ForEach(row => row.HeldBy(holders.GetValueOrDefault(row.PostId)));
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        await RecordPeriodsAsync(tenantId, stale.Select(row => row.TaskId).Distinct().ToList(), fillIn: false, cancellationToken);
     }
 
     /// <summary>
@@ -217,6 +219,10 @@ public sealed class TaskPostDirectory(
 
         ended.ForEach(repository.RemovePostActing);
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        if (changes.Count > 0)
+        {
+            await RecordPeriodsAsync(tenantId, changes.Select(change => change.TaskId).Distinct().ToList(), fillIn: false, cancellationToken);
+        }
     }
 
     /// <summary>
@@ -262,8 +268,95 @@ public sealed class TaskPostDirectory(
         if (added)
         {
             await unitOfWork.SaveChangesAsync(cancellationToken);
+            await RecordPeriodsAsync(tenantId, pending.Select(task => task.TaskId).ToList(), fillIn: false, cancellationToken);
         }
     }
+
+    /// <summary>
+    /// On start-up: records the periods of whoever is on tasks through their posts now and has
+    /// none open yet (tasks given to posts before this history was kept start when their post
+    /// got its holder); ends the open ones nobody is on any more. Safe to run again.
+    /// </summary>
+    public Task RecordAllPeriodsAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        RecordPeriodsAsync(tenantId, null, fillIn: true, cancellationToken);
+
+    /// <summary>
+    /// Brings the history of these tasks (null: every task) up to date with who is on them now
+    /// through their posts - each post's holder as its creator or responsible, and the stand-in
+    /// of a vacant responsible post: a period nobody is on any more ends now, and someone now on
+    /// a task without an open period starts one now (<paramref name="fillIn"/>: when the task's
+    /// post has no history at all yet, from when the post got its holder or stand-in).
+    /// </summary>
+    private async Task RecordPeriodsAsync(Guid tenantId, IReadOnlyCollection<Guid>? taskIds, bool fillIn, CancellationToken cancellationToken)
+    {
+        if (!Enabled || taskIds is { Count: 0 })
+        {
+            return;
+        }
+
+        var rows = (await repository.ListTaskPostsAsync(tenantId, taskIds, null, cancellationToken))
+            .Where(row => row.Role is (int)TaskPostRole.Owner or (int)TaskPostRole.Responsible)
+            .ToList();
+        var actings = (await repository.ListPostActingsAsync(tenantId, cancellationToken))
+            .Where(acting => acting.AppliedUserId is not null)
+            .ToDictionary(acting => acting.VacantPostId);
+        var state = await LoadAsync(tenantId, cancellationToken);
+        var posts = state.Posts.ToDictionary(post => post.PostId);
+        var positionOf = state.Seats.ToDictionary(seat => seat.Id, seat => seat.PositionId);
+        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset Since(AuditableStamp stamp) => (stamp.Modified ?? stamp.Created) is { } at && at != default && at <= now ? at : now;
+
+        var wanted = new List<Wanted>();
+        foreach (var row in rows)
+        {
+            if (row.HolderUserId is { } holder)
+            {
+                wanted.Add(new Wanted(row.TaskId, row.PostId, row.Role, holder, null, Since(new(row.CreatedAtUtc, row.ModifiedAtUtc))));
+            }
+            else if (row.Role == (int)TaskPostRole.Responsible && actings.TryGetValue(row.PostId, out var acting))
+            {
+                wanted.Add(new Wanted(row.TaskId, row.PostId, (int)TaskPostRole.Acting, acting.AppliedUserId!.Value, acting.ActingPostId,
+                    Since(new(acting.CreatedAtUtc, acting.ModifiedAtUtc))));
+            }
+        }
+
+        var history = await repository.ListTaskPostPeriodsAsync(tenantId, taskIds, openOnly: !fillIn, cancellationToken);
+        var open = history.Where(period => period.EndedAtUtc is null).ToList();
+        bool Same(TaskPostPeriod period, Wanted want) =>
+            period.TaskId == want.TaskId && period.PostId == want.PostId && period.Role == want.Role
+            && period.UserId == want.UserId && period.ActingPostId == want.ActingPostId;
+
+        var changed = false;
+        foreach (var period in open.Where(period => !wanted.Any(want => Same(period, want))))
+        {
+            period.End(now);
+            changed = true;
+        }
+
+        foreach (var want in wanted.DistinctBy(w => (w.TaskId, w.PostId, w.Role, w.UserId, w.ActingPostId)).Where(want => !open.Any(period => Same(period, want))))
+        {
+            var post = posts.GetValueOrDefault(want.PostId);
+            var own = want.ActingPostId is { } actingPost ? posts.GetValueOrDefault(actingPost) : post;
+            var ownPostId = want.ActingPostId ?? want.PostId;
+            var startedAt = fillIn && !history.Any(period => period.TaskId == want.TaskId && period.PostId == want.PostId && period.Role == want.Role)
+                ? want.Since
+                : now;
+            await repository.AddTaskPostPeriodAsync(new TaskPostPeriod(
+                Guid.NewGuid(), tenantId, want.TaskId, want.PostId, want.Role, want.UserId,
+                post?.Title ?? string.Empty, post?.Code ?? string.Empty, post?.Place ?? string.Empty,
+                positionOf.GetValueOrDefault(ownPostId), own?.Title ?? string.Empty, want.ActingPostId, startedAt), cancellationToken);
+            changed = true;
+        }
+
+        if (changed)
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    private sealed record AuditableStamp(DateTimeOffset Created, DateTimeOffset? Modified);
+
+    private sealed record Wanted(Guid TaskId, Guid PostId, int Role, Guid UserId, Guid? ActingPostId, DateTimeOffset Since);
 
     private async Task<State> LoadAsync(Guid tenantId, CancellationToken cancellationToken)
     {

@@ -26,6 +26,7 @@ public sealed class TaskReportTests
     private readonly Guid _boss = Guid.NewGuid(), _deputyHead = Guid.NewGuid(), _expert = Guid.NewGuid(), _outsider = Guid.NewGuid(), _other = Guid.NewGuid();
     private readonly string _db = Guid.NewGuid().ToString();
     private readonly Users _users = new();
+    private readonly History _history = new();
     private Guid _expertPosition;
     private TaskItem _t1 = null!, _t2 = null!, _t3 = null!, _t4 = null!, _t5 = null!, _t6 = null!;
 
@@ -153,6 +154,60 @@ public sealed class TaskReportTests
         Assert.Equal("validation.error", (await service.GetReportAsync(Tenant, _boss, Query() with { DueFrom = Today, DueTo = Today.AddDays(-1) }, default)).Error.Code);
     }
 
+    [Fact]
+    public async Task TasksGivenToPosts_ShowWhoWasOnThemWhen_WithTheirPositionThen()
+    {
+        await SeedAsync();
+        // The expert was on t7 (an expert then), the deputy's head stood in while its post was
+        // vacant, then «other» took the post. The task is now only «other»'s.
+        var t7 = new TaskItem(Guid.NewGuid(), Tenant, "کار پستی", Today, TaskPriority.Medium, false, _outsider);
+        t7.SetResponsibleUsers([_other]);
+        using (var tasks = TasksDb(restricted: false, null))
+        {
+            tasks.Tasks.Add(t7);
+            await tasks.SaveChangesAsync();
+        }
+
+        var at = DateTimeOffset.UtcNow;
+        var post = Guid.NewGuid();
+        TaskPostPeriodDto Period(Guid who, string role, string position, Guid positionId, int fromDays, int? toDays) => new(
+            t7.Id, who, role, post, "کارشناس", "7", "معاونت · شرکت", positionId, position, at.AddDays(fromDays), toDays is { } d ? at.AddDays(d) : null);
+        _history.Periods.AddRange([
+            Period(_expert, "responsible", "کارشناس", _expertPosition, -10, -5),
+            Period(_deputyHead, "acting", "مدیر معاونت", Guid.NewGuid(), -5, -3),
+            Period(_other, "responsible", "کارشناس", _expertPosition, -3, null),
+        ]);
+
+        var boss = Service(_boss, restricted: false);
+        async Task<TaskReportDto> Run(TaskReportQuery q) => (await boss.GetReportAsync(Tenant, _boss, q, default)).Value!;
+
+        // Found by the people who were on it (the stand-in as responsible) and by the position they had then.
+        Assert.Contains(t7.Id, Ids(await Run(Query() with { PersonId = _expert })));
+        Assert.Contains(t7.Id, Ids(await Run(Query() with { PersonId = _deputyHead })));
+        Assert.DoesNotContain(t7.Id, Ids(await Run(Query() with { PersonId = _expert, PersonRole = "creator" })));
+        Assert.Contains(t7.Id, Ids(await Run(Query() with { PositionId = _expertPosition })));
+        // And by the expert in their own report, though it is no longer theirs.
+        var own = (await Service(_expert).GetReportAsync(Tenant, _expert, Query(), default)).Value!;
+        Assert.False(Assert.Single(own.Rows, r => r.Id == t7.Id).CanOpen);
+
+        var row = (await Run(Query())).Rows.Single(r => r.Id == t7.Id);
+        Assert.Equal(
+            [("کارشناس", "responsible", "کارشناس", true), ("معاون", "acting", "مدیر معاونت", true), ("دیگر", "responsible", "کارشناس", false)],
+            row.History!.Select(h => (h.DisplayName, h.Role, h.PositionTitle, h.ToUtc is not null)).ToArray());
+
+        // Done while the stand-in was on it: their stretch ends then, and «other», who came after, is left out.
+        using (var tasks = TasksDb(restricted: false, null))
+        {
+            var done = await tasks.Tasks.SingleAsync(t => t.Id == t7.Id);
+            done.ChangeStatus(TaskItemStatus.Completed, at.AddDays(-4));
+            await tasks.SaveChangesAsync();
+        }
+
+        row = (await Run(Query())).Rows.Single(r => r.Id == t7.Id);
+        Assert.Equal(["کارشناس", "معاون"], row.History!.Select(h => h.DisplayName).ToArray());
+        Assert.Equal(at.AddDays(-4), row.History![1].ToUtc);
+    }
+
     // ------------------------------------------------------------------ helpers
 
     private static TaskReportQuery Query() => new(null, null, null, null, null, [], null, null);
@@ -172,7 +227,7 @@ public sealed class TaskReportTests
         new(new DbContextOptionsBuilder<TaskManagementDbContext>().UseInMemoryDatabase("tasks-" + _db).Options, new Scope(restricted, userId));
 
     private TaskReportService Service(Guid userId, bool restricted = true) =>
-        new(TasksDb(restricted, userId), new Scope(restricted, userId), OrgStructure(), _users);
+        new(TasksDb(restricted, userId), new Scope(restricted, userId), OrgStructure(), _users, null, _history);
 
     private sealed class Scope(bool restricted, Guid? userId) : ITaskAccessScope
     {
@@ -181,6 +236,18 @@ public sealed class TaskReportTests
         public IReadOnlyList<Guid> GroupIds => [];
         public Task EnsureLoadedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         public bool CanManage(TaskItem task) => !restricted || task.OwnerUserId == userId;
+    }
+
+    private sealed class History : ITaskPostHistory
+    {
+        public List<TaskPostPeriodDto> Periods { get; } = [];
+
+        public Task<IReadOnlyList<TaskPostPeriodDto>> ForTasksAsync(Guid tenantId, IReadOnlyCollection<Guid> taskIds, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<TaskPostPeriodDto>>(Periods.Where(p => taskIds.Contains(p.TaskId)).ToList());
+
+        public Task<IReadOnlyList<TaskPostPeriodDto>> FindAsync(Guid tenantId, IReadOnlyCollection<Guid>? userIds, Guid? positionId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<TaskPostPeriodDto>>(Periods
+                .Where(p => (userIds is null || userIds.Contains(p.UserId)) && (positionId is null || p.PositionId == positionId)).ToList());
     }
 
     private sealed class Users : IUserDirectory
