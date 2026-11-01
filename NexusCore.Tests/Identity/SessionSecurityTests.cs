@@ -390,6 +390,8 @@ public sealed class SessionSecurityTests
         var after = await api.SendAsync(HttpMethod.Get, "/api/identity/auth/me", access, null);
         Assert.Equal(HttpStatusCode.Unauthorized, after.StatusCode);
         Assert.Equal("session.logged_out", ReasonOf(after));
+        // A browser on another origin can only read the reason if the response lists it.
+        Assert.Contains("X-Nexus-Session-Reason", after.Headers.GetValues("Access-Control-Expose-Headers").SelectMany(value => value.Split(',')).Select(value => value.Trim()));
     }
 
     [Fact]

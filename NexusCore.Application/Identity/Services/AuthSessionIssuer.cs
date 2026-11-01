@@ -20,7 +20,8 @@ public sealed class AuthSessionIssuer(
     IUnitOfWork unitOfWork,
     IPlatformService platformService,
     ICurrentUserContext currentUser,
-    ISessionService sessionService)
+    ISessionService sessionService,
+    Microsoft.Extensions.Options.IOptions<NexusCore.Application.Identity.Options.SignInSessionOptions> sessionOptions)
 {
     /// <summary>
     /// Starts a session for the user and hands out its tokens. At the concurrent-session limit
@@ -54,7 +55,8 @@ public sealed class AuthSessionIssuer(
         await platformService.AuditForAsync(user.TenantId, user.Id, "identity.login", nameof(User), user.Id.ToString(), user.Username ?? user.PhoneNumber, cancellationToken, sessionId: session.Id);
 
         var status = new SessionStatusDto(session.Id, session.IdleTimeoutSeconds, session.IdleTimeoutSeconds,
-            Math.Max(0, (int)(session.AbsoluteExpiresAtUtc - DateTimeOffset.UtcNow).TotalSeconds), DateTimeOffset.UtcNow);
+            Math.Max(0, (int)(session.AbsoluteExpiresAtUtc - DateTimeOffset.UtcNow).TotalSeconds), DateTimeOffset.UtcNow,
+            Math.Max(10, sessionOptions.Value.IdleWarningSeconds));
         return new AuthResponse(accessToken.Token, refreshToken, accessToken.ExpiresAtUtc, IdentityMappings.ToUserDto(user), refreshTokenEntity.ExpiresAtUtc, null, status);
     }
 }
