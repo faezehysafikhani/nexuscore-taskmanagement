@@ -395,3 +395,16 @@ official person; a person's place (assignment) is the first position they were p
 same people. Table `org_structure.NodePersons` and `NodeHeads`; `db/upgrade-19-org-kinds.sql` maps what exists (every node
 becomes a unit; every post becomes a position node with its holder; the manager post becomes the unit's head) and
 `db/upgrade-19-rollback.sql` undoes it. Posts, appointments and assignments are not removed.
+
+## The two models together (feature/orgMerge)
+
+`feature/finalOrg` (the simple chart: org / unit / position nodes with people) and
+`feature/1405-08-07-orgNode` (companies, positions, posts, appointments over time) are merged; the data of
+both lives in the same tables. A person is put in a position of the chart from user management (edit user,
+«سمت‌ها») or from the chart; both write `NodePersons`, and the person's place, the node managers and the
+unit heads follow (see the simple chart above). Old-style posts and their appointments keep working.
+
+Where the two meet: a person who is only in a position of the chart has no old-style post, and no
+`PositionId` on their place. The chat scope counts them as having a post (`HierarchyChatScope`), the
+manager comes from the chart, and the old rank rules (`WorkAssignmentLevels`) measure such a person by
+how many managers are above them.
