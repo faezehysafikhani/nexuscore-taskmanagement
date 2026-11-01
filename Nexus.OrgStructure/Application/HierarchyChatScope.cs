@@ -190,7 +190,10 @@ public sealed class HierarchyChatScope(
         // In a company where people hold posts, someone with no post now (e.g. replaced on their last
         // one) is nobody's colleague or subordinate any more; they still reach their own manager.
         var postCompanies = holdings.Select(h => seats.GetValueOrDefault(h.UnitPositionId)?.CompanyId).OfType<Guid>().ToHashSet();
-        var withoutPost = assignments.Where(a => !postsOf.ContainsKey(a.UserId) && postCompanies.Contains(a.CompanyId)).Select(a => a.UserId).ToHashSet();
+        // A person put in a position of the chart («سمت» in the simple chart) has a post too, although no
+        // old-style post row says so.
+        var inPositions = (await repository.ListNodePersonsAsync(tenantId, cancellationToken)).Select(p => p.UserId).ToHashSet();
+        var withoutPost = assignments.Where(a => !postsOf.ContainsKey(a.UserId) && !inPositions.Contains(a.UserId) && postCompanies.Contains(a.CompanyId)).Select(a => a.UserId).ToHashSet();
         return new Model(managersOf, unitsOf, withoutPost);
     }
 }
