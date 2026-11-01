@@ -32,6 +32,10 @@ public static class PermissionPrerequisites
         [IdentityPermissions.SmsSettingsTest] = [IdentityPermissions.SmsSettingsView],
         [IdentityPermissions.LdapSettingsUpdate] = [IdentityPermissions.LdapSettingsView],
         [IdentityPermissions.LdapSettingsTest] = [IdentityPermissions.LdapSettingsView],
+        // Sessions of other users are looked at from the user list.
+        [IdentityPermissions.SessionsView] = [IdentityPermissions.UsersView],
+        [IdentityPermissions.SessionsRevoke] = [IdentityPermissions.SessionsView],
+        [IdentityPermissions.SessionsRevokeAll] = [IdentityPermissions.SessionsView],
         [IdentityPermissions.TenantsCreate] = [IdentityPermissions.TenantsView],
         [IdentityPermissions.TenantsManageAll] = [IdentityPermissions.TenantsView],
 
