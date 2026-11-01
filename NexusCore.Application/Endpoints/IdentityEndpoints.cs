@@ -265,6 +265,12 @@ public static class IdentityEndpoints
             .RequireAuthorization()
             .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi);
 
+        // For the users report: when each user last signed in and from where (audit_logs.view,
+        // like the sign-in history it is read from).
+        platform.MapGet("/last-sign-ins", async (Guid? tenantId, ICurrentUserContext currentUser, IPlatformService platformService, CancellationToken cancellationToken) =>
+                (await platformService.ListLastSignInsAsync(tenantId ?? currentUser.TenantId, cancellationToken)).ToApiResult())
+            .RequireAuthorization(IdentityPermissions.AuditLogsView);
+
         // The audit log, also the source of sign-in history (action=identity.login). Without an
         // explicit tenantId it is the caller's own tenant.
         platform.MapGet("/audit-logs", async (Guid? tenantId, int? pageNumber, int? pageSize, string? search, string? action, string? sort, ICurrentUserContext currentUser, IPlatformService platformService, CancellationToken cancellationToken) =>

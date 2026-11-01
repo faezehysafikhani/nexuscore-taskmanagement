@@ -4,6 +4,9 @@ namespace NexusCore.Application.Platform.Dtos;
 /// One audit entry. UserDisplayName/Username name the person it concerns: the actor, or - for an
 /// anonymous request such as a sign-in - the user the entry is about.
 /// </summary>
+/// <summary>When each user last signed in, and from which address (the newest identity.login entry of the audit log).</summary>
+public sealed record LastSignInDto(Guid UserId, DateTimeOffset OccurredAtUtc, string? IpAddress);
+
 public sealed record AuditLogDto(Guid Id, Guid? TenantId, Guid? UserId, string Action, string? EntityName, string? EntityId, string? Details, string? IpAddress, DateTimeOffset OccurredAtUtc, string? UserDisplayName = null, string? Username = null);
 
 /// <summary>
