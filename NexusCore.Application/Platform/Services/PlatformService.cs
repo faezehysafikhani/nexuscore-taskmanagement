@@ -36,6 +36,17 @@ public sealed class PlatformService(
         await unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task<Result<IReadOnlyList<LastSignInDto>>> ListLastSignInsAsync(Guid? tenantId, CancellationToken cancellationToken)
+    {
+        // Only the caller's own organization, unless they may see every organization.
+        if (currentUserContext.ResolveTenant(tenantId) is not { } tenant)
+        {
+            return Result.Success<IReadOnlyList<LastSignInDto>>([]);
+        }
+
+        return Result.Success(await repository.ListLastSignInsAsync(tenant, cancellationToken));
+    }
+
     public async Task<Result<PagedResult<AuditLogDto>>> ListAuditLogsAsync(AuditLogQuery query, CancellationToken cancellationToken)
     {
         var safe = query with

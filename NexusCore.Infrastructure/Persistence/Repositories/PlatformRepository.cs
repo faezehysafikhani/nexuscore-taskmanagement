@@ -12,6 +12,24 @@ public sealed class PlatformRepository(NexusCoreDbContext dbContext) : IPlatform
     public async Task AddAuditLogAsync(AuditLog auditLog, CancellationToken cancellationToken) =>
         await dbContext.AuditLogs.AddAsync(auditLog, cancellationToken);
 
+    public async Task<IReadOnlyList<LastSignInDto>> ListLastSignInsAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        var signIns = dbContext.AuditLogs.AsNoTracking()
+            .Where(log => log.TenantId == tenantId && log.Action == "identity.login" && log.UserId != null);
+        var latest = signIns
+            .GroupBy(log => log.UserId)
+            .Select(group => new { UserId = group.Key, At = group.Max(log => log.OccurredAtUtc) });
+        var rows = await (from log in signIns
+                          join last in latest on new { log.UserId, At = log.OccurredAtUtc } equals new { last.UserId, last.At }
+                          select new { UserId = log.UserId!.Value, log.OccurredAtUtc, log.IpAddress })
+            .ToListAsync(cancellationToken);
+        // Two entries at the same instant: one row per user.
+        return rows.GroupBy(row => row.UserId)
+            .Select(group => group.First())
+            .Select(row => new LastSignInDto(row.UserId, row.OccurredAtUtc, row.IpAddress))
+            .ToList();
+    }
+
     public async Task<PagedResult<AuditLogDto>> ListAuditLogsAsync(AuditLogQuery filter, CancellationToken cancellationToken)
     {
         var query = dbContext.AuditLogs.AsNoTracking().AsQueryable();

@@ -338,6 +338,24 @@ public sealed class SessionSecurityTests
         }
     }
 
+    [Fact]
+    public async Task TheUsersReport_CanReadEachUsersLastSignIn_OnlyWithTheAuditPermission()
+    {
+        await using var api = await Api.StartAsync();
+        await api.LoginAsync(UserName, Password);
+        await api.LoginAsync(UserName, Password);
+        var admin = await Json(await api.LoginAsync(Api.AdminName, Password));
+        var manager = await Json(await api.LoginAsync(Api.ManagerName, Password));
+
+        var rows = await Json(await api.SendAsync(HttpMethod.Get, "/api/platform/last-sign-ins", admin.GetProperty("accessToken").GetString(), null));
+        var refused = await api.SendAsync(HttpMethod.Get, "/api/platform/last-sign-ins", manager.GetProperty("accessToken").GetString(), null);
+
+        // One row per user, the user who signed in twice once.
+        Assert.Single(rows.EnumerateArray(), row => row.GetProperty("userId").GetGuid() == api.UserId);
+        Assert.Equal(rows.GetArrayLength(), rows.EnumerateArray().Select(row => row.GetProperty("userId").GetGuid()).Distinct().Count());
+        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+    }
+
     private sealed class Api : IAsyncDisposable
     {
         public const string AdminName = "0000000001";

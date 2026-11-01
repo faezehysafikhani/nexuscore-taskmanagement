@@ -85,7 +85,9 @@ public sealed class TaskPostDirectory(
         CancellationToken cancellationToken)
     {
         var rows = await repository.ListTaskPostsAsync(tenantId, [taskId], null, cancellationToken);
-        var holders = (await LoadAsync(tenantId, cancellationToken)).Posts.ToDictionary(post => post.PostId, post => post.HolderUserId);
+        var workPosts = (await LoadAsync(tenantId, cancellationToken)).Posts;
+        var holders = workPosts.ToDictionary(post => post.PostId, post => post.HolderUserId);
+        var added = new HashSet<Guid>();
 
         async Task SetRoleAsync(TaskPostRole role, IReadOnlyList<Guid> postIds)
         {
@@ -93,6 +95,7 @@ public sealed class TaskPostDirectory(
             current.Where(row => !postIds.Contains(row.PostId)).ToList().ForEach(repository.RemoveTaskPost);
             foreach (var postId in postIds.Distinct().Where(id => current.All(row => row.PostId != id)))
             {
+                added.Add(postId);
                 await repository.AddTaskPostAsync(
                     new TaskPost(Guid.NewGuid(), tenantId, taskId, postId, (int)role, holders.GetValueOrDefault(postId)), cancellationToken);
             }
@@ -114,6 +117,22 @@ public sealed class TaskPostDirectory(
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // A post with a stand-in on now: the stand-in also gets the task newly given to it.
+        var before = rows.Select(row => row.PostId).ToHashSet();
+        var standIns = added.Count == 0 ? [] : (await repository.ListPostActingsAsync(tenantId, cancellationToken))
+            .Where(a => a.AppliedUserId is not null && added.Contains(a.VacantPostId) && !before.Contains(a.VacantPostId))
+            .ToList();
+        if (standIns.Count > 0 && services.GetService<ITaskPeopleUpdater>() is { } updater)
+        {
+            await updater.ApplyAsync(tenantId, standIns.Select(a =>
+            {
+                var post = workPosts.FirstOrDefault(p => p.PostId == a.VacantPostId);
+                var note = post is null ? "جانشین" : $"جانشین {post.Title} · کد {post.Code}";
+                return new TaskPersonChange(taskId, TaskPostRole.Acting, null, a.AppliedUserId, note);
+            }).ToList(), cancellationToken);
+        }
+
         await RecordPeriodsAsync(tenantId, [taskId], fillIn: false, cancellationToken);
     }
 
