@@ -41,7 +41,10 @@ internal sealed class ActiveUserTokenValidation : IPostConfigureOptions<JwtBeare
             if (failure is not null)
             {
                 // The client reads the reason to tell the user why they were signed out.
-                context.HttpContext.Response.Headers[SessionReasons.HeaderName] = failure;
+                var headers = context.HttpContext.Response.Headers;
+                headers[SessionReasons.HeaderName] = failure;
+                // A browser on another origin (UI :3000, API :5271) may only read headers listed here.
+                headers.AppendCommaSeparatedValues("Access-Control-Expose-Headers", SessionReasons.HeaderName);
                 context.Fail(failure);
                 return;
             }
@@ -100,7 +103,9 @@ internal sealed class ActiveUserTokenValidation : IPostConfigureOptions<JwtBeare
         if (failure is null)
         {
             var activity = http.Request.Headers.ContainsKey(ActivityHeader);
-            await sessions.TouchAsync(sessionId, now, activity, http.Connection.RemoteIpAddress?.ToString(), SessionService.TouchInterval, cancellationToken);
+            await sessions.TouchAsync(sessionId, now, activity, http.Connection.RemoteIpAddress?.ToString(), 
+                // 30 s normally; a quarter of a very short idle timeout (development), so it stays accurate.
+                TimeSpan.FromSeconds(Math.Min(SessionService.TouchInterval.TotalSeconds, Math.Max(1, state.IdleTimeoutSeconds / 4.0))), cancellationToken);
         }
 
         return failure;

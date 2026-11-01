@@ -25,6 +25,19 @@ public sealed class SignInSessionOptions
     /// </summary>
     public int ReuseGraceSeconds { get; set; } = 10;
 
+    /// <summary>How long before the idle timeout the UI warns the user (seconds).</summary>
+    public int IdleWarningSeconds { get; set; } = 120;
+
+    /// <summary>
+    /// For trying the timeouts by hand: replaces the idle timeout (seconds, may be below the
+    /// platform's 5-minute minimum) of every new session. Honoured ONLY when the host runs in the
+    /// Development environment; ignored everywhere else.
+    /// </summary>
+    public int? DevIdleSecondsOverride { get; set; }
+
+    /// <summary>Same, for the absolute limit (seconds). Development only.</summary>
+    public int? DevAbsoluteSecondsOverride { get; set; }
+
     /// <summary>Name of the refresh token cookie.</summary>
     public string RefreshCookieName { get; set; } = "nexus_rt";
 

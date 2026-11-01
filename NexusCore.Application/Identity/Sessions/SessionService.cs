@@ -19,7 +19,8 @@ public sealed class SessionService(
     IPlatformService platformService,
     ICurrentUserContext currentUser,
     ISessionConnectionRegistry connections,
-    ISessionSecurityNotifier notifier) : ISessionService
+    ISessionSecurityNotifier notifier,
+    Microsoft.Extensions.Options.IOptions<NexusCore.Application.Identity.Options.SignInSessionOptions> sessionOptions) : ISessionService
 {
     /// <summary>The idle clock and the "last seen" time move at most this often: one write per user per interval.</summary>
     public static readonly TimeSpan TouchInterval = TimeSpan.FromSeconds(30);
@@ -170,7 +171,7 @@ public sealed class SessionService(
     public async Task<Result<SessionStatusDto>> GetCurrentStatusAsync(CancellationToken cancellationToken)
     {
         var session = await CurrentSessionAsync(cancellationToken);
-        return session.IsFailure ? Result.Failure<SessionStatusDto>(session.Error) : Result.Success(ToStatus(session.Value!, DateTimeOffset.UtcNow));
+        return session.IsFailure ? Result.Failure<SessionStatusDto>(session.Error) : Result.Success(ToStatus(session.Value!, DateTimeOffset.UtcNow, WarningSeconds));
     }
 
     public async Task<Result<SessionStatusDto>> RecordActivityAsync(CancellationToken cancellationToken)
@@ -185,7 +186,7 @@ public sealed class SessionService(
         // "Keep me signed in" is explicit: the idle clock restarts now, without the 30-second throttle.
         await sessions.TouchAsync(current.Value!.Id, now, true, currentUser.IpAddress, TimeSpan.Zero, cancellationToken);
         var fresh = await sessions.GetSessionAsync(current.Value.Id, cancellationToken);
-        return Result.Success(ToStatus(fresh ?? current.Value, DateTimeOffset.UtcNow));
+        return Result.Success(ToStatus(fresh ?? current.Value, DateTimeOffset.UtcNow, WarningSeconds));
     }
 
     public async Task<Result> RevokeMineAsync(Guid sessionId, CancellationToken cancellationToken)
@@ -510,12 +511,15 @@ public sealed class SessionService(
             user.SmsOnEveryNewSignIn);
     }
 
-    private static SessionStatusDto ToStatus(UserSession session, DateTimeOffset now) => new(
+    private int WarningSeconds => Math.Max(10, sessionOptions.Value.IdleWarningSeconds);
+
+    private static SessionStatusDto ToStatus(UserSession session, DateTimeOffset now, int warningSeconds) => new(
         session.Id,
         session.IdleTimeoutSeconds,
         Math.Max(0, (int)(session.IdleExpiresAtUtc - now).TotalSeconds),
         Math.Max(0, (int)(session.AbsoluteExpiresAtUtc - now).TotalSeconds),
-        now);
+        now,
+        warningSeconds);
 
     private static SessionDto ToDto(UserSession session, Guid? currentSid, DateTimeOffset now, string? endedByName)
     {

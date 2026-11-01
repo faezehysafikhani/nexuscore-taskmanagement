@@ -37,7 +37,8 @@ public sealed record SessionStatusDto(
     int IdleTimeoutSeconds,
     int IdleRemainingSeconds,
     int AbsoluteRemainingSeconds,
-    DateTimeOffset ServerTimeUtc);
+    DateTimeOffset ServerTimeUtc,
+    int IdleWarningSeconds = 120);
 
 public sealed record UpdateSessionPreferencesRequest(int? MaxConcurrentSessions, bool SmsOnEveryNewSignIn);
 

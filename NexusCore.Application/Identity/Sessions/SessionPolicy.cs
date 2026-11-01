@@ -91,7 +91,11 @@ public interface ISessionPolicyProvider
     Task<(bool Ok, string? Error)> SaveSettingsAsync(Guid tenantId, SessionPolicySettings settings, CancellationToken cancellationToken);
 }
 
-public sealed class SessionPolicyProvider(IPlatformRepository settingsRepository, IUnitOfWork unitOfWork) : ISessionPolicyProvider
+public sealed class SessionPolicyProvider(
+    IPlatformRepository settingsRepository,
+    IUnitOfWork unitOfWork,
+    Microsoft.Extensions.Options.IOptions<NexusCore.Application.Identity.Options.SignInSessionOptions> options,
+    Microsoft.Extensions.Hosting.IHostEnvironment? environment = null) : ISessionPolicyProvider
 {
     /// <summary>
     /// Whoever holds one of these can change who may sign in, what the system sends or what the
@@ -136,12 +140,16 @@ public sealed class SessionPolicyProvider(IPlatformRepository settingsRepository
         // The strictest value of each limit among the profiles that apply; the label is the
         // profile that is strictest on the idle timeout (ties: the later, more specific one).
         var label = candidates.OrderBy(c => c.IdleSeconds).ThenByDescending(c => candidates.IndexOf(c)).First().Profile;
-        return new SessionPolicy(
-            label,
-            candidates.Min(c => c.IdleSeconds),
-            candidates.Min(c => c.AbsoluteSeconds),
-            candidates.Min(c => c.MaxConcurrent),
-            outside);
+        var idle = candidates.Min(c => c.IdleSeconds);
+        var absolute = candidates.Min(c => c.AbsoluteSeconds);
+        // Trying the timeouts by hand (Identity:Session:DevIdleSecondsOverride): Development only.
+        if (environment?.IsDevelopment() == true)
+        {
+            if (options.Value.DevIdleSecondsOverride is > 0 and var devIdle) idle = devIdle;
+            if (options.Value.DevAbsoluteSecondsOverride is > 0 and var devAbsolute) absolute = devAbsolute;
+        }
+
+        return new SessionPolicy(label, idle, absolute, candidates.Min(c => c.MaxConcurrent), outside);
     }
 
     public async Task<SessionPolicySettings> GetSettingsAsync(Guid tenantId, CancellationToken cancellationToken)
