@@ -9,7 +9,7 @@ public sealed class AuditLog : Entity<Guid>
         Action = string.Empty;
     }
 
-    public AuditLog(Guid id, Guid? tenantId, Guid? userId, string action, string? entityName, string? entityId, string? details, string? ipAddress) : base(id)
+    public AuditLog(Guid id, Guid? tenantId, Guid? userId, string action, string? entityName, string? entityId, string? details, string? ipAddress, Guid? sessionId = null, string? userAgent = null) : base(id)
     {
         TenantId = tenantId;
         UserId = userId;
@@ -18,6 +18,8 @@ public sealed class AuditLog : Entity<Guid>
         EntityId = entityId;
         Details = details;
         IpAddress = ipAddress;
+        SessionId = sessionId;
+        UserAgent = userAgent is { Length: > 512 } ? userAgent[..512] : userAgent;
         OccurredAtUtc = DateTimeOffset.UtcNow;
     }
 
@@ -28,5 +30,8 @@ public sealed class AuditLog : Entity<Guid>
     public string? EntityId { get; private set; }
     public string? Details { get; private set; }
     public string? IpAddress { get; private set; }
+    /// <summary>The session (sid) the entry belongs to, when there is one.</summary>
+    public Guid? SessionId { get; private set; }
+    public string? UserAgent { get; private set; }
     public DateTimeOffset OccurredAtUtc { get; private set; }
 }

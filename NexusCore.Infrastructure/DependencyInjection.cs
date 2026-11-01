@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Options;
 using NexusCore.Application.Approvals;
 using NexusCore.Application.Common;
@@ -12,6 +14,7 @@ using NexusCore.Application.Identity.Options;
 using NexusCore.Infrastructure.Security;
 using NexusCore.Application.Identity.Permissions;
 using NexusCore.Application.Identity.Security;
+using NexusCore.Application.Identity.Sessions;
 using NexusCore.Application.Ldap;
 using NexusCore.Application.Messaging;
 using NexusCore.Application.Platform.Interfaces;
@@ -55,6 +58,13 @@ public static class DependencyInjection
 
         services.AddScoped<IUnitOfWork>(provider => provider.GetRequiredService<NexusCoreDbContext>());
         services.AddScoped<IIdentityRepository, IdentityRepository>();
+        services.AddScoped<ISessionRepository, SessionRepository>();
+        // Hub connections: every call re-checks the session, and a session that ends closes its connections.
+        services.AddSingleton<InMemorySessionConnectionRegistry>();
+        services.AddSingleton<SessionHubFilter>();
+        services.Replace(ServiceDescriptor.Singleton<ISessionConnectionRegistry>(provider => provider.GetRequiredService<InMemorySessionConnectionRegistry>()));
+        services.Configure<Microsoft.AspNetCore.SignalR.HubOptions>(options => options.AddFilter<SessionHubFilter>());
+        services.AddHostedService<SessionMaintenanceService>();
         services.AddScoped<IPlatformRepository, PlatformRepository>();
         services.AddScoped<IPasswordHasher, BCryptPasswordHasher>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();

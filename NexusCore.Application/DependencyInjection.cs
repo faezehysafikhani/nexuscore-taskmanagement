@@ -5,6 +5,7 @@ using NexusCore.Application.Identity.Dtos;
 using NexusCore.Application.Identity.Interfaces;
 using NexusCore.Application.Identity.Permissions;
 using NexusCore.Application.Identity.Services;
+using NexusCore.Application.Identity.Sessions;
 using NexusCore.Application.Identity.Validators;
 using NexusCore.Application.Files;
 using NexusCore.Application.Messaging;
@@ -27,6 +28,12 @@ public static class DependencyInjection
         services.AddScoped<IValidator<ResetPasswordRequest>, ResetPasswordRequestValidator>();
         services.AddScoped<IValidator<UpdateMyProfileRequest>, UpdateMyProfileRequestValidator>();
         services.AddScoped<AuthSessionIssuer>();
+        // Sessions: the policy, the service, and the two hooks other modules replace (live
+        // connections, notifications); the defaults do nothing.
+        services.AddScoped<ISessionPolicyProvider, SessionPolicyProvider>();
+        services.AddScoped<ISessionService, SessionService>();
+        services.TryAddSingleton<ISessionConnectionRegistry, NullSessionConnectionRegistry>();
+        services.TryAddScoped<ISessionSecurityNotifier, NullSessionSecurityNotifier>();
         services.AddScoped<IIdentityService, IdentityService>();
         // Everyone in the tenant may be reached unless a module limits it (Nexus.OrgStructure can,
         // to one's own company); TryAdd so that module's registration wins whichever runs first.

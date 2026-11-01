@@ -59,6 +59,22 @@ public sealed class User : AuditableEntity<Guid>
 
     public bool NotifySms { get; private set; }
 
+    /// <summary>
+    /// How many sessions at most the user wants open at once, within the organization's limit
+    /// (null: the organization's limit). Lowering it does not close open sessions; it applies at
+    /// the next sign-in.
+    /// </summary>
+    public int? MaxConcurrentSessions { get; private set; }
+
+    /// <summary>Send an SMS for every new sign-in to this account (off by default).</summary>
+    public bool SmsOnEveryNewSignIn { get; private set; }
+
+    public void SetSessionPreferences(int? maxConcurrentSessions, bool smsOnEveryNewSignIn)
+    {
+        MaxConcurrentSessions = maxConcurrentSessions;
+        SmsOnEveryNewSignIn = smsOnEveryNewSignIn;
+    }
+
     /// <summary>Avatar image as a URL or data URL (the UI's preset or uploaded picture).</summary>
     public string? AvatarUrl { get; private set; }
 

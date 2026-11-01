@@ -23,15 +23,20 @@ public sealed class PlatformService(
             entityName,
             entityId,
             details,
-            currentUserContext.IpAddress);
+            currentUserContext.IpAddress,
+            currentUserContext.SessionId,
+            currentUserContext.UserAgent);
 
         await repository.AddAuditLogAsync(auditLog, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task AuditForAsync(Guid? tenantId, Guid? userId, string action, string? entityName, string? entityId, string? details, CancellationToken cancellationToken)
+    public Task AuditForAsync(Guid? tenantId, Guid? userId, string action, string? entityName, string? entityId, string? details, CancellationToken cancellationToken) =>
+        AuditForAsync(tenantId, userId, action, entityName, entityId, details, cancellationToken, null);
+
+    public async Task AuditForAsync(Guid? tenantId, Guid? userId, string action, string? entityName, string? entityId, string? details, CancellationToken cancellationToken, Guid? sessionId)
     {
-        var auditLog = new AuditLog(Guid.NewGuid(), tenantId, userId, action, entityName, entityId, details, currentUserContext.IpAddress);
+        var auditLog = new AuditLog(Guid.NewGuid(), tenantId, userId, action, entityName, entityId, details, currentUserContext.IpAddress, sessionId ?? currentUserContext.SessionId, currentUserContext.UserAgent);
         await repository.AddAuditLogAsync(auditLog, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
     }

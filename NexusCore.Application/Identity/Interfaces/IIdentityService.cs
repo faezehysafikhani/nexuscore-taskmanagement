@@ -7,6 +7,7 @@ public interface IIdentityService
 {
     Task<Result<AuthResponse>> LoginAsync(LoginRequest request, CancellationToken cancellationToken);
     Task<Result<AuthResponse>> RefreshTokenAsync(RefreshTokenRequest request, CancellationToken cancellationToken);
+    Task<Result<AuthResponse>> CompleteLoginAsync(NexusCore.Application.Identity.Sessions.CompleteLoginRequest request, CancellationToken cancellationToken);
     Task<Result> LogoutAsync(RefreshTokenRequest request, CancellationToken cancellationToken);
     Task<Result<CurrentUserResponse>> GetCurrentUserAsync(Guid userId, CancellationToken cancellationToken);
     Task<Result<PagedResult<UserDto>>> ListUsersAsync(Guid? tenantId, int? pageNumber, int? pageSize, string? search, CancellationToken cancellationToken);

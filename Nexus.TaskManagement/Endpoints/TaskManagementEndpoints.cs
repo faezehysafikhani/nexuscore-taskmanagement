@@ -29,7 +29,7 @@ public static class TaskManagementEndpoints
         app.MapNoteEndpoints();
         app.MapReminderSettingsEndpoints();
         app.MapAssignmentLimitEndpoint();
-        app.MapHub<TaskManagementHub>(TaskManagementHub.Route)
+        app.MapHub<TaskManagementHub>(TaskManagementHub.Route, options => options.CloseOnAuthenticationExpiration = true)
             .RequireRateLimiting(NexusRateLimitPolicies.Realtime);
         return app;
     }

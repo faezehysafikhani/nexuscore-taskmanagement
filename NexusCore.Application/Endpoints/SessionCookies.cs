@@ -50,10 +50,13 @@ public static class SessionCookies
         return http.Request.Headers.ContainsKey(CsrfHeader) ? value : null;
     }
 
-    /// <summary>Puts the refresh token in the cookie and takes it out of the body.</summary>
-    public static AuthResponse Attach(HttpContext http, SignInSessionOptions options, AuthResponse response, DateTimeOffset refreshExpiresAtUtc)
+    /// <summary>
+    /// Puts the refresh token in the cookie and takes it out of the body. A session cookie (no
+    /// expiry date): closing the browser ends it; the server decides how long the session lives.
+    /// </summary>
+    public static AuthResponse Attach(HttpContext http, SignInSessionOptions options, AuthResponse response)
     {
-        http.Response.Cookies.Append(options.RefreshCookieName, response.RefreshToken, Options(http, refreshExpiresAtUtc));
+        http.Response.Cookies.Append(options.RefreshCookieName, response.RefreshToken, Options(http, null));
         return response with { RefreshToken = string.Empty };
     }
 

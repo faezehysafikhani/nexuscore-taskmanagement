@@ -7,6 +7,7 @@ using NexusCore.Application.Identity.Interfaces;
 using NexusCore.Application.Identity.Options;
 using NexusCore.Application.Identity.Permissions;
 using NexusCore.Application.Identity.Security;
+using NexusCore.Application.Identity.Sessions;
 using NexusCore.Application.Platform.Interfaces;
 using NexusCore.Application.Security;
 using NexusCore.Domain.Identity;
@@ -32,6 +33,9 @@ public sealed class IdentityService(
     IUserGroupPermissionProvider groupPermissions,
     IOptions<ManagedPermissionOptions> managedPermissionOptions,
     IEnumerable<IUserDeactivationListener> deactivationListeners,
+    ISessionService sessionService,
+    ISessionRepository sessionRepository,
+    ISessionSecurityNotifier sessionNotifier,
     IUserReachScope? reachScope = null,
     IOptions<SignInSessionOptions>? sessionOptions = null) : IIdentityService
 {
@@ -116,6 +120,23 @@ public sealed class IdentityService(
             return invalid;
         }
 
+        // The family of the refresh token is the session. One that predates sessions has none and
+        // cannot be used (everybody signs in again once, when this is deployed); one whose idle or
+        // absolute limit has passed ends here, and the client is told which. The refresh itself is
+        // not activity: the idle clock only moves when the user does something.
+        var session = await sessionRepository.GetSessionAsync(refreshToken.Family, cancellationToken);
+        if (session is null || session.UserId != refreshToken.UserId)
+        {
+            return invalid;
+        }
+
+        if (session.EndReasonAt(now) is { } ended)
+        {
+            await sessionService.EndSessionAsync(session.Id, ended, cancellationToken);
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+            return Result.Failure<AuthResponse>(new Error(SessionReasons.CodeFor(ended), SessionMessage(ended)));
+        }
+
         // Normal case: the token has not been used. The database lets one request take it; a
         // second one with the same token (another tab, a retry) loses the race and is handled
         // like a token that was exchanged a moment ago.
@@ -150,8 +171,10 @@ public sealed class IdentityService(
         // Exchanged earlier and presented again: whoever holds this copy is not the one who got
         // the new token. The whole sign-in ends, for the user and for the thief alike.
         await repository.RevokeRefreshTokenFamilyAsync(refreshToken.UserId, refreshToken.Family, cancellationToken);
+        await sessionService.EndSessionAsync(refreshToken.Family, SessionEndReason.ReuseDetected, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        await platformService.AuditForAsync(refreshToken.User.TenantId, refreshToken.UserId, "identity.refresh_token_reuse", nameof(User), refreshToken.UserId.ToString(), null, cancellationToken);
+        await platformService.AuditForAsync(refreshToken.User.TenantId, refreshToken.UserId, "identity.refresh_token_reuse", nameof(User), refreshToken.UserId.ToString(), null, cancellationToken, sessionId: refreshToken.Family);
+        await sessionNotifier.NotifyAsync(refreshToken.User.TenantId, refreshToken.UserId, SessionSecurityEvent.TokenReuse, session.DeviceLabel, null, cancellationToken);
         return invalid;
     }
 
@@ -163,7 +186,7 @@ public sealed class IdentityService(
         await repository.AddRefreshTokenAsync(entity, cancellationToken);
 
         var permissions = await repository.GetUserPermissionNamesAsync(user.Id, cancellationToken);
-        var accessToken = jwtTokenService.CreateAccessToken(user, permissions);
+        var accessToken = jwtTokenService.CreateAccessToken(user, permissions, previous.Family);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new AuthResponse(accessToken.Token, rawRefreshToken, accessToken.ExpiresAtUtc, ToUserDto(user), entity.ExpiresAtUtc);
@@ -188,10 +211,28 @@ public sealed class IdentityService(
 
         refreshToken.Revoke(null);
         await repository.RevokeRefreshTokenFamilyAsync(refreshToken.UserId, refreshToken.Family, cancellationToken);
+        // The session ends with it: its access tokens stop working now, not in a quarter of an hour.
+        await sessionService.EndSessionAsync(refreshToken.Family, SessionEndReason.Logout, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        await platformService.AuditForAsync(refreshToken.User?.TenantId, refreshToken.UserId, "identity.logout", nameof(User), refreshToken.UserId.ToString(), null, cancellationToken);
+        await platformService.AuditForAsync(refreshToken.User?.TenantId, refreshToken.UserId, "identity.logout", nameof(User), refreshToken.UserId.ToString(), null, cancellationToken, sessionId: refreshToken.Family);
         return Result.Success();
     }
+
+    /// <summary>Step 2 of a sign-in that stopped at the session limit: the user chose which sessions to close.</summary>
+    public async Task<Result<AuthResponse>> CompleteLoginAsync(CompleteLoginRequest request, CancellationToken cancellationToken)
+    {
+        var user = await sessionService.CompletePendingAsync(request, cancellationToken);
+        return user.IsFailure
+            ? Result.Failure<AuthResponse>(user.Error)
+            : Result.Success(await sessionIssuer.IssueAsync(user.Value!, cancellationToken, skipLimit: true));
+    }
+
+    private static string SessionMessage(SessionEndReason reason) => reason switch
+    {
+        SessionEndReason.IdleTimeout => "You were signed out because of inactivity.",
+        SessionEndReason.AbsoluteTimeout => "Your sign-in has ended. Sign in again.",
+        _ => "Your session has ended. Sign in again."
+    };
 
     public async Task<Result<CurrentUserResponse>> GetCurrentUserAsync(Guid userId, CancellationToken cancellationToken)
     {
@@ -354,11 +395,13 @@ public sealed class IdentityService(
             user.ChangePassword(passwordHasher.HashPassword(request.Password));
             // A new password ends every existing session of that user.
             await repository.RevokeRefreshTokensAsync(user.Id, cancellationToken);
+            await sessionService.EndUserSessionsAsync(user.Id, null, SessionEndReason.CredentialsChanged, cancellationToken);
         }
 
         if (!user.IsActive)
         {
             await repository.RevokeRefreshTokensAsync(user.Id, cancellationToken);
+            await sessionService.EndUserSessionsAsync(user.Id, null, SessionEndReason.AccountDisabled, cancellationToken);
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -414,6 +457,7 @@ public sealed class IdentityService(
         {
             // A disabled account keeps no session: its refresh tokens stop working at once.
             await repository.RevokeRefreshTokensAsync(user.Id, cancellationToken);
+            await sessionService.EndUserSessionsAsync(user.Id, null, SessionEndReason.AccountDisabled, cancellationToken);
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);

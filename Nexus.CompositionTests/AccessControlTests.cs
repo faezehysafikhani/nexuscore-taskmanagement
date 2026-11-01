@@ -579,6 +579,9 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
             }
 
             db.Users.Add(user);
+            // Every request is checked against the session of its token (sid): a long-lived one for the test.
+            var session = new UserSession(Guid.NewGuid(), user.Id, tenantId, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(10), 36000, "test", null, null, null);
+            db.UserSessions.Add(session);
             await db.SaveChangesAsync();
 
             var taskDb = scope.ServiceProvider.GetRequiredService<TaskManagementDbContext>();
@@ -586,7 +589,7 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
             await taskDb.SaveChangesAsync();
 
             // Signed with no permissions: every request reads the user's current ones.
-            var token = scope.ServiceProvider.GetRequiredService<IJwtTokenService>().CreateAccessToken(user, []).Token;
+            var token = scope.ServiceProvider.GetRequiredService<IJwtTokenService>().CreateAccessToken(user, [], session.Id).Token;
             return new Caller(user.Id, token);
         }
 
