@@ -452,6 +452,28 @@ public sealed class SessionSecurityTests
         Assert.True(await LastActivityAsync(api, sid) > old.AddMinutes(4));
     }
 
+    [Fact]
+    public async Task ASessionThatEndedByIdleTimeout_IsListedAsEnded_AndAnAdministratorClosingItDoesNotChangeWhy()
+    {
+        await using var api = await Api.StartAsync();
+        var user = await Json(await api.LoginAsync(UserName, Password));
+        var sid = SidOf(Access(user));
+        await SetSessionAsync(api, sid, entry => entry.Property(nameof(UserSession.LastActivityAtUtc)).CurrentValue = DateTimeOffset.UtcNow.AddHours(-1));
+        var admin = await Json(await api.LoginAsync(Api.AdminName, Password));
+
+        var before = await Json(await api.SendAsync(HttpMethod.Get, $"/api/identity/users/{api.UserId}/sessions", Access(admin), null));
+        // Past its idle limit it is not "active", although nothing has marked it yet.
+        Assert.Equal(0, before.GetProperty("active").GetArrayLength());
+        Assert.Equal("session.idle_expired", before.GetProperty("recent")[0].GetProperty("endReason").GetString());
+
+        var close = await api.SendAsync(HttpMethod.Delete, $"/api/identity/users/{api.UserId}/sessions/{sid}", Access(admin), null);
+
+        Assert.Equal(HttpStatusCode.NoContent, close.StatusCode);
+        var after = await Json(await api.SendAsync(HttpMethod.Get, $"/api/identity/users/{api.UserId}/sessions", Access(admin), null));
+        Assert.Equal("session.idle_expired", after.GetProperty("recent")[0].GetProperty("endReason").GetString());
+        Assert.True(after.GetProperty("recent")[0].GetProperty("endedByName").ValueKind == JsonValueKind.Null);
+    }
+
     private static async Task<DateTimeOffset> LastActivityAsync(Api api, Guid sid)
     {
         using var scope = api.Services.CreateScope();
