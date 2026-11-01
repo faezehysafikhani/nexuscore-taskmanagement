@@ -3,6 +3,10 @@ param(
     [string]$Version = "0.1.0",
     [string]$Output = "artifacts/packages",
 
+    # Optional label added to the version (0.1.0.1405081001-sessions1), so packages of different
+    # pieces of work never get mixed up. Letters, digits and dots only.
+    [string]$Suffix = "",
+
     # Optional: sign every package with a code-signing certificate (.pfx). Hosts can then require
     # signed packages (nuget.config / "dotnet nuget verify") and refuse a swapped file.
     [string]$SigningCertificatePath,
@@ -45,7 +49,7 @@ $escapedDate = [regex]::Escape($persianDate)
 $existingBuildNumbers = @(
     Get-ChildItem -Path $outputPath -Filter "*.nupkg" -File -ErrorAction SilentlyContinue |
     ForEach-Object {
-        if ($_.Name -match "\.$escapedVersion\.$escapedDate(\d{2})\.nupkg$") {
+        if ($_.Name -match "\.$escapedVersion\.$escapedDate(\d{2})(-[0-9A-Za-z.]+)?\.nupkg$") {
             [int]$Matches[1]
         }
     }
@@ -65,7 +69,14 @@ if ($buildNumber -gt 99) {
 
 $buildNumberText = "{0:D2}" -f $buildNumber
 
+if ($Suffix -and $Suffix -notmatch '^[0-9A-Za-z.]+$') {
+    throw "Suffix may contain only letters, digits and dots."
+}
+
 $PackageVersion = "$Version.$persianDate$buildNumberText"
+if ($Suffix) {
+    $PackageVersion = "$PackageVersion-$Suffix"
+}
 
 Write-Host ""
 Write-Host "Base Version:    $Version"
