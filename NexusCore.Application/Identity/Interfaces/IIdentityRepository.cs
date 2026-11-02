@@ -17,6 +17,9 @@ public interface IIdentityRepository
 
     /// <summary>Whether another user of the tenant has this mobile number (compared in canonical form).</summary>
     Task<bool> PhoneNumberExistsAsync(Guid tenantId, string phoneNumber, Guid? exceptUserId, CancellationToken cancellationToken);
+
+    /// <summary>The name of the user (other than exceptUserId) who has this mobile number, or null.</summary>
+    Task<string?> FindPhoneNumberOwnerAsync(Guid tenantId, string phoneNumber, Guid? exceptUserId, CancellationToken cancellationToken);
     Task<Role?> GetRoleByNameAsync(Guid tenantId, string name, CancellationToken cancellationToken);
     Task<Tenant?> GetTenantBySlugAsync(string slug, CancellationToken cancellationToken);
     Task AddPasswordResetTokenAsync(PasswordResetToken token, CancellationToken cancellationToken);

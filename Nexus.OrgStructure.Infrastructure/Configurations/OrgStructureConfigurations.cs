@@ -19,7 +19,16 @@ public sealed class CompanyConfiguration : IEntityTypeConfiguration<Company>
         builder.Property(x => x.Name).HasMaxLength(200).IsRequired();
         builder.Property(x => x.Code).HasMaxLength(40).IsRequired();
         builder.Property(x => x.Description).HasMaxLength(1000);
+        builder.Property(x => x.Phone).HasMaxLength(40);
+        builder.Property(x => x.Email).HasMaxLength(200);
+        builder.Property(x => x.Website).HasMaxLength(200);
+        builder.Property(x => x.NationalId).HasMaxLength(20);
+        builder.Property(x => x.EconomicCode).HasMaxLength(20);
+        builder.Property(x => x.Address).HasMaxLength(500);
+        builder.Property(x => x.HeadTitle).HasMaxLength(100);
+        builder.Property(x => x.Logo).HasMaxLength(500);
         builder.HasIndex(x => new { x.TenantId, x.Code }).IsUnique();
+        builder.HasIndex(x => x.ParentCompanyId);
     }
 }
 
@@ -86,6 +95,7 @@ public sealed class PostActingConfiguration : IEntityTypeConfiguration<PostActin
         builder.Property(x => x.Id).ValueGeneratedNever();
         builder.HasIndex(x => new { x.TenantId, x.VacantPostId }).IsUnique();
         builder.HasIndex(x => x.ActingPostId);
+        builder.Ignore(x => x.IsDated);
     }
 }
 
@@ -131,6 +141,7 @@ public sealed class UnitPositionConfiguration : IEntityTypeConfiguration<UnitPos
         builder.HasIndex(x => x.UnitId);
         builder.HasIndex(x => x.PositionId);
         builder.HasIndex(x => x.ParentPostId);
+        builder.Property(x => x.RowVersion).IsRowVersion();
     }
 }
 
@@ -141,8 +152,8 @@ public sealed class UserPositionConfiguration : IEntityTypeConfiguration<UserPos
         builder.ToTable("UserPositions", OrgStructureSchema.Name);
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).ValueGeneratedNever();
-        // One person per post.
-        builder.HasIndex(x => new { x.TenantId, x.UnitPositionId }).IsUnique();
+        // One open appointment per post (ended ones stay as history).
+        builder.HasIndex(x => new { x.TenantId, x.UnitPositionId }).IsUnique().HasFilter("[EndDate] IS NULL");
         builder.HasIndex(x => x.UserId);
     }
 }

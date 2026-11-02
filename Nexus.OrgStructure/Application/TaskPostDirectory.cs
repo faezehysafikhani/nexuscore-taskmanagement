@@ -52,7 +52,7 @@ public sealed class TaskPostDirectory(
         foreach (var userId in userIds.Distinct())
         {
             var held = state.Holdings.Where(h => h.UserId == userId).Select(h => h.UnitPositionId).ToHashSet();
-            var seats = state.Seats.Where(seat => held.Contains(seat.Id) && state.Posts.Any(post => post.PostId == seat.Id)).ToList();
+            var seats = state.Seats.Where(seat => held.Contains(seat.Id) && state.Posts.Any(post => post.PostId == seat.Id && post.IsActive)).ToList();
             if (seats.Count == 0)
             {
                 continue;
@@ -85,7 +85,9 @@ public sealed class TaskPostDirectory(
         CancellationToken cancellationToken)
     {
         var rows = await repository.ListTaskPostsAsync(tenantId, [taskId], null, cancellationToken);
-        var holders = (await LoadAsync(tenantId, cancellationToken)).Posts.ToDictionary(post => post.PostId, post => post.HolderUserId);
+        var workPosts = (await LoadAsync(tenantId, cancellationToken)).Posts;
+        var holders = workPosts.ToDictionary(post => post.PostId, post => post.HolderUserId);
+        var added = new HashSet<Guid>();
 
         async Task SetRoleAsync(TaskPostRole role, IReadOnlyList<Guid> postIds)
         {
@@ -93,6 +95,7 @@ public sealed class TaskPostDirectory(
             current.Where(row => !postIds.Contains(row.PostId)).ToList().ForEach(repository.RemoveTaskPost);
             foreach (var postId in postIds.Distinct().Where(id => current.All(row => row.PostId != id)))
             {
+                added.Add(postId);
                 await repository.AddTaskPostAsync(
                     new TaskPost(Guid.NewGuid(), tenantId, taskId, postId, (int)role, holders.GetValueOrDefault(postId)), cancellationToken);
             }
@@ -114,6 +117,22 @@ public sealed class TaskPostDirectory(
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // A post with a stand-in on now: the stand-in also gets the task newly given to it.
+        var before = rows.Select(row => row.PostId).ToHashSet();
+        var standIns = added.Count == 0 ? [] : (await repository.ListPostActingsAsync(tenantId, cancellationToken))
+            .Where(a => a.AppliedUserId is not null && added.Contains(a.VacantPostId) && !before.Contains(a.VacantPostId))
+            .ToList();
+        if (standIns.Count > 0 && services.GetService<ITaskPeopleUpdater>() is { } updater)
+        {
+            await updater.ApplyAsync(tenantId, standIns.Select(a =>
+            {
+                var post = workPosts.FirstOrDefault(p => p.PostId == a.VacantPostId);
+                var note = post is null ? "جانشین" : $"جانشین {post.Title} · کد {post.Code}";
+                return new TaskPersonChange(taskId, TaskPostRole.Acting, null, a.AppliedUserId, note);
+            }).ToList(), cancellationToken);
+        }
+
         await RecordPeriodsAsync(tenantId, [taskId], fillIn: false, cancellationToken);
     }
 
@@ -173,9 +192,9 @@ public sealed class TaskPostDirectory(
     }
 
     /// <summary>
-    /// Brings stand-ins (سرپرستی) up to date: the acting post's holder sees the vacant post's tasks
-    /// as its stand-in (جانشین); a post that got a holder, or a vacant post that no longer exists,
-    /// ends its stand-in and takes the view back.
+    /// Brings stand-ins (سرپرستی) up to date: the acting post's holder sees the post's tasks as its
+    /// stand-in (جانشین). An undated stand-in ends when the post gets a holder; a dated one (also for a
+    /// post with a holder) is on from its start until its end; a post that no longer exists ends it.
     /// </summary>
     public async Task SyncActingAsync(Guid tenantId, CancellationToken cancellationToken)
     {
@@ -194,10 +213,14 @@ public sealed class TaskPostDirectory(
         var taskPosts = await repository.ListTaskPostsAsync(tenantId, null, actings.Select(a => a.VacantPostId).ToList(), cancellationToken);
         var changes = new List<TaskPersonChange>();
         var ended = new List<PostActing>();
+        var now = DateTimeOffset.UtcNow;
         foreach (var acting in actings)
         {
-            var stillVacant = posts.TryGetValue(acting.VacantPostId, out var vacant) && vacant.HolderUserId is null;
-            var desired = stillVacant ? posts.GetValueOrDefault(acting.ActingPostId)?.HolderUserId : null;
+            var exists = posts.TryGetValue(acting.VacantPostId, out var vacant);
+            var isVacant = exists && vacant!.HolderUserId is null;
+            // A dated stand-in is on in its time (the post may have a holder); an undated one while the post is vacant.
+            var on = exists && acting.IsOnAt(now, isVacant);
+            var desired = on ? posts.GetValueOrDefault(acting.ActingPostId)?.HolderUserId : null;
             if (desired != acting.AppliedUserId)
             {
                 var note = vacant is null ? "جانشین" : $"جانشین {vacant.Title} · کد {vacant.Code}";
@@ -206,7 +229,7 @@ public sealed class TaskPostDirectory(
                 acting.Applied(desired);
             }
 
-            if (!stillVacant)
+            if (!exists || acting.IsOverAt(now, isVacant))
             {
                 ended.Add(acting);
             }

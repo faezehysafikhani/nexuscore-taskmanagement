@@ -22,6 +22,7 @@ public sealed class Company : AuditableEntity<Guid>
         Description = Normalize(description);
         ManagerUserId = managerUserId;
         IsActive = true;
+        UiLevel = OrgUiLevel.Advanced;
     }
 
     public Guid TenantId { get; private set; }
@@ -38,6 +39,23 @@ public sealed class Company : AuditableEntity<Guid>
 
     public bool IsActive { get; private set; }
 
+    /// <summary>The parent company in a group (holding); null: a company of its own.</summary>
+    public Guid? ParentCompanyId { get; private set; }
+
+    /// <summary>The structure template the company was made from (a copy; later edits do not change it).</summary>
+    public Guid? TemplateId { get; private set; }
+
+    /// <summary>How much of the structure tools the screens show (only hides things in the UI).</summary>
+    public OrgUiLevel UiLevel { get; private set; }
+
+    public void SetGroup(Guid? parentCompanyId, Guid? templateId)
+    {
+        ParentCompanyId = parentCompanyId;
+        TemplateId = templateId;
+    }
+
+    public void SetUiLevel(OrgUiLevel level) => UiLevel = level;
+
     public void Update(string name, string code, string? description, bool isActive)
     {
         Name = name.Trim();
@@ -48,7 +66,42 @@ public sealed class Company : AuditableEntity<Guid>
 
     public void SetHead(Guid? userId) => ManagerUserId = userId;
 
+    public string? Phone { get; private set; }
+    public string? Email { get; private set; }
+    public string? Website { get; private set; }
+    public string? NationalId { get; private set; }
+    public string? EconomicCode { get; private set; }
+    public string? Address { get; private set; }
+
+    /// <summary>What the chart calls the company's head (e.g. «مدیرعامل»); null: «رئیس کل».</summary>
+    public string? HeadTitle { get; private set; }
+
+    /// <summary>The logo in the file storage: "storageKey|contentType"; null: none.</summary>
+    public string? Logo { get; private set; }
+
+    /// <summary>Replaces all the optional details at once (empty means none).</summary>
+    public void SetDetails(string? phone, string? email, string? website, string? nationalId, string? economicCode, string? address, string? headTitle)
+    {
+        Phone = Normalize(phone);
+        Email = Normalize(email);
+        Website = Normalize(website);
+        NationalId = Normalize(nationalId);
+        EconomicCode = Normalize(economicCode);
+        Address = Normalize(address);
+        HeadTitle = Normalize(headTitle);
+    }
+
+    public void SetLogo(string? logo) => Logo = Normalize(logo);
+
     private static string? Normalize(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+}
+
+/// <summary>Screen detail level of a company. The default (0) is Normal, so existing rows need no value.</summary>
+public enum OrgUiLevel
+{
+    Normal = 0,
+    Simple = 1,
+    Advanced = 2,
 }
 
 /// <summary>
@@ -203,9 +256,25 @@ public sealed class UnitPosition : AuditableEntity<Guid>
     /// </summary>
     public Guid? ParentPostId { get; private set; }
 
+    /// <summary>The post that manages its unit (its holder is the unit's manager when the unit has none set).</summary>
+    public bool IsManagerPost { get; private set; }
+
+    /// <summary>The company head's post. Until the data is migrated, a directly-in-company post whose position has no superior counts too.</summary>
+    public bool IsCompanyHead { get; private set; }
+
+    /// <summary>Concurrency token: saving with an older version is refused.</summary>
+    public byte[] RowVersion { get; private set; } = [];
+
+    public void SetManagerPost(bool isManagerPost) => IsManagerPost = isManagerPost;
+
+    public void SetCompanyHead(bool isCompanyHead) => IsCompanyHead = isCompanyHead;
+
     public void MoveTo(int sortOrder) => SortOrder = sortOrder;
 
     public void PlaceUnder(Guid? parentPostId) => ParentPostId = parentPostId;
+
+    /// <summary>To another node of the same company (a merge): the post, its holder and its tasks stay as they are.</summary>
+    public void MoveToUnit(Guid unitId) => UnitId = unitId;
 
     /// <summary>Its unit moved to another company.</summary>
     public void MoveToCompany(Guid companyId) => CompanyId = companyId;
@@ -223,16 +292,34 @@ public sealed class UserPosition : AuditableEntity<Guid>
     {
     }
 
-    public UserPosition(Guid id, Guid tenantId, Guid userId, Guid unitPositionId) : base(id)
+    public UserPosition(Guid id, Guid tenantId, Guid userId, Guid unitPositionId, DateTimeOffset? startDate = null) : base(id)
     {
         TenantId = tenantId;
         UserId = userId;
         UnitPositionId = unitPositionId;
+        StartDate = startDate;
     }
 
     public Guid TenantId { get; private set; }
     public Guid UserId { get; private set; }
     public Guid UnitPositionId { get; private set; }
+
+    /// <summary>
+    /// The appointment's period (phase 9): from StartDate (null: since always) until EndDate (null: still
+    /// on). An appointment that has ended stays as history; at most one is open (no EndDate) per post.
+    /// </summary>
+    public DateTimeOffset? StartDate { get; private set; }
+    public DateTimeOffset? EndDate { get; private set; }
+
+    /// <summary>A new appointment with no start given starts when it is saved.</summary>
+    public void StartOn(DateTimeOffset at) => StartDate ??= at;
+
+    public void End(DateTimeOffset at) => EndDate = at;
+
+    /// <summary>The appointment that was to end when a later one starts goes on (that later one was cancelled).</summary>
+    public void Reopen() => EndDate = null;
+
+    public bool IsActiveAt(DateTimeOffset at) => (StartDate is not { } from || from <= at) && (EndDate is not { } to || at < to);
 }
 
 /// <summary>
@@ -355,7 +442,29 @@ public sealed class PostActing : AuditableEntity<Guid>
     public Guid ActingPostId { get; private set; }
     public Guid? AppliedUserId { get; private set; }
 
+    /// <summary>
+    /// A stand-in for a set time (from StartDate, null: now, until EndDate): also while the post has
+    /// a holder (leave, a mission). Without an end it lasts while the post is vacant.
+    /// </summary>
+    public DateTimeOffset? StartDate { get; private set; }
+    public DateTimeOffset? EndDate { get; private set; }
+
+    public bool IsDated => EndDate is not null;
+
+    /// <summary>Whether it is on at <paramref name="at"/>: a dated one in its time, else while the post is vacant.</summary>
+    public bool IsOnAt(DateTimeOffset at, bool postVacant) =>
+        IsDated ? (StartDate is not { } start || start <= at) && at < EndDate!.Value : postVacant;
+
+    /// <summary>Whether it is over: a dated one after its end, else once the post has a holder.</summary>
+    public bool IsOverAt(DateTimeOffset at, bool postVacant) => IsDated ? at >= EndDate!.Value : !postVacant;
+
     public void ActBy(Guid actingPostId) => ActingPostId = actingPostId;
+
+    public void SetPeriod(DateTimeOffset? start, DateTimeOffset? end)
+    {
+        StartDate = start;
+        EndDate = end;
+    }
 
     public void Applied(Guid? userId) => AppliedUserId = userId;
 }

@@ -39,13 +39,20 @@ public sealed class TestUserContext : ICurrentUserContext
 /// </summary>
 public sealed class SqlServerFixture : IAsyncLifetime
 {
-    private const string MasterConnectionString =
-        "Server=.;Database=master;Trusted_Connection=True;TrustServerCertificate=True";
+    /// <summary>
+    /// The server: NEXUS_TEST_SQLSERVER when set (a connection string without a database, as the other
+    /// test projects take it), else the local default instance with Windows sign-in.
+    /// </summary>
+    private static readonly string Server =
+        Environment.GetEnvironmentVariable("NEXUS_TEST_SQLSERVER") is { Length: > 0 } configured
+            ? configured.TrimEnd(';')
+            : "Server=.;Trusted_Connection=True;TrustServerCertificate=True";
+
+    private static string MasterConnectionString => $"{Server};Database=master";
 
     public string DatabaseName { get; } = $"TaskMgmt_IT_{Guid.NewGuid():N}";
 
-    public string ConnectionString =>
-        $"Server=.;Database={DatabaseName};Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True";
+    public string ConnectionString => $"{Server};Database={DatabaseName};MultipleActiveResultSets=true";
 
     public bool Available { get; private set; }
 
@@ -58,6 +65,64 @@ public sealed class SqlServerFixture : IAsyncLifetime
     public Guid UserGroupId { get; } = Guid.NewGuid();
 
     private ServiceProvider? _provider;
+
+    /// <summary>
+    /// The services the tests resolve, as a host would register them (also checked without any database, see
+    /// FixtureServicesTests: a service one of them needs and nobody registered fails there, at once, with its name).
+    /// </summary>
+    internal static ServiceCollection BuildServices(string connectionString, string storageRoot)
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(typeof(Microsoft.Extensions.Logging.ILogger<>), typeof(NullLogger<>));
+        services.AddSingleton<IConfiguration>(new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["FileStorage:RootPath"] = storageRoot })
+            .Build());
+        services.AddScoped<IFileStorage, LocalDiskFileStorage>();
+        services.AddScoped<IPlatformRepository, PlatformRepository>();
+        services.AddScoped<IUploadPolicyReader, UploadPolicyReader>();
+        services.AddSingleton<TestUserContext>();
+        services.AddSingleton<ICurrentUserContext>(sp => sp.GetRequiredService<TestUserContext>());
+        services.AddScoped<AuditingInterceptor>();
+        services.AddScoped<DomainEventDispatchInterceptor>();
+        services.AddScoped<NexusCore.Application.Common.IDomainEventDispatcher, NoOpDomainEventDispatcher>();
+
+        services.AddDbContext<NexusCoreDbContext>((sp, options) =>
+            options.UseSqlServer(connectionString)
+                .AddInterceptors(sp.GetRequiredService<AuditingInterceptor>()));
+
+        services.AddDbContext<TaskManagementDbContext>((sp, options) =>
+            options.UseSqlServer(connectionString)
+                .AddInterceptors(
+                    sp.GetRequiredService<AuditingInterceptor>(),
+                    sp.GetRequiredService<DomainEventDispatchInterceptor>()));
+
+        services.AddScoped<ITaskManagementUnitOfWork>(sp => sp.GetRequiredService<TaskManagementDbContext>());
+        services.AddScoped<ITaskRepository, TaskRepository>();
+        services.AddScoped<IRepetitiveTaskRepository, RepetitiveTaskRepository>();
+        services.AddScoped<ITagRepository, TagRepository>();
+        services.AddScoped<ITaskFileRepository, TaskFileRepository>();
+        services.AddScoped<INoteRepository, NoteRepository>();
+        services.AddScoped<ITaskCommentRepository, TaskCommentRepository>();
+        // The services below take the notice publisher; these tests do not look at notices, so the null one.
+        services.AddScoped<ITaskNoticePublisher, NullTaskNoticePublisher>();
+        // The seams TaskService takes (Nexus.OrgStructure fills them in a product): the module's own defaults here.
+        services.AddScoped<NexusCore.Application.Identity.Interfaces.IWorkAssignmentScope, NexusCore.Application.Identity.Interfaces.UnlimitedWorkAssignmentScope>();
+        services.AddScoped<NexusCore.Application.Identity.Interfaces.IUserReachScope, NexusCore.Application.Identity.Interfaces.UnlimitedUserReachScope>();
+        services.AddScoped<NexusCore.Application.Identity.Interfaces.ITaskPosts, NexusCore.Application.Identity.Interfaces.NoTaskPosts>();
+        services.AddScoped<ITaskActivityService, TaskActivityService>();
+        services.AddSingleton<IRecurrenceCalculator, RecurrenceCalculator>();
+        services.AddScoped<ITaskService, TaskService>();
+        services.AddScoped<IRepetitiveTaskService, RepetitiveTaskService>();
+        services.AddScoped<ITagService, TagService>();
+        services.AddScoped<ITaskFileService, TaskFileService>();
+        services.AddScoped<INoteService, NoteService>();
+        services.AddScoped<ITaskCommentService, TaskCommentService>();
+        // These tests exercise the services' own rules, not who may see which task (that is
+        // covered end to end in NexusCore.Tests' access tests), so every task is reachable here.
+        services.AddScoped<ITaskAccessScope, UnrestrictedTaskAccessScope>();
+
+        return services;
+    }
 
     public async Task InitializeAsync()
     {
@@ -80,48 +145,7 @@ public sealed class SqlServerFixture : IAsyncLifetime
             return;
         }
 
-        var services = new ServiceCollection();
-        services.AddSingleton(typeof(Microsoft.Extensions.Logging.ILogger<>), typeof(NullLogger<>));
-        services.AddSingleton<IConfiguration>(new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?> { ["FileStorage:RootPath"] = StorageRoot })
-            .Build());
-        services.AddScoped<IFileStorage, LocalDiskFileStorage>();
-        services.AddScoped<IPlatformRepository, PlatformRepository>();
-        services.AddScoped<IUploadPolicyReader, UploadPolicyReader>();
-        services.AddSingleton<TestUserContext>();
-        services.AddSingleton<ICurrentUserContext>(sp => sp.GetRequiredService<TestUserContext>());
-        services.AddScoped<AuditingInterceptor>();
-        services.AddScoped<DomainEventDispatchInterceptor>();
-        services.AddScoped<NexusCore.Application.Common.IDomainEventDispatcher, NoOpDomainEventDispatcher>();
-
-        services.AddDbContext<NexusCoreDbContext>((sp, options) =>
-            options.UseSqlServer(ConnectionString)
-                .AddInterceptors(sp.GetRequiredService<AuditingInterceptor>()));
-
-        services.AddDbContext<TaskManagementDbContext>((sp, options) =>
-            options.UseSqlServer(ConnectionString)
-                .AddInterceptors(
-                    sp.GetRequiredService<AuditingInterceptor>(),
-                    sp.GetRequiredService<DomainEventDispatchInterceptor>()));
-
-        services.AddScoped<ITaskManagementUnitOfWork>(sp => sp.GetRequiredService<TaskManagementDbContext>());
-        services.AddScoped<ITaskRepository, TaskRepository>();
-        services.AddScoped<IRepetitiveTaskRepository, RepetitiveTaskRepository>();
-        services.AddScoped<ITagRepository, TagRepository>();
-        services.AddScoped<ITaskFileRepository, TaskFileRepository>();
-        services.AddScoped<INoteRepository, NoteRepository>();
-        services.AddScoped<ITaskCommentRepository, TaskCommentRepository>();
-        services.AddScoped<ITaskActivityService, TaskActivityService>();
-        services.AddSingleton<IRecurrenceCalculator, RecurrenceCalculator>();
-        services.AddScoped<ITaskService, TaskService>();
-        services.AddScoped<IRepetitiveTaskService, RepetitiveTaskService>();
-        services.AddScoped<ITagService, TagService>();
-        services.AddScoped<ITaskFileService, TaskFileService>();
-        services.AddScoped<INoteService, NoteService>();
-        services.AddScoped<ITaskCommentService, TaskCommentService>();
-        // These tests exercise the services' own rules, not who may see which task (that is
-        // covered end to end in NexusCore.Tests' access tests), so every task is reachable here.
-        services.AddScoped<ITaskAccessScope, UnrestrictedTaskAccessScope>();
+        var services = BuildServices(ConnectionString, StorageRoot);
 
         _provider = services.BuildServiceProvider();
 

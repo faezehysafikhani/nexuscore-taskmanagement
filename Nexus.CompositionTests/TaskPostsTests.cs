@@ -28,6 +28,7 @@ public sealed class TaskPostsTests(AccessControlTests.Host host) : IClassFixture
         var expertPost = host.TaskPosts.Post("کارشناس", expert.Id);
         var clerkPost = host.TaskPosts.Post("کارمند", clerk.Id);
         var vacant = host.TaskPosts.Post("کارآموز", null);
+        var inactive = host.TaskPosts.Post("سمت غیرفعال", expert.Id, false);
 
         var created = await CreateAsync(creator, new { responsiblePostIds = new[] { expertPost }, accessPostIds = new[] { clerkPost } });
         Assert.Equal(HttpStatusCode.OK, created.StatusCode);
@@ -37,7 +38,8 @@ public sealed class TaskPostsTests(AccessControlTests.Host host) : IClassFixture
         var posts = task.RootElement.GetProperty("posts").EnumerateArray().Select(p => (p.GetProperty("postId").GetGuid(), p.GetProperty("role").GetString())).ToList();
         Assert.Equal([(creatorPost, "owner"), (expertPost, "responsible"), (clerkPost, "access")], posts);
 
-        // A vacant post can't be given a task, nor can someone with no post (sent as a person).
+        // A vacant or inactive post cannot be given a new task.
+        Assert.Equal(HttpStatusCode.BadRequest, (await CreateAsync(creator, new { responsiblePostIds = new[] { inactive } })).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await CreateAsync(creator, new { responsiblePostIds = new[] { vacant } })).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await CreateAsync(creator, new { responsibleUserIds = new[] { nobody.Id } })).StatusCode);
 
@@ -161,6 +163,29 @@ public sealed class TaskPostsTests(AccessControlTests.Host host) : IClassFixture
         Assert.False((await host.SendAsync(worker, HttpMethod.Get, $"/api/task-management/tasks/{taskId}")).IsSuccessStatusCode);
     }
 
+    [Fact]
+    public async Task AUserWhoseAppointmentEnded_CannotReceiveANewTask_ByPersonOrStalePost()
+    {
+        host.TaskPosts.Enabled = true;
+        var creator = await UserAsync();
+        var formerHolder = await UserAsync();
+        host.TaskPosts.Post("مدیر", creator.Id);
+        var post = host.TaskPosts.Post("کارشناس", formerHolder.Id);
+        Assert.Equal(HttpStatusCode.OK,
+            (await CreateAsync(creator, new { responsiblePostIds = new[] { post } })).StatusCode);
+
+        // The form may still have an old selection open when the appointment ends.
+        host.TaskPosts.Hold(post, null);
+        Assert.Equal(HttpStatusCode.BadRequest,
+            (await CreateAsync(creator, new { responsiblePostIds = new[] { post } })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest,
+            (await CreateAsync(creator, new { responsibleUserIds = new[] { formerHolder.Id } })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest,
+            (await CreateAsync(creator, new { assignedUserId = formerHolder.Id })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest,
+            (await CreateAsync(creator, new { responsibleUserIds = new[] { creator.Id }, assigneeUserIds = new[] { formerHolder.Id } })).StatusCode);
+    }
+
     private Task<AccessControlTests.Caller> UserAsync() => host.UserAsync(host.TenantA, Permissions);
 
     private Task<HttpResponseMessage> CreateAsync(AccessControlTests.Caller creator, object people)
@@ -182,10 +207,10 @@ public sealed class ProgrammableTaskPosts : ITaskPosts
 
     public bool Enabled { get; set; }
 
-    public Guid Post(string title, Guid? holder)
+    public Guid Post(string title, Guid? holder, bool isActive = true)
     {
         var id = Guid.NewGuid();
-        _posts[id] = new WorkPost(id, holder, title, (_posts.Count + 1).ToString(), "معاونت");
+        _posts[id] = new WorkPost(id, holder, title, (_posts.Count + 1).ToString(), "معاونت", isActive);
         return id;
     }
 

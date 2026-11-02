@@ -21,12 +21,26 @@ public sealed class LoginRequestValidator : AbstractValidator<LoginRequest>
 internal static class ProfileRules
 {
     public const int MaxAvatarLength = 1_500_000;
+    private const int MaxPersonnelPhotoBytes = 300 * 1024;
 
-    public const string UsernameMessage = "Username must be a national code: exactly 10 digits.";
-    public const string PhoneMessage = "Enter a valid mobile number (for example 09121234567 or +98 912 123 4567).";
+    // Count decoded bytes, not Base64 characters; HTTP callers cannot bypass the upload limit.
+    public static bool IsPersonnelPhotoWithinLimit(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return true;
+        var data = value.Trim();
+        var comma = data.IndexOf(',');
+        if (!data.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase) || comma < 0) return false;
+        var payload = data[(comma + 1)..];
+        if (payload.Length > 4 * ((MaxPersonnelPhotoBytes + 2) / 3)) return false;
+        try { return Convert.FromBase64String(payload).Length <= MaxPersonnelPhotoBytes; }
+        catch (FormatException) { return false; }
+    }
+
+    public const string UsernameMessage = "نام کاربری باید کد ملی معتبر ۱۰ رقمی باشد.";
+    public const string PhoneMessage = "شماره تلفن همراه معتبر وارد کنید (مثلاً ۰۹۱۲۱۲۳۴۵۶۷ یا ‎+98 912 123 4567‎).";
 
     public static IRuleBuilderOptions<T, string?> ValidUsername<T>(this IRuleBuilder<T, string?> rule) =>
-        rule.Must(Username.IsValid).WithMessage(UsernameMessage);
+        rule.Must(Username.IsValidNationalCode).WithMessage(UsernameMessage);
 
     /// <summary>data:image/(png|jpeg|webp|gif);base64,... or an https:// address. Never svg, html or another scheme.</summary>
     private static readonly System.Text.RegularExpressions.Regex AvatarPattern = new(
@@ -36,7 +50,7 @@ internal static class ProfileRules
 
     public static IRuleBuilderOptions<T, string?> ValidAvatar<T>(this IRuleBuilder<T, string?> rule) =>
         rule.Must(value => string.IsNullOrWhiteSpace(value) || AvatarPattern.IsMatch(value.Trim()))
-            .WithMessage("The avatar must be a PNG, JPEG, WebP or GIF image.");
+            .WithMessage("تصویر پروفایل باید PNG، JPEG، WebP یا GIF باشد.");
 
     public static IRuleBuilderOptions<T, string?> ValidPhoneNumber<T>(this IRuleBuilder<T, string?> rule) =>
         rule.Must(PhoneNumber.IsValid).WithMessage(PhoneMessage);
@@ -46,6 +60,12 @@ public sealed class CreateUserRequestValidator : AbstractValidator<CreateUserReq
 {
     public CreateUserRequestValidator()
     {
+        RuleFor(x => x.Address).MaximumLength(1000);
+        RuleFor(x => x.FatherName).MaximumLength(80);
+        RuleFor(x => x.BirthDate).Must(date => date is null || date <= DateOnly.FromDateTime(DateTime.UtcNow)).WithMessage("تاریخ تولد نمی‌تواند در آینده باشد.");
+        RuleFor(x => x.AvatarUrl).MaximumLength(ProfileRules.MaxAvatarLength).ValidAvatar()
+            .Must(ProfileRules.IsPersonnelPhotoWithinLimit).WithMessage("عکس پرسنلی باید فایل تصویر با حداکثر حجم ۳۰۰ کیلوبایت باشد.");
+
         RuleFor(x => x.TenantId).NotEmpty();
         RuleFor(x => x.Username).NotEmpty().ValidUsername();
         RuleFor(x => x.FirstName).NotEmpty().MaximumLength(80);
@@ -60,6 +80,12 @@ public sealed class UpdateUserRequestValidator : AbstractValidator<UpdateUserReq
 {
     public UpdateUserRequestValidator()
     {
+        RuleFor(x => x.Address).MaximumLength(1000);
+        RuleFor(x => x.FatherName).MaximumLength(80);
+        RuleFor(x => x.BirthDate).Must(date => date is null || date <= DateOnly.FromDateTime(DateTime.UtcNow)).WithMessage("تاریخ تولد نمی‌تواند در آینده باشد.");
+        RuleFor(x => x.AvatarUrl).MaximumLength(ProfileRules.MaxAvatarLength).ValidAvatar()
+            .Must(ProfileRules.IsPersonnelPhotoWithinLimit).WithMessage("عکس پرسنلی باید فایل تصویر با حداکثر حجم ۳۰۰ کیلوبایت باشد.");
+
         RuleFor(x => x.DisplayName).NotEmpty().MaximumLength(160);
         RuleFor(x => x.Email).EmailAddress().MaximumLength(256).When(x => !string.IsNullOrWhiteSpace(x.Email));
         RuleFor(x => x.Password).StrongPassword().When(x => !string.IsNullOrWhiteSpace(x.Password));
@@ -101,7 +127,7 @@ public sealed class UpdateMyProfileRequestValidator : AbstractValidator<UpdateMy
         RuleFor(x => x.LastName).MaximumLength(80);
         RuleFor(x => x.PhoneNumber).ValidPhoneNumber().When(x => !string.IsNullOrWhiteSpace(x.PhoneNumber));
         RuleFor(x => x.AvatarUrl).MaximumLength(ProfileRules.MaxAvatarLength)
-            .WithMessage("The avatar image is too large.");
+            .WithMessage("حجم تصویر پروفایل بیش از حد مجاز است.");
         RuleFor(x => x.AvatarUrl).ValidAvatar();
     }
 }

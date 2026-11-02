@@ -707,6 +707,158 @@ public sealed class OrgChartTeamsAndTitlesTests
     }
 
     [Fact]
+    public async Task DirectChat_IsKeptToPeers_ThoseBelow_TheManager_AndTheManagersManager()
+    {
+        var world = new World();
+        var (top, m, a, b, c, d, x, nobody) = (world.User("بالا"), world.User("مدیر"), world.User("الف"), world.User("ب"),
+            world.User("ج"), world.User("د"), world.User("دیگر"), world.User("بی‌جا"));
+        var y = world.User("واحد دیگر");
+        var unit = world.Unit("معاونت");
+        var unit2 = world.Unit("معاونت دوم");
+        var company = await world.CompanyAsync("C1");
+        await world.Service.LinkUnitAsync(Tenant, unit.Id, new LinkUnitRequest(company), default);
+        await world.Service.LinkUnitAsync(Tenant, unit2.Id, new LinkUnitRequest(company), default);
+        async Task Place(Guid user, Guid? manager, Guid? where = null) =>
+            Assert.True((await world.Service.SetAssignmentAsync(Tenant, user, new SetUserAssignmentRequest(company, where ?? unit.Id, null, manager), default)).IsSuccess);
+        await Place(top, null);
+        await Place(m, top);
+        await Place(x, top);
+        await Place(a, m);
+        await Place(b, m);
+        await Place(c, a);
+        await Place(d, c);
+        await Place(y, m, unit2.Id); // same manager, another unit: not at a's level
+
+        var scope = world.ChatScope(on: true);
+        Assert.Equal(new[] { b, c, d, m, top }.Order(), (await scope.GetPartnersAsync(Tenant, a, default))!.Order());
+        Assert.Equal(new[] { a, c }.Order(), (await scope.GetPartnersAsync(Tenant, d, default))!.Order());
+        Assert.Null(await scope.GetPartnersAsync(Tenant, nobody, default));
+        Assert.Null(await world.ChatScope(on: false).GetPartnersAsync(Tenant, a, default));
+    }
+
+    [Fact]
+    public async Task DirectChat_CountsEveryPostSomeoneHolds_NotOnlyTheMainOne()
+    {
+        var world = new World();
+        var (boss1, boss2, two, three, six) = (world.User("مدیر یک"), world.User("مدیر دو"), world.User("دو"), world.User("سه"), world.User("شش"));
+        var u1 = world.Unit("واحد یک");
+        var u2 = world.Unit("واحد دو");
+        var company = await world.CompanyAsync("C1");
+        await world.Service.LinkUnitAsync(Tenant, u1.Id, new LinkUnitRequest(company), default);
+        await world.Service.LinkUnitAsync(Tenant, u2.Id, new LinkUnitRequest(company), default);
+        async Task<Guid> Seat(Guid unit, string title, Guid? parent) =>
+            (await world.Service.AddUnitPositionAsync(Tenant, unit, new AddUnitPositionRequest(await world.PositionAsync(title), null, parent), default)).Value!.Id;
+        var head1 = await Seat(u1.Id, "مدیر کل", null);
+        var head2 = await Seat(u2.Id, "مدیر", null);
+        var expert1 = await Seat(u1.Id, "کارشناس", head1);
+        var expert1b = await Seat(u1.Id, "کارشناس ارشد", head1);
+        var expert2 = await Seat(u2.Id, "کارشناس دوم", head2);
+        await world.Service.SetAssignmentAsync(Tenant, boss1, new SetUserAssignmentRequest(company, u1.Id, null, null, [head1]), default);
+        await world.Service.SetAssignmentAsync(Tenant, boss2, new SetUserAssignmentRequest(company, u2.Id, null, null, [head2]), default);
+        await world.Service.SetAssignmentAsync(Tenant, six, new SetUserAssignmentRequest(company, u1.Id, null, null, [expert1]), default);
+        // «سه»'s main place is unit two, but he also holds a post in unit one.
+        await world.Service.SetAssignmentAsync(Tenant, three, new SetUserAssignmentRequest(company, u2.Id, null, null, [expert2, expert1b]), default);
+
+        var scope = world.ChatScope(on: true);
+        Assert.Contains(three, (await scope.GetPartnersAsync(Tenant, six, default))!);   // same manager, same unit through his second post
+        Assert.Contains(three, (await scope.GetPartnersAsync(Tenant, boss1, default))!); // below boss1 through that post
+        Assert.Contains(boss1, (await scope.GetPartnersAsync(Tenant, three, default))!);
+        Assert.Contains(boss2, (await scope.GetPartnersAsync(Tenant, three, default))!);
+        Assert.DoesNotContain(boss2, (await scope.GetPartnersAsync(Tenant, six, default))!);
+
+        // He gives the post in unit two up: its manager is no longer his.
+        Assert.True((await world.Service.SetAssignmentAsync(Tenant, three, new SetUserAssignmentRequest(company, u1.Id, null, null, [expert1b]), default)).IsSuccess);
+        Assert.DoesNotContain(boss2, (await world.ChatScope(on: true).GetPartnersAsync(Tenant, three, default))!);
+    }
+
+    [Fact]
+    public async Task DirectChat_AsInTheQaRound_APostWithNoParent_AndSomeoneReplaced()
+    {
+        var world = new World();
+        var (two, three, four, six, one) = (world.User("دو"), world.User("سه"), world.User("چهار"), world.User("شش"), world.User("یک"));
+        var credit = world.Unit("اعتبارات");
+        var review = world.Unit("بررسی و نظارت");
+        var company = await world.CompanyAsync("C1");
+        await world.Service.LinkUnitAsync(Tenant, credit.Id, new LinkUnitRequest(company), default);
+        await world.Service.LinkUnitAsync(Tenant, review.Id, new LinkUnitRequest(company), default);
+        async Task<Guid> Seat(Guid unit, string title, Guid? parent) =>
+            (await world.Service.AddUnitPositionAsync(Tenant, unit, new AddUnitPositionRequest(await world.PositionAsync(title), null, parent), default)).Value!.Id;
+        var deputy = await Seat(credit.Id, "معاون", null);            // vacant
+        var p5 = await Seat(credit.Id, "مدیر کل", deputy);
+        var p6 = await Seat(credit.Id, "کارشناس", p5);
+        var p85 = await Seat(credit.Id, "کارشناس ب", null);           // made as «پست تازه»: no parent post
+        var reviewHead = await Seat(review.Id, "رئیس", null);
+        var p22 = await Seat(review.Id, "کارشناس بررسی", reviewHead);
+        await ((OrgStructureService)world.Service).SetManagerPostAsync(Tenant, p5, new SetManagerPostRequest(true), default);
+        await world.Service.SetAssignmentAsync(Tenant, two, new SetUserAssignmentRequest(company, credit.Id, null, null, [p5]), default);
+        await world.Service.SetAssignmentAsync(Tenant, three, new SetUserAssignmentRequest(company, credit.Id, null, null, [p6]), default);
+        await world.Service.SetAssignmentAsync(Tenant, four, new SetUserAssignmentRequest(company, review.Id, null, null, [reviewHead]), default);
+        await world.Service.SetAssignmentAsync(Tenant, one, new SetUserAssignmentRequest(company, credit.Id, null, null, [p85]), default);
+        await world.Service.SetAssignmentAsync(Tenant, six, new SetUserAssignmentRequest(company, review.Id, null, null, [p22]), default);
+        // «شش» replaces «یک» on post 85 and keeps post 22.
+        Assert.True((await ((OrgStructureService)world.Service).AppointAsync(Tenant, p85, new AppointRequest(six), default)).IsSuccess);
+
+        var scope = world.ChatScope(on: true);
+        Assert.Equal(new[] { three, six }.Order(), (await scope.GetPartnersAsync(Tenant, two, default))!.Order());
+        Assert.Equal(new[] { two, six }.Order(), (await scope.GetPartnersAsync(Tenant, three, default))!.Order());
+        Assert.Equal(new[] { two, three, four }.Order(), (await scope.GetPartnersAsync(Tenant, six, default))!.Order());
+
+        // «یک» left his only post: his place has no position any more.
+        var place = (await world.Service.GetAssignmentAsync(Tenant, one, default)).Value!;
+        Assert.Null(place.PositionId);
+        Assert.Equal([two], (await world.ChatScope(on: true).GetPartnersAsync(Tenant, one, default))!);
+    }
+
+    [Fact]
+    public async Task AFilledPost_GetsAStandIn_OnlyForASetTime_FromItsOwnUnit()
+    {
+        var world = new World();
+        var (worker, standIn, elsewhere, admin) = (world.User("کارمند"), world.User("جانشین"), world.User("بیرونی"), world.User("مدیر سیستم"));
+        var tech = world.Unit("معاونت فناوری");
+        var other = world.Unit("معاونت مالی");
+        var company = await world.CompanyAsync("C1");
+        await world.Service.LinkUnitAsync(Tenant, tech.Id, new LinkUnitRequest(company), default);
+        await world.Service.LinkUnitAsync(Tenant, other.Id, new LinkUnitRequest(company), default);
+        var (post, accountant, far) = (await world.SeatAsync(tech.Id, "کارشناس"), await world.SeatAsync(tech.Id, "حسابدار"), await world.SeatAsync(other.Id, "کارشناس مالی"));
+        await world.Service.SetAssignmentAsync(Tenant, worker, new SetUserAssignmentRequest(company, tech.Id, null, null, [post]), default);
+        await world.Service.SetAssignmentAsync(Tenant, standIn, new SetUserAssignmentRequest(company, tech.Id, null, null, [accountant]), default);
+        await world.Service.SetAssignmentAsync(Tenant, elsewhere, new SetUserAssignmentRequest(company, other.Id, null, null, [far]), default);
+        var task = Guid.NewGuid();
+        world.Updater.Summaries.Add(new TaskSummary(task, "کار باز", new DateOnly(2030, 1, 1), "Todo", false));
+        await world.TaskPosts.SetTaskPostsAsync(Tenant, task, null, [post], [], default);
+        var substitution = world.Substitution(admin, OrgStructurePermissions.ManageSubstitution);
+
+        // With a holder: only with an end date, and only from the post's own unit.
+        Assert.Equal("validation.error", (await substitution.SetActingAsync(Tenant, post, new SetActingRequest(accountant), default)).Error.Code);
+        var candidates = (await substitution.GetPostAsync(Tenant, post, default)).Value!.Candidates;
+        Assert.Equal([accountant], candidates.Select(c => c.PostId));
+        var until = DateTimeOffset.UtcNow.AddDays(3);
+        Assert.Equal("validation.error", (await substitution.SetActingAsync(Tenant, post, new SetActingRequest(far, null, until), default)).Error.Code);
+        Assert.Equal("validation.error", (await substitution.SetActingAsync(Tenant, post, new SetActingRequest(accountant, null, DateTimeOffset.UtcNow.AddDays(-1)), default)).Error.Code);
+
+        // From now until a later day: the stand-in sees the post's task beside its holder.
+        Assert.True((await substitution.SetActingAsync(Tenant, post, new SetActingRequest(accountant, null, until), default)).IsSuccess);
+        Assert.Contains(new TaskPersonChange(task, TaskPostRole.Acting, null, standIn, "جانشین کارشناس · کد 1"), world.Updater.Applied);
+        var shown = (await substitution.GetPostAsync(Tenant, post, default)).Value!;
+        Assert.Equal((standIn, worker, until), (shown.Acting!.HolderUserId, shown.HolderUserId, shown.ActingUntil));
+        Assert.Contains((await substitution.GetInboxAsync(Tenant, default)).Value!.Posts, p => p.PostId == post);
+
+        // A task given to the post afterwards reaches the stand-in too.
+        var later = Guid.NewGuid();
+        await world.TaskPosts.SetTaskPostsAsync(Tenant, later, null, [post], [], default);
+        Assert.Contains(new TaskPersonChange(later, TaskPostRole.Acting, null, standIn, "جانشین کارشناس · کد 1"), world.Updater.Applied);
+
+        // Starting later: not on yet.
+        Assert.True((await substitution.SetActingAsync(Tenant, post, new SetActingRequest(accountant, DateTimeOffset.UtcNow.AddDays(1), until), default)).IsSuccess);
+        Assert.Contains(new TaskPersonChange(task, TaskPostRole.Acting, standIn, null, "جانشین کارشناس · کد 1"), world.Updater.Applied);
+        Assert.Contains(new TaskPersonChange(later, TaskPostRole.Acting, standIn, null, "جانشین کارشناس · کد 1"), world.Updater.Applied);
+
+        // Cleared: gone.
+        Assert.True((await substitution.ClearActingAsync(Tenant, post, default)).IsSuccess);
+        Assert.Null((await substitution.GetPostAsync(Tenant, post, default)).Value!.Acting);
+    }
+
+    [Fact]
     public async Task ATasksHistory_KeepsItsStandIns_WithTheirOwnPosition()
     {
         var world = new World();
@@ -1010,6 +1162,11 @@ public sealed class OrgChartTeamsAndTitlesTests
             _users.Bare[id] = name;
             return id;
         }
+
+        /// <summary>Whom each user may chat with, OrgStructure:LimitChatToHierarchy on or off.</summary>
+        public IChatPartnerScope ChatScope(bool on) =>
+            new HierarchyChatScope(_repository, new OrganizationUnitRepository(_organization),
+                Microsoft.Extensions.Options.Options.Create(new OrgStructureOptions { LimitChatToHierarchy = on }));
 
         public OrganizationUnit Unit(string name, Guid? managerUserId = null)
         {

@@ -18,6 +18,7 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
+        Common.PersianValidationMessages.Use();
 
         services.AddScoped<IValidator<LoginRequest>, LoginRequestValidator>();
         services.AddScoped<IValidator<CreateUserRequest>, CreateUserRequestValidator>();

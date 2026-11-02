@@ -17,6 +17,10 @@ public interface IPlatformService
     Task AuditForAsync(Guid? tenantId, Guid? userId, string action, string? entityName, string? entityId, string? details, CancellationToken cancellationToken, Guid? sessionId) =>
         AuditForAsync(tenantId, userId, action, entityName, entityId, details, cancellationToken);
 
+    /// <summary>The last sign-in (time and address) of each user of the caller's organization, for the users report.</summary>
+    Task<Result<IReadOnlyList<LastSignInDto>>> ListLastSignInsAsync(Guid? tenantId, CancellationToken cancellationToken) =>
+        Task.FromResult(Result.Success<IReadOnlyList<LastSignInDto>>([]));
+
     Task<Result<PagedResult<AuditLogDto>>> ListAuditLogsAsync(AuditLogQuery query, CancellationToken cancellationToken);
     Task<Result<IReadOnlyList<SettingDto>>> ListSettingsAsync(Guid? tenantId, CancellationToken cancellationToken);
     Task<Result<SettingDto>> UpsertSettingAsync(UpsertSettingRequest request, CancellationToken cancellationToken);

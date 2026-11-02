@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using NexusCore.Application.Identity.Options;
+using NexusCore.Application.Identity;
 using NexusCore.Application.Identity.Permissions;
 using NexusCore.Application.Security;
 using NexusCore.Domain.Identity;
@@ -44,6 +45,14 @@ public sealed class DefaultDataSeeder(
 
         // Sessions (db/upgrade-sessions.sql): their tables, and the columns they added.
         await SessionSchema.EnsureAsync(dbContext, cancellationToken);
+
+        // Existing installations use the module initializer rather than the full Core migration chain.
+        await ModuleSchemaInitializer.EnsureColumnAsync(dbContext, "identity.Users", "Address",
+            "ALTER TABLE [identity].[Users] ADD [Address] nvarchar(1000) NULL", null, cancellationToken);
+        await ModuleSchemaInitializer.EnsureColumnAsync(dbContext, "identity.Users", "FatherName",
+            "ALTER TABLE [identity].[Users] ADD [FatherName] nvarchar(80) NULL", null, cancellationToken);
+        await ModuleSchemaInitializer.EnsureColumnAsync(dbContext, "identity.Users", "BirthDate",
+            "ALTER TABLE [identity].[Users] ADD [BirthDate] date NULL", null, cancellationToken);
 
         if (!await dbContext.Tenants.AnyAsync(cancellationToken))
         {
@@ -138,7 +147,9 @@ public sealed class DefaultDataSeeder(
 
     private async Task SeedConfiguredRolesAsync(CancellationToken cancellationToken)
     {
-        foreach (var definition in seedOptions.Value.SeedRoles.Where(role => !string.IsNullOrWhiteSpace(role.Name)))
+        // The built-in «کاربر عادی» first (new users get it), then the host's own.
+        var builtIn = new SeedRoleOptions { Name = DefaultUserRole.Name, Description = DefaultUserRole.Description, Permissions = [.. DefaultUserRole.Permissions] };
+        foreach (var definition in seedOptions.Value.SeedRoles.Prepend(builtIn).Where(role => !string.IsNullOrWhiteSpace(role.Name)))
         {
             var normalized = definition.Name.Trim().ToUpperInvariant();
             if (await dbContext.Roles.AnyAsync(role => role.TenantId == DefaultTenantId && role.NormalizedName == normalized, cancellationToken))
@@ -152,7 +163,7 @@ public sealed class DefaultDataSeeder(
                 .Select(permission => new { permission.Id, permission.Name })
                 .ToListAsync(cancellationToken);
 
-            foreach (var missing in wanted.Except(permissions.Select(p => p.Name)))
+            foreach (var missing in wanted.Except(permissions.Select(p => p.Name)).Where(_ => !ReferenceEquals(definition, builtIn)))
             {
                 logger.LogWarning("Seed role {Role} names unknown permission {Permission}; it was skipped.", definition.Name, missing);
             }

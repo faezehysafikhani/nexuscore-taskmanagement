@@ -10,10 +10,52 @@ public sealed record CompanyDto(
     string? Description,
     PersonRef? Manager,
     bool IsActive,
-    IReadOnlyList<Guid> LinkedUnitIds);
+    IReadOnlyList<Guid> LinkedUnitIds,
+    Guid? ParentCompanyId = null,
+    string? Phone = null,
+    string? Email = null,
+    string? Website = null,
+    string? NationalId = null,
+    string? EconomicCode = null,
+    string? Address = null,
+    string? HeadTitle = null,
+    string? LogoUrl = null,
+    string? UiLevel = null);
 
-/// <summary>The head is not chosen here: see <see cref="PositionDto"/>.</summary>
-public sealed record CreateCompanyRequest(string Name, string Code, string? Description);
+/// <summary>
+/// The head is not chosen here: see <see cref="PositionDto"/>. TemplateId (optional): a structure
+/// template (GET /api/org-structure/templates) whose types, rules, positions, nodes and links the
+/// new company gets a copy of. Code (optional): empty makes one (C-001, C-002, ...). Details
+/// (optional): as in <see cref="SetCompanyDetailsRequest"/>. UnitIds (optional): top units with no
+/// company yet to link to the new one.
+/// </summary>
+public sealed record CreateCompanyRequest(
+    string Name,
+    string? Code = null,
+    string? Description = null,
+    Guid? TemplateId = null,
+    Guid? ParentCompanyId = null,
+    SetCompanyDetailsRequest? Details = null,
+    IReadOnlyList<Guid>? UnitIds = null);
+
+/// <summary>
+/// The company's optional details; replaces all of them (empty means none). HeadTitle: what the
+/// chart calls the company's head (e.g. «مدیرعامل»); empty: «رئیس کل».
+/// </summary>
+public sealed record SetCompanyDetailsRequest(
+    string? Phone = null,
+    string? Email = null,
+    string? Website = null,
+    string? NationalId = null,
+    string? EconomicCode = null,
+    string? Address = null,
+    string? HeadTitle = null);
+
+/// <summary>The company's parent in a group (holding); null: a company of its own.</summary>
+public sealed record SetParentCompanyRequest(Guid? ParentCompanyId);
+
+/// <summary>A company and the companies under it in its group, at any depth.</summary>
+public sealed record CompanyGroupDto(Guid Id, string Name, string Code, bool IsActive, IReadOnlyList<CompanyGroupDto> Children);
 
 public sealed record UpdateCompanyRequest(string Name, string Code, string? Description, bool IsActive);
 
@@ -63,7 +105,7 @@ public sealed record UserAssignmentDto(
 /// their other positions stay as they are.
 /// </summary>
 public sealed record SetUserAssignmentRequest(
-    Guid CompanyId, Guid? UnitId, Guid? PositionId, Guid? ManagerUserId, IReadOnlyList<Guid>? UnitPositionIds = null);
+    Guid CompanyId, Guid? UnitId, Guid? PositionId, Guid? ManagerUserId, IReadOnlyList<Guid>? UnitPositionIds = null, DateTimeOffset? StartDate = null, DateTimeOffset? EndDate = null);
 
 /// <summary>A post someone holds. UnitId null: directly in the company (UnitName is then the company's).</summary>
 public sealed record HeldPositionDto(Guid UnitPositionId, Guid? UnitId, string UnitName, Guid PositionId, string Title, string? Code = null);
@@ -84,7 +126,8 @@ public sealed record UnitPositionDto(
     string Code = "",
     Guid CompanyId = default,
     string? CompanyName = null,
-    Guid? ParentPostId = null);
+    Guid? ParentPostId = null,
+    bool IsManagerPost = false);
 
 /// <summary>Code: optional; without it the next free number of the company. ParentPostId: the post above it.</summary>
 public sealed record AddUnitPositionRequest(Guid PositionId, string? Code = null, Guid? ParentPostId = null);
@@ -135,6 +178,9 @@ public sealed record OrgChartTeamDto(
 /// Positions: the unit's positions in its order, each with its holders (vacant ones too).
 /// Members: the unit's people who hold none of its positions. Teams: the work teams built by the
 /// unit's people (no longer drawn in the chart; kept for older clients).
+/// Children: the nodes directly under it (Units of the company holds only its top nodes), in their
+/// order; ParentNodeId: the node above (null at the top); NodeType and Links: its type and its
+/// secondary links (null / empty for a plain unit with none).
 /// </summary>
 public sealed record OrgChartUnitDto(
     Guid UnitId,
@@ -145,7 +191,16 @@ public sealed record OrgChartUnitDto(
     IReadOnlyList<OrgChartTeamDto> Teams,
     bool IsActive = true,
     int PeopleCount = 0,
-    IReadOnlyList<OrgChartPositionDto>? Positions = null);
+    IReadOnlyList<OrgChartPositionDto>? Positions = null,
+    Guid? ParentNodeId = null,
+    OrgChartNodeTypeDto? NodeType = null,
+    IReadOnlyList<OrgChartLinkDto>? Links = null);
+
+/// <summary>A node's type as the chart draws it: colour (#rrggbb) and lucide icon name.</summary>
+public sealed record OrgChartNodeTypeDto(Guid NodeTypeId, string Name, string Color, string Icon, bool IsDomainBoundary);
+
+/// <summary>A secondary link from a node to another (LineStyle: solid, dotted or dashed).</summary>
+public sealed record OrgChartLinkDto(Guid LinkId, Guid TargetNodeId, Guid LinkTypeId, string Name, string LineStyle, bool CountsAsManager);
 
 /// <summary>A post in the chart; no holder means it is vacant. IsHead: the company head's post.</summary>
 public sealed record OrgChartPositionDto(
@@ -172,7 +227,10 @@ public sealed record OrgChartCompanyDto(
     IReadOnlyList<OrgChartMemberDto> Members,
     IReadOnlyList<OrgChartUnitDto> Units,
     int PeopleCount = 0,
-    IReadOnlyList<OrgChartPositionDto>? Positions = null);
+    IReadOnlyList<OrgChartPositionDto>? Positions = null,
+    string? UiLevel = null,
+    string? HeadTitle = null,
+    string? LogoUrl = null);
 
 /// <summary>Someone of the organization who has no place in the structure yet.</summary>
 public sealed record UnplacedUserDto(Guid UserId, string DisplayName, string? AvatarUrl);
@@ -187,3 +245,39 @@ public sealed record UserTitleDto(Guid UserId, Guid? HonorificId, string? Title)
 
 /// <summary>Null removes the user's title.</summary>
 public sealed record SetUserTitleRequest(Guid? HonorificId);
+
+// ---------------------------------------------------------------- posts from a pattern (phase 6.1)
+
+public sealed record SetManagerPostRequest(bool IsManagerPost);
+
+/// <summary>A post a node type gets: of this position; IsManagerPost: the node's manager post.</summary>
+public sealed record NodeTypePostDto(Guid PositionId, string Title, bool IsManagerPost, int SortOrder);
+
+public sealed record NodeTypePostRequest(Guid PositionId, bool IsManagerPost = false);
+
+/// <summary>The posts, in order; at most one manager post.</summary>
+public sealed record SetNodeTypePostsRequest(IReadOnlyList<NodeTypePostRequest> Posts);
+
+/// <summary>One node (NodeId) or every active node of a type (NodeTypeId).</summary>
+public sealed record ApplyPostTemplatesRequest(Guid? NodeId = null, Guid? NodeTypeId = null);
+
+/// <summary>A post of the pattern that was not made, and why (a post the node already has is not listed).</summary>
+public sealed record SkippedPostDto(Guid NodeId, string NodeName, string? PositionTitle, string Reason);
+
+public sealed record ApplyPostTemplatesResultDto(IReadOnlyList<UnitPositionDto> Created, IReadOnlyList<SkippedPostDto> Skipped);
+
+/// <summary>A post a template puts directly in the company (resolved to the organization's position).</summary>
+public sealed record CompanyPostToMake(Guid PositionId, bool IsCompanyHead);
+
+// ---------------------------------------------------------------- appointments over time (phase 9)
+
+/// <summary>UserId takes the post from StartDate (null: now; never in the past). Whoever holds it then ends on that day.</summary>
+public sealed record AppointRequest(Guid UserId, DateTimeOffset? StartDate = null);
+
+/// <summary>The post's appointment on now ends on EndDate (null: now; never in the past).</summary>
+public sealed record EndAppointmentRequest(DateTimeOffset? EndDate = null);
+
+/// <summary>One appointment: who held (holds, will hold) which post, from when until when (null: no limit).</summary>
+public sealed record AppointmentDto(
+    Guid Id, Guid UnitPositionId, string? PostTitle, string? PostCode, string? Place, PersonRef Person,
+    DateTimeOffset? StartDate, DateTimeOffset? EndDate, bool IsActive);

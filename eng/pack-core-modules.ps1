@@ -7,6 +7,10 @@ param(
     # pieces of work never get mixed up. Letters, digits and dots only.
     [string]$Suffix = "",
 
+    # Optional: a label after the version, e.g. "nima" gives 0.1.0.1405080801-nima, so it is clear
+    # whose packages these are. The build number of the day counts packages with any label.
+    [string]$VersionSuffix,
+
     # Optional: sign every package with a code-signing certificate (.pfx). Hosts can then require
     # signed packages (nuget.config / "dotnet nuget verify") and refuse a swapped file.
     [string]$SigningCertificatePath,
@@ -76,6 +80,10 @@ if ($Suffix -and $Suffix -notmatch '^[0-9A-Za-z.]+$') {
 $PackageVersion = "$Version.$persianDate$buildNumberText"
 if ($Suffix) {
     $PackageVersion = "$PackageVersion-$Suffix"
+}
+
+if ($VersionSuffix) {
+    $PackageVersion = "$PackageVersion-$($VersionSuffix.TrimStart('-'))"
 }
 
 Write-Host ""
@@ -442,7 +450,11 @@ $integrationProjects = @(
 
     "Nexus.Integrations.ProjectStrategyAlignment.Infrastructure/Nexus.Integrations.ProjectStrategyAlignment.Infrastructure.csproj",
 
-    "Nexus.Integrations.TaskReporting/Nexus.Integrations.TaskReporting.csproj"
+    "Nexus.Integrations.TaskReporting/Nexus.Integrations.TaskReporting.csproj",
+
+    "Nexus.Integrations.CalendarTasks/Nexus.Integrations.CalendarTasks.csproj",
+
+    "Nexus.Integrations.CalendarOrgStructure/Nexus.Integrations.CalendarOrgStructure.csproj"
 
 )
 

@@ -1,5 +1,6 @@
 using Nexus.TaskManagement.Application.Dtos;
 using Nexus.TaskManagement.Domain;
+using NexusCore.Application.Common;
 using NexusCore.Application.Files;
 using NexusCore.Application.Identity.Interfaces;
 using NexusCore.SharedKernel.Interfaces;
@@ -19,7 +20,8 @@ public sealed class TaskService(
     IWorkAssignmentScope assignmentScope,
     ITaskPosts taskPosts,
     IUserReachScope reachScope,
-    IRecurrenceCalculator calendar) : ITaskService
+    IRecurrenceCalculator calendar,
+    ISchedulingDayPolicy? schedulingDays = null) : ITaskService
 {
     /// <summary>
     /// Seeing a task (owner, assignee, collaborator, team) lets a user work on it; changing what
@@ -108,6 +110,10 @@ public sealed class TaskService(
         }
 
         var tenantId = currentUser.TenantId.Value;
+
+        var schedulingDecision = (schedulingDays ?? new AllowAllSchedulingDays()).Check(request.DueDate);
+        if (!schedulingDecision.IsAllowed)
+            return Result.Failure<TaskDto>(Error.Validation(schedulingDecision.Reason!));
 
         if (request.IsProject && (request.SubTasks is null || request.SubTasks.Count == 0))
         {
@@ -248,6 +254,13 @@ public sealed class TaskService(
         if (!access.CanManage(task))
         {
             return Result.Failure<TaskDto>(NotTaskOwner());
+        }
+
+        if (request.DueDate != task.DueDate)
+        {
+            var schedulingDecision = (schedulingDays ?? new AllowAllSchedulingDays()).Check(request.DueDate);
+            if (!schedulingDecision.IsAllowed)
+                return Result.Failure<TaskDto>(Error.Validation(schedulingDecision.Reason!));
         }
 
         var plan = await PlanPostsAsync(
@@ -889,6 +902,10 @@ public sealed class TaskService(
         }
 
         var alreadyOnTask = existingResponsible.Concat(existingAccess).ToHashSet();
+        if (responsible.Concat(finalAccess).Any(id => !alreadyOnTask.Contains(id) && !posts[id].IsActive))
+        {
+            return Result.Failure<PostPlan?>(Error.Validation("تخصیص وظیفه به سمت غیرفعال مجاز نیست."));
+        }
         if (responsible.Concat(finalAccess).Any(id => !alreadyOnTask.Contains(id) && posts[id].HolderUserId is null))
         {
             return Result.Failure<PostPlan?>(Error.Validation("This post is vacant: tasks are given only to posts someone holds."));

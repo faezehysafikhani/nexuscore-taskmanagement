@@ -4,8 +4,72 @@ using Nexus.OrgStructure.Domain;
 
 namespace Nexus.OrgStructure.Infrastructure;
 
-public sealed class OrgStructureRepository(OrgStructureDbContext dbContext) : IOrgStructureRepository
+public sealed class OrgStructureRepository(OrgStructureDbContext dbContext, TimeProvider? clock = null) : IOrgStructureRepository
 {
+    public async Task<IReadOnlyList<NodeType>> ListNodeTypesAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        await dbContext.NodeTypes.Where(x => x.TenantId == tenantId).OrderBy(x => x.SortOrder).ThenBy(x => x.Name).ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<NodeTypeRule>> ListNodeTypeRulesAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        await dbContext.NodeTypeRules.Where(x => x.TenantId == tenantId).ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<NodeTypePostTemplate>> ListNodeTypePostTemplatesAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        await dbContext.NodeTypePostTemplates.Where(x => x.TenantId == tenantId).OrderBy(x => x.SortOrder).ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<LinkType>> ListLinkTypesAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        await dbContext.LinkTypes.Where(x => x.TenantId == tenantId).OrderBy(x => x.Name).ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<AutoLinkRule>> ListAutoLinkRulesAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        await dbContext.AutoLinkRules.Where(x => x.TenantId == tenantId).ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<OrgLink>> ListOrgLinksAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        await dbContext.OrgLinks.Where(x => x.TenantId == tenantId).ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<StructureTemplate>> ListStructureTemplatesAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        await dbContext.StructureTemplates.Where(x => x.TenantId == tenantId).OrderBy(x => x.Name).ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<StructureTemplateItem>> ListStructureTemplateItemsAsync(Guid tenantId, Guid? templateId, CancellationToken cancellationToken) =>
+        await dbContext.StructureTemplateItems.Where(x => x.TenantId == tenantId && (templateId == null || x.TemplateId == templateId))
+            .OrderBy(x => x.SortOrder).ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<OrgChangeLog>> ListOrgChangeLogsAsync(Guid tenantId, Guid? entityId, int take, CancellationToken cancellationToken) =>
+        await dbContext.OrgChangeLogs.Where(x => x.TenantId == tenantId && (entityId == null || x.EntityId == entityId))
+            .OrderByDescending(x => x.AtUtc).Take(take).ToListAsync(cancellationToken);
+
+    public async Task AddNodeTypeAsync(NodeType nodeType, CancellationToken cancellationToken) =>
+        await dbContext.NodeTypes.AddAsync(nodeType, cancellationToken);
+
+    public void RemoveNodeType(NodeType nodeType) => dbContext.NodeTypes.Remove(nodeType);
+
+    public async Task AddNodeTypeRuleAsync(NodeTypeRule rule, CancellationToken cancellationToken) =>
+        await dbContext.NodeTypeRules.AddAsync(rule, cancellationToken);
+
+    public void RemoveNodeTypeRule(NodeTypeRule rule) => dbContext.NodeTypeRules.Remove(rule);
+
+    public async Task AddOrgChangeLogAsync(OrgChangeLog entry, CancellationToken cancellationToken) =>
+        await dbContext.OrgChangeLogs.AddAsync(entry, cancellationToken);
+
+    public async Task AddLinkTypeAsync(LinkType linkType, CancellationToken cancellationToken) => await dbContext.LinkTypes.AddAsync(linkType, cancellationToken);
+
+    public void RemoveLinkType(LinkType linkType) => dbContext.LinkTypes.Remove(linkType);
+
+    public async Task AddAutoLinkRuleAsync(AutoLinkRule rule, CancellationToken cancellationToken) => await dbContext.AutoLinkRules.AddAsync(rule, cancellationToken);
+
+    public void RemoveAutoLinkRule(AutoLinkRule rule) => dbContext.AutoLinkRules.Remove(rule);
+
+    public async Task AddOrgLinkAsync(OrgLink link, CancellationToken cancellationToken) => await dbContext.OrgLinks.AddAsync(link, cancellationToken);
+
+    public void RemoveOrgLink(OrgLink link) => dbContext.OrgLinks.Remove(link);
+
+    public async Task AddNodeTypePostTemplateAsync(NodeTypePostTemplate template, CancellationToken cancellationToken) =>
+        await dbContext.NodeTypePostTemplates.AddAsync(template, cancellationToken);
+
+    public void RemoveNodeTypePostTemplate(NodeTypePostTemplate template) => dbContext.NodeTypePostTemplates.Remove(template);
+
+    public async Task AddStructureTemplateAsync(StructureTemplate template, CancellationToken cancellationToken) =>
+        await dbContext.StructureTemplates.AddAsync(template, cancellationToken);
+
+    public void RemoveStructureTemplate(StructureTemplate template) => dbContext.StructureTemplates.Remove(template);
+
     public async Task<IReadOnlyList<Company>> ListCompaniesAsync(Guid tenantId, CancellationToken cancellationToken) =>
         await dbContext.Companies.Where(x => x.TenantId == tenantId).OrderBy(x => x.Name).ToListAsync(cancellationToken);
 
@@ -142,13 +206,45 @@ public sealed class OrgStructureRepository(OrgStructureDbContext dbContext) : IO
 
     public void RemoveUnitPosition(UnitPosition unitPosition) => dbContext.UnitPositions.Remove(unitPosition);
 
-    public async Task<IReadOnlyList<UserPosition>> ListUserPositionsAsync(Guid tenantId, CancellationToken cancellationToken) =>
-        await dbContext.UserPositions.Where(x => x.TenantId == tenantId).ToListAsync(cancellationToken);
+    private DateTimeOffset Now => (clock ?? TimeProvider.System).GetUtcNow();
 
-    public async Task AddUserPositionAsync(UserPosition userPosition, CancellationToken cancellationToken) =>
+    /// <summary>The appointments on now (started, not ended): what every reader of «who holds which post» sees.</summary>
+    public async Task<IReadOnlyList<UserPosition>> ListUserPositionsAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        var now = Now;
+        return await dbContext.UserPositions
+            .Where(x => x.TenantId == tenantId && (x.StartDate == null || x.StartDate <= now) && (x.EndDate == null || x.EndDate > now))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<UserPosition>> ListUserPositionHistoryAsync(Guid tenantId, Guid? userId, Guid? unitPositionId, CancellationToken cancellationToken) =>
+        await dbContext.UserPositions
+            .Where(x => x.TenantId == tenantId && (userId == null || x.UserId == userId) && (unitPositionId == null || x.UnitPositionId == unitPositionId))
+            .ToListAsync(cancellationToken);
+
+    public async Task AddUserPositionAsync(UserPosition userPosition, CancellationToken cancellationToken)
+    {
+        userPosition.StartOn(Now);
         await dbContext.UserPositions.AddAsync(userPosition, cancellationToken);
+    }
 
-    public void RemoveUserPosition(UserPosition userPosition) => dbContext.UserPositions.Remove(userPosition);
+    /// <summary>
+    /// Ends the appointment now: it stays as history. One that has not started yet never was, so it goes.
+    /// </summary>
+    public void RemoveUserPosition(UserPosition userPosition)
+    {
+        var now = Now;
+        if (userPosition.StartDate is { } start && start > now)
+        {
+            dbContext.UserPositions.Remove(userPosition);
+            return;
+        }
+
+        if (userPosition.EndDate is not { } end || end > now)
+        {
+            userPosition.End(now);
+        }
+    }
 
     public async Task<IReadOnlyList<Honorific>> ListHonorificsAsync(Guid tenantId, CancellationToken cancellationToken) =>
         await dbContext.Honorifics.Where(x => x.TenantId == tenantId).OrderBy(x => x.SortOrder).ThenBy(x => x.Title).ToListAsync(cancellationToken);

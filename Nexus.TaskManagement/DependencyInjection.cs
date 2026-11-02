@@ -1,6 +1,7 @@
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using NexusCore.Application.Common;
 using Nexus.TaskManagement.Application;
 using Nexus.TaskManagement.Application.Dtos;
 using Nexus.TaskManagement.Application.Validators;
@@ -20,6 +21,7 @@ public static class DependencyInjection
     /// </summary>
     public static IServiceCollection AddTaskManagement(this IServiceCollection services)
     {
+        services.TryAddSingleton<ISchedulingDayPolicy, AllowAllSchedulingDays>();
         services.AddScoped<ITaskService, TaskService>();
         services.AddScoped<IRepetitiveTaskService, RepetitiveTaskService>();
         services.AddScoped<ITagService, TagService>();
