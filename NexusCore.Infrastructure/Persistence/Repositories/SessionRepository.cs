@@ -39,6 +39,13 @@ public sealed class SessionRepository(NexusCoreDbContext dbContext) : ISessionRe
                         .SetProperty(session => session.LastActivityAtUtc, nowUtc)
                         .SetProperty(session => session.LastSeenAtUtc, nowUtc)
                         .SetProperty(session => session.LastIp, session => ipAddress ?? session.LastIp), cancellationToken);
+                // ExecuteUpdate bypasses the change tracker: a copy of the session already loaded in this
+                // request (the "stay signed in" call reads it first) would still carry the old idle time and
+                // the answer would send the user straight back to the warning.
+                foreach (var entry in dbContext.ChangeTracker.Entries<UserSession>().Where(e => e.Entity.Id == sessionId).ToList())
+                {
+                    await entry.ReloadAsync(cancellationToken);
+                }
             }
             else
             {
