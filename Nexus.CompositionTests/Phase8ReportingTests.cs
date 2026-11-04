@@ -78,8 +78,8 @@ public sealed class Phase8ReportingTests
     [Fact]
     public async Task WithTheOptionsOn_UnitsAreRatedFromPlannedVersusDoneFigures_OfApprovedProjectsOnly()
     {
-        var head = new OrganizationUnit(Guid.NewGuid(), Tenant, "Head", "H", null);
-        var eng = new OrganizationUnit(Guid.NewGuid(), Tenant, "Eng", "E", head.Id);
+        var head = OrgUnits.Make(Guid.NewGuid(), Tenant, "Head", "H", null);
+        var eng = OrgUnits.Make(Guid.NewGuid(), Tenant, "Eng", "E", head.Id);
         var good = NewProject("GOOD", eng.Id, Alice);
         var late = NewProject("LATE", eng.Id, Alice);
         var draft = NewProject("DRAFT", eng.Id, Bob, approved: false);
@@ -102,8 +102,8 @@ public sealed class Phase8ReportingTests
     [Fact]
     public async Task ManagersGetTheSameFiguresAndRating_AndTheMatrixListsWhichProjectsAreInEachCell()
     {
-        var head = new OrganizationUnit(Guid.NewGuid(), Tenant, "Head", "H", null);
-        var eng = new OrganizationUnit(Guid.NewGuid(), Tenant, "Eng", "E", head.Id);
+        var head = OrgUnits.Make(Guid.NewGuid(), Tenant, "Head", "H", null);
+        var eng = OrgUnits.Make(Guid.NewGuid(), Tenant, "Eng", "E", head.Id);
         var a = NewProject("A", eng.Id, Alice);
         var b = NewProject("B", eng.Id, Alice, ProjectStatus.Completed);
         var c = NewProject("C", eng.Id, Bob);
@@ -128,8 +128,8 @@ public sealed class Phase8ReportingTests
     [Fact]
     public async Task WithTheOptionsOff_NothingChanges_ProgressStillComesFromRegisteredUpdates_AndDraftsAreIncluded()
     {
-        var head = new OrganizationUnit(Guid.NewGuid(), Tenant, "Head", "H", null);
-        var eng = new OrganizationUnit(Guid.NewGuid(), Tenant, "Eng", "E", head.Id);
+        var head = OrgUnits.Make(Guid.NewGuid(), Tenant, "Head", "H", null);
+        var eng = OrgUnits.Make(Guid.NewGuid(), Tenant, "Eng", "E", head.Id);
         var draft = NewProject("DRAFT", eng.Id, Alice, approved: false);
         var plan = new Plan((draft, 50, 0));
 

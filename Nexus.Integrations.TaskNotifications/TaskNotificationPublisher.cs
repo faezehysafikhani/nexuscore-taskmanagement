@@ -97,6 +97,8 @@ public static class DependencyInjection
         // A new responsible person, or a moved due date, is told by SMS too (the responsible person only).
         services.AddScoped<NexusCore.SharedKernel.Domain.IDomainEventHandler<Nexus.TaskManagement.Domain.TaskItemAssigneeChanged>, TaskChangeSmsNotifier>();
         services.AddScoped<NexusCore.SharedKernel.Domain.IDomainEventHandler<Nexus.TaskManagement.Domain.TaskItemDueChanged>, TaskChangeSmsNotifier>();
+        // A past-due task whose status changes is texted to its creator and those responsible.
+        services.AddScoped<NexusCore.SharedKernel.Domain.IDomainEventHandler<Nexus.TaskManagement.Domain.TaskItemOverdueStatusChanged>, TaskOverdueChangeSmsNotifier>();
         // The texts of those SMS, editable in the SMS panel.
         services.AddSingleton<NexusCore.Application.Messaging.ISmsTemplateCatalog, TaskSmsTemplateCatalog>();
         // People added to a work team are told so in the app (the Core's default tells no one).

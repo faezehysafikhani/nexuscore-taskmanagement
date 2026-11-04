@@ -10,12 +10,68 @@ public enum ManagerSource
     UnitManager = 1,
 
     /// <summary>The head of the user's company.</summary>
-    CompanyManager = 2
+    CompanyManager = 2,
+
+    /// <summary>The holder of the post above the user's own (the nearest one someone holds).</summary>
+    PostSuperior = 3
 }
 
-public sealed record UnitNode(Guid Id, Guid? ParentId, Guid? ManagerUserId);
+/// <summary>IsDomainBoundary: whether the unit is the boundary of «the same deputy» (see <see cref="OrgGraph.DomainOf"/>); true for a plain unit.</summary>
+public sealed record UnitNode(Guid Id, Guid? ParentId, Guid? ManagerUserId, bool IsDomainBoundary = true);
 
-public sealed record AssignmentNode(Guid UserId, Guid CompanyId, Guid? UnitId, Guid? ManagerUserId);
+/// <summary>PostSuperiorUserId: who holds the post above the user's own (see <see cref="PostSuperiors"/>).</summary>
+public sealed record AssignmentNode(Guid UserId, Guid CompanyId, Guid? UnitId, Guid? ManagerUserId, Guid? PostSuperiorUserId = null);
+
+/// <summary>
+/// Posts under posts (معاون above کارشناس, a head of office above its staff...): a placed person's
+/// superior through their post is the holder of the nearest post above their main post that
+/// someone else holds; a vacant post above is passed over. The main post: the one of their main
+/// position in their own place (unit, or directly in the company), else the first they hold there.
+/// </summary>
+public static class PostSuperiors
+{
+    public sealed record Placement(Guid UserId, Guid CompanyId, Guid? UnitId, Guid? PositionId);
+
+    public static IReadOnlyDictionary<Guid, Guid> Of(
+        IEnumerable<Placement> placements,
+        IEnumerable<Domain.UnitPosition> seats,
+        IEnumerable<Domain.UserPosition> holdings,
+        Func<Domain.UnitPosition, Guid?>? parentOf = null)
+    {
+        parentOf ??= seat => seat.ParentPostId;
+        var byId = seats.ToDictionary(seat => seat.Id);
+        var holdingList = holdings.ToList();
+        var holderOf = holdingList.GroupBy(h => h.UnitPositionId).ToDictionary(group => group.Key, group => group.First().UserId);
+        var heldBy = holdingList.ToLookup(h => h.UserId, h => h.UnitPositionId);
+        var result = new Dictionary<Guid, Guid>();
+        foreach (var placement in placements)
+        {
+            var own = heldBy[placement.UserId].Select(id => byId.GetValueOrDefault(id)).OfType<Domain.UnitPosition>()
+                .Where(seat => seat.CompanyId == placement.CompanyId && seat.UnitId == placement.UnitId)
+                .ToList();
+            var main = own.FirstOrDefault(seat => seat.PositionId == placement.PositionId) ?? own.OrderBy(seat => seat.SortOrder).FirstOrDefault();
+            if (main is null)
+            {
+                continue;
+            }
+
+            var visited = new HashSet<Guid> { main.Id };
+            var parent = parentOf(main);
+            while (parent is { } postId && visited.Add(postId) && byId.TryGetValue(postId, out var above))
+            {
+                if (holderOf.TryGetValue(postId, out var holder) && holder != placement.UserId)
+                {
+                    result[placement.UserId] = holder;
+                    break;
+                }
+
+                parent = parentOf(above);
+            }
+        }
+
+        return result;
+    }
+}
 
 public sealed record ResolvedManager(Guid ManagerUserId, ManagerSource Source);
 
@@ -29,7 +85,7 @@ public sealed record ResolvedManager(Guid ManagerUserId, ManagerSource Source);
 /// </summary>
 public sealed class HierarchyResolver
 {
-    private readonly IReadOnlyDictionary<Guid, UnitNode> _units;
+    private readonly OrgGraph _graph;
     private readonly IReadOnlyDictionary<Guid, Guid> _companyOfLinkedUnit;
     private readonly IReadOnlyDictionary<Guid, Guid?> _companyManagers;
     private readonly IReadOnlyDictionary<Guid, AssignmentNode> _assignments;
@@ -40,66 +96,58 @@ public sealed class HierarchyResolver
         IReadOnlyDictionary<Guid, Guid> companyOfLinkedUnit,
         IReadOnlyDictionary<Guid, Guid?> companyManagers,
         IEnumerable<AssignmentNode> assignments)
+        : this(new OrgGraph(units, companyOfLinkedUnit), companyManagers, assignments)
     {
-        _units = units.ToDictionary(unit => unit.Id);
-        _companyOfLinkedUnit = companyOfLinkedUnit;
+    }
+
+    /// <summary>The resolver over an existing graph (the usual way: the graph is built once and shared).</summary>
+    public HierarchyResolver(
+        OrgGraph graph,
+        IReadOnlyDictionary<Guid, Guid?> companyManagers,
+        IEnumerable<AssignmentNode> assignments)
+    {
+        _graph = graph;
+        _companyOfLinkedUnit = graph.LinkedUnits;
         _companyManagers = companyManagers;
         _assignments = assignments.ToDictionary(assignment => assignment.UserId);
     }
 
     public IReadOnlyDictionary<Guid, AssignmentNode> Assignments => _assignments;
 
+    /// <summary>The graph of units this resolver walks (the one algorithm for parents, subtrees and domains).</summary>
+    public OrgGraph Graph => _graph;
+
     /// <summary>The company a unit belongs to: the one linked to it or to the nearest unit above it.</summary>
-    public Guid? CompanyOfUnit(Guid unitId) => LinkedAncestorOf(unitId) is { } linked ? _companyOfLinkedUnit[linked] : null;
+    public Guid? CompanyOfUnit(Guid unitId) => _graph.CompanyOfUnit(unitId);
 
     /// <summary>The unit itself or the nearest unit above it that is linked to a company.</summary>
-    public Guid? LinkedAncestorOf(Guid unitId)
-    {
-        var visited = new HashSet<Guid>();
-        Guid? current = unitId;
-        while (current is { } id && visited.Add(id))
-        {
-            if (_companyOfLinkedUnit.ContainsKey(id))
-            {
-                return id;
-            }
-
-            current = _units.TryGetValue(id, out var unit) ? unit.ParentId : null;
-        }
-
-        return null;
-    }
+    public Guid? LinkedAncestorOf(Guid unitId) => _graph.LinkedAncestorOf(unitId);
 
     /// <summary>Every unit at or below the given one (cycle-safe).</summary>
-    public IReadOnlyList<Guid> SubtreeOf(Guid unitId)
-    {
-        var children = _units.Values
-            .Where(unit => unit.ParentId is not null)
-            .GroupBy(unit => unit.ParentId!.Value)
-            .ToDictionary(group => group.Key, group => group.Select(unit => unit.Id).ToList());
-
-        var result = new List<Guid>();
-        var visited = new HashSet<Guid>();
-        var pending = new Stack<Guid>([unitId]);
-        while (pending.Count > 0)
-        {
-            var id = pending.Pop();
-            if (!visited.Add(id))
-            {
-                continue;
-            }
-
-            result.Add(id);
-            if (children.TryGetValue(id, out var below))
-            {
-                below.ForEach(pending.Push);
-            }
-        }
-
-        return result;
-    }
+    public IReadOnlyList<Guid> SubtreeOf(Guid unitId) => _graph.SubtreeOf(unitId);
 
     public ResolvedManager? ManagerOf(Guid userId) => Managers.TryGetValue(userId, out var manager) ? manager : null;
+
+    /// <summary>
+    /// Managers a user has besides their own (ManagerOf) through secondary links that count as
+    /// manager: the managers of the nodes their unit (or a unit above it) is linked to that way.
+    /// Not used by anything else yet (task approval stays with the main manager).
+    /// </summary>
+    public IReadOnlyList<Guid> ExtraManagersOf(Guid userId, ILookup<Guid, Guid> countingLinks)
+    {
+        if (!_assignments.TryGetValue(userId, out var assignment) || assignment.UnitId is not { } unitId)
+        {
+            return [];
+        }
+
+        var main = ManagerOf(userId)?.ManagerUserId;
+        return _graph.ExtraManagerNodesOf(unitId, countingLinks)
+            .Select(node => _graph.Node(node)?.ManagerUserId)
+            .OfType<Guid>()
+            .Where(manager => manager != userId && manager != main)
+            .Distinct()
+            .ToList();
+    }
 
     /// <summary>The user's managers, nearest first, stopping before a loop would repeat anyone.</summary>
     public IReadOnlyList<Guid> ManagementChainOf(Guid userId)
@@ -185,9 +233,14 @@ public sealed class HierarchyResolver
             return new ResolvedManager(explicitManager, ManagerSource.Explicit);
         }
 
+        if (assignment.PostSuperiorUserId is { } superior && superior != assignment.UserId)
+        {
+            return new ResolvedManager(superior, ManagerSource.PostSuperior);
+        }
+
         var visited = new HashSet<Guid>();
         var current = assignment.UnitId;
-        while (current is { } unitId && visited.Add(unitId) && _units.TryGetValue(unitId, out var unit))
+        while (current is { } unitId && visited.Add(unitId) && _graph.Node(unitId) is { } unit)
         {
             if (unit.ManagerUserId is { } unitManager && unitManager != assignment.UserId)
             {

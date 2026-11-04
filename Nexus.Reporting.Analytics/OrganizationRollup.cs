@@ -49,7 +49,7 @@ internal sealed class OrganizationRollup
         var path = new List<Guid> { unit.Id };
         var seen = new HashSet<Guid> { unit.Id };
         var current = unit;
-        while (current.ParentId is { } parentId && _units.TryGetValue(parentId, out var parent) && seen.Add(parentId))
+        while (current.ParentUnitId is { } parentId && _units.TryGetValue(parentId, out var parent) && seen.Add(parentId))
         {
             path.Insert(0, parentId);
             current = parent;

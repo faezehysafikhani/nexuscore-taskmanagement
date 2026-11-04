@@ -1,7 +1,17 @@
 param(
     [string]$Configuration = "Release",
     [string]$Version = "0.1.0",
-    [string]$Output = "artifacts/packages"
+    [string]$Output = "artifacts/packages",
+
+    # Optional: a label after the version, e.g. "nima" gives 0.1.0.1405080801-nima, so it is clear
+    # whose packages these are. The build number of the day counts packages with any label.
+    [string]$VersionSuffix,
+
+    # Optional: sign every package with a code-signing certificate (.pfx). Hosts can then require
+    # signed packages (nuget.config / "dotnet nuget verify") and refuse a swapped file.
+    [string]$SigningCertificatePath,
+    [string]$SigningCertificatePassword,
+    [string]$TimestamperUrl = "http://timestamp.digicert.com"
 )
 
 $ErrorActionPreference = "Stop"
@@ -39,7 +49,7 @@ $escapedDate = [regex]::Escape($persianDate)
 $existingBuildNumbers = @(
     Get-ChildItem -Path $outputPath -Filter "*.nupkg" -File -ErrorAction SilentlyContinue |
     ForEach-Object {
-        if ($_.Name -match "\.$escapedVersion\.$escapedDate(\d{2})\.nupkg$") {
+        if ($_.Name -match "\.$escapedVersion\.$escapedDate(\d{2})(-[0-9A-Za-z.]+)?\.nupkg$") {
             [int]$Matches[1]
         }
     }
@@ -49,7 +59,8 @@ if ($existingBuildNumbers.Count -eq 0) {
     $buildNumber = 1
 }
 else {
-    $buildNumber = ($existingBuildNumbers | Measure-Object -Maximum).Maximum + 1
+    # Measure-Object returns a double, which "{0:D2}" cannot format.
+    $buildNumber = [int](($existingBuildNumbers | Measure-Object -Maximum).Maximum) + 1
 }
 
 if ($buildNumber -gt 99) {
@@ -59,6 +70,10 @@ if ($buildNumber -gt 99) {
 $buildNumberText = "{0:D2}" -f $buildNumber
 
 $PackageVersion = "$Version.$persianDate$buildNumberText"
+
+if ($VersionSuffix) {
+    $PackageVersion = "$PackageVersion-$($VersionSuffix.TrimStart('-'))"
+}
 
 Write-Host ""
 Write-Host "Base Version:    $Version"
@@ -432,7 +447,11 @@ $integrationProjects = @(
 
     "Nexus.Integrations.ProjectDeletion/Nexus.Integrations.ProjectDeletion.csproj",
 
-    "Nexus.Integrations.ProjectGovernance/Nexus.Integrations.ProjectGovernance.csproj"
+    "Nexus.Integrations.ProjectGovernance/Nexus.Integrations.ProjectGovernance.csproj",
+
+    "Nexus.Integrations.CalendarTasks/Nexus.Integrations.CalendarTasks.csproj",
+
+    "Nexus.Integrations.CalendarOrgStructure/Nexus.Integrations.CalendarOrgStructure.csproj"
 
 )
 
@@ -567,13 +586,7 @@ $excludedProjects = @(
 
     "Nexus.CompositionTests/Nexus.CompositionTests.csproj",
 
-    "NexusCore.Api/NexusCore.Api.csproj",
-
-    # Test host for the organization structure module; remove with the project before merging to main.
-    "TejaratBank.Api/TejaratBank.Api.csproj",
-
-    # Product host (an application, not a package). It is composed from the packages below.
-    "PostBank.Api/PostBank.Api.csproj"
+    "NexusCore.Api/NexusCore.Api.csproj"
 
 )
 
@@ -759,4 +772,54 @@ $completedPackages | ForEach-Object {
 Write-Host ""
 Write-Host "Output folder:"
 Write-Host $outputPath
+Write-Host ""
+
+
+# ============================================================
+# Provenance: signatures and checksums
+# ============================================================
+
+if ($SigningCertificatePath) {
+
+    Write-Host "Signing packages..."
+
+    foreach ($package in $completedPackages) {
+
+        dotnet nuget sign $package `
+            --certificate-path $SigningCertificatePath `
+            --certificate-password $SigningCertificatePassword `
+            --timestamper $TimestamperUrl `
+            --overwrite
+
+        if ($LASTEXITCODE -ne 0) {
+
+            throw "Failed to sign $package. Exit code: $LASTEXITCODE"
+
+        }
+
+    }
+
+}
+else {
+
+    Write-Warning "Packages were not signed (no -SigningCertificatePath). Checksums are still written."
+
+}
+
+# SHA256SUMS.txt next to the packages ("<hash>  <file>", the format of sha256sum). Copy it together
+# with the .nupkg files into a host's packages folder; the host's verify script compares them.
+$sumsPath = Join-Path $outputPath "SHA256SUMS.txt"
+
+Get-ChildItem -Path $outputPath -Filter "*.nupkg" -File |
+    Sort-Object Name |
+    ForEach-Object {
+
+        $hash = (Get-FileHash -Algorithm SHA256 -Path $_.FullName).Hash.ToLowerInvariant()
+
+        "$hash  $($_.Name)"
+
+    } |
+    Set-Content -Path $sumsPath -Encoding ascii
+
+Write-Host "Checksums: $sumsPath"
 Write-Host ""

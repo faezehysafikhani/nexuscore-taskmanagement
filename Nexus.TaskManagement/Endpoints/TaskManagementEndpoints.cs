@@ -7,6 +7,7 @@ using Nexus.TaskManagement.Domain;
 using Nexus.TaskManagement.Permissions;
 using Nexus.TaskManagement.Realtime;
 using NexusCore.Application.Common;
+using NexusCore.Application.Files;
 using NexusCore.Application.Security.RateLimiting;
 using NexusCore.SharedKernel.Interfaces;
 
@@ -27,7 +28,8 @@ public static class TaskManagementEndpoints
         app.MapTaskFileEndpoints();
         app.MapNoteEndpoints();
         app.MapReminderSettingsEndpoints();
-        app.MapHub<TaskManagementHub>(TaskManagementHub.Route)
+        app.MapAssignmentLimitEndpoint();
+        app.MapHub<TaskManagementHub>(TaskManagementHub.Route, options => options.CloseOnAuthenticationExpiration = true)
             .RequireRateLimiting(NexusRateLimitPolicies.Realtime);
         return app;
     }
@@ -51,6 +53,45 @@ public static class TaskManagementEndpoints
                 (await service.SaveAsync(request, cancellationToken)).ToApiResult())
             .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(NexusCore.Application.Identity.Permissions.IdentityPermissions.SmsSettingsUpdate);
+
+        return app;
+    }
+
+    /// <summary>
+    /// Whom the signed-in user may not make responsible for a task (where the product limits it -
+    /// see IWorkAssignmentScope), so the task screen offers only the others. The server checks again.
+    /// </summary>
+    private static IEndpointRouteBuilder MapAssignmentLimitEndpoint(this IEndpointRouteBuilder app)
+    {
+        app.MapGet("/api/task-management/assignment-limit", async (
+                ICurrentUserContext user, NexusCore.Application.Identity.Interfaces.IWorkAssignmentScope scope,
+                NexusCore.Application.Identity.Interfaces.IUserReachScope reachScope, CancellationToken cancellationToken) =>
+            {
+                if (user.TenantId is not { } tenantId || user.UserId is not { } userId)
+                {
+                    return Results.Unauthorized();
+                }
+
+                var limit = await scope.GetLimitAsync(tenantId, userId, cancellationToken);
+                // Kept to one's own company: only its people (AllowedUserIds; null when not limited).
+                var reach = await reachScope.GetReachAsync(tenantId, userId, cancellationToken);
+                return Results.Ok(new AssignmentLimitDto(
+                    limit is not null,
+                    [.. (limit?.BlockedUserIds ?? new HashSet<Guid>()).Union(reach?.PlacedElsewhere ?? new HashSet<Guid>())],
+                    reach?.UserIds.ToList()));
+            })
+            .WithTags("Tasks")
+            .RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi);
+
+        // Where tasks are given to posts: the posts to choose from (Enabled false: give them to people).
+        app.MapGet("/api/task-management/assignable-posts", async (ITaskService service, CancellationToken cancellationToken) =>
+                await service.ListAssignablePostsAsync(cancellationToken) is { IsSuccess: true } result
+                    ? Results.Ok(result.Value)
+                    : Results.Unauthorized())
+            .WithTags("Tasks")
+            .RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi);
 
         return app;
     }
@@ -350,33 +391,39 @@ public static class TaskManagementEndpoints
         group.MapPost("/tasks/{taskId:guid}", async (
                 Guid taskId, IFormFile file, ITaskFileService service, CancellationToken cancellationToken) =>
             {
+                if (TooLarge(file)) return PayloadTooLarge();
                 var upload = await ReadAsync(file, cancellationToken);
                 return (await service.UploadToTaskAsync(taskId, upload, cancellationToken)).ToApiResult();
             })
             .WithSummary("Upload an attachment to a task (max 200 KB)")
             .DisableAntiforgery()
+            .WithUploadSizeLimit()
             .RequireRateLimiting(NexusRateLimitPolicies.Upload)
             .RequireAuthorization(TaskManagementPermissions.UploadFiles);
 
         group.MapPost("/subtasks/{subTaskId:guid}", async (
                 Guid subTaskId, IFormFile file, ITaskFileService service, CancellationToken cancellationToken) =>
             {
+                if (TooLarge(file)) return PayloadTooLarge();
                 var upload = await ReadAsync(file, cancellationToken);
                 return (await service.UploadToSubTaskAsync(subTaskId, upload, cancellationToken)).ToApiResult();
             })
             .WithSummary("Upload an attachment to a subtask (max 200 KB)")
             .DisableAntiforgery()
+            .WithUploadSizeLimit()
             .RequireRateLimiting(NexusRateLimitPolicies.Upload)
             .RequireAuthorization(TaskManagementPermissions.UploadFiles);
 
         group.MapPost("/comments/{commentId:guid}", async (
                 Guid commentId, IFormFile file, ITaskFileService service, CancellationToken cancellationToken) =>
             {
+                if (TooLarge(file)) return PayloadTooLarge();
                 var upload = await ReadAsync(file, cancellationToken);
                 return (await service.UploadToCommentAsync(commentId, upload, cancellationToken)).ToApiResult();
             })
             .WithSummary("Attach a file to your own comment (max 200 KB)")
             .DisableAntiforgery()
+            .WithUploadSizeLimit()
             .RequireRateLimiting(NexusRateLimitPolicies.Upload)
             .RequireAuthorization(TaskManagementPermissions.Comment);
 
@@ -389,7 +436,8 @@ public static class TaskManagementEndpoints
                     return result.ToApiResult();
                 }
 
-                return Results.File(download.Content, download.ContentType, download.FileName);
+                // The type comes from the extension, so a file stored earlier with a type the client chose is served safely too.
+                return Results.File(download.Content, NexusCore.Application.Files.AllowedUploadTypes.ContentTypeFor(download.FileName), download.FileName);
             })
             .WithSummary("Download an attachment")
             .RequireAuthorization(TaskManagementPermissions.View);
@@ -460,6 +508,12 @@ public static class TaskManagementEndpoints
 
         return app;
     }
+
+    /// <summary>Said before a single byte of the file is read into memory.</summary>
+    private static bool TooLarge(IFormFile file) => file.Length > TaskFileAsset.MaxFileSizeBytes;
+
+    private static IResult PayloadTooLarge() =>
+        Results.Problem(title: "payload_too_large", detail: "The file is too large.", statusCode: StatusCodes.Status413PayloadTooLarge);
 
     private static async Task<UploadFileRequest> ReadAsync(IFormFile file, CancellationToken cancellationToken)
     {

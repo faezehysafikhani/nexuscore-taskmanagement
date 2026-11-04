@@ -436,10 +436,16 @@ public sealed class TaskFileService(
                 $"File is too large. The maximum size is {TaskFileAsset.MaxFileSizeBytes} bytes."));
         }
 
-        if (!AllowedUploadTypes.IsAllowed(request.FileName, request.ContentType))
+        if (!AllowedUploadTypes.IsAllowed(request.FileName, request.ContentType)
+            && !AllowedUploadTypes.IsVoiceMessage(request.FileName, request.ContentType))
         {
             return Result.Failure<TaskFileDto>(Error.Validation(
-                "This file type is not allowed. Only Excel, Word, PDF and image files can be uploaded."));
+                "This file type is not allowed. Only Excel, Word, PDF, image and voice files can be uploaded."));
+        }
+
+        if (!AllowedUploadTypes.HeadMatches(request.FileName, request.Content))
+        {
+            return Result.Failure<TaskFileDto>(Error.Validation("The file content does not match its type. Upload a genuine Excel, Word, PDF, image or voice file."));
         }
 
         var maxConfiguredBytes = await uploadPolicy.GetMaxFileSizeKbAsync(tenantId, cancellationToken) * 1024L;
@@ -461,7 +467,8 @@ public sealed class TaskFileService(
             displayName = "file";
         }
 
-        var contentType = string.IsNullOrWhiteSpace(request.ContentType) ? "application/octet-stream" : request.ContentType;
+        // Served with the type its extension stands for, never the one the client claimed.
+        var contentType = AllowedUploadTypes.ContentTypeFor(displayName);
 
         StoredFile stored;
         await using (var content = new MemoryStream(request.Content, writable: false))
@@ -742,6 +749,10 @@ public sealed class TaskCommentService(
     IFileStorage fileStorage,
     ITaskNoticePublisher notices) : ITaskCommentService
 {
+    private bool CanUseConversation(TaskItem task) => currentUser.UserId is { } userId
+        && (task.OwnerUserId == userId || task.IsResponsible(userId)
+            || task.Assignees.Any(a => a.UserId == userId && a.IsActing));
+
     public async Task<Result<IReadOnlyList<TaskCommentDto>>> ListAsync(Guid taskId, CancellationToken cancellationToken)
     {
         if (currentUser.TenantId is null)
@@ -750,6 +761,13 @@ public sealed class TaskCommentService(
         }
 
         var tenantId = currentUser.TenantId.Value;
+        // A task the user cannot see answers "not found", as its other endpoints do.
+        var task = await taskRepository.GetByIdAsync(tenantId, taskId, cancellationToken);
+        if (task is null || !CanUseConversation(task))
+        {
+            return Result.Failure<IReadOnlyList<TaskCommentDto>>(Error.NotFound("Task not found."));
+        }
+
         var comments = await repository.ListForTaskAsync(tenantId, taskId, cancellationToken);
         var users = await taskRepository.GetUserSummariesAsync(
             comments.Select(c => c.UserId).Distinct().ToList(), cancellationToken);
@@ -775,13 +793,18 @@ public sealed class TaskCommentService(
         var tenantId = currentUser.TenantId.Value;
         // With its people: they are told of the comment.
         var task = await taskRepository.GetByIdAsync(tenantId, taskId, cancellationToken);
-        if (task is null)
+        if (task is null || !CanUseConversation(task))
         {
             return Result.Failure<TaskCommentDto>(Error.NotFound("Task not found."));
         }
 
+        // Someone only standing in for a vacant post of the task writes as its stand-in (جانشین).
+        var me = currentUser.UserId.Value;
+        var acting = task.OwnerUserId != me && !task.IsResponsible(me)
+            ? task.Assignees.FirstOrDefault(a => a.UserId == me && a.IsActing)?.ActingNote ?? (task.Assignees.Any(a => a.UserId == me && a.IsActing) ? "جانشین" : null)
+            : null;
         var comment = new TaskComment(
-            Guid.NewGuid(), tenantId, taskId, currentUser.UserId.Value, request.Text);
+            Guid.NewGuid(), tenantId, taskId, me, request.Text, acting);
 
         await repository.AddAsync(comment, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -813,6 +836,10 @@ public sealed class TaskCommentService(
             return Result.Failure<TaskCommentDto>(Error.NotFound("Comment not found."));
         }
 
+        var task = await taskRepository.GetByIdAsync(tenantId, comment.TaskId, cancellationToken);
+        if (task is null || !CanUseConversation(task))
+            return Result.Failure<TaskCommentDto>(Error.NotFound("Comment not found."));
+
         if (comment.UserId != currentUser.UserId.Value)
         {
             return Result.Failure<TaskCommentDto>(Error.Forbidden("You can only edit your own comments."));
@@ -838,6 +865,10 @@ public sealed class TaskCommentService(
             return Result.Failure(Error.NotFound("Comment not found."));
         }
 
+        var task = await taskRepository.GetByIdAsync(currentUser.TenantId.Value, comment.TaskId, cancellationToken);
+        if (task is null || !CanUseConversation(task))
+            return Result.Failure(Error.NotFound("Comment not found."));
+
         if (comment.UserId != currentUser.UserId.Value)
         {
             return Result.Failure(Error.Forbidden("You can only delete your own comments."));
@@ -862,5 +893,5 @@ public sealed class TaskCommentService(
 
     private static TaskCommentDto ToDto(TaskComment comment, string? displayName, IReadOnlyList<TaskFileDto> files) =>
         new(comment.Id, comment.TaskId, comment.UserId, displayName,
-            comment.Text, comment.CreatedAtUtc, comment.ModifiedAtUtc, files);
+            comment.Text, comment.CreatedAtUtc, comment.ModifiedAtUtc, files, comment.ActingNote);
 }

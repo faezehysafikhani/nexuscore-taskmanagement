@@ -215,6 +215,39 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
         Assert.Equal(HttpStatusCode.Forbidden, (await host.SendAsync(member, HttpMethod.Get, "/api/platform/audit-logs")).StatusCode);
     }
 
+    // ---------------------------------------------------------------- organizations
+
+    [Fact]
+    public async Task AGroupChat_CannotIncludeSomeoneFromAnotherOrganization()
+    {
+        var creator = await host.UserAsync(host.TenantA, MemberPermissions);
+        var colleague = await host.UserAsync(host.TenantA, MemberPermissions);
+        var stranger = await host.UserAsync(host.TenantB, MemberPermissions);
+
+        var withStranger = await host.SendAsync(creator, HttpMethod.Post, "/api/chat/conversations/group",
+            new { title = "Mixed", participantIds = new[] { colleague.Id, stranger.Id } });
+        var withUnknown = await host.SendAsync(creator, HttpMethod.Post, "/api/chat/conversations/group",
+            new { title = "Ghost", participantIds = new[] { Guid.NewGuid() } });
+        var withColleague = await host.SendAsync(creator, HttpMethod.Post, "/api/chat/conversations/group",
+            new { title = "Team", participantIds = new[] { colleague.Id } });
+
+        Assert.Equal(HttpStatusCode.NotFound, withStranger.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, withUnknown.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, withColleague.StatusCode);
+    }
+
+    [Fact]
+    public async Task TheTenantList_ShowsOnlyTheCallersOwnOrganization()
+    {
+        var viewer = await host.UserAsync(host.TenantA, [IdentityPermissions.TenantsView]);
+
+        var own = await Json(await host.SendAsync(viewer, HttpMethod.Get, "/api/platform/tenants"));
+        var all = await Json(await host.SendAsync(host.Admin, HttpMethod.Get, "/api/platform/tenants"));
+
+        Assert.Equal([host.TenantA], own.EnumerateArray().Select(tenant => tenant.GetProperty("id").GetGuid()).ToArray());
+        Assert.True(all.GetArrayLength() >= 1);
+    }
+
     // ---------------------------------------------------------------- escalation
 
     [Fact]
@@ -259,7 +292,7 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
 
         var create = await host.SendAsync(host.AdminB, HttpMethod.Post, "/api/identity/users", new
         {
-            tenantId = host.TenantA, username = "0077777777", firstName = "Planted", lastName = "User",
+            tenantId = host.TenantA, username = "0077777778", firstName = "Planted", lastName = "User",
             phoneNumber = "09127777777", password = "Correct-Pass-1"
         });
         Assert.Equal(HttpStatusCode.NotFound, create.StatusCode);
@@ -317,7 +350,7 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
         var taskId = await host.CreatedTaskIdAsync(owner, "With attachment");
 
         using var form = new MultipartFormDataContent();
-        form.Add(new ByteArrayContent(Encoding.UTF8.GetBytes("secret")) { Headers = { ContentType = new MediaTypeHeaderValue("application/pdf") } }, "file", "secret.pdf");
+        form.Add(new ByteArrayContent(Encoding.UTF8.GetBytes("%PDF-1.4 secret")) { Headers = { ContentType = new MediaTypeHeaderValue("application/pdf") } }, "file", "secret.pdf");
         var upload = await host.SendAsync(owner, HttpMethod.Post, $"/api/task-management/files/tasks/{taskId}", form);
         Assert.Equal(HttpStatusCode.OK, upload.StatusCode);
         var file = await Json(upload);
@@ -367,6 +400,15 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
         /// <summary>The SMS the platform handed to its provider ("test"; off until a tenant enables it).</summary>
         public RecordingSmsProvider Sms { get; } = new();
 
+        /// <summary>Whom each user may not make responsible (nobody limited unless a test says so).</summary>
+        public ProgrammableAssignmentScope AssignmentScope { get; } = new();
+
+        /// <summary>Tasks given to posts (off unless a test turns it on).</summary>
+        public ProgrammableTaskPosts TaskPosts { get; } = new();
+
+        /// <summary>Whom each user may reach at all (everyone, unless a test keeps someone to a set).</summary>
+        public ProgrammableReachScope Reach { get; } = new();
+
         /// <summary>Chat's own database (a real relational engine, so its unique indexes are enforced), file per Host.</summary>
         private readonly string _chatDbFile = Path.Combine(Path.GetTempPath(), $"chat-tests-{Guid.NewGuid():N}.db");
 
@@ -398,6 +440,9 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
             builder.Services.AddInfrastructure(builder.Configuration);
             builder.Services.AddTaskManagement();
             builder.Services.AddTaskManagementInfrastructure(builder.Configuration);
+            builder.Services.AddSingleton<NexusCore.Application.Identity.Interfaces.IWorkAssignmentScope>(AssignmentScope);
+            builder.Services.AddSingleton<NexusCore.Application.Identity.Interfaces.ITaskPosts>(TaskPosts);
+            builder.Services.AddSingleton<NexusCore.Application.Identity.Interfaces.IUserReachScope>(Reach);
             // Task SMS through the platform's SMS panel, to a recording provider (never a real gateway).
             builder.Services.AddTaskNotificationsIntegration();
             builder.Services.AddSingleton<ISmsProvider>(Sms);
@@ -534,6 +579,9 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
             }
 
             db.Users.Add(user);
+            // Every request is checked against the session of its token (sid): a long-lived one for the test.
+            var session = new UserSession(Guid.NewGuid(), user.Id, tenantId, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(10), 36000, "test", null, null, null);
+            db.UserSessions.Add(session);
             await db.SaveChangesAsync();
 
             var taskDb = scope.ServiceProvider.GetRequiredService<TaskManagementDbContext>();
@@ -541,7 +589,7 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
             await taskDb.SaveChangesAsync();
 
             // Signed with no permissions: every request reads the user's current ones.
-            var token = scope.ServiceProvider.GetRequiredService<IJwtTokenService>().CreateAccessToken(user, []).Token;
+            var token = scope.ServiceProvider.GetRequiredService<IJwtTokenService>().CreateAccessToken(user, [], session.Id).Token;
             return new Caller(user.Id, token);
         }
 

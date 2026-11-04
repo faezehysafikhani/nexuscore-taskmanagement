@@ -23,12 +23,23 @@ public sealed class OrganizationMembershipTests
             Db = new OrganizationDbContext(new DbContextOptionsBuilder<OrganizationDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
             var units = new OrganizationUnitRepository(Db);
             var members = new OrganizationMemberRepository(Db);
-            Units = new OrganizationService(units, Db, members);
+            Repository = units;
+            Units = new OrganizationService(units, Db, new TenantUser(Tenant), null!, members);
             Members = new OrganizationMembershipService(members, units, Db);
         }
 
-        public async Task<OrganizationUnitDto> UnitAsync(string name, Guid? parent = null) =>
-            (await Units.CreateAsync(new CreateOrganizationUnitRequest(Tenant, name, name.ToUpperInvariant(), parent), default)).Value!;
+        private OrganizationUnitRepository Repository { get; }
+
+        /// <summary>A unit placed in the chart the way the organization structure places it (the service itself only makes flat units).</summary>
+        public async Task<OrganizationUnitDto> UnitAsync(string name, Guid? parent = null)
+        {
+            var unit = new OrganizationUnit(Guid.NewGuid(), Tenant, name);
+            unit.SetParent(parent);
+            unit.SetNodeCode(name.ToUpperInvariant());
+            await Repository.AddAsync(unit, default);
+            await Db.SaveChangesAsync();
+            return (await Units.GetAsync(unit.Id, default)).Value!;
+        }
     }
 
     [Fact]
@@ -58,36 +69,35 @@ public sealed class OrganizationMembershipTests
     }
 
     [Fact]
-    public async Task AUnit_CannotBeMovedUnderItself_OrUnderItsOwnDescendant_OrAMissingParent()
+    public async Task AUnitsPlaceAndCode_AreChangedInTheStructure_SoADifferentValueIsRefused_AndTheSameOneIsFine()
     {
         var f = new Fixture();
         var org = await f.UnitAsync("Organization");
         var eng = await f.UnitAsync("Engineering", org.Id);
-        var civil = await f.UnitAsync("Civil", eng.Id);
-        UpdateOrganizationUnitRequest Move(OrganizationUnitDto unit, Guid? parent) => new(unit.Name, unit.Code, parent, null, true);
+        UpdateOrganizationUnitRequest Send(OrganizationUnitDto unit, string name, Guid? parent, string? code) => new(name, null, true, code, parent);
 
-        Assert.Equal("validation.error", (await f.Units.UpdateAsync(org.Id, Move(org, civil.Id), default)).Error.Code); // under its grandchild
-        Assert.Equal("validation.error", (await f.Units.UpdateAsync(org.Id, Move(org, eng.Id), default)).Error.Code);   // under its child
-        Assert.Equal("validation.error", (await f.Units.UpdateAsync(eng.Id, Move(eng, eng.Id), default)).Error.Code);   // under itself
-        Assert.Equal("validation.error", (await f.Units.UpdateAsync(eng.Id, Move(eng, Guid.NewGuid()), default)).Error.Code); // nowhere
-
-        var moved = (await f.Units.UpdateAsync(civil.Id, Move(civil, org.Id), default)).Value!;
-        Assert.Equal("Organization > Civil", moved.Path);
+        // the whole unit sent back unchanged (as a screen does) is accepted, and renaming works
+        var renamed = (await f.Units.UpdateAsync(eng.Id, Send(eng, "Engineering 2", eng.ParentId, eng.Code), default)).Value!;
+        Assert.Equal("Organization > Engineering 2", renamed.Path);
+        // nothing sent means "as it is"
+        Assert.True((await f.Units.UpdateAsync(eng.Id, Send(eng, "Engineering 3", null, null), default)).IsSuccess);
+        // a different place or code is refused
+        Assert.Equal("validation.error", (await f.Units.UpdateAsync(eng.Id, Send(eng, "X", Guid.NewGuid(), null), default)).Error.Code);
+        Assert.Equal("validation.error", (await f.Units.UpdateAsync(eng.Id, Send(eng, "X", null, "OTHER"), default)).Error.Code);
+        Assert.Equal(org.Id, (await f.Units.GetAsync(eng.Id, default)).Value!.ParentId);
     }
 
     [Fact]
-    public async Task ACodeIsAssignedWhenNoneIsGiven_AndNeverCollides()
+    public async Task ANewUnitIsFlat_AndAPlaceOrCodeInTheRequestIsRefused()
     {
         var f = new Fixture();
-        await f.Units.CreateAsync(new CreateOrganizationUnitRequest(Tenant, "Taken", "U0002"), default); // occupies the code the second unit would get
 
-        var first = (await f.Units.CreateAsync(new CreateOrganizationUnitRequest(Tenant, "A"), default)).Value!;
-        var second = (await f.Units.CreateAsync(new CreateOrganizationUnitRequest(Tenant, "B"), default)).Value!;
-
-        Assert.NotEqual(first.Code, second.Code);
-        Assert.All(new[] { first.Code, second.Code }, code => Assert.Matches(@"^U\d{4}$", code));
+        var created = (await f.Units.CreateAsync(new CreateOrganizationUnitRequest(Tenant, "A"), default)).Value!;
+        Assert.Null(created.ParentId);
+        Assert.Equal("", created.Code);
         Assert.Equal("validation.error", (await f.Units.CreateAsync(new CreateOrganizationUnitRequest(Tenant, " "), default)).Error.Code);
-        Assert.Equal("conflict", (await f.Units.CreateAsync(new CreateOrganizationUnitRequest(Tenant, "C", "U0002"), default)).Error.Code);
+        Assert.Equal("validation.error", (await f.Units.CreateAsync(new CreateOrganizationUnitRequest(Tenant, "B", "U1"), default)).Error.Code);
+        Assert.Equal("validation.error", (await f.Units.CreateAsync(new CreateOrganizationUnitRequest(Tenant, "C", null, created.Id), default)).Error.Code);
     }
 
     [Fact]

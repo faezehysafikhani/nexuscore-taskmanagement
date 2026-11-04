@@ -10,7 +10,7 @@ interface LoginProps {
 
 export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigate }) => {
   const [email, setEmail] = useState('admin@nexus.local');
-  const [password, setPassword] = useState('Admin@12345');
+  const [password, setPassword] = useState('');
   const [tenantSlug, setTenantSlug] = useState('default');
   const [message, setMessage] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
@@ -145,11 +145,6 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigate }) => {
           </div>
         </form>
 
-        <div className="mt-6 pt-5 border-t border-slate-100 text-center">
-          <div className="text-[11px] text-slate-400">
-            کاربر پیش‌فرض ادمین: <code className="bg-slate-100 px-1 py-0.5 rounded text-slate-700">admin@nexus.local</code> | رمز: <code className="bg-slate-100 px-1 py-0.5 rounded text-slate-700">Admin@12345</code>
-          </div>
-        </div>
       </div>
     </div>
   );

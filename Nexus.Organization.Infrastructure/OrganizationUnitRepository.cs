@@ -15,11 +15,6 @@ public sealed class OrganizationUnitRepository(OrganizationDbContext dbContext) 
             .OrderBy(unit => unit.Name)
             .ToListAsync(cancellationToken);
 
-    public Task<bool> CodeExistsAsync(Guid tenantId, string code, Guid? excludeId, CancellationToken cancellationToken) =>
-        dbContext.OrganizationUnits.AnyAsync(
-            unit => unit.TenantId == tenantId && unit.Code == code && unit.Id != excludeId,
-            cancellationToken);
-
     public async Task AddAsync(OrganizationUnit unit, CancellationToken cancellationToken)
     {
         await dbContext.OrganizationUnits.AddAsync(unit, cancellationToken);

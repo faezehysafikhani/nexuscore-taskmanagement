@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using NexusCore.Application.Identity.Options;
+using NexusCore.Application.Identity;
 using NexusCore.Application.Identity.Permissions;
 using NexusCore.Application.Security;
 using NexusCore.Domain.Identity;
@@ -30,6 +31,28 @@ public sealed class DefaultDataSeeder(
     public async Task SeedAsync(CancellationToken cancellationToken = default)
     {
         await ModuleSchemaInitializer.EnsureCreatedAsync(dbContext, cancellationToken);
+
+        // Columns added after the table first existed: reach databases made before them (the same
+        // change is in the EF migration and in db/upgrade-security-refresh-tokens.sql).
+        await ModuleSchemaInitializer.EnsureColumnAsync(dbContext, "identity.RefreshTokens", "FamilyId",
+            "ALTER TABLE [identity].[RefreshTokens] ADD [FamilyId] uniqueidentifier NULL",
+            "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_RefreshTokens_UserId_FamilyId' AND object_id = OBJECT_ID(N'identity.RefreshTokens')) " +
+            "CREATE INDEX [IX_RefreshTokens_UserId_FamilyId] ON [identity].[RefreshTokens] ([UserId], [FamilyId])",
+            cancellationToken);
+        await ModuleSchemaInitializer.EnsureColumnAsync(dbContext, "identity.RefreshTokens", "UsedAtUtc",
+            "ALTER TABLE [identity].[RefreshTokens] ADD [UsedAtUtc] datetimeoffset NULL",
+            null, cancellationToken);
+
+        // Existing installations use the module initializer rather than the full Core migration chain.
+        await ModuleSchemaInitializer.EnsureColumnAsync(dbContext, "identity.Users", "Address",
+            "ALTER TABLE [identity].[Users] ADD [Address] nvarchar(1000) NULL", null, cancellationToken);
+        await ModuleSchemaInitializer.EnsureColumnAsync(dbContext, "identity.Users", "FatherName",
+            "ALTER TABLE [identity].[Users] ADD [FatherName] nvarchar(80) NULL", null, cancellationToken);
+        await ModuleSchemaInitializer.EnsureColumnAsync(dbContext, "identity.Users", "BirthDate",
+            "ALTER TABLE [identity].[Users] ADD [BirthDate] date NULL", null, cancellationToken);
+
+        // Sessions (db/upgrade-sessions.sql): their tables, and the columns they added.
+        await SessionSchema.EnsureAsync(dbContext, cancellationToken);
 
         if (!await dbContext.Tenants.AnyAsync(cancellationToken))
         {
@@ -67,9 +90,10 @@ public sealed class DefaultDataSeeder(
         if (builtInAdmin is null)
         {
             var configuredPassword = seedOptions.Value.AdminPassword;
-            if (environment.IsProduction() && (string.IsNullOrWhiteSpace(configuredPassword) || configuredPassword.Length < 12 || configuredPassword == "Admin@12345"))
+            // Every environment but local development: Staging/UAT boxes hold real data too.
+            if (!environment.IsDevelopment() && (string.IsNullOrWhiteSpace(configuredPassword) || configuredPassword.Length < 12 || configuredPassword == "Admin@12345"))
             {
-                throw new InvalidOperationException("Identity:AdminPassword must be a unique password of at least 12 characters before creating the administrator in production.");
+                throw new InvalidOperationException("Identity:AdminPassword must be a unique password of at least 12 characters before creating the administrator outside local development.");
             }
             var initialPassword = string.IsNullOrWhiteSpace(configuredPassword) ? "Admin@12345" : configuredPassword;
             var admin = new User(AdminUserId, DefaultTenantId, "admin@nexus.local", "System Administrator", passwordHasher.HashPassword(initialPassword), true);
@@ -123,7 +147,9 @@ public sealed class DefaultDataSeeder(
 
     private async Task SeedConfiguredRolesAsync(CancellationToken cancellationToken)
     {
-        foreach (var definition in seedOptions.Value.SeedRoles.Where(role => !string.IsNullOrWhiteSpace(role.Name)))
+        // The built-in «کاربر عادی» first (new users get it), then the host's own.
+        var builtIn = new SeedRoleOptions { Name = DefaultUserRole.Name, Description = DefaultUserRole.Description, Permissions = [.. DefaultUserRole.Permissions] };
+        foreach (var definition in seedOptions.Value.SeedRoles.Prepend(builtIn).Where(role => !string.IsNullOrWhiteSpace(role.Name)))
         {
             var normalized = definition.Name.Trim().ToUpperInvariant();
             if (await dbContext.Roles.AnyAsync(role => role.TenantId == DefaultTenantId && role.NormalizedName == normalized, cancellationToken))
@@ -137,7 +163,7 @@ public sealed class DefaultDataSeeder(
                 .Select(permission => new { permission.Id, permission.Name })
                 .ToListAsync(cancellationToken);
 
-            foreach (var missing in wanted.Except(permissions.Select(p => p.Name)))
+            foreach (var missing in wanted.Except(permissions.Select(p => p.Name)).Where(_ => !ReferenceEquals(definition, builtIn)))
             {
                 logger.LogWarning("Seed role {Role} names unknown permission {Permission}; it was skipped.", definition.Name, missing);
             }

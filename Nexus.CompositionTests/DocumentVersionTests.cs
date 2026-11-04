@@ -24,8 +24,9 @@ public sealed class DocumentVersionTests
         public List<ProjectDocumentVersion> Versions { get; } = [];
 
         public Task<ProjectDocument?> GetByIdAsync(Guid id, CancellationToken ct) => Task.FromResult(Documents.SingleOrDefault(d => d.Id == id));
-        public Task<IReadOnlyList<ProjectDocument>> ListByProjectAsync(Guid projectId, CancellationToken ct) =>
-            Task.FromResult<IReadOnlyList<ProjectDocument>>(Documents.Where(d => d.ProjectId == projectId).ToList());
+        public Task<ProjectDocument?> GetByIdAsync(Guid tenantId, Guid id, CancellationToken ct) => Task.FromResult(Documents.SingleOrDefault(d => d.Id == id && d.TenantId == tenantId));
+        public Task<IReadOnlyList<ProjectDocument>> ListByProjectAsync(Guid tenantId, Guid projectId, CancellationToken ct) =>
+            Task.FromResult<IReadOnlyList<ProjectDocument>>(Documents.Where(d => d.TenantId == tenantId && d.ProjectId == projectId).ToList());
         public Task AddAsync(ProjectDocument document, CancellationToken ct) { Documents.Add(document); return Task.CompletedTask; }
         public Task RemoveAsync(ProjectDocument document, CancellationToken ct) { Documents.Remove(document); return Task.CompletedTask; }
         public Task<IReadOnlyList<ProjectDocumentVersion>> ListVersionsAsync(Guid documentId, CancellationToken ct) =>
@@ -91,10 +92,13 @@ public sealed class DocumentVersionTests
         var repository = new FakeRepository();
         var storage = new FakeStorage();
         var unitOfWork = new FakeUnitOfWork();
-        return new Fixture(new ProjectDocumentService(repository, storage, unitOfWork, new FakeApprovals(outcome)), repository, storage, unitOfWork);
+        return new Fixture(new ProjectDocumentService(repository, storage, unitOfWork, new FakeApprovals(outcome), new TenantUser(Tenant), new UnlimitedUploads()), repository, storage, unitOfWork);
     }
 
-    private static MemoryStream Bytes(string text) => new(Encoding.UTF8.GetBytes(text));
+    // Uploads are checked for a real file: the first bytes must agree with the extension (.pdf).
+    private const string PdfHeader = "%PDF-1.4 ";
+
+    private static MemoryStream Bytes(string text) => new(Encoding.UTF8.GetBytes(PdfHeader + text));
 
     private static async Task<Guid> UploadAsync(Fixture fixture, string text = "v1 content", string fileName = "plan.pdf")
     {
@@ -112,7 +116,7 @@ public sealed class DocumentVersionTests
     {
         Assert.True(result.IsSuccess);
         using var reader = new StreamReader(result.Value.Content);
-        return await reader.ReadToEndAsync();
+        return (await reader.ReadToEndAsync()).Replace(PdfHeader, string.Empty);
     }
 
     [Fact]
@@ -262,7 +266,7 @@ public sealed class DocumentVersionTests
         // Only the freshly saved file was cleaned up; the existing one is untouched.
         Assert.Equal(["key-2"], fixture.Storage.Deleted);
         Assert.Equal(new[] { "key-1" }, fixture.Storage.Files.Keys.ToArray());
-        Assert.Equal("keep me", Encoding.UTF8.GetString(fixture.Storage.Files["key-1"]));
+        Assert.Equal("keep me", Encoding.UTF8.GetString(fixture.Storage.Files["key-1"]).Replace(PdfHeader, string.Empty));
         // (The fake repository applies changes immediately, whereas a real DbContext only tracks
         // them until SaveChanges - which failed here and whose scope is discarded with the
         // exception. So only storage is asserted: that is the state the failure could corrupt.)
@@ -311,7 +315,7 @@ public sealed class DocumentVersionTests
 
         await using (var db = new ProjectDocumentsDbContext(options))
         {
-            var service = new ProjectDocumentService(new ProjectDocumentRepository(db), storage, db, new FakeApprovals());
+            var service = new ProjectDocumentService(new ProjectDocumentRepository(db), storage, db, new FakeApprovals(), new TenantUser(Tenant), new UnlimitedUploads());
             documentId = (await service.UploadAsync(new UploadProjectDocumentRequest(Tenant, Project, "A", ProjectDocumentType.Report, "a.pdf", "application/pdf"), Bytes("a1"), default)).Value!.Id;
             otherId = (await service.UploadAsync(new UploadProjectDocumentRequest(Tenant, Project, "B", ProjectDocumentType.Letter, "b.pdf", "application/pdf"), Bytes("b1"), default)).Value!.Id;
             await service.UploadVersionAsync(documentId, NextVersion("a2.pdf", "second"), Bytes("a2"), default);
@@ -328,7 +332,7 @@ public sealed class DocumentVersionTests
             Assert.Equal(3, document.CurrentVersion);
             Assert.Equal("a3.pdf", document.FileName);
 
-            var service = new ProjectDocumentService(repository, storage, db, new FakeApprovals());
+            var service = new ProjectDocumentService(repository, storage, db, new FakeApprovals(), new TenantUser(Tenant), new UnlimitedUploads());
             Assert.True((await service.DeleteAsync(documentId, default)).IsSuccess);
         }
 

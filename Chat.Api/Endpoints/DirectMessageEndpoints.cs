@@ -1,3 +1,4 @@
+using NexusCore.Application.Files;
 using Chat.Api.Hubs;
 using Chat.Api.Hubs.Contracts;
 using Chat.Application.Direct;
@@ -68,6 +69,7 @@ public static class DirectMessageEndpoints
                 return result.ToApiResult();
             })
             .DisableAntiforgery()
+            .WithUploadSizeLimit()
             .RequireRateLimiting(NexusRateLimitPolicies.ChatSend)
             .WithSummary("Send a message (text and/or one attachment) to the user");
 

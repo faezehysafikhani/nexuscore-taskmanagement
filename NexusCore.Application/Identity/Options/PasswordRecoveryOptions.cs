@@ -17,4 +17,10 @@ public sealed class PasswordRecoveryOptions
 
     /// <summary>How long the code, once confirmed, allows setting the new password.</summary>
     public int ResetTokenLifetimeMinutes { get; set; } = 10;
+
+    /// <summary>
+    /// The least time a recovery request takes to answer, whether or not the account exists
+    /// (sending the SMS makes the existing ones slower). 0 turns it off.
+    /// </summary>
+    public int MinimumResponseMilliseconds { get; set; } = 1200;
 }

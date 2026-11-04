@@ -15,6 +15,12 @@ public interface ITaskRepository
     /// <summary>Full graph: subtasks, tags, files, assignees and recurrence.</summary>
     Task<TaskItem?> GetByIdAsync(Guid tenantId, Guid id, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// The task with its people (assignees), whoever is signed in: for changes that come from the
+    /// organization structure (a post's new holder, a stand-in), which decides who may make them.
+    /// </summary>
+    Task<TaskItem?> GetPeopleOfAsync(Guid tenantId, Guid id, CancellationToken cancellationToken);
+
     /// <summary>No includes - for commands that only mutate scalar columns.</summary>
     Task<TaskItem?> GetForUpdateAsync(Guid tenantId, Guid id, CancellationToken cancellationToken);
 
@@ -25,6 +31,12 @@ public interface ITaskRepository
     Task<IReadOnlyList<SubTask>> GetSubTasksAsync(Guid tenantId, Guid taskId, CancellationToken cancellationToken);
 
     Task<int> CountSubTasksAsync(Guid tenantId, Guid taskId, CancellationToken cancellationToken);
+
+    /// <summary>Every task of the tenant with its owner, responsible people and access list (no other data).</summary>
+    Task<IReadOnlyList<NexusCore.Application.Identity.Interfaces.TaskPeopleSnapshot>> ListPeopleAsync(Guid tenantId, CancellationToken cancellationToken);
+
+    /// <summary>Title, due date and status of these tasks, whoever is signed in (no access check: callers decide what to show).</summary>
+    Task<IReadOnlyList<NexusCore.Application.Identity.Interfaces.TaskSummary>> GetSummariesAsync(Guid tenantId, IReadOnlyCollection<Guid> taskIds, CancellationToken cancellationToken);
 
     Task AddAsync(TaskItem task, CancellationToken cancellationToken);
 
@@ -149,6 +161,7 @@ public interface ITaskService
     Task<Result<TaskDto>> ChangePriorityAsync(Guid id, ChangeTaskPriorityRequest request, CancellationToken cancellationToken);
     Task<Result<TaskDto>> AssignUserAsync(Guid id, AssignUserRequest request, CancellationToken cancellationToken);
     Task<Result<TaskDto>> AssignUserGroupAsync(Guid id, AssignUserGroupRequest request, CancellationToken cancellationToken);
+    Task<Result<AssignablePostsDto>> ListAssignablePostsAsync(CancellationToken cancellationToken);
 
     Task<Result<SubTaskDto>> CreateSubTaskAsync(Guid taskId, CreateSubTaskRequest request, CancellationToken cancellationToken);
     Task<Result<SubTaskDto>> UpdateSubTaskAsync(Guid subTaskId, UpdateSubTaskRequest request, CancellationToken cancellationToken);
@@ -218,7 +231,8 @@ public interface ITaskActivityService
 {
     Task<Result<IReadOnlyList<TaskActivityDto>>> GetForTaskAsync(Guid taskId, CancellationToken cancellationToken);
 
-    Task RecordAsync(Guid taskId, string action, string? details, CancellationToken cancellationToken);
+    /// <param name="notify">False when the people of the task are told about this change in another, fuller way.</param>
+    Task RecordAsync(Guid taskId, string action, string? details, CancellationToken cancellationToken, IReadOnlyCollection<Guid>? exceptUserIds = null);
 }
 
 // ---------------------------------------------------------------------------
@@ -298,6 +312,9 @@ public static class TaskSmsTemplateKeys
 
     /// <summary>A task's due moment passed and it is not done. TaskTitle, DueDate.</summary>
     public const string TaskOverdue = "task_overdue";
+
+    /// <summary>The status of a task that was past due and not done changed. TaskTitle, DueDate, StatusTitle, ActorName.</summary>
+    public const string TaskOverdueChanged = "task_overdue_changed";
 
     /// <summary>An occurrence of a recurring task is coming up (an hour before, by default). TaskTitle, ExecutionDateTime, ExecutionDate, ExecutionTime.</summary>
     public const string RecurringTaskUpcoming = "recurring_task_upcoming";

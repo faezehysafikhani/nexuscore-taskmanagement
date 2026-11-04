@@ -19,7 +19,9 @@ namespace Chat.Application.Direct;
 public sealed class DirectConversationService(
     IChatDbContext db,
     ICurrentUserContext currentUser,
-    IUserDirectory userDirectory)
+    IUserDirectory userDirectory,
+    IUserReachScope? reachScope = null,
+    IChatPartnerScope? partnerScope = null)
 {
     public const int MaxTextLength = 4000;
 
@@ -45,8 +47,35 @@ public sealed class DirectConversationService(
             return Result.Failure<(UserContact, UserContact)>(Error.NotFound("User was not found."));
         }
 
+        // Kept to one's own company (see IUserReachScope): its people only - whatever their rank.
+        if (!await CanReachAsync([otherUserId], cancellationToken))
+        {
+            return Result.Failure<(UserContact, UserContact)>(Error.NotFound("User was not found."));
+        }
+
         return Result.Success((me, other));
     }
+
+    /// <summary>
+    /// Whether the signed-in user may send to this person (see IChatPartnerScope): either of the two
+    /// may chat with the other, so whoever is written to from above can always answer.
+    /// </summary>
+    public async Task<bool> MayChatWithAsync(Guid otherUserId, CancellationToken cancellationToken)
+    {
+        if (partnerScope is null || currentUser.UserId is not { } meId || currentUser.TenantId is not { } tenantId)
+        {
+            return true;
+        }
+
+        return await partnerScope.GetPartnersAsync(tenantId, meId, cancellationToken) is not { } mine || mine.Contains(otherUserId)
+            || await partnerScope.GetPartnersAsync(tenantId, otherUserId, cancellationToken) is not { } theirs || theirs.Contains(meId);
+    }
+
+    /// <summary>Whether the signed-in user may reach all of these people (see IUserReachScope).</summary>
+    public async Task<bool> CanReachAsync(IEnumerable<Guid> userIds, CancellationToken cancellationToken) =>
+        reachScope is null || currentUser.UserId is not { } meId || currentUser.TenantId is not { } tenantId
+        || await reachScope.GetReachAsync(tenantId, meId, cancellationToken) is not { } reach
+        || userIds.All(reach.Contains);
 
     public Task<Conversation?> FindAsync(Guid meId, Guid otherUserId, CancellationToken cancellationToken)
     {
@@ -107,7 +136,9 @@ public sealed class DirectConversationService(
 /// </summary>
 public sealed class GetChatDirectoryQueryHandler(
     ICurrentUserContext currentUser,
-    IUserDirectory userDirectory)
+    IUserDirectory userDirectory,
+    IUserReachScope? reachScope = null,
+    IChatPartnerScope? partnerScope = null)
     : IRequestHandler<GetChatDirectoryQuery, Result<List<ChatContactDto>>>
 {
     public async Task<Result<List<ChatContactDto>>> Handle(GetChatDirectoryQuery request, CancellationToken cancellationToken)
@@ -118,8 +149,12 @@ public sealed class GetChatDirectoryQueryHandler(
         }
 
         var users = await userDirectory.GetActiveUsersInTenantAsync(tenantId, cancellationToken);
+        // Kept to one's own company: only its people are listed.
+        var reach = reachScope is null ? null : await reachScope.GetReachAsync(tenantId, meId, cancellationToken);
+        // And to one's hierarchy (see IChatPartnerScope), where the product limits it.
+        var partners = partnerScope is null ? null : await partnerScope.GetPartnersAsync(tenantId, meId, cancellationToken);
         return Result.Success(users
-            .Where(user => user.Id != meId)
+            .Where(user => user.Id != meId && (reach is null || reach.Contains(user.Id)) && (partners is null || partners.Contains(user.Id)))
             .Select(user => new ChatContactDto(user.Id, user.DisplayName, user.AvatarUrl))
             .ToList());
     }
@@ -209,10 +244,16 @@ public sealed class SendDirectMessageCommandHandler(
                     $"The attached file is too large. The limit is {options.Value.MaxAttachmentBytes / (1024 * 1024)} MB."));
             }
 
-            if (!AllowedUploadTypes.IsAllowed(upload.FileName, upload.ContentType))
+            if (!AllowedUploadTypes.IsAllowed(upload.FileName, upload.ContentType)
+                && !AllowedUploadTypes.IsVoiceMessage(upload.FileName, upload.ContentType))
             {
                 return Result.Failure<DirectMessageDto>(Error.Validation(
-                    "This file type is not allowed. Only Excel, Word, PDF and image files can be uploaded."));
+                    "This file type is not allowed. Only Excel, Word, PDF, image and voice files can be uploaded."));
+            }
+
+            if (!await AllowedUploadTypes.StreamMatchesAsync(upload.FileName, upload.Content, cancellationToken))
+            {
+                return Result.Failure<DirectMessageDto>(Error.Validation("The file content does not match its type. Upload a genuine Excel, Word, PDF, image or voice file."));
             }
 
             var maxConfiguredBytes = await uploadPolicy.GetMaxFileSizeKbAsync(currentUser.TenantId, cancellationToken) * 1024L;
@@ -229,6 +270,11 @@ public sealed class SendDirectMessageCommandHandler(
             return Result.Failure<DirectMessageDto>(pair.Error);
         }
 
+        if (!await conversations.MayChatWithAsync(request.OtherUserId, cancellationToken))
+        {
+            return Result.Failure<DirectMessageDto>(Error.Forbidden("گفتگو فقط با هم‌رده‌ها، زیرمجموعه، مدیر خود و مدیرِ مدیر ممکن است."));
+        }
+
         var (me, other) = pair.Value;
         var conversation = await conversations.FindOrCreateAsync(me.Id, other.Id, cancellationToken);
         var message = new Message(Guid.NewGuid(), conversation.Id, me.Id, text);
@@ -241,7 +287,7 @@ public sealed class SendDirectMessageCommandHandler(
                 fileName = "attachment";
             }
 
-            var contentType = string.IsNullOrWhiteSpace(attachment.ContentType) ? "application/octet-stream" : attachment.ContentType;
+            var contentType = AllowedUploadTypes.ContentTypeFor(fileName);
             var stored = await fileStorage.SaveAsync(fileName, contentType, attachment.Content, cancellationToken);
             message.AttachFile(fileName.Length > 260 ? fileName[..260] : fileName, contentType, stored.SizeBytes, stored.StorageKey);
         }
@@ -300,7 +346,8 @@ public sealed class MarkDirectConversationReadCommandHandler(
 
 public sealed class GetUnreadCountsBySenderQueryHandler(
     IChatDbContext db,
-    ICurrentUserContext currentUser)
+    ICurrentUserContext currentUser,
+    IUserReachScope? reachScope = null)
     : IRequestHandler<GetUnreadCountsBySenderQuery, Result<List<UnreadBySenderDto>>>
 {
     public async Task<Result<List<UnreadBySenderDto>>> Handle(GetUnreadCountsBySenderQuery request, CancellationToken cancellationToken)
@@ -319,6 +366,14 @@ public sealed class GetUnreadCountsBySenderQueryHandler(
             .GroupBy(m => m.SenderUserId!.Value)
             .Select(g => new UnreadBySenderDto(g.Key, g.Count()))
             .ToListAsync(cancellationToken);
+
+        // Kept to one's own company (see IUserReachScope): nobody else is counted - their old
+        // messages cannot be opened anyway.
+        if (reachScope is not null && currentUser.TenantId is { } tenantId
+            && await reachScope.GetReachAsync(tenantId, meId, cancellationToken) is { } reach)
+        {
+            counts = counts.Where(count => reach.Contains(count.SenderUserId)).ToList();
+        }
 
         return Result.Success(counts);
     }

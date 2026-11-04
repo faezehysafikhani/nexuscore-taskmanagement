@@ -88,9 +88,7 @@ public sealed class PortfolioVisibilityTests
 
     private static OrganizationUnit Unit(string name, Guid? parent = null, Guid? manager = null)
     {
-        var unit = new OrganizationUnit(Guid.NewGuid(), Tenant, name, name, parent);
-        unit.Update(name, name, parent, manager, true);
-        return unit;
+        return OrgUnits.Make(Guid.NewGuid(), Tenant, name, name, parent, manager);
     }
 
     private static Project NewProject(string code, Guid? owner = null, Guid? manager = null, Guid? unit = null)
@@ -150,7 +148,7 @@ public sealed class PortfolioVisibilityTests
     {
         var a = Unit("A", manager: Alice);
         var b = Unit("B", a.Id);
-        a.Update("A", "A", b.Id, Alice, true); // A's parent is B, B's parent is A
+        a.SetParent(b.Id); // A's parent is B, B's parent is A
 
         var grant = await new OrganizationUnitManagerVisibilityProvider(new FakeUnits(a, b)).GetGrantAsync(Tenant, Alice, default);
 

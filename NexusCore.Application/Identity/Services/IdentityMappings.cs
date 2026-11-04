@@ -23,5 +23,5 @@ internal static class IdentityMappings
             user.ThemeMode,
             user.FirstName,
             user.LastName,
-            user.IsSystem);
+            user.IsSystem, user.Address, user.FatherName, user.BirthDate);
 }

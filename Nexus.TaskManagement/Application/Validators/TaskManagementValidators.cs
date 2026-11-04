@@ -78,11 +78,12 @@ public sealed class CreateTaskRequestValidator : AbstractValidator<CreateTaskReq
 
         // Every new task has someone responsible for doing it (the creator may pick themselves) -
         // one or more in ResponsibleUserIds, or the single AssignedUserId older clients send.
-        // Existing tasks without one stay valid: this applies to creation only.
+        // Existing tasks without one stay valid: this applies to creation only. Where tasks are
+        // given to posts, ResponsiblePostIds names them instead (checked by the service).
         RuleFor(x => x.AssignedUserId)
             .NotNull().WithMessage("Choose who is responsible for the task.")
             .NotEqual(Guid.Empty).WithMessage("Choose who is responsible for the task.")
-            .When(x => x.ResponsibleUserIds is not { Count: > 0 });
+            .When(x => x.ResponsibleUserIds is not { Count: > 0 } && x.ResponsiblePostIds is not { Count: > 0 });
         RuleForEach(x => x.ResponsibleUserIds!).NotEqual(Guid.Empty).WithMessage("Choose who is responsible for the task.");
         RuleFor(x => x.ResponsibleUserIds!.Count).LessThanOrEqualTo(MaxResponsible)
             .When(x => x.ResponsibleUserIds is not null)
@@ -106,6 +107,9 @@ public sealed class CreateTaskRequestValidator : AbstractValidator<CreateTaskReq
             subTask.RuleFor(s => s.EndDate)
                 .GreaterThanOrEqualTo(s => s.StartDate!.Value)
                 .When(s => s.StartDate.HasValue && s.EndDate.HasValue);
+            subTask.RuleFor(s => s.AssigneeUserIds)
+                .Must(ids => ids is { Count: > 0 })
+                .WithMessage("Choose at least one responsible person for the subtask.");
         });
 
         RuleForEach(x => x.Tags!).NotEmpty().MaximumLength(100);
@@ -171,6 +175,9 @@ public sealed class CreateSubTaskRequestValidator : AbstractValidator<CreateSubT
         RuleFor(x => x.EndDate)
             .GreaterThanOrEqualTo(x => x.StartDate!.Value)
             .When(x => x.StartDate.HasValue && x.EndDate.HasValue);
+        RuleFor(x => x.AssigneeUserIds)
+            .Must(ids => ids is { Count: > 0 })
+            .WithMessage("Choose at least one responsible person for the subtask.");
     }
 }
 
@@ -183,7 +190,15 @@ public sealed class UpdateSubTaskRequestValidator : AbstractValidator<UpdateSubT
         RuleFor(x => x.EndDate)
             .GreaterThanOrEqualTo(x => x.StartDate!.Value)
             .When(x => x.StartDate.HasValue && x.EndDate.HasValue);
+        RuleFor(x => x.AssigneeUserIds)
+            .Must(ids => ids is { Count: > 0 })
+            .WithMessage("Choose at least one responsible person for the subtask.");
     }
+}
+
+public sealed class ChangeSubTaskStatusRequestValidator : AbstractValidator<ChangeSubTaskStatusRequest>
+{
+    public ChangeSubTaskStatusRequestValidator() => RuleFor(x => x.Status).IsInEnum();
 }
 
 public sealed class CreateRepetitiveTaskRequestValidator : AbstractValidator<CreateRepetitiveTaskRequest>

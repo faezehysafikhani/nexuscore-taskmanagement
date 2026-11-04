@@ -247,7 +247,7 @@ public sealed class PasswordRecoveryTests
         var tooShort = await api.PostAsync("/api/identity/auth/reset-password", new { token = resetToken, newPassword = "short" });
 
         Assert.Equal(HttpStatusCode.BadRequest, tooShort.StatusCode);
-        Assert.Contains("حداقل ۸ کاراکتر", (await Json(tooShort)).GetProperty("detail").GetString());
+        Assert.Contains("حداقل ۱۰ کاراکتر", (await Json(tooShort)).GetProperty("detail").GetString());
     }
 
     // ---------------------------------------------------------------- unexpected errors
@@ -381,6 +381,7 @@ public sealed class PasswordRecoveryTests
             builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["Identity:LoginProtection:CaptchaAfterFailedAttempts"] = "100",
+                ["PasswordReset:MinimumResponseMilliseconds"] = "0",
                 ["Identity:LoginProtection:ResetCodeCooldownSeconds"] = cooldownSeconds.ToString(),
                 ["Identity:LoginProtection:MaxResetCodesPerIdentifier"] = maxCodes.ToString(),
             });

@@ -30,9 +30,8 @@ public sealed class ActionPriorityTests
     private sealed class FakeUnits : IOrganizationUnitRepository
     {
         public Task<OrganizationUnit?> GetByIdAsync(Guid id, CancellationToken ct) =>
-            Task.FromResult<OrganizationUnit?>(new OrganizationUnit(id, Tenant, "Unit", "U1"));
+            Task.FromResult<OrganizationUnit?>(new OrganizationUnit(id, Tenant, "Unit"));
         public Task<IReadOnlyList<OrganizationUnit>> ListAsync(Guid tenantId, CancellationToken ct) => throw new NotSupportedException();
-        public Task<bool> CodeExistsAsync(Guid tenantId, string code, Guid? excludeId, CancellationToken ct) => throw new NotSupportedException();
         public Task AddAsync(OrganizationUnit unit, CancellationToken ct) => throw new NotSupportedException();
     }
 

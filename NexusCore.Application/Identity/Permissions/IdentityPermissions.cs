@@ -33,6 +33,15 @@ public static class IdentityPermissions
     public const string LdapSettingsTest = "ldap_settings.test";
     public const string SsoSettingsView = "sso_settings.view";
 
+    /// <summary>See the sessions of other users in the organization (device, address, last activity, why a session ended).</summary>
+    public const string SessionsView = "sessions.view";
+
+    /// <summary>Close one session, or all the sessions, of another user.</summary>
+    public const string SessionsRevoke = "sessions.revoke";
+
+    /// <summary>The emergency button: end every session of the organization (needs the password and a reason).</summary>
+    public const string SessionsRevokeAll = "sessions.revoke_all";
+
     public static IReadOnlyList<PermissionDefinition> All { get; } =
     [
         new(UsersView, "Identity", "مشاهده فهرست کاربران"),
@@ -59,7 +68,10 @@ public static class IdentityPermissions
         new(LdapSettingsView, "Platform", "مشاهده تنظیمات اتصال به LDAP"),
         new(LdapSettingsUpdate, "Platform", "ویرایش تنظیمات اتصال به LDAP"),
         new(LdapSettingsTest, "Platform", "آزمایش اتصال به LDAP"),
-        new(SsoSettingsView, "Platform", "مشاهده تنظیمات ورود یکپارچه (SSO)")
+        new(SsoSettingsView, "Platform", "مشاهده تنظیمات ورود یکپارچه (SSO)"),
+        new(SessionsView, "Identity", "مشاهده نشست‌های کاربران"),
+        new(SessionsRevoke, "Identity", "بستن نشست‌های کاربران"),
+        new(SessionsRevokeAll, "Identity", "خاتمه‌ی اضطراری همه‌ی نشست‌های سازمان")
     ];
 }
 

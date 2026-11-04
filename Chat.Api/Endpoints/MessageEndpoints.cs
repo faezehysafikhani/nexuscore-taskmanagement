@@ -93,7 +93,8 @@ public static class MessageEndpoints
                     return result.ToApiResult();
                 }
 
-                return Results.File(download.Content, download.ContentType, download.FileName);
+                // The type comes from the extension, so a file stored earlier with a type the client chose is served safely too.
+                return Results.File(download.Content, NexusCore.Application.Files.AllowedUploadTypes.ContentTypeFor(download.FileName), download.FileName);
             })
             .WithSummary("Download a message attachment (participants only)");
     }

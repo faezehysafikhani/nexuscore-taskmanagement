@@ -62,6 +62,15 @@ public sealed class IdentityRepository(
             cancellationToken);
     }
 
+    public Task<string?> FindPhoneNumberOwnerAsync(Guid tenantId, string phoneNumber, Guid? exceptUserId, CancellationToken cancellationToken)
+    {
+        var value = PhoneNumber.Normalize(phoneNumber) ?? phoneNumber.Trim();
+        return dbContext.Users
+            .Where(user => user.TenantId == tenantId && user.PhoneNumber == value && (exceptUserId == null || user.Id != exceptUserId))
+            .Select(user => user.DisplayName)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
     public Task<bool> UsernameExistsAsync(Guid tenantId, string username, Guid? exceptUserId, CancellationToken cancellationToken)
     {
         var value = username.Trim();
@@ -126,13 +135,20 @@ public sealed class IdentityRepository(
     int? pageNumber,
     int? pageSize,
     string? search,
-    CancellationToken cancellationToken)
+    CancellationToken cancellationToken,
+    IReadOnlyCollection<Guid>? excludeUserIds = null)
     {
         var query = IncludeUserGraph(dbContext.Users).AsQueryable();
 
         if (tenantId.HasValue)
         {
             query = query.Where(user => user.TenantId == tenantId);
+        }
+
+        if (excludeUserIds is { Count: > 0 })
+        {
+            var excluded = excludeUserIds.ToList();
+            query = query.Where(user => !excluded.Contains(user.Id));
         }
 
         if (!string.IsNullOrWhiteSpace(search))
@@ -283,6 +299,70 @@ public sealed class IdentityRepository(
         dbContext.RefreshTokens
             .Include(token => token.User)!.ThenInclude(user => user!.Roles).ThenInclude(role => role.Role)
             .SingleOrDefaultAsync(token => token.TokenHash == tokenHash && token.RevokedAtUtc == null && token.ExpiresAtUtc > DateTimeOffset.UtcNow, cancellationToken);
+
+    public Task<RefreshToken?> FindRefreshTokenAsync(string tokenHash, CancellationToken cancellationToken) =>
+        dbContext.RefreshTokens
+            .Include(token => token.User)!.ThenInclude(user => user!.Roles).ThenInclude(role => role.Role)
+            .SingleOrDefaultAsync(token => token.TokenHash == tokenHash, cancellationToken);
+
+    public async Task<bool> TryUseRefreshTokenAsync(Guid tokenId, string replacedByTokenHash, DateTimeOffset nowUtc, CancellationToken cancellationToken)
+    {
+        if (dbContext.Database.IsRelational())
+        {
+            // UPDATE ... WHERE RevokedAtUtc IS NULL: the database lets exactly one of two
+            // simultaneous requests change the row.
+            var rows = await dbContext.RefreshTokens
+                .Where(token => token.Id == tokenId && token.RevokedAtUtc == null)
+                .ExecuteUpdateAsync(set => set
+                    .SetProperty(token => token.RevokedAtUtc, nowUtc)
+                    .SetProperty(token => token.UsedAtUtc, nowUtc)
+                    .SetProperty(token => token.ReplacedByTokenHash, replacedByTokenHash), cancellationToken);
+            return rows == 1;
+        }
+
+        // Providers without set-based updates (the in-memory one used by tests).
+        var tracked = await dbContext.RefreshTokens.FirstOrDefaultAsync(token => token.Id == tokenId && token.RevokedAtUtc == null, cancellationToken);
+        if (tracked is null)
+        {
+            return false;
+        }
+
+        tracked.Revoke(null, replacedByTokenHash);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    public Task<RefreshTokenState?> GetRefreshTokenStateAsync(Guid tokenId, CancellationToken cancellationToken) =>
+        dbContext.RefreshTokens.AsNoTracking()
+            .Where(token => token.Id == tokenId)
+            .Select(token => new RefreshTokenState(token.RevokedAtUtc, token.UsedAtUtc, token.ReplacedByTokenHash))
+            .FirstOrDefaultAsync(cancellationToken);
+
+    public async Task RevokeRefreshTokenFamilyAsync(Guid userId, Guid familyId, CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var family = await dbContext.RefreshTokens
+            .Where(token => token.UserId == userId && token.RevokedAtUtc == null && token.ExpiresAtUtc > now
+                            && (token.FamilyId == familyId || (token.FamilyId == null && token.Id == familyId)))
+            .ToListAsync(cancellationToken);
+        foreach (var token in family)
+        {
+            token.Revoke(null);
+        }
+    }
+
+    public async Task RevokeRefreshTokensExceptFamilyAsync(Guid userId, Guid keepFamilyId, CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var others = await dbContext.RefreshTokens
+            .Where(token => token.UserId == userId && token.RevokedAtUtc == null && token.ExpiresAtUtc > now
+                            && token.FamilyId != keepFamilyId && !(token.FamilyId == null && token.Id == keepFamilyId))
+            .ToListAsync(cancellationToken);
+        foreach (var token in others)
+        {
+            token.Revoke(null);
+        }
+    }
 
     private static IQueryable<User> IncludeUserGraph(IQueryable<User> query) =>
         query.Include(user => user.Tenant)

@@ -1,4 +1,5 @@
 using NexusCore.Application.Messaging;
+using NexusCore.Application.Security;
 using NexusCore.SharedKernel.Results;
 
 namespace NexusCore.Infrastructure.Messaging;
@@ -9,7 +10,8 @@ namespace NexusCore.Infrastructure.Messaging;
 /// </summary>
 public sealed class GatewaySmsSender(
     INotificationChannelSettingsReader settingsReader,
-    IEnumerable<ISmsProvider> providers) : ISmsSender
+    IEnumerable<ISmsProvider> providers,
+    IOutboundAddressPolicy outboundAddresses) : ISmsSender
 {
     public async Task<Result<string>> SendAsync(Guid tenantId, string phoneNumber, string text, CancellationToken cancellationToken)
     {
@@ -30,6 +32,17 @@ public sealed class GatewaySmsSender(
         if (provider is null)
         {
             return Result.Failure<string>(Error.Validation($"سرویس‌دهنده پیامک «{settings.Provider}» پشتیبانی نمی‌شود."));
+        }
+
+        // Checked again here: the stored address may predate the rules or have been written to the
+        // database directly. The stored key is never sent to an address that fails them.
+        if (!string.IsNullOrWhiteSpace(settings.ApiUrl))
+        {
+            var allowed = await outboundAddresses.ValidateGatewayUrlAsync(settings.ApiUrl, providers.Select(p => p.DefaultBaseUrl).ToList(), cancellationToken);
+            if (allowed.IsFailure)
+            {
+                return Result.Failure<string>(allowed.Error);
+            }
         }
 
         var receiver = NexusCore.Domain.Identity.PhoneNumber.Normalize(phoneNumber) ?? phoneNumber.Trim();

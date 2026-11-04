@@ -6,7 +6,8 @@ public sealed class JwtOptions
     public string Issuer { get; set; } = "NexusCore";
     public string Audience { get; set; } = "NexusCore";
     public string SigningKey { get; set; } = "change-me-to-a-strong-production-secret-at-least-32-characters";
-    public int AccessTokenMinutes { get; set; } = 30;
+    // Short, because the access token cannot be revoked: a stolen one stays usable until it expires.
+    public int AccessTokenMinutes { get; set; } = 15;
 
     // Placeholder values shipped as defaults/examples in source - never acceptable as the real
     // production signing key.

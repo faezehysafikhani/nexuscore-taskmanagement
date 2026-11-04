@@ -75,6 +75,8 @@ public sealed class RecurringTaskReminderTests : IDisposable
         services.AddSingleton<INotificationService>(_notifications);
         services.AddSingleton<INotificationChannelSettingsReader>(_channels);
         services.AddSingleton<ISmsProvider>(_smsProvider);
+        services.AddOptions();
+        services.AddSingleton<NexusCore.Application.Security.IOutboundAddressPolicy, NexusCore.Application.Security.OutboundAddressPolicy>();
         services.AddScoped<ISmsSender, GatewaySmsSender>();
         // The real SMS templates over an in-memory settings store (an edited text lives there).
         services.AddSingleton<IPlatformRepository>(_templateStore);

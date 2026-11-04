@@ -18,6 +18,7 @@ public static class TaskManagementSchema
         BEGIN
             IF COL_LENGTH(N'task_management.Tasks', N'DueSoonNotifiedFor') IS NULL ALTER TABLE [task_management].[Tasks] ADD [DueSoonNotifiedFor] datetimeoffset NULL;
             IF COL_LENGTH(N'task_management.Tasks', N'OverdueNotifiedFor') IS NULL ALTER TABLE [task_management].[Tasks] ADD [OverdueNotifiedFor] datetimeoffset NULL;
+            IF COL_LENGTH(N'task_management.Tasks', N'ParentTaskId') IS NULL ALTER TABLE [task_management].[Tasks] ADD [ParentTaskId] uniqueidentifier NULL;
         END
         IF OBJECT_ID(N'[task_management].[RepetitiveTasks]') IS NOT NULL
             AND COL_LENGTH(N'task_management.RepetitiveTasks', N'UpcomingNotifiedFor') IS NULL
@@ -35,6 +36,56 @@ public static class TaskManagementSchema
             CREATE INDEX [IX_PendingSms_SendAfterUtc] ON [task_management].[PendingSms] ([SendAfterUtc]);
         END
         """;
+
+    /// <summary>Tasks owned through a post, stand-ins for vacant posts (جانشین) and their comments.</summary>
+    public const string AddPostOwnershipAndActingSql = """
+        IF OBJECT_ID(N'[task_management].[Tasks]') IS NOT NULL AND COL_LENGTH(N'task_management.Tasks', N'OwnerHeldByPost') IS NULL
+            ALTER TABLE [task_management].[Tasks] ADD [OwnerHeldByPost] bit NOT NULL CONSTRAINT [DF_Tasks_OwnerHeldByPost] DEFAULT CAST(0 AS bit);
+        IF OBJECT_ID(N'[task_management].[TaskAssignees]') IS NOT NULL
+        BEGIN
+            IF COL_LENGTH(N'task_management.TaskAssignees', N'IsActing') IS NULL
+                ALTER TABLE [task_management].[TaskAssignees] ADD [IsActing] bit NOT NULL CONSTRAINT [DF_TaskAssignees_IsActing] DEFAULT CAST(0 AS bit);
+            IF COL_LENGTH(N'task_management.TaskAssignees', N'ActingNote') IS NULL
+                ALTER TABLE [task_management].[TaskAssignees] ADD [ActingNote] nvarchar(200) NULL;
+        END
+        IF OBJECT_ID(N'[task_management].[TaskComments]') IS NOT NULL AND COL_LENGTH(N'task_management.TaskComments', N'ActingNote') IS NULL
+            ALTER TABLE [task_management].[TaskComments] ADD [ActingNote] nvarchar(200) NULL;
+        """;
+    /// <summary>
+    /// Subtasks' own people (SubTaskAssignees) and their three-state status with actual start and
+    /// end dates. A subtask already completed gets status Completed and its audit time as both dates,
+    /// once, when the columns are added.
+    /// </summary>
+    public const string AddSubTaskAssigneesAndStatusSql = """
+        IF OBJECT_ID(N'[task_management].[SubTasks]') IS NOT NULL
+        BEGIN
+            IF COL_LENGTH(N'task_management.SubTasks', N'ActualStartedAtUtc') IS NULL
+                ALTER TABLE [task_management].[SubTasks] ADD [ActualStartedAtUtc] datetimeoffset NULL;
+            IF COL_LENGTH(N'task_management.SubTasks', N'ActualCompletedAtUtc') IS NULL
+                ALTER TABLE [task_management].[SubTasks] ADD [ActualCompletedAtUtc] datetimeoffset NULL;
+            IF COL_LENGTH(N'task_management.SubTasks', N'Status') IS NULL
+            BEGIN
+                ALTER TABLE [task_management].[SubTasks] ADD [Status] int NOT NULL CONSTRAINT [DF_SubTasks_Status] DEFAULT 0;
+                EXEC(N'UPDATE [task_management].[SubTasks]
+                    SET [Status] = 2,
+                        [ActualStartedAtUtc] = COALESCE([ModifiedAtUtc], [CreatedAtUtc]),
+                        [ActualCompletedAtUtc] = COALESCE([ModifiedAtUtc], [CreatedAtUtc])
+                    WHERE [IsCompleted] = 1;');
+            END
+        END
+        IF OBJECT_ID(N'[task_management].[SubTasks]') IS NOT NULL AND OBJECT_ID(N'[task_management].[SubTaskAssignees]') IS NULL
+        BEGIN
+            CREATE TABLE [task_management].[SubTaskAssignees] (
+                [Id] uniqueidentifier NOT NULL,
+                [SubTaskId] uniqueidentifier NOT NULL,
+                [UserId] uniqueidentifier NOT NULL,
+                CONSTRAINT [PK_SubTaskAssignees] PRIMARY KEY ([Id]),
+                CONSTRAINT [FK_SubTaskAssignees_SubTasks_SubTaskId] FOREIGN KEY ([SubTaskId]) REFERENCES [task_management].[SubTasks] ([Id]) ON DELETE CASCADE,
+                CONSTRAINT [FK_SubTaskAssignees_Users_UserId] FOREIGN KEY ([UserId]) REFERENCES [identity].[Users] ([Id]));
+            CREATE UNIQUE INDEX [IX_SubTaskAssignees_SubTaskId_UserId] ON [task_management].[SubTaskAssignees] ([SubTaskId], [UserId]);
+            CREATE INDEX [IX_SubTaskAssignees_UserId] ON [task_management].[SubTaskAssignees] ([UserId]);
+        END
+        """;
 }
 
 /// <summary>Applies <see cref="TaskManagementSchema"/> when the host starts (SQL Server only), before the module's jobs run.</summary>
@@ -49,6 +100,8 @@ public sealed class TaskManagementSchemaPatcher(IServiceScopeFactory scopes, ILo
             if (db.Database.IsSqlServer())
             {
                 await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddRemindersSql, cancellationToken);
+                await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddPostOwnershipAndActingSql, cancellationToken);
+                await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddSubTaskAssigneesAndStatusSql, cancellationToken);
             }
         }
         catch (Exception ex)

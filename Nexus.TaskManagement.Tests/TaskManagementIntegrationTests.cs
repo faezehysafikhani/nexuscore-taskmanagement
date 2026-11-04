@@ -19,12 +19,13 @@ public sealed class TaskManagementIntegrationTests(SqlServerFixture fixture)
 {
     private bool Skip => !fixture.Available;
 
-    private static CreateTaskRequest PlainTask(string title = "Write the report") =>
-        new(title, new DateOnly(2026, 6, 1));
+    // Every new task has someone responsible (the product's rule): the fixture's owner.
+    private CreateTaskRequest PlainTask(string title = "Write the report") =>
+        new(title, new DateOnly(2026, 6, 1), AssignedUserId: fixture.OwnerUserId);
 
-    private static CreateTaskRequest Project(string title, params string[] subTaskTitles) =>
-        new(title, new DateOnly(2026, 6, 1), IsProject: true,
-            SubTasks: subTaskTitles.Select(t => new SubTaskInput(t)).ToList());
+    private CreateTaskRequest Project(string title, params string[] subTaskTitles) =>
+        new(title, new DateOnly(2026, 6, 1), IsProject: true, AssignedUserId: fixture.OwnerUserId,
+            SubTasks: subTaskTitles.Select(t => new SubTaskInput(t, AssigneeUserIds: [fixture.OwnerUserId])).ToList());
 
     // -----------------------------------------------------------------------
     // Task and project rules
@@ -123,7 +124,7 @@ public sealed class TaskManagementIntegrationTests(SqlServerFixture fixture)
 
         var subTask = await fixture.ScopedAsync(sp =>
             sp.GetRequiredService<ITaskService>()
-                .CreateSubTaskAsync(task.Value.Id, new CreateSubTaskRequest("Step"), default));
+                .CreateSubTaskAsync(task.Value.Id, new CreateSubTaskRequest("Step", AssigneeUserIds: [fixture.OwnerUserId]), default));
 
         var result = await fixture.ScopedAsync(sp =>
             sp.GetRequiredService<ITaskService>().DeleteSubTaskAsync(subTask.Value.Id, default));
@@ -149,7 +150,7 @@ public sealed class TaskManagementIntegrationTests(SqlServerFixture fixture)
 
         await fixture.ScopedAsync(sp =>
             sp.GetRequiredService<ITaskService>()
-                .CreateSubTaskAsync(task.Value.Id, new CreateSubTaskRequest("Now it has one"), default));
+                .CreateSubTaskAsync(task.Value.Id, new CreateSubTaskRequest("Now it has one", AssigneeUserIds: [fixture.OwnerUserId]), default));
 
         var accepted = await fixture.ScopedAsync(sp =>
             sp.GetRequiredService<ITaskService>().UpdateAsync(
@@ -381,7 +382,7 @@ public sealed class TaskManagementIntegrationTests(SqlServerFixture fixture)
 
         var upload = await fixture.ScopedAsync(sp =>
             sp.GetRequiredService<ITaskFileService>().UploadToTaskAsync(
-                task.Value.Id, new UploadFileRequest("notes.txt", "text/plain", new byte[64]), default));
+                task.Value.Id, new UploadFileRequest("notes.pdf", "application/pdf", TestFiles.Pdf(64)), default));
 
         Assert.True(upload.IsSuccess);
 
@@ -405,7 +406,7 @@ public sealed class TaskManagementIntegrationTests(SqlServerFixture fixture)
         var upload = await fixture.ScopedAsync(sp =>
             sp.GetRequiredService<ITaskFileService>().UploadToSubTaskAsync(
                 project.Value.SubTasks.Single().Id,
-                new UploadFileRequest("s.txt", "text/plain", new byte[32]), default));
+                new UploadFileRequest("s.pdf", "application/pdf", TestFiles.Pdf(32)), default));
 
         Assert.True(upload.IsSuccess);
 
@@ -433,8 +434,7 @@ public sealed class TaskManagementIntegrationTests(SqlServerFixture fixture)
         var upload = await fixture.ScopedAsync(sp =>
             sp.GetRequiredService<ITaskFileService>().UploadToTaskAsync(
                 task.Value.Id,
-                new UploadFileRequest("big.pdf", "application/pdf",
-                    new byte[defaultLimitBytes]),
+                new UploadFileRequest("big.pdf", "application/pdf", TestFiles.Pdf(defaultLimitBytes)),
                 default));
 
         Assert.True(upload.IsSuccess);
@@ -454,8 +454,7 @@ public sealed class TaskManagementIntegrationTests(SqlServerFixture fixture)
         var upload = await fixture.ScopedAsync(sp =>
             sp.GetRequiredService<ITaskFileService>().UploadToTaskAsync(
                 task.Value.Id,
-                new UploadFileRequest("toobig.pdf", "application/pdf",
-                    new byte[defaultLimitBytes + 1]),
+                new UploadFileRequest("toobig.pdf", "application/pdf", TestFiles.Pdf(defaultLimitBytes + 1)),
                 default));
 
         Assert.True(upload.IsFailure);
@@ -485,7 +484,7 @@ public sealed class TaskManagementIntegrationTests(SqlServerFixture fixture)
 
         var upload = await fixture.ScopedAsync(sp =>
             sp.GetRequiredService<ITaskFileService>().UploadToTaskAsync(
-                Guid.NewGuid(), new UploadFileRequest("x.txt", "text/plain", new byte[8]), default));
+                Guid.NewGuid(), new UploadFileRequest("x.pdf", "application/pdf", TestFiles.Pdf(8)), default));
 
         Assert.True(upload.IsFailure);
     }
@@ -501,7 +500,7 @@ public sealed class TaskManagementIntegrationTests(SqlServerFixture fixture)
         var upload = await fixture.ScopedAsync(sp =>
             sp.GetRequiredService<ITaskFileService>().UploadToTaskAsync(
                 task.Value.Id,
-                new UploadFileRequest("../../../etc/passwd", "text/plain", new byte[8]),
+                new UploadFileRequest("../../../etc/passwd.pdf", "application/pdf", TestFiles.Pdf(16)),
                 default));
 
         Assert.True(upload.IsSuccess);
@@ -703,7 +702,8 @@ public sealed class TaskManagementIntegrationTests(SqlServerFixture fixture)
         Assert.True(task.IsSuccess);
         Assert.Equal(fixture.OtherUserId, task.Value.AssignedUser?.Id);
         Assert.Equal(fixture.UserGroupId, task.Value.AssignedUserGroup?.Id);
-        Assert.Single(task.Value.Assignees);
+        // The responsible person is one of the task's people too, beside the one added.
+        Assert.Equal(new[] { fixture.OtherUserId, fixture.OwnerUserId }.Order(), task.Value.Assignees.Select(a => a.Id).Order());
     }
 
     [Fact]

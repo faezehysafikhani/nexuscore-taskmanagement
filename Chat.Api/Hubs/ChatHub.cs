@@ -57,7 +57,8 @@ public class ChatHub : Hub
         var isParticipant = await _db.ConversationParticipants
             .AnyAsync(p =>
                 p.ConversationId == conversationId &&
-                p.UserId == _currentUser.UserId);
+                p.UserId == _currentUser.UserId &&
+                _db.Conversations.Any(c => c.Id == p.ConversationId && c.TenantId == _currentUser.TenantId));
 
         // A team's thread is only for its current members, whatever rows are left from before.
         if (!isParticipant

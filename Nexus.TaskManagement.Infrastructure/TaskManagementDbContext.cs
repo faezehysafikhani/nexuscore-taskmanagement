@@ -2,6 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using Nexus.TaskManagement.Domain;
 using NexusCore.Domain.Identity;
 using Nexus.TaskManagement.Application;
+using NexusCore.Application.Security;
+using NexusCore.SharedKernel.Interfaces;
 
 namespace Nexus.TaskManagement.Infrastructure;
 
@@ -18,9 +20,13 @@ namespace Nexus.TaskManagement.Infrastructure;
 /// </summary>
 public sealed class TaskManagementDbContext(
     DbContextOptions<TaskManagementDbContext> options,
-    ITaskAccessScope? access = null)
+    ITaskAccessScope? access = null,
+    ITenantScope? tenantScope = null)
     : DbContext(options), ITaskManagementUnitOfWork
 {
+    // The organization of the signed-in user, or null when nothing confines the work (ITenantScope).
+    private Guid? TenantFilterId => tenantScope?.FilterTenantIdFor(nameof(TaskManagementDbContext));
+
     public DbSet<TaskItem> Tasks => Set<TaskItem>();
     public DbSet<SubTask> SubTasks => Set<SubTask>();
     public DbSet<RepetitiveTask> RepetitiveTasks => Set<RepetitiveTask>();
@@ -30,6 +36,7 @@ public sealed class TaskManagementDbContext(
     public DbSet<TaskTag> TaskTags => Set<TaskTag>();
     public DbSet<Note> Notes => Set<Note>();
     public DbSet<TaskAssignee> TaskAssignees => Set<TaskAssignee>();
+    public DbSet<SubTaskAssignee> SubTaskAssignees => Set<SubTaskAssignee>();
     public DbSet<TaskComment> TaskComments => Set<TaskComment>();
     public DbSet<PendingTaskSms> PendingSms => Set<PendingTaskSms>();
 
@@ -41,6 +48,8 @@ public sealed class TaskManagementDbContext(
     // serves every user. See ITaskAccessScope for the rule.
     private bool AccessRestricted => access?.IsRestricted ?? false;
     private Guid? AccessUserId => access?.UserId;
+    private bool AccessReachLimited => access?.ReachUserIds is not null;
+    private List<Guid> AccessReach => access?.ReachUserIds?.ToList() ?? [];
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -53,12 +62,19 @@ public sealed class TaskManagementDbContext(
         //
         // A task's team is its context, not a grant: the members who may see it are on its
         // access list (Assignees), so taking one off the list really takes the task away.
+        //
+        // A Tasks.ManageAll holder kept to their own company sees the tasks of its people.
         modelBuilder.Entity<TaskItem>().HasQueryFilter(task =>
-            !AccessRestricted
-            || task.OwnerUserId == null
+            (TenantFilterId == null || task.TenantId == TenantFilterId)
+            && ((!AccessRestricted
+                && (!AccessReachLimited
+                    || (task.OwnerUserId != null && AccessReach.Contains(task.OwnerUserId.Value))
+                    || (task.AssignedUserId != null && AccessReach.Contains(task.AssignedUserId.Value))
+                    || task.Assignees.Any(assignee => AccessReach.Contains(assignee.UserId))))
+            || (task.OwnerUserId == null && !task.OwnerHeldByPost)
             || task.OwnerUserId == AccessUserId
             || task.AssignedUserId == AccessUserId
-            || task.Assignees.Any(assignee => assignee.UserId == AccessUserId));
+            || task.Assignees.Any(assignee => assignee.UserId == AccessUserId)));
 
         modelBuilder.Entity<SubTask>().HasQueryFilter(subTask => subTask.Task!.Title != null);
         modelBuilder.Entity<RepetitiveTask>().HasQueryFilter(schedule => schedule.Task!.Title != null);
@@ -70,5 +86,9 @@ public sealed class TaskManagementDbContext(
         modelBuilder.Entity<TaskTag>().HasQueryFilter(link =>
             (link.TaskId == null || link.Task!.Title != null)
             && (link.SubTaskId == null || link.SubTask!.Title != null));
+
+        // The organization condition on everything else that belongs to one (tags, notes, files,
+        // pending SMS...). What hangs off a task follows the task's own filter above.
+        modelBuilder.ApplyTenantFilters(() => TenantFilterId);
     }
 }

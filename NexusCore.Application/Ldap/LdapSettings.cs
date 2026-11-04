@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Logging;
 using NexusCore.Application.Platform.Interfaces;
+using NexusCore.Application.Security;
 using NexusCore.Domain.Settings;
 using NexusCore.SharedKernel.Interfaces;
 using NexusCore.SharedKernel.Results;
@@ -74,6 +75,7 @@ public sealed class LdapSettingsService(
     IPlatformService platformService,
     IDataProtectionProvider dataProtectionProvider,
     ILdapDirectoryClient directory,
+    IOutboundAddressPolicy outboundAddresses,
     ILogger<LdapSettingsService> logger) : ILdapSettingsService
 {
     public const string SettingKey = "Identity.Ldap";
@@ -105,10 +107,19 @@ public sealed class LdapSettingsService(
             return Result.Failure<LdapSettingsDto>(Error.Unauthorized());
         }
 
-        var (_, storedPassword) = await ReadAsync(tenantId, cancellationToken);
-        var password = string.IsNullOrEmpty(settings.BindPassword) ? storedPassword : settings.BindPassword;
+        var (savedSettings, storedPassword) = await ReadAsync(tenantId, cancellationToken);
+        // The stored bind password is only ever sent to the server it was entered for: moving the
+        // settings to another host or port needs the password typed in again.
+        var password = string.IsNullOrEmpty(settings.BindPassword)
+            ? (SameServer(settings, savedSettings) ? storedPassword : null)
+            : settings.BindPassword;
 
         var validation = Validate(settings, requireHost: settings.Enabled);
+        if (validation.IsSuccess && !string.IsNullOrWhiteSpace(settings.Host))
+        {
+            validation = await outboundAddresses.ValidateLdapServerAsync(settings.Host, settings.Port, cancellationToken);
+        }
+
         if (validation.IsFailure)
         {
             return Result.Failure<LdapSettingsDto>(validation.Error);
@@ -156,12 +167,19 @@ public sealed class LdapSettingsService(
         var (saved, storedPassword) = await ReadAsync(tenantId, cancellationToken);
         var candidate = settings ?? saved;
         var validation = Validate(candidate, requireHost: true);
+        if (validation.IsSuccess)
+        {
+            validation = await outboundAddresses.ValidateLdapServerAsync(candidate.Host!, candidate.Port, cancellationToken);
+        }
+
         if (validation.IsFailure)
         {
             return Result.Failure<LdapTestResultDto>(validation.Error);
         }
 
-        var password = string.IsNullOrEmpty(candidate.BindPassword) ? storedPassword : candidate.BindPassword;
+        var password = string.IsNullOrEmpty(candidate.BindPassword)
+            ? (SameServer(candidate, saved) ? storedPassword : null)
+            : candidate.BindPassword;
         var result = await directory.TestConnectionAsync(new LdapConnectionSettings(
             candidate.Host!.Trim(), candidate.Port, candidate.UseSsl, candidate.UseStartTls,
             Clean(candidate.Domain), Clean(candidate.BaseDn), Clean(candidate.BindUsername), password,
@@ -261,6 +279,9 @@ public sealed class LdapSettingsService(
     }
 
     private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static bool SameServer(LdapSettingsDto a, LdapSettingsDto b) =>
+        a.Port == b.Port && string.Equals(Clean(a.Host), Clean(b.Host), StringComparison.OrdinalIgnoreCase);
 
     private sealed record Stored(
         bool Enabled, string? Host, int Port, bool UseSsl, bool UseStartTls, string? Domain, string? BaseDn,

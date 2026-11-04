@@ -17,6 +17,9 @@ public interface IIdentityRepository
 
     /// <summary>Whether another user of the tenant has this mobile number (compared in canonical form).</summary>
     Task<bool> PhoneNumberExistsAsync(Guid tenantId, string phoneNumber, Guid? exceptUserId, CancellationToken cancellationToken);
+
+    /// <summary>The name of the user (other than exceptUserId) who has this mobile number, or null.</summary>
+    Task<string?> FindPhoneNumberOwnerAsync(Guid tenantId, string phoneNumber, Guid? exceptUserId, CancellationToken cancellationToken);
     Task<Role?> GetRoleByNameAsync(Guid tenantId, string name, CancellationToken cancellationToken);
     Task<Tenant?> GetTenantBySlugAsync(string slug, CancellationToken cancellationToken);
     Task AddPasswordResetTokenAsync(PasswordResetToken token, CancellationToken cancellationToken);
@@ -31,7 +34,8 @@ public interface IIdentityRepository
     int? pageNumber,
     int? pageSize,
     string? search,
-    CancellationToken cancellationToken);
+    CancellationToken cancellationToken,
+    IReadOnlyCollection<Guid>? excludeUserIds = null);
     Task<bool> UserEmailExistsAsync(Guid tenantId, string email, Guid? exceptUserId, CancellationToken cancellationToken);
     Task AddUserAsync(User user, CancellationToken cancellationToken);
     Task RemoveUserAsync(User user, CancellationToken cancellationToken);
@@ -51,4 +55,25 @@ public interface IIdentityRepository
     Task<bool> IsUserActiveAsync(Guid userId, CancellationToken cancellationToken);
     Task<IReadOnlyList<Permission>> GetPermissionsByIdsAsync(IReadOnlyCollection<Guid> permissionIds, CancellationToken cancellationToken);
     Task<RefreshToken?> FindActiveRefreshTokenAsync(string tokenHash, CancellationToken cancellationToken);
+
+    /// <summary>The refresh token whatever its state (active, replaced, revoked, expired), with its user.</summary>
+    Task<RefreshToken?> FindRefreshTokenAsync(string tokenHash, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Takes the token out of use in one conditional statement (revoked, marked used, pointing to
+    /// its successor) and says whether this call was the one that did it. Two requests with the
+    /// same token cannot both get true.
+    /// </summary>
+    Task<bool> TryUseRefreshTokenAsync(Guid tokenId, string replacedByTokenHash, DateTimeOffset nowUtc, CancellationToken cancellationToken);
+
+    /// <summary>The token's state as it is in the database right now, not as this request first read it.</summary>
+    Task<RefreshTokenState?> GetRefreshTokenStateAsync(Guid tokenId, CancellationToken cancellationToken);
+
+    /// <summary>Revokes every token of one sign-in (family): the token in use, its successors and its replaced ones.</summary>
+    Task RevokeRefreshTokenFamilyAsync(Guid userId, Guid familyId, CancellationToken cancellationToken);
+
+    /// <summary>Signs the user out everywhere except the one sign-in (family) the caller is using.</summary>
+    Task RevokeRefreshTokensExceptFamilyAsync(Guid userId, Guid keepFamilyId, CancellationToken cancellationToken);
 }
+
+public sealed record RefreshTokenState(DateTimeOffset? RevokedAtUtc, DateTimeOffset? UsedAtUtc, string? ReplacedByTokenHash);

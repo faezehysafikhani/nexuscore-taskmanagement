@@ -13,44 +13,79 @@ public sealed class OrganizationUnit : AuditableEntity<Guid>
     private OrganizationUnit() : base(Guid.Empty)
     {
         Name = string.Empty;
-        Code = string.Empty;
     }
 
-    public OrganizationUnit(Guid id, Guid tenantId, string name, string code, Guid? parentId = null) : base(id)
+    public OrganizationUnit(Guid id, Guid tenantId, string name, Guid? managerUserId = null) : base(id)
     {
         TenantId = tenantId;
         Name = name.Trim();
-        Code = code.Trim();
-        ParentId = parentId;
-        IsActive = true;
-    }
-
-    /// <summary>
-    /// A top-level unit with no code of its own (the shape the flat chart used): the code is derived from the id,
-    /// so it is still unique within the tenant.
-    /// </summary>
-    public OrganizationUnit(Guid id, Guid tenantId, string name, Guid? managerUserId = null)
-        : this(id, tenantId, name, $"U{id:N}")
-    {
         ManagerUserId = managerUserId;
+        IsActive = true;
     }
 
     public Guid TenantId { get; private set; }
     public string Name { get; private set; }
-    public string Code { get; private set; }
-    public Guid? ParentId { get; private set; }
     public Guid? ManagerUserId { get; private set; }
     public bool IsActive { get; private set; }
 
-    /// <summary>Renames and re-assigns the unit, keeping its code and its place in the chart.</summary>
-    public void Update(string name, Guid? managerUserId, bool isActive) =>
-        Update(name, Code, ParentId, managerUserId, isActive);
+    /// <summary>
+    /// The unit above this one. Null: directly under the (implicit, row-less) root of its company,
+    /// which is how every unit was until now. Kept as a bare reference like every other id here.
+    /// </summary>
+    public Guid? ParentUnitId { get; private set; }
 
-    public void Update(string name, string code, Guid? parentId, Guid? managerUserId, bool isActive)
+    /// <summary>Which node type (Nexus.OrgStructure, org_structure.NodeTypes) this unit is; null: the plain «unit».</summary>
+    public Guid? NodeTypeId { get; private set; }
+
+    /// <summary>The period the unit exists in (null: always). For planned restructurings; not used yet.</summary>
+    public DateTimeOffset? ValidFrom { get; private set; }
+    public DateTimeOffset? ValidTo { get; private set; }
+
+    /// <summary>Concurrency token: saving with an older version is refused.</summary>
+    public byte[] RowVersion { get; private set; } = [];
+
+    /// <summary>Its place among the nodes beside it (same parent, or the same company's top), lowest first.</summary>
+    public int SortOrder { get; private set; }
+
+    /// <summary>
+    /// The node's own code (unique in its company; null: none - every unit before phase 6). Not the
+    /// old Code column that upgrade-1 removed: that is why it is NodeCode.
+    /// </summary>
+    public string? NodeCode { get; private set; }
+
+    /// <summary>Optional details (null: none): a latin name, the title used in letters (apart from the name), and contact details.</summary>
+    public string? LatinName { get; private set; }
+    public string? CorrespondenceTitle { get; private set; }
+    public string? Phone { get; private set; }
+    public string? Address { get; private set; }
+
+    public void SetNodeCode(string? code) => NodeCode = Clean(code);
+
+    public void SetDetails(string? latinName, string? correspondenceTitle, string? phone, string? address)
+    {
+        LatinName = Clean(latinName);
+        CorrespondenceTitle = Clean(correspondenceTitle);
+        Phone = Clean(phone);
+        Address = Clean(address);
+    }
+
+    private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    public void SetSortOrder(int sortOrder) => SortOrder = sortOrder;
+
+    public void SetParent(Guid? parentUnitId) => ParentUnitId = parentUnitId;
+
+    public void SetNodeType(Guid? nodeTypeId) => NodeTypeId = nodeTypeId;
+
+    public void SetValidity(DateTimeOffset? validFrom, DateTimeOffset? validTo)
+    {
+        ValidFrom = validFrom;
+        ValidTo = validTo;
+    }
+
+    public void Update(string name, Guid? managerUserId, bool isActive)
     {
         Name = name.Trim();
-        Code = code.Trim();
-        ParentId = parentId;
         ManagerUserId = managerUserId;
         IsActive = isActive;
     }

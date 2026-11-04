@@ -32,11 +32,14 @@ public static class EndpointResults
 
     private static IResult ToProblem(Error error)
     {
-        var statusCode = error.Code switch
+        // A session that is over (idle, absolute, revoked ...): the client signs the user out and says why.
+        var statusCode = error.Code.StartsWith("session.", StringComparison.Ordinal) ? StatusCodes.Status401Unauthorized : error.Code switch
         {
             "validation.error" => StatusCodes.Status400BadRequest,
             "not_found" => StatusCodes.Status404NotFound,
             "conflict" => StatusCodes.Status409Conflict,
+            // Someone else changed it meanwhile (or is changing it now): read again and retry.
+            "conflict.changed" => StatusCodes.Status409Conflict,
             "unauthorized" => StatusCodes.Status401Unauthorized,
             // A failed sign-in after which the next attempt must include a CAPTCHA.
             "unauthorized.captcha_required" => StatusCodes.Status401Unauthorized,

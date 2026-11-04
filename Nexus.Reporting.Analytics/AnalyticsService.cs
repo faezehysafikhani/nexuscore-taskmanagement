@@ -107,7 +107,7 @@ public sealed class AnalyticsService(
         var units = new List<UnitPerformanceDto>();
         foreach (var unit in rollup.Units.Where(u => rollup.DepthOf(u.Id) == level || rows.ContainsKey(u.Id)).OrderBy(u => u.Name, StringComparer.CurrentCulture))
         {
-            units.Add(ToUnitRow(unit.Id, unit.Name, unit.Code, rollup.DepthOf(unit.Id), rows.GetValueOrDefault(unit.Id) ?? [], date));
+            units.Add(ToUnitRow(unit.Id, unit.Name, unit.NodeCode, rollup.DepthOf(unit.Id), rows.GetValueOrDefault(unit.Id) ?? [], date));
         }
 
         if (rows.TryGetValue(Guid.Empty, out var unassigned))
@@ -144,7 +144,7 @@ public sealed class AnalyticsService(
         var result = rollup.Units
             .Where(u => rollup.DepthOf(u.Id) == level || rows.ContainsKey(u.Id))
             .OrderBy(u => u.Name, StringComparer.CurrentCulture)
-            .Select(u => Row(u.Id, u.Name, u.Code))
+            .Select(u => Row(u.Id, u.Name, u.NodeCode))
             .ToList();
         if (rows.ContainsKey(Guid.Empty))
         {

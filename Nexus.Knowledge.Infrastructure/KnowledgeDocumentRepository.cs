@@ -6,8 +6,8 @@ namespace Nexus.Knowledge.Infrastructure;
 
 public sealed class KnowledgeDocumentRepository(KnowledgeDbContext dbContext) : IKnowledgeDocumentRepository
 {
-    public Task<KnowledgeDocument?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
-        dbContext.KnowledgeDocuments.SingleOrDefaultAsync(document => document.Id == id, cancellationToken);
+    public Task<KnowledgeDocument?> GetByIdAsync(Guid tenantId, Guid id, CancellationToken cancellationToken) =>
+        dbContext.KnowledgeDocuments.SingleOrDefaultAsync(document => document.Id == id && document.TenantId == tenantId, cancellationToken);
 
     public async Task<IReadOnlyList<KnowledgeDocument>> SearchAsync(Guid tenantId, string? search, KnowledgeDocumentType? documentType, CancellationToken cancellationToken)
     {

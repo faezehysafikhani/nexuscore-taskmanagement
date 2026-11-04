@@ -16,7 +16,7 @@ public static class OrganizationPaths
             var names = new List<string> { unit.Name };
             var seen = new HashSet<Guid> { unit.Id };
             var current = unit;
-            while (current.ParentId is { } parentId && byId.TryGetValue(parentId, out var parent) && seen.Add(parentId))
+            while (current.ParentUnitId is { } parentId && byId.TryGetValue(parentId, out var parent) && seen.Add(parentId))
             {
                 names.Insert(0, parent.Name);
                 current = parent;
@@ -31,7 +31,7 @@ public static class OrganizationPaths
     /// <summary>Every unit below <paramref name="unitId"/> (children, their children...), not the unit itself.</summary>
     public static HashSet<Guid> Descendants(IReadOnlyCollection<OrganizationUnit> units, Guid unitId)
     {
-        var childrenOf = units.Where(u => u.ParentId is not null).ToLookup(u => u.ParentId!.Value, u => u.Id);
+        var childrenOf = units.Where(u => u.ParentUnitId is not null).ToLookup(u => u.ParentUnitId!.Value, u => u.Id);
         var result = new HashSet<Guid>();
         var stack = new Stack<Guid>([unitId]);
         while (stack.Count > 0)
@@ -61,7 +61,7 @@ public static class OrganizationPaths
                 return true;
             }
 
-            current = byId.TryGetValue(id, out var unit) ? unit.ParentId : null;
+            current = byId.TryGetValue(id, out var unit) ? unit.ParentUnitId : null;
         }
 
         return false;

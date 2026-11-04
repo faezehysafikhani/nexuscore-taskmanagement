@@ -73,7 +73,29 @@ public sealed class TaskAssignee : Entity<Guid>
     /// <summary>Responsible for doing the task, not only allowed to see and work on it.</summary>
     public bool IsResponsible { get; private set; }
 
-    internal void SetResponsible(bool isResponsible) => IsResponsible = isResponsible;
+    /// <summary>
+    /// Standing in for a vacant post of the task (جانشین): may see the task and comment, nothing
+    /// more. Not part of the access list; ActingNote names the post («جانشین کارشناس · کد ۷»).
+    /// </summary>
+    public bool IsActing { get; private set; }
+
+    public string? ActingNote { get; private set; }
+
+    internal void SetResponsible(bool isResponsible)
+    {
+        IsResponsible = isResponsible;
+        if (isResponsible)
+        {
+            IsActing = false;
+            ActingNote = null;
+        }
+    }
+
+    internal void SetActing(string? note)
+    {
+        IsActing = true;
+        ActingNote = note;
+    }
 
     public Guid TaskId { get; private set; }
     public TaskItem? Task { get; private set; }

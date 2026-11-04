@@ -30,6 +30,9 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
         // Optional contact address; unique when present.
         builder.Property(x => x.Email).HasMaxLength(256);
         builder.Property(x => x.DisplayName).HasMaxLength(160).IsRequired();
+        builder.Property(x => x.Address).HasMaxLength(1000);
+        builder.Property(x => x.FatherName).HasMaxLength(80);
+        builder.Property(x => x.BirthDate).HasColumnType("date");
         builder.Property(x => x.FirstName).HasMaxLength(80);
         builder.Property(x => x.LastName).HasMaxLength(80);
         builder.Property(x => x.IsSystem).HasDefaultValue(false);
@@ -125,6 +128,10 @@ public sealed class RefreshTokenConfiguration : IEntityTypeConfiguration<Refresh
         builder.Property(x => x.Id).ValueGeneratedNever();
         builder.Property(x => x.TokenHash).HasMaxLength(128).IsRequired();
         builder.HasIndex(x => x.TokenHash).IsUnique();
+        builder.Property(x => x.FamilyId);
+        builder.Property(x => x.UsedAtUtc);
+        builder.Ignore(x => x.Family);
+        builder.HasIndex(x => new { x.UserId, x.FamilyId });
         builder.HasOne(x => x.User).WithMany(x => x.RefreshTokens).HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
     }
 }
@@ -140,7 +147,43 @@ public sealed class AuditLogConfiguration : IEntityTypeConfiguration<AuditLog>
         builder.Property(x => x.EntityName).HasMaxLength(120);
         builder.Property(x => x.EntityId).HasMaxLength(80);
         builder.Property(x => x.IpAddress).HasMaxLength(64);
+        builder.Property(x => x.UserAgent).HasMaxLength(512);
         builder.HasIndex(x => new { x.TenantId, x.OccurredAtUtc });
+        builder.HasIndex(x => x.SessionId);
+    }
+}
+
+public sealed class UserSessionConfiguration : IEntityTypeConfiguration<UserSession>
+{
+    public void Configure(EntityTypeBuilder<UserSession> builder)
+    {
+        builder.ToTable("UserSessions", "identity");
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.Property(x => x.PolicyProfile).HasMaxLength(40).IsRequired();
+        builder.Property(x => x.RevokedReason).HasConversion<string>().HasMaxLength(40);
+        builder.Property(x => x.CreatedIp).HasMaxLength(64);
+        builder.Property(x => x.LastIp).HasMaxLength(64);
+        builder.Property(x => x.UserAgent).HasMaxLength(UserSession.MaxUserAgentLength);
+        builder.Property(x => x.DeviceLabel).HasMaxLength(80);
+        builder.Ignore(x => x.IdleExpiresAtUtc);
+        builder.HasIndex(x => new { x.UserId, x.RevokedAtUtc });
+        builder.HasIndex(x => new { x.TenantId, x.RevokedAtUtc });
+        builder.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+public sealed class PendingSignInConfiguration : IEntityTypeConfiguration<PendingSignIn>
+{
+    public void Configure(EntityTypeBuilder<PendingSignIn> builder)
+    {
+        builder.ToTable("PendingSignIns", "identity");
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.Property(x => x.TicketHash).HasMaxLength(128).IsRequired();
+        builder.Property(x => x.CreatedIp).HasMaxLength(64);
+        builder.HasIndex(x => x.TicketHash).IsUnique();
+        builder.HasIndex(x => x.ExpiresAtUtc);
     }
 }
 

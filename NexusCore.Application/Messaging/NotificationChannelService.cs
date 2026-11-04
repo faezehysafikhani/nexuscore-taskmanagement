@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.DataProtection;
 using NexusCore.Application.Platform.Interfaces;
+using NexusCore.Application.Security;
 using NexusCore.Domain.Settings;
 using NexusCore.SharedKernel.Interfaces;
 using NexusCore.SharedKernel.Results;
@@ -21,7 +22,8 @@ public sealed class NotificationChannelService(
     IDataProtectionProvider dataProtectionProvider,
     INotificationChannelSettingsReader reader,
     IEnumerable<ISmsProvider> providers,
-    ISmsSender smsSender) : INotificationChannelService
+    ISmsSender smsSender,
+    IOutboundAddressPolicy outboundAddresses) : INotificationChannelService
 {
     private const int MaxStoredLength = 2000; // platform.Settings.Value column size
 
@@ -50,12 +52,16 @@ public sealed class NotificationChannelService(
 
         var current = await reader.ReadAsync(tenantId, cancellationToken);
         // An empty key means "keep the stored one" - the client never had it to send back.
-        var apiKey = string.IsNullOrWhiteSpace(settings.Sms?.ApiKey) ? current.Sms.ApiKey : settings.Sms.ApiKey.Trim();
-        var username = string.IsNullOrWhiteSpace(settings.Sms?.Username) ? current.Sms.Username : settings.Sms.Username.Trim();
-        var password = string.IsNullOrWhiteSpace(settings.Sms?.Password) ? current.Sms.Password : settings.Sms.Password.Trim();
+        // ...unless the address the key is sent to changes in the same save: then the stored key
+        // is dropped, and the new address only ever receives a key typed in for it. Otherwise
+        // editing the address alone would hand the stored key to the new owner of that address.
+        var addressChanges = !SameAddress(settings.Sms?.ApiUrl, current.Sms.ApiUrl);
+        var apiKey = string.IsNullOrWhiteSpace(settings.Sms?.ApiKey) ? (addressChanges ? null : current.Sms.ApiKey) : settings.Sms.ApiKey.Trim();
+        var username = string.IsNullOrWhiteSpace(settings.Sms?.Username) ? (addressChanges ? null : current.Sms.Username) : settings.Sms.Username.Trim();
+        var password = string.IsNullOrWhiteSpace(settings.Sms?.Password) ? (addressChanges ? null : current.Sms.Password) : settings.Sms.Password.Trim();
         var configuredProviders = BuildStoredProviders(settings.Sms?.Providers, current.Sms);
 
-        var validation = Validate(settings, apiKey, username, password);
+        var validation = await ValidateAsync(settings, apiKey, username, password, cancellationToken);
         if (validation.IsFailure)
         {
             return Result.Failure<NotificationChannelSettingsDto>(validation.Error);
@@ -125,7 +131,7 @@ public sealed class NotificationChannelService(
             : new ChannelTestResultDto(false, sent.Error.Message));
     }
 
-    private Result Validate(NotificationChannelSettingsDto settings, string? apiKey, string? username, string? password)
+    private async Task<Result> ValidateAsync(NotificationChannelSettingsDto settings, string? apiKey, string? username, string? password, CancellationToken cancellationToken)
     {
         if (settings.Sms is null)
         {
@@ -154,11 +160,23 @@ public sealed class NotificationChannelService(
             return Result.Failure(Error.Validation("The sender number must be digits only (20 at most)."));
         }
 
-        var url = settings.Sms.ApiUrl;
-        if (!string.IsNullOrWhiteSpace(url)
-            && (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp)))
+        var defaultUrls = providers.Select(p => p.DefaultBaseUrl).ToList();
+        var urls = new List<string?> { settings.Sms.ApiUrl };
+        urls.AddRange(settings.Sms.Providers?.Select(provider => provider.ApiUrl) ?? []);
+        foreach (var url in urls.Where(url => !string.IsNullOrWhiteSpace(url)))
         {
-            return Result.Failure(Error.Validation($"'{url}' is not a valid http(s) URL."));
+            if (!Uri.TryCreate(url!.Trim(), UriKind.Absolute, out _))
+            {
+                return Result.Failure(Error.Validation($"'{url}' is not a valid URL."));
+            }
+
+            // Where the stored key is sent to: the provider's own address, or a host the
+            // operator of this server listed - never an address typed into a settings screen.
+            var allowed = await outboundAddresses.ValidateGatewayUrlAsync(url, defaultUrls, cancellationToken);
+            if (allowed.IsFailure)
+            {
+                return allowed;
+            }
         }
 
         return Result.Success();
@@ -196,9 +214,12 @@ public sealed class NotificationChannelService(
             var existing = current.Providers?.FirstOrDefault(item => item.Id == provider.Id);
             var legacyProvider = current.Providers is null && provider.Id == Guid.Parse("00000000-0000-0000-0000-000000000001")
                 && provider.Provider.Equals(current.Provider, StringComparison.OrdinalIgnoreCase);
-            var apiKey = string.IsNullOrWhiteSpace(provider.ApiKey) ? existing?.ApiKey ?? (legacyProvider ? current.ApiKey : null) : provider.ApiKey;
-            var username = string.IsNullOrWhiteSpace(provider.Username) ? existing?.Username ?? (legacyProvider ? current.Username : null) : provider.Username;
-            var password = string.IsNullOrWhiteSpace(provider.Password) ? existing?.Password ?? (legacyProvider ? current.Password : null) : provider.Password;
+            // A stored credential is kept only while the address it is sent to stays the same.
+            var previousUrl = existing is not null ? existing.ApiUrl : legacyProvider ? current.ApiUrl : null;
+            var keep = (existing is not null || legacyProvider) && SameAddress(provider.ApiUrl, previousUrl);
+            var apiKey = string.IsNullOrWhiteSpace(provider.ApiKey) ? (keep ? existing?.ApiKey ?? (legacyProvider ? current.ApiKey : null) : null) : provider.ApiKey;
+            var username = string.IsNullOrWhiteSpace(provider.Username) ? (keep ? existing?.Username ?? (legacyProvider ? current.Username : null) : null) : provider.Username;
+            var password = string.IsNullOrWhiteSpace(provider.Password) ? (keep ? existing?.Password ?? (legacyProvider ? current.Password : null) : null) : provider.Password;
             return new NotificationChannelSettingsReader.StoredSmsProvider(
                 provider.Id == Guid.Empty ? Guid.NewGuid() : provider.Id,
                 Clean(provider.Name) ?? "سرویس‌دهنده پیامک",
@@ -213,4 +234,8 @@ public sealed class NotificationChannelService(
     }
 
     private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    /// <summary>Whether two gateway addresses are the same one (empty = the provider's default).</summary>
+    private static bool SameAddress(string? a, string? b) =>
+        string.Equals((a ?? string.Empty).Trim().TrimEnd('/'), (b ?? string.Empty).Trim().TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
 }

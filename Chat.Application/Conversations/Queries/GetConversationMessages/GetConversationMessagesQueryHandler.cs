@@ -29,10 +29,13 @@ public sealed class GetConversationMessagesQueryHandler
         GetConversationMessagesQuery request,
         CancellationToken cancellationToken)
     {
+        // A participant row alone is not enough: the conversation must be one of the caller's
+        // own organization, whatever rows exist.
         var isParticipant = await _db.ConversationParticipants
             .AnyAsync(x =>
                 x.ConversationId == request.ConversationId &&
-                x.UserId == _currentUser.UserId,
+                x.UserId == _currentUser.UserId &&
+                _db.Conversations.Any(c => c.Id == x.ConversationId && c.TenantId == _currentUser.TenantId),
                 cancellationToken);
 
         if (!isParticipant

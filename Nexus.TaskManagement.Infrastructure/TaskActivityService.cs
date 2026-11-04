@@ -70,7 +70,7 @@ public sealed class TaskActivityService(
             .ToList());
     }
 
-    public async Task RecordAsync(Guid taskId, string action, string? details, CancellationToken cancellationToken)
+    public async Task RecordAsync(Guid taskId, string action, string? details, CancellationToken cancellationToken, IReadOnlyCollection<Guid>? exceptUserIds = null)
     {
         if (currentUser.TenantId is null)
         {
@@ -96,7 +96,9 @@ public sealed class TaskActivityService(
             .IgnoreQueryFilters()
             .Include(t => t.Assignees)
             .FirstOrDefaultAsync(t => t.Id == taskId && t.TenantId == entry.TenantId, cancellationToken);
-        var people = task is null ? [] : TaskPeople.Of(task).Where(userId => userId != currentUser.UserId).ToList();
+        var people = task is null ? [] : TaskPeople.Of(task)
+            .Where(userId => userId != currentUser.UserId && exceptUserIds?.Contains(userId) != true)
+            .ToList();
         if (people.Count > 0)
         {
             await notices.PublishAsync(

@@ -36,7 +36,7 @@ public sealed class OrganizationUnitManagerVisibilityProvider(IOrganizationUnitR
         }
 
         var units = await organizationRepository.ListAsync(tenantId, cancellationToken);
-        var childrenOf = units.Where(u => u.ParentId is not null).ToLookup(u => u.ParentId!.Value, u => u.Id);
+        var childrenOf = units.Where(u => u.ParentUnitId is not null).ToLookup(u => u.ParentUnitId!.Value, u => u.Id);
 
         var visible = new HashSet<Guid>();
         var stack = new Stack<Guid>(units.Where(u => u.ManagerUserId == userId).Select(u => u.Id));

@@ -9,7 +9,8 @@ public enum AuthAction
     Login,
     Captcha,
     ForgotPassword,
-    ResetCode
+    ResetCode,
+    PhoneChange
 }
 
 /// <summary>
@@ -58,6 +59,20 @@ public interface ILoginProtection
     Task ClearResetCodeFailuresAsync(string identifier, CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// The code that proves control of a new mobile number before it replaces the one on the account.
+/// One outstanding code per user; a right answer uses it up. Kept hashed and short-lived.
+/// </summary>
+public interface IPhoneChangeCodes
+{
+    Task StoreAsync(Guid userId, string phoneNumber, string code, TimeSpan lifetime, CancellationToken cancellationToken);
+
+    /// <summary>True when <paramref name="code"/> is the outstanding code for this user and number; it is then spent.</summary>
+    Task<bool> ConfirmAsync(Guid userId, string phoneNumber, string code, CancellationToken cancellationToken);
+
+    Task ClearAsync(Guid userId, CancellationToken cancellationToken);
+}
+
 /// <summary>Identity:LoginProtection. The defaults are the intended production behaviour.</summary>
 public sealed class LoginProtectionOptions
 {
@@ -69,11 +84,14 @@ public sealed class LoginProtectionOptions
     /// <summary>How long failed sign-ins are remembered.</summary>
     public int FailureWindowMinutes { get; set; } = 30;
 
-    /// <summary>Failed sign-ins for one identifier within the window before it is refused until the window ends.</summary>
+    /// <summary>
+    /// Failed sign-ins for one identifier from one client within the window before that client is
+    /// refused until the window ends. (All clients together may fail five times as often.)
+    /// </summary>
     public int MaxFailedAttemptsPerIdentifier { get; set; } = 10;
 
     public int CaptchaLifetimeSeconds { get; set; } = 120;
-    public int CaptchaLength { get; set; } = 5;
+    public int CaptchaLength { get; set; } = 6;
 
     /// <summary>Per-client limits: at most N uses of the action per window.</summary>
     public int MaxLoginAttemptsPerClient { get; set; } = 30;

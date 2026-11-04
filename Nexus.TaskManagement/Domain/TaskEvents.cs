@@ -31,6 +31,18 @@ public sealed record TaskItemDueChanged(
     Guid? ChangedByUserId,
     IReadOnlyList<Guid>? ResponsibleUserIds = null) : DomainEvent;
 
+/// <summary>
+/// Raised when the status of a task that was past due and not done changes (finished, paused,
+/// moved back...). Those who care about it - its creator and those responsible, but not whoever
+/// made the change - are told by SMS.
+/// </summary>
+public sealed record TaskItemOverdueStatusChanged(
+    Guid TaskId,
+    Guid TenantId,
+    Guid? ChangedByUserId,
+    TaskItemStatus PreviousStatus,
+    TaskItemStatus Status) : DomainEvent;
+
 /// <summary>Raised when a task changes status.</summary>
 public sealed record TaskItemStatusChanged(Guid TaskId, Guid TenantId, TaskItemStatus Status) : DomainEvent;
 

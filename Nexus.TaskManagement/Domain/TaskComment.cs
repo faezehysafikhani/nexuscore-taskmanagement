@@ -24,13 +24,17 @@ public sealed class TaskComment : AuditableEntity<Guid>
         Text = string.Empty;
     }
 
-    public TaskComment(Guid id, Guid tenantId, Guid taskId, Guid userId, string text) : base(id)
+    public TaskComment(Guid id, Guid tenantId, Guid taskId, Guid userId, string text, string? actingNote = null) : base(id)
     {
         TenantId = tenantId;
         TaskId = taskId;
         UserId = userId;
         Text = text.Trim();
+        ActingNote = actingNote;
     }
+
+    /// <summary>Written by someone standing in for a vacant post (جانشین): which one.</summary>
+    public string? ActingNote { get; private set; }
 
     public Guid TenantId { get; private set; }
 

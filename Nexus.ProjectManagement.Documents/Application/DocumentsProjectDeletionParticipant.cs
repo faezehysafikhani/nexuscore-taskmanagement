@@ -8,7 +8,7 @@ public sealed class DocumentsProjectDeletionParticipant(IProjectDocumentReposito
     public async Task<string?> GetBlockingReasonAsync(Guid tenantId, Guid projectId, CancellationToken cancellationToken)
     {
         var found = new List<string>();
-        var n = (await documents.ListByProjectAsync(projectId, cancellationToken)).Count;
+        var n = (await documents.ListByProjectAsync(tenantId, projectId, cancellationToken)).Count;
         if (n > 0) found.Add($"{n} document(s)");
 
         return found.Count == 0 ? null : string.Join(", ", found);

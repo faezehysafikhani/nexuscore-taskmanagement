@@ -75,7 +75,7 @@ public sealed class BatchRegisterLookupTests
         }
 
         await db.SaveChangesAsync();
-        var service = new ProjectDocumentService(repository, null!, db, new NoApprovals());
+        var service = new ProjectDocumentService(repository, null!, db, new NoApprovals(), new TenantUser(Tenant), new UnlimitedUploads());
 
         var result = await service.ListForProjectsAsync(new ListProjectDocumentsForProjectsRequest([P1, P2]), default);
 

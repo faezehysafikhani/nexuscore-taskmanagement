@@ -42,6 +42,17 @@ public sealed class User : AuditableEntity<Guid>
     /// The built-in system administrator created by the seeder (like Role.IsSystem). It cannot be
     /// deleted, disabled, re-roled or renamed through the API, and no API can set this flag.
     /// </summary>
+    public string? Address { get; private set; }
+    public string? FatherName { get; private set; }
+    public DateOnly? BirthDate { get; private set; }
+
+    public void SetPersonalDetails(string? address, string? fatherName, DateOnly? birthDate)
+    {
+        Address = Normalize(address);
+        FatherName = Normalize(fatherName);
+        BirthDate = birthDate;
+    }
+
     public bool IsSystem { get; private set; }
 
     public string PasswordHash { get; private set; }
@@ -58,6 +69,22 @@ public sealed class User : AuditableEntity<Guid>
     public string? PhoneNumber { get; private set; }
 
     public bool NotifySms { get; private set; }
+
+    /// <summary>
+    /// How many sessions at most the user wants open at once, within the organization's limit
+    /// (null: the organization's limit). Lowering it does not close open sessions; it applies at
+    /// the next sign-in.
+    /// </summary>
+    public int? MaxConcurrentSessions { get; private set; }
+
+    /// <summary>Send an SMS for every new sign-in to this account (off by default).</summary>
+    public bool SmsOnEveryNewSignIn { get; private set; }
+
+    public void SetSessionPreferences(int? maxConcurrentSessions, bool smsOnEveryNewSignIn)
+    {
+        MaxConcurrentSessions = maxConcurrentSessions;
+        SmsOnEveryNewSignIn = smsOnEveryNewSignIn;
+    }
 
     /// <summary>Avatar image as a URL or data URL (the UI's preset or uploaded picture).</summary>
     public string? AvatarUrl { get; private set; }
@@ -193,9 +220,9 @@ public sealed class User : AuditableEntity<Guid>
         }
     }
 
-    public RefreshToken AddRefreshToken(string tokenHash, DateTimeOffset expiresAtUtc, string? createdByIp)
+    public RefreshToken AddRefreshToken(string tokenHash, DateTimeOffset expiresAtUtc, string? createdByIp, Guid? familyId = null)
     {
-        var refreshToken = new RefreshToken(Guid.NewGuid(), Id, tokenHash, expiresAtUtc, createdByIp);
+        var refreshToken = new RefreshToken(Guid.NewGuid(), Id, tokenHash, expiresAtUtc, createdByIp, familyId);
         _refreshTokens.Add(refreshToken);
         return refreshToken;
     }

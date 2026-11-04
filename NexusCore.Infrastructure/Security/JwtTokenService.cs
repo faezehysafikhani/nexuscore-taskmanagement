@@ -11,7 +11,7 @@ namespace NexusCore.Infrastructure.Security;
 
 public sealed class JwtTokenService(IOptions<JwtOptions> options) : IJwtTokenService
 {
-    public AuthToken CreateAccessToken(User user, IReadOnlyCollection<string> permissions)
+    public AuthToken CreateAccessToken(User user, IReadOnlyCollection<string> permissions, Guid? sessionId = null)
     {
         var jwtOptions = options.Value;
         var expiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(jwtOptions.AccessTokenMinutes);
@@ -19,8 +19,15 @@ public sealed class JwtTokenService(IOptions<JwtOptions> options) : IJwtTokenSer
         {
             new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
             new("tenant_id", user.TenantId.ToString()),
-            new("name", user.DisplayName)
+            new("name", user.DisplayName),
+            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString("N"))
         };
+
+        // The session this token belongs to; a token without it is not accepted (see ActiveUserTokenValidation).
+        if (sessionId is { } sid)
+        {
+            claims.Add(new Claim("sid", sid.ToString()));
+        }
 
         // Email is optional contact data; the claim is only there when the user has one.
         if (!string.IsNullOrWhiteSpace(user.Email))

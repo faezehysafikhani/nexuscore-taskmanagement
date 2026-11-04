@@ -14,7 +14,8 @@ public interface IWorkTeamMemberScope
 
 /// <param name="AllowedUserIds">The people who may be added.</param>
 /// <param name="ScopeName">What they share, to tell the user (e.g. the deputy's name).</param>
-public sealed record WorkTeamMemberLimit(IReadOnlySet<Guid> AllowedUserIds, string ScopeName);
+/// <param name="IsCompany">Whether that is a company (its people only) rather than a deputy.</param>
+public sealed record WorkTeamMemberLimit(IReadOnlySet<Guid> AllowedUserIds, string ScopeName, bool IsCompany = false);
 
 public sealed class UnlimitedWorkTeamMemberScope : IWorkTeamMemberScope
 {

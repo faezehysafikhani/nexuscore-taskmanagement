@@ -204,7 +204,7 @@ public sealed class AnalyticsTests
         return new ProgressUpdateDto(Guid.NewGuid(), Tenant, projectId, null, date, planned, actual, null, null, deviation, classification, ApprovalStatus.Approved, null);
     }
 
-    private static OrganizationUnit Unit(string name, Guid? parent = null) => new(Guid.NewGuid(), Tenant, name, name, parent);
+    private static OrganizationUnit Unit(string name, Guid? parent = null) => OrgUnits.Make(Guid.NewGuid(), Tenant, name, name, parent);
 
     private static Dictionary<Guid, List<ProgressUpdateDto>> Updates(params ProgressUpdateDto[] updates) =>
         updates.GroupBy(u => u.ProjectId).ToDictionary(g => g.Key, g => g.ToList());
@@ -386,7 +386,7 @@ public sealed class AnalyticsTests
     {
         var a = Unit("A");
         var b = Unit("B", a.Id);
-        a.Update("A", "A", b.Id, null, true);
+        a.SetParent(b.Id);
         var service = Service([NewProject("P", b.Id)], units: [a, b]);
 
         var report = (await service.GetUnitPerformanceAsync(Tenant, 5, null, default)).Value!;

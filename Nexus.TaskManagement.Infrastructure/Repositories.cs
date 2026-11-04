@@ -15,6 +15,7 @@ public sealed class TaskRepository(TaskManagementDbContext db) : ITaskRepository
         db.Tasks
             .Include(t => t.SubTasks).ThenInclude(s => s.Tags).ThenInclude(tt => tt.Tag)
             .Include(t => t.SubTasks).ThenInclude(s => s.Files).ThenInclude(tf => tf.File)
+            .Include(t => t.SubTasks).ThenInclude(s => s.Assignees)
             .Include(t => t.Tags).ThenInclude(tt => tt.Tag)
             .Include(t => t.Files).ThenInclude(tf => tf.File)
             .Include(t => t.Assignees)
@@ -22,8 +23,46 @@ public sealed class TaskRepository(TaskManagementDbContext db) : ITaskRepository
             .AsSplitQuery()
             .FirstOrDefaultAsync(t => t.TenantId == tenantId && t.Id == id, cancellationToken);
 
+    public Task<TaskItem?> GetPeopleOfAsync(Guid tenantId, Guid id, CancellationToken cancellationToken) =>
+        db.Tasks.IgnoreQueryFilters()
+            .Include(t => t.Assignees)
+            .FirstOrDefaultAsync(t => t.TenantId == tenantId && t.Id == id, cancellationToken);
+
     public Task<TaskItem?> GetForUpdateAsync(Guid tenantId, Guid id, CancellationToken cancellationToken) =>
         db.Tasks.FirstOrDefaultAsync(t => t.TenantId == tenantId && t.Id == id, cancellationToken);
+
+    public async Task<IReadOnlyList<NexusCore.Application.Identity.Interfaces.TaskSummary>> GetSummariesAsync(
+        Guid tenantId, IReadOnlyCollection<Guid> taskIds, CancellationToken cancellationToken)
+    {
+        var ids = taskIds.ToList();
+        var rows = await db.Tasks.IgnoreQueryFilters().AsNoTracking()
+            .Where(t => t.TenantId == tenantId && ids.Contains(t.Id))
+            .Select(t => new { t.Id, t.Title, t.DueDate, t.Status })
+            .ToListAsync(cancellationToken);
+        return rows.Select(t => new NexusCore.Application.Identity.Interfaces.TaskSummary(
+            t.Id, t.Title, t.DueDate, t.Status.ToString(), t.Status == Domain.TaskItemStatus.Completed)).ToList();
+    }
+
+    public async Task<IReadOnlyList<NexusCore.Application.Identity.Interfaces.TaskPeopleSnapshot>> ListPeopleAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        var tasks = await db.Tasks.AsNoTracking().Where(t => t.TenantId == tenantId)
+            .Select(t => new { t.Id, t.OwnerUserId, t.AssignedUserId }).ToListAsync(cancellationToken);
+        var assignees = (await db.TaskAssignees.AsNoTracking().Where(a => !a.IsActing && db.Tasks.Any(t => t.Id == a.TaskId && t.TenantId == tenantId))
+                .Select(a => new { a.TaskId, a.UserId, a.IsResponsible }).ToListAsync(cancellationToken))
+            .ToLookup(a => a.TaskId);
+        return tasks.Select(t =>
+        {
+            var responsible = new List<Guid>();
+            if (t.AssignedUserId is { } primary)
+            {
+                responsible.Add(primary);
+            }
+
+            responsible.AddRange(assignees[t.Id].Where(a => a.IsResponsible && !responsible.Contains(a.UserId)).Select(a => a.UserId));
+            var access = assignees[t.Id].Where(a => !responsible.Contains(a.UserId)).Select(a => a.UserId).Distinct().ToList();
+            return new NexusCore.Application.Identity.Interfaces.TaskPeopleSnapshot(t.Id, t.OwnerUserId, responsible, access);
+        }).ToList();
+    }
 
     public async Task<PagedResult<TaskItem>> ListAsync(ListTasksRequest request, CancellationToken cancellationToken)
     {
@@ -78,19 +117,23 @@ public sealed class TaskRepository(TaskManagementDbContext db) : ITaskRepository
             (_, false) => query.OrderBy(t => t.ModifiedAtUtc ?? t.CreatedAtUtc)
         };
 
+        // A page is at most 200 rows, whatever the request asked for.
+        var pageNumber = Math.Max(1, request.PageNumber);
+        var pageSize = Math.Clamp(request.PageSize, 1, 200);
         var total = await query.CountAsync(cancellationToken);
         var items = await query
-            .Skip((request.PageNumber - 1) * request.PageSize)
-            .Take(request.PageSize)
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
             .ToListAsync(cancellationToken);
 
-        return new PagedResult<TaskItem>(items, request.PageNumber, request.PageSize, total);
+        return new PagedResult<TaskItem>(items, pageNumber, pageSize, total);
     }
 
     public Task<SubTask?> GetSubTaskAsync(Guid tenantId, Guid subTaskId, CancellationToken cancellationToken) =>
         db.SubTasks
             .Include(s => s.Tags).ThenInclude(tt => tt.Tag)
             .Include(s => s.Files).ThenInclude(tf => tf.File)
+            .Include(s => s.Assignees)
             .FirstOrDefaultAsync(s => s.TenantId == tenantId && s.Id == subTaskId, cancellationToken);
 
     public async Task<IReadOnlyList<SubTask>> GetSubTasksAsync(
@@ -98,6 +141,7 @@ public sealed class TaskRepository(TaskManagementDbContext db) : ITaskRepository
         await db.SubTasks
             .Include(s => s.Tags).ThenInclude(tt => tt.Tag)
             .Include(s => s.Files).ThenInclude(tf => tf.File)
+            .Include(s => s.Assignees)
             .Where(s => s.TenantId == tenantId && s.TaskId == taskId)
             .OrderBy(s => s.SortOrder)
             .ToListAsync(cancellationToken);
@@ -230,14 +274,16 @@ public sealed class RepetitiveTaskRepository(TaskManagementDbContext db) : IRepe
             query = query.Where(r => r.IsActive == isActive);
         }
 
+        var pageNumber = Math.Max(1, request.PageNumber);
+        var pageSize = Math.Clamp(request.PageSize, 1, 200);
         var total = await query.CountAsync(cancellationToken);
         var items = await query
             .OrderBy(r => r.NextExecutionAtUtc ?? DateTimeOffset.MaxValue)
-            .Skip((request.PageNumber - 1) * request.PageSize)
-            .Take(request.PageSize)
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
             .ToListAsync(cancellationToken);
 
-        return new PagedResult<RepetitiveTask>(items, request.PageNumber, request.PageSize, total);
+        return new PagedResult<RepetitiveTask>(items, pageNumber, pageSize, total);
     }
 
     public async Task AddAsync(RepetitiveTask recurrence, CancellationToken cancellationToken) =>

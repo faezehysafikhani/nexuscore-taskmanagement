@@ -16,19 +16,57 @@ public static class DependencyInjection
     /// </summary>
     public static IServiceCollection AddOrgStructure(this IServiceCollection services)
     {
-        services.AddScoped<IOrgStructureService, OrgStructureService>();
+        // The one graph of units everything reads (parents, subtrees, domains).
+        services.AddScoped<IOrgGraphProvider, OrgGraphProvider>();
+        services.AddScoped<OrgStructureService>();
+        services.AddScoped<IOrgStructureService>(sp => sp.GetRequiredService<OrgStructureService>());
+        services.AddScoped<IOrgPostTemplateService>(sp => sp.GetRequiredService<OrgStructureService>());
+        services.AddScoped<IOrgCompanyGroupService>(sp => sp.GetRequiredService<OrgStructureService>());
+        services.AddScoped<IOrgAppointmentService>(sp => sp.GetRequiredService<OrgStructureService>());
+        services.AddScoped<IOrgCompanyProfileService>(sp => sp.GetRequiredService<OrgStructureService>());
+        // The dynamic structure's nodes, types and rules, and the impact preview of a change.
+        services.AddScoped<OrgNodeService>();
+        services.AddScoped<IOrgNodeService>(sp => sp.GetRequiredService<OrgNodeService>());
+        services.AddScoped<IOrgLinkService>(sp => sp.GetRequiredService<OrgNodeService>());
+        services.AddScoped<IOrgNodeHistoryService>(sp => sp.GetRequiredService<OrgNodeService>());
+        services.AddScoped<IOrgTemplateService>(sp => sp.GetRequiredService<OrgNodeService>());
+        services.AddScoped<IOrgImpactPreview, OrgImpactPreview>();
         services.AddScoped<IHonorificService, HonorificService>();
         services.AddSingleton<IPermissionCatalog, OrgStructurePermissionCatalog>();
         // Work-team builders add their own deputy's people (more with TeamMembersFromAnyUnit).
         // The Core registers its unlimited default with TryAdd, so this one wins whichever runs first.
         services.AddScoped<IWorkTeamMemberScope, DeputyWorkTeamMemberScope>();
+        // Tasks only to one's own level and below - when OrgStructure:LimitTaskAssignment is on.
+        services.AddOptions<OrgStructureOptions>().BindConfiguration(OrgStructureOptions.SectionName);
+        services.AddScoped<IWorkAssignmentScope, HierarchyWorkAssignmentScope>();
+        // Everyone kept to their own company - when OrgStructure:LimitToOwnCompany is on.
+        services.AddScoped<CompanyReachScope>();
+        services.AddScoped<IUserReachScope>(provider => provider.GetRequiredService<CompanyReachScope>());
+        // Direct chat kept to one's hierarchy - when OrgStructure:LimitChatToHierarchy is on.
+        services.AddScoped<IChatPartnerScope, HierarchyChatScope>();
+        // Tasks given to posts - when OrgStructure:AssignTasksToPosts is on (wins over the Core's default like the scopes above).
+        services.AddScoped<TaskPostDirectory>();
+        services.AddScoped<ITaskPosts>(provider => provider.GetRequiredService<TaskPostDirectory>());
+        // Who was on each task through its posts, and when (for reports).
+        services.AddScoped<ITaskPostHistory, TaskPostHistory>();
+        services.AddScoped<ISubstitutionService, SubstitutionService>();
+        // A disabled account leaves its posts.
+        services.AddScoped<IUserDeactivationListener, PostReleaseOnDeactivation>();
 
         services.AddAuthorization(options =>
         {
-            foreach (var permission in OrgStructurePermissions.All.Concat(OrgStructurePermissions.WorkTeams))
+            foreach (var permission in OrgStructurePermissions.All.Concat(OrgStructurePermissions.WorkTeams)
+                         .Where(permission => !OrgStructurePermissions.NodePolicies.ContainsKey(permission.Name)))
             {
                 options.AddPolicy(permission.Name, policy =>
                     policy.RequireAuthenticatedUser().AddRequirements(new PermissionRequirement(permission.Name)));
+            }
+
+            // Node operations: their own permission or the older one that covered them.
+            foreach (var (name, accepted) in OrgStructurePermissions.NodePolicies)
+            {
+                options.AddPolicy(name, policy => policy.RequireAuthenticatedUser().RequireAssertion(context =>
+                    accepted.Any(permission => context.User.HasClaim("permission", permission))));
             }
 
             options.AddPolicy(OrgStructurePermissions.ReadPolicy, policy =>

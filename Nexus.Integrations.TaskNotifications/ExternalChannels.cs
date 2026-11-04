@@ -7,6 +7,7 @@ using NexusCore.Application.Identity.Interfaces;
 using NexusCore.Application.Messaging;
 using NexusCore.SharedKernel.Domain;
 using NexusCore.SharedKernel.Results;
+using Notifications.Application.Abstractions;
 
 namespace Nexus.Integrations.TaskNotifications;
 
@@ -98,6 +99,10 @@ public sealed class TaskSmsTemplateCatalog : ISmsTemplateCatalog
             "موعد فعالیت «{TaskTitle}» گذشته و هنوز انجام نشده است.\nموعد: {DueDate}",
             "یک بار، وقتی موعد فعالیت بگذرد و هنوز انجام نشده یا متوقف نشده باشد، برای مسئول اجرا ارسال می‌شود.",
             ["TaskTitle"]),
+        new(TaskSmsTemplateKeys.TaskOverdueChanged, "تغییر فعالیت موعدگذشته", ["TaskTitle", "DueDate", "StatusTitle", "ActorName"],
+            "وضعیت فعالیت موعدگذشته‌ی «{TaskTitle}» توسط {ActorName} به «{StatusTitle}» تغییر کرد.\nموعد: {DueDate}",
+            "وقتی وضعیت فعالیتی که موعدش گذشته و هنوز انجام نشده تغییر کند (مثلاً از بخش «موعد گذشته» خاتمه یابد)، برای سازنده و مسئولان اجرای آن ارسال می‌شود (نه برای کسی که خودش تغییر را انجام داده).",
+            ["TaskTitle"]),
         new(TaskSmsTemplateKeys.RecurringTaskUpcoming, "یادآوری پیش از نوبت تکرارشونده", ["TaskTitle", "ExecutionDateTime", "ExecutionDate", "ExecutionTime"],
             "یادآوری: نوبت فعالیت «{TaskTitle}» نزدیک است.\nزمان انجام: {ExecutionDateTime}",
             "پیش از هر نوبت فعالیت تکرارشونده (طبق «زمان‌بندی یادآوری‌ها»)، برای مسئول اجرا ارسال می‌شود.",
@@ -175,6 +180,161 @@ public sealed class TaskChangeSmsNotifier(IServiceScopeFactory scopeFactory)
             scopeFactory, domainEvent.TenantId, domainEvent.TaskId, TaskSmsTemplateKeys.TaskDueChanged,
             task => domainEvent.ResponsibleUserIds ?? task.ResponsibleUserIds, domainEvent.ChangedByUserId));
         return Task.CompletedTask;
+    }
+}
+
+/// <summary>
+/// When the status of a past-due, unfinished task changes, tells its creator and the people
+/// responsible for it in the app and, when the SMS panel is on, by SMS ("task_overdue_changed") - never the one who made the change. Only
+/// when the SMS panel is on and that template is not turned off; in the organization's quiet
+/// hours it is kept and sent when they end. They are also always told in the app (the bell's tab
+/// of task changes), whether or not the SMS panel is on. Runs in the background, best-effort.
+/// </summary>
+public sealed class TaskOverdueChangeSmsNotifier(IServiceScopeFactory scopeFactory) : IDomainEventHandler<TaskItemOverdueStatusChanged>
+{
+    public Task HandleAsync(TaskItemOverdueStatusChanged domainEvent, CancellationToken cancellationToken)
+    {
+        _ = Task.Run(() => SendAsync(domainEvent));
+        return Task.CompletedTask;
+    }
+
+    private static string StatusTitle(TaskItemStatus status) => status switch
+    {
+        TaskItemStatus.Todo => "شروع نشده",
+        TaskItemStatus.InProgress => "درحال اجرا",
+        TaskItemStatus.Paused => "متوقف",
+        TaskItemStatus.Completed => "خاتمه یافته",
+        _ => status.ToString(),
+    };
+
+    /// <summary>«۳ روز و ۴ ساعت» / «۵ ساعت و ۱۰ دقیقه» / «کمتر از یک دقیقه»</summary>
+    private static string LateBy(TimeSpan span)
+    {
+        if (span < TimeSpan.FromMinutes(1))
+        {
+            return "کمتر از یک دقیقه";
+        }
+
+        var parts = new List<string>();
+        if (span.Days > 0) parts.Add($"{span.Days} روز");
+        if (span.Hours > 0) parts.Add($"{span.Hours} ساعت");
+        if (span.Days == 0 && span.Minutes > 0) parts.Add($"{span.Minutes} دقیقه");
+        return TaskCreatedChannelNotifier.ToPersianDigits(string.Join(" و ", parts));
+    }
+
+    private async Task SendAsync(TaskItemOverdueStatusChanged change)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var services = scope.ServiceProvider;
+        var logger = services.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(TaskOverdueChangeSmsNotifier));
+
+        try
+        {
+            var task = await services.GetRequiredService<ITaskRepository>().GetByIdAsync(change.TenantId, change.TaskId, CancellationToken.None);
+            if (task is null)
+            {
+                return;
+            }
+
+            // Whoever cares: those responsible and the creator, but not who made the change.
+            var userIds = TaskPeople.OverdueChangeRecipients(task, change.ChangedByUserId);
+            if (userIds.Count == 0)
+            {
+                return;
+            }
+
+            // Names of everybody the message is about, in one lookup.
+            var calendar = services.GetRequiredService<IRecurrenceCalculator>();
+            var aboutIds = userIds.Concat(task.ResponsibleUserIds).Concat(task.OwnerUserId is { } creatorId ? [creatorId] : [])
+                .Concat(change.ChangedByUserId is { } changerId ? [changerId] : []).Distinct().ToList();
+            var names = (await services.GetRequiredService<IUserDirectory>().GetUsersAsync(aboutIds, CancellationToken.None))
+                .Where(u => u.TenantId == change.TenantId)
+                .ToDictionary(u => u.Id, u => u.DisplayName);
+            string NameOf(Guid id) => names.TryGetValue(id, out var name) ? name : "کاربر";
+
+            var actor = change.ChangedByUserId is { } actorId && names.TryGetValue(actorId, out var actorName) ? actorName : "یکی از همکاران";
+
+            var due = TaskCreatedChannelNotifier.ToPersianDate(task.DueDate);
+            if (task.DueTime is { } dueTime)
+            {
+                due += " - " + TaskCreatedChannelNotifier.ToPersianDigits(dueTime.ToString("HH:mm", CultureInfo.InvariantCulture));
+            }
+
+            var status = StatusTitle(change.Status);
+            var previousStatus = StatusTitle(change.PreviousStatus);
+            var values = new Dictionary<string, string?>
+            {
+                ["TaskTitle"] = task.Title, ["DueDate"] = due, ["StatusTitle"] = status, ["ActorName"] = actor,
+            };
+            var text = $"وضعیت فعالیت موعدگذشته‌ی «{task.Title}» توسط {actor} به «{status}» تغییر کرد.\nموعد: {due}";
+
+            // How late it was when it changed: from its due moment (the end of the day when it has no time).
+            var dueAt = task.DueTime is { } at
+                ? calendar.FromLocal(task.DueDate, at)
+                : calendar.FromLocal(task.DueDate.AddDays(1), TimeOnly.MinValue);
+            var late = LateBy(change.OccurredOnUtc - dueAt);
+            var changedAt = calendar.ToLocalTime(change.OccurredOnUtc);
+            var changedAtText = TaskDates.Format(DateOnly.FromDateTime(changedAt.DateTime), TimeOnly.FromDateTime(changedAt.DateTime));
+            var priority = task.Priority switch { TaskPriority.High => "زیاد", TaskPriority.Low => "کم", _ => "متوسط" };
+            var outcome = change.Status switch
+            {
+                TaskItemStatus.Completed => "فعالیت خاتمه یافت و از فهرست «موعد گذشته» خارج شد.",
+                TaskItemStatus.Paused => "فعالیت متوقف شد و دیگر «موعد گذشته» حساب نمی‌شود.",
+                _ => "فعالیت هنوز «موعد گذشته» است و ادامه دارد.",
+            };
+            var responsibleNames = string.Join("، ", task.ResponsibleUserIds.Select(NameOf));
+
+            // In the app, always (the bell's "task changes" tab, shown line by line in the details popup).
+            var changeLines = string.Join(" | ", new[]
+            {
+                $"وضعیت: «{previousStatus}» ← «{status}»",
+                $"نتیجه: {outcome}",
+                $"موعد: {due}",
+                $"تأخیر تا لحظه‌ی تغییر: {late}",
+                $"اولویت: {priority}",
+                responsibleNames.Length > 0 ? $"مسئولان اجرا: {responsibleNames}" : null,
+                task.OwnerUserId is { } ownerId ? $"سازنده: {NameOf(ownerId)}" : null,
+                $"زمان تغییر: {changedAtText}",
+                $"تغییر توسط: {actor}",
+            }.Where(line => line is not null));
+
+            // And by SMS too when the SMS panel is on (to those with a number and SMS switched on,
+            // unless the template is turned off).
+            var sms = services.GetRequiredService<ITaskSmsSender>();
+            if (await sms.IsEnabledAsync(change.TenantId, CancellationToken.None))
+            {
+                var phones = await services.GetRequiredService<IUserContactResolver>()
+                    .GetPhoneNumbersAsync(change.TenantId, userIds, CancellationToken.None);
+                foreach (var phone in phones.Values.Distinct(StringComparer.Ordinal))
+                {
+                    var sent = await sms.SendTemplateAsync(change.TenantId, phone, TaskSmsTemplateKeys.TaskOverdueChanged, values, text, CancellationToken.None);
+                    if (sent.IsFailure)
+                    {
+                        logger.LogWarning("Task {TaskId}: overdue-change SMS not sent: {Error}", task.Id, sent.Error.Message);
+                    }
+                }
+            }
+
+            foreach (var userId in userIds)
+            {
+                try
+                {
+                    await using var notifyScope = scopeFactory.CreateAsyncScope();
+                    await notifyScope.ServiceProvider.GetRequiredService<INotificationService>().NotifyAsync(
+                        new NotificationRequest(userId, task.Title, changeLines, "Info", change.TenantId, TaskNoticeNotifications.OverdueChanged,
+                            task.Id, change.ChangedByUserId, actor),
+                        CancellationToken.None);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Task {TaskId}: overdue-change notification for user {UserId} was not stored.", task.Id, userId);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Overdue-change message for task {TaskId} failed.", change.TaskId);
+        }
     }
 }
 

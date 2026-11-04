@@ -5,7 +5,8 @@ namespace NexusCore.Application.Security;
 
 public interface IJwtTokenService
 {
-    AuthToken CreateAccessToken(User user, IReadOnlyCollection<string> permissions);
+    /// <summary>An access token for one session: <paramref name="sessionId"/> becomes its <c>sid</c> claim, which every request checks.</summary>
+    AuthToken CreateAccessToken(User user, IReadOnlyCollection<string> permissions, Guid? sessionId = null);
     string CreateRefreshToken();
 }
 

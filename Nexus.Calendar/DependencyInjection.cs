@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Nexus.Calendar.Application;
 using Nexus.Calendar.Permissions;
 using NexusCore.Application.Identity.Permissions;
+using NexusCore.Application.Common;
 
 namespace Nexus.Calendar;
 
@@ -13,6 +14,7 @@ public static class DependencyInjection
         configure?.Invoke(options);
         services.AddSingleton(options);
         services.AddScoped<IWorkCalendarService, WorkCalendarService>();
+        services.AddSingleton<ISchedulingDayPolicy, IranSchedulingDayPolicy>();
         services.AddSingleton<IPermissionCatalog, CalendarPermissionCatalog>();
 
         services.AddAuthorization(options =>

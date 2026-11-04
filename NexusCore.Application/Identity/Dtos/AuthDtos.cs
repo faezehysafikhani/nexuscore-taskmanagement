@@ -12,8 +12,19 @@ public sealed record LoginRequest(
     string? CaptchaId = null,
     string? CaptchaAnswer = null);
 
-public sealed record RefreshTokenRequest(string RefreshToken);
-public sealed record AuthResponse(string AccessToken, string RefreshToken, DateTimeOffset AccessTokenExpiresAtUtc, UserDto User);
+/// <summary>
+/// The refresh token may be left out (null or empty) by a browser that holds it in its HttpOnly
+/// cookie; see <c>SessionCookies</c>.
+/// </summary>
+public sealed record RefreshTokenRequest(string? RefreshToken = null);
+
+/// <summary>
+/// RefreshToken is empty when the refresh token was set as a cookie instead of being returned.
+/// RefreshTokenExpiresAtUtc is when the sign-in ends for good (the last day of the session).
+/// </summary>
+public sealed record AuthResponse(string AccessToken, string RefreshToken, DateTimeOffset AccessTokenExpiresAtUtc, UserDto User, DateTimeOffset? RefreshTokenExpiresAtUtc = null,
+    NexusCore.Application.Identity.Sessions.PendingSignInDto? SessionLimit = null,
+    NexusCore.Application.Identity.Sessions.SessionStatusDto? Session = null);
 public sealed record CurrentUserResponse(UserDto User, IReadOnlyList<string> Permissions);
 
 /// <summary>

@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Options;
 using NexusCore.Application.Approvals;
 using NexusCore.Application.Common;
@@ -12,6 +14,7 @@ using NexusCore.Application.Identity.Options;
 using NexusCore.Infrastructure.Security;
 using NexusCore.Application.Identity.Permissions;
 using NexusCore.Application.Identity.Security;
+using NexusCore.Application.Identity.Sessions;
 using NexusCore.Application.Ldap;
 using NexusCore.Application.Messaging;
 using NexusCore.Application.Platform.Interfaces;
@@ -40,6 +43,9 @@ public static class DependencyInjection
 
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUserContext, CurrentUserContext>();
+        // The organization condition on every query of the DbContexts (global query filters).
+        services.Configure<TenantFilterOptions>(configuration.GetSection(TenantFilterOptions.SectionName));
+        services.AddScoped<ITenantScope, HttpTenantScope>();
         services.AddScoped<IDomainEventDispatcher, DomainEventDispatcher>();
         services.AddScoped<AuditingInterceptor>();
         services.AddScoped<DomainEventDispatchInterceptor>();
@@ -52,6 +58,13 @@ public static class DependencyInjection
 
         services.AddScoped<IUnitOfWork>(provider => provider.GetRequiredService<NexusCoreDbContext>());
         services.AddScoped<IIdentityRepository, IdentityRepository>();
+        services.AddScoped<ISessionRepository, SessionRepository>();
+        // Hub connections: every call re-checks the session, and a session that ends closes its connections.
+        services.AddSingleton<InMemorySessionConnectionRegistry>();
+        services.AddSingleton<SessionHubFilter>();
+        services.Replace(ServiceDescriptor.Singleton<ISessionConnectionRegistry>(provider => provider.GetRequiredService<InMemorySessionConnectionRegistry>()));
+        services.Configure<Microsoft.AspNetCore.SignalR.HubOptions>(options => options.AddFilter<SessionHubFilter>());
+        services.AddHostedService<SessionMaintenanceService>();
         services.AddScoped<IPlatformRepository, PlatformRepository>();
         services.AddScoped<IPasswordHasher, BCryptPasswordHasher>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
@@ -76,7 +89,9 @@ public static class DependencyInjection
         services.AddDistributedMemoryCache();
         services.Configure<LoginProtectionOptions>(configuration.GetSection(LoginProtectionOptions.SectionName));
         services.AddScoped<ILoginProtection, LoginProtection>();
+        services.AddScoped<IPhoneChangeCodes, PhoneChangeCodes>();
 
+        services.Configure<SignInSessionOptions>(configuration.GetSection(SignInSessionOptions.SectionName));
         services.Configure<IdentitySeedOptions>(configuration.GetSection(IdentitySeedOptions.SectionName));
         services.Configure<ManagedPermissionOptions>(configuration.GetSection(ManagedPermissionOptions.SectionName));
         // Password recovery sends its one-time code through ISmsSender (below); no email.
@@ -85,7 +100,19 @@ public static class DependencyInjection
 
         // Outgoing messages. Request logging is removed from this client: the SMS API key is part
         // of the request URL and must not reach the logs.
-        services.AddHttpClient(KavenegarSmsProvider.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(15)).RemoveAllLoggers();
+        // Where outgoing calls configured by administrators (SMS gateway, LDAP) may go.
+        services.Configure<OutboundAddressOptions>(configuration.GetSection(OutboundAddressOptions.SectionName));
+        services.AddSingleton<IOutboundAddressPolicy, OutboundAddressPolicy>();
+        // No redirects (a redirect would carry the request, and the API key in its path, to an
+        // address nobody checked) and the address is checked again at the moment of connecting,
+        // so a name that changes its answer between the check and the call gets nowhere.
+        services.AddHttpClient(KavenegarSmsProvider.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(15))
+            .ConfigurePrimaryHttpMessageHandler(provider => new SocketsHttpHandler
+            {
+                AllowAutoRedirect = false,
+                ConnectCallback = new GatewayConnector(provider.GetRequiredService<IOutboundAddressPolicy>()).ConnectAsync
+            })
+            .RemoveAllLoggers();
         // SMS providers: one implementation each; the panel setting picks one. Add a provider here.
         services.AddScoped<ISmsProvider, KavenegarSmsProvider>();
         services.AddScoped<ISmsSender, GatewaySmsSender>();

@@ -5,6 +5,7 @@ using Nexus.OrgStructure.Application;
 using Nexus.OrgStructure.Application.Dtos;
 using Nexus.OrgStructure.Permissions;
 using NexusCore.Application.Common;
+using NexusCore.Application.Files;
 using NexusCore.SharedKernel.Interfaces;
 
 namespace Nexus.OrgStructure.Endpoints;
@@ -41,6 +42,49 @@ public static class OrgStructureEndpoints
                 InTenant(user, tenant => service.DeleteCompanyAsync(tenant, id, ct)))
             .RequireAuthorization(OrgStructurePermissions.ManageCompanies);
 
+        // --- a company's profile: details, what its head is called, logo
+        group.MapPut("/companies/{id:guid}/details", (Guid id, SetCompanyDetailsRequest request, ICurrentUserContext user, IOrgCompanyProfileService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.SetCompanyDetailsAsync(tenant, id, request, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ManageCompanies);
+
+        group.MapGet("/companies/{id:guid}/logo", async (Guid id, HttpContext http, ICurrentUserContext user, IOrgCompanyProfileService service, CancellationToken ct) =>
+            {
+                if (user.TenantId is not { } tenant || await service.OpenCompanyLogoAsync(tenant, id, ct) is not { } logo)
+                {
+                    return Results.NotFound();
+                }
+
+                // The address carries the logo's version (?v=), so a changed logo is a new address.
+                http.Response.Headers.CacheControl = "private, max-age=86400";
+                http.Response.Headers["Content-Security-Policy"] = "default-src 'none'";
+                return Results.Stream(logo.Content, logo.ContentType);
+            })
+            .RequireAuthorization(OrgStructurePermissions.ReadPolicy);
+
+        group.MapPut("/companies/{id:guid}/logo", async (Guid id, HttpRequest http, ICurrentUserContext user, IOrgCompanyProfileService service, CancellationToken ct) =>
+            {
+                if (!http.HasFormContentType)
+                {
+                    return Results.BadRequest();
+                }
+
+                var form = await http.ReadFormAsync(ct);
+                if (form.Files.GetFile("logo") is not { Length: > 0 } file)
+                {
+                    return Results.BadRequest();
+                }
+
+                return await InTenant(user, tenant => service.SetCompanyLogoAsync(tenant, id, new CompanyLogoUpload(file.FileName, file.OpenReadStream(), file.Length), ct));
+            })
+            .DisableAntiforgery()
+            .WithUploadSizeLimit()
+            .RequireAuthorization(OrgStructurePermissions.ManageCompanies)
+            .WithSummary("A company's logo (multipart: logo; PNG, JPEG or WebP, at most 512 KB)");
+
+        group.MapDelete("/companies/{id:guid}/logo", (Guid id, ICurrentUserContext user, IOrgCompanyProfileService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.RemoveCompanyLogoAsync(tenant, id, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ManageCompanies);
+
         // --- which company each unit (deputy) belongs to
         group.MapGet("/company-units", (ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
                 InTenant(user, tenant => service.ListCompanyUnitsAsync(tenant, ct)))
@@ -70,6 +114,53 @@ public static class OrgStructureEndpoints
         group.MapDelete("/positions/{id:guid}", (Guid id, ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
                 InTenant(user, tenant => service.DeletePositionAsync(tenant, id, ct)))
             .RequireAuthorization(OrgStructurePermissions.ManagePositions);
+
+        // --- posts: each unit's (deputy's) in its order, and those directly in a company; one holder each
+        group.MapGet("/unit-positions", (Guid? unitId, ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.ListUnitPositionsAsync(tenant, unitId, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ReadPolicy);
+
+        group.MapPost("/units/{unitId:guid}/positions", (Guid unitId, AddUnitPositionRequest request, ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.AddUnitPositionAsync(tenant, unitId, request, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ManagePositions);
+
+        group.MapPost("/companies/{companyId:guid}/positions", (Guid companyId, AddUnitPositionRequest request, ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.AddCompanyPositionAsync(tenant, companyId, request, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ManagePositions);
+
+        group.MapPut("/unit-positions/{id:guid}", (Guid id, UpdateUnitPositionRequest request, ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.UpdateUnitPositionAsync(tenant, id, request, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ManagePositions);
+
+        group.MapPut("/unit-positions/{id:guid}/parent", (Guid id, SetPostParentRequest request, ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.SetPostParentAsync(tenant, id, request, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ManagePositions);
+
+        group.MapPut("/units/{unitId:guid}/positions/order", (Guid unitId, OrderUnitPositionsRequest request, ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.OrderUnitPositionsAsync(tenant, unitId, request, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ManagePositions);
+
+        group.MapDelete("/unit-positions/{id:guid}", (Guid id, ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.RemoveUnitPositionAsync(tenant, id, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ManagePositions);
+
+        // --- the substitution inbox (tasks given to posts): vacant posts' tasks and who stands in for them.
+        // Signed-in users only; the service shows each post to the managers above it and to ManageSubstitution holders.
+        group.MapGet("/substitution", (ICurrentUserContext user, ISubstitutionService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.GetInboxAsync(tenant, ct)))
+            .RequireAuthorization();
+
+        group.MapGet("/substitution/{postId:guid}", (Guid postId, ICurrentUserContext user, ISubstitutionService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.GetPostAsync(tenant, postId, ct)))
+            .RequireAuthorization();
+
+        group.MapPut("/substitution/{postId:guid}", (Guid postId, SetActingRequest request, ICurrentUserContext user, ISubstitutionService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.SetActingAsync(tenant, postId, request, ct)))
+            .RequireAuthorization();
+
+        group.MapDelete("/substitution/{postId:guid}", (Guid postId, ICurrentUserContext user, ISubstitutionService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.ClearActingAsync(tenant, postId, ct)))
+            .RequireAuthorization();
 
         // --- each user's company / unit / position / manager
         group.MapGet("/assignments", (Guid? companyId, Guid? unitId, ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
@@ -101,14 +192,20 @@ public static class OrgStructureEndpoints
         group.MapGet("/me/subordinates", (bool? all, ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
                 user.UserId is { } me ? InTenant(user, tenant => service.GetSubordinatesAsync(tenant, me, all ?? false, ct)) : Task.FromResult(Results.Unauthorized()));
 
-        group.MapGet("/chart", (Guid? companyId, ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
-                InTenant(user, tenant => service.GetChartAsync(tenant, companyId, ct)))
+        // asOf (optional): only the nodes that exist on that day.
+        group.MapGet("/chart", (Guid? companyId, DateTimeOffset? asOf, ICurrentUserContext user, OrgStructureService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.GetChartAsync(tenant, companyId, asOf, ct)))
             .RequireAuthorization(OrgStructurePermissions.ReadPolicy);
 
         // People of the organization with no place in the structure yet (to place them).
         group.MapGet("/unplaced-users", (ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
                 InTenant(user, tenant => service.ListUnplacedUsersAsync(tenant, ct)))
             .RequireAuthorization(OrgStructurePermissions.ReadPolicy);
+
+        // Units of other companies, which someone kept to their own company does not see (just
+        // their ids, so a list of units can leave them out; empty when not kept).
+        group.MapGet("/other-companies-units", (ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
+            InTenant(user, tenant => service.ListOtherCompaniesUnitsAsync(tenant, ct)));
 
         // Work teams whose builder is in no unit of a company (the chart shows the rest under units).
         group.MapGet("/teams-outside-units", (ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
@@ -139,6 +236,9 @@ public static class OrgStructureEndpoints
         group.MapPut("/users/{userId:guid}/title", (Guid userId, SetUserTitleRequest request, ICurrentUserContext user, IHonorificService service, CancellationToken ct) =>
                 InTenant(user, tenant => service.SetUserTitleAsync(tenant, userId, request, ct)))
             .RequireAuthorization(OrgStructurePermissions.TitlesAssignPolicy);
+
+        // --- the dynamic structure's nodes, types, rules and impact preview
+        app.MapOrgNodeEndpoints();
 
         return app;
     }

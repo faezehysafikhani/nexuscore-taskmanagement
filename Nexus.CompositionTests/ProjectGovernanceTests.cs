@@ -268,8 +268,7 @@ public sealed class ProjectGovernanceTests
     public async Task TheProviders_GrantNothing_WhenTheirSwitchIsOff()
     {
         var project = Guid.NewGuid();
-        var unit = new OrganizationUnit(Guid.NewGuid(), Tenant, "U", "U", null);
-        unit.Update("U", "U", null, Alice, true);
+        var unit = OrgUnits.Make(Guid.NewGuid(), Tenant, "U", "U", null, Alice);
         var off = new FixedRules(new VisibilityRules(ViewByResources: false, ViewByOrgHeads: false));
         var on = new FixedRules(VisibilityRules.AllOn);
         var team = new FakeTeam(new ProjectMember(Guid.NewGuid(), Tenant, project, Alice));

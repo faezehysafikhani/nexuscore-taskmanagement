@@ -7,6 +7,8 @@ using Nexus.ProjectManagement.Documents.Application.Dtos;
 using Nexus.ProjectManagement.Documents.Domain;
 using Nexus.ProjectManagement.Documents.Permissions;
 using NexusCore.Application.Common;
+using NexusCore.Application.Files;
+using NexusCore.Application.Security.RateLimiting;
 using NexusCore.SharedKernel.Interfaces;
 
 namespace Nexus.ProjectManagement.Documents.Endpoints;
@@ -55,7 +57,9 @@ public static class ProjectDocumentEndpoints
                 await using var stream = file.OpenReadStream();
                 return (await service.UploadAsync(request, stream, cancellationToken)).ToApiResult();
             })
-            .DisableAntiforgery() // a bearer-token API: there is no cookie to forge a request with, and no antiforgery middleware in the hosts
+            .DisableAntiforgery()
+            .WithUploadSizeLimit()
+            .RequireRateLimiting(NexusRateLimitPolicies.Upload)
             .RequireAuthorization(ProjectDocumentPermissions.Upload);
 
         group.MapGet("/{id:guid}/versions", async (Guid id, IProjectDocumentService service, CancellationToken cancellationToken) =>
