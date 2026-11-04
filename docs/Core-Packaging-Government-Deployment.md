@@ -39,6 +39,16 @@ dotnet restore TMPB/TMPB.Api/TMPB.Api.csproj --configfile TMPB/nuget.config
 Do not let production restore from public feeds. External dependencies must be mirrored and
 approved in the internal feed first.
 
+## PostBank host (POSTBANKPMAPI) offline restore
+
+The PostBank API host lives in its own repository (`POSTBANKPMAPI`) and consumes these packages. Besides the
+packages above it needs third-party packages, so its `eng/make-offline-feed.ps1` (or `.sh`) takes the folder produced by
+`pack-core-modules.ps1`, restores the host once on a machine with internet, gathers **every** package into one
+`offline-feed` folder (with SHA-256 sums) and verifies that the folder restores on its own. The host's `nuget.config`
+then points only to that folder. The project-management modules (Contracts, History, Delegation, Reporting.Analytics,
+Calendar.IranianHolidays and the ProjectCalendar / ProjectVisibility / ProjectDeletion / ProjectGovernance integrations)
+are part of the packed set.
+
 ## Deployment controls
 
 Before installing in a restricted organization:
