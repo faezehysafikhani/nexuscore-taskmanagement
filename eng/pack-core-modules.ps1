@@ -424,7 +424,67 @@ $integrationProjects = @(
 
     "Nexus.Integrations.ProjectStrategyAlignment.Infrastructure/Nexus.Integrations.ProjectStrategyAlignment.Infrastructure.csproj",
 
-    "Nexus.Integrations.TaskReporting/Nexus.Integrations.TaskReporting.csproj"
+    "Nexus.Integrations.TaskReporting/Nexus.Integrations.TaskReporting.csproj",
+
+    "Nexus.Integrations.ProjectCalendar/Nexus.Integrations.ProjectCalendar.csproj",
+
+    "Nexus.Integrations.ProjectVisibility/Nexus.Integrations.ProjectVisibility.csproj",
+
+    "Nexus.Integrations.ProjectDeletion/Nexus.Integrations.ProjectDeletion.csproj",
+
+    "Nexus.Integrations.ProjectGovernance/Nexus.Integrations.ProjectGovernance.csproj"
+
+)
+
+
+# ============================================================
+# Project Management: contracts, history, delegation
+# (independent capabilities; each is opt-in in the host)
+# ============================================================
+
+$contractsProjects = @(
+
+    "Nexus.ProjectManagement.Contracts/Nexus.ProjectManagement.Contracts.csproj",
+
+    "Nexus.ProjectManagement.Contracts.Infrastructure/Nexus.ProjectManagement.Contracts.Infrastructure.csproj"
+
+)
+
+$historyProjects = @(
+
+    "Nexus.ProjectManagement.History/Nexus.ProjectManagement.History.csproj",
+
+    "Nexus.ProjectManagement.History.Infrastructure/Nexus.ProjectManagement.History.Infrastructure.csproj"
+
+)
+
+$delegationProjects = @(
+
+    "Nexus.ProjectManagement.Delegation/Nexus.ProjectManagement.Delegation.csproj",
+
+    "Nexus.ProjectManagement.Delegation.Infrastructure/Nexus.ProjectManagement.Delegation.Infrastructure.csproj"
+
+)
+
+
+# ============================================================
+# Reporting analytics (opt-in, reads the other modules)
+# ============================================================
+
+$reportingAnalyticsProjects = @(
+
+    "Nexus.Reporting.Analytics/Nexus.Reporting.Analytics.csproj"
+
+)
+
+
+# ============================================================
+# Iranian public holidays for Calendar (optional add-on)
+# ============================================================
+
+$calendarHolidayProjects = @(
+
+    "Nexus.Calendar.IranianHolidays/Nexus.Calendar.IranianHolidays.csproj"
 
 )
 
@@ -485,6 +545,11 @@ $projects = @(
 
     $teamProjects
 
+    $contractsProjects
+    $historyProjects
+    $delegationProjects
+    $reportingAnalyticsProjects
+    $calendarHolidayProjects
     $integrationProjects
 
 ) | ForEach-Object { $_ } | Select-Object -Unique
@@ -505,7 +570,10 @@ $excludedProjects = @(
     "NexusCore.Api/NexusCore.Api.csproj",
 
     # Test host for the organization structure module; remove with the project before merging to main.
-    "TejaratBank.Api/TejaratBank.Api.csproj"
+    "TejaratBank.Api/TejaratBank.Api.csproj",
+
+    # Product host (an application, not a package). It is composed from the packages below.
+    "PostBank.Api/PostBank.Api.csproj"
 
 )
 
