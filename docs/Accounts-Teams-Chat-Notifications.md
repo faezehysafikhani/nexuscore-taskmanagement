@@ -28,7 +28,7 @@ Every `/api/identity/groups` request failed with
 |---|---|
 | `POST /api/identity/auth/login` | `identifier` is a **username or mobile number** (email is not a sign-in name); CAPTCHA fields once required - see below |
 | `POST /api/identity/auth/captcha` | a single-use CAPTCHA image for the next sign-in attempt of this client |
-| `POST /api/identity/auth/register` | self-registration (only when `Identity:SelfRegistration:Enabled`); username and mobile required, email optional |
+| *(no self-registration)* | There is no registration endpoint: accounts are created by administrators. |
 | `POST /api/identity/auth/forgot-password` | `identifier` = username or mobile; emails a reset link to the account's email, if it has one; same answer whether or not the account exists |
 | `POST /api/identity/auth/reset-password` | sets the new password, signs the user out everywhere |
 | `PUT /api/identity/auth/me/profile` | own name, username (required), avatar, mobile, SMS choice |
@@ -119,7 +119,6 @@ Deleting a team that tasks are still assigned to answers 409.
 
 ```jsonc
 "Identity": {
-  "SelfRegistration": { "Enabled": true, "TenantSlug": "", "DefaultRoleName": "Member" },
   "SeedRoles": [ { "Name": "Member", "Permissions": [ "Tasks.View", "...", "groups.manage_own" ] } ]
 },
 "PasswordReset": { "CodeLength": 6, "CodeLifetimeMinutes": 5, "ResetTokenLifetimeMinutes": 10 },
