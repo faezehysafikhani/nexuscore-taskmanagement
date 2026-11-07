@@ -60,7 +60,7 @@ public sealed class PositionPermissionProvider(OrgStructureDbContext dbContext, 
         var posts = await dbContext.UnitPositions.IgnoreQueryFilters()
             .Where(x => postIds.Contains(x.Id))
             .Join(dbContext.Positions.IgnoreQueryFilters().Where(p => p.IsActive), x => x.PositionId, p => p.Id,
-                (x, p) => new { PostId = x.Id, x.PositionId, p.Title, x.Code })
+                (x, p) => new { PostId = x.Id, x.PositionId, x.CompanyId, p.Title, x.Code })
             .ToListAsync(cancellationToken);
         if (posts.Count == 0)
         {
@@ -69,9 +69,11 @@ public sealed class PositionPermissionProvider(OrgStructureDbContext dbContext, 
 
         var positionIds = posts.Select(x => x.PositionId).Distinct().ToList();
         var activePostIds = posts.Select(x => x.PostId).ToList();
+        // A position's permissions are per company: only the ones of the company the post is in count.
+        var companyIds = posts.Select(x => x.CompanyId).Distinct().ToList();
         var byPosition = await dbContext.PositionPermissions.IgnoreQueryFilters()
-            .Where(x => positionIds.Contains(x.PositionId))
-            .Select(x => new { x.PositionId, x.PermissionName })
+            .Where(x => positionIds.Contains(x.PositionId) && companyIds.Contains(x.CompanyId))
+            .Select(x => new { x.CompanyId, x.PositionId, x.PermissionName })
             .ToListAsync(cancellationToken);
         var byPost = await dbContext.UnitPositionPermissions.IgnoreQueryFilters()
             .Where(x => activePostIds.Contains(x.UnitPositionId))
@@ -83,7 +85,7 @@ public sealed class PositionPermissionProvider(OrgStructureDbContext dbContext, 
         {
             var prefix = standingFor.Contains(post.PostId) ? "جانشین " : string.Empty;
             var label = $"{prefix}{post.Title}" + (string.IsNullOrWhiteSpace(post.Code) ? string.Empty : $" ({post.Code})");
-            grants.AddRange(byPosition.Where(x => x.PositionId == post.PositionId).Select(x => new Grant(x.PermissionName, label)));
+            grants.AddRange(byPosition.Where(x => x.PositionId == post.PositionId && x.CompanyId == post.CompanyId).Select(x => new Grant(x.PermissionName, label)));
             grants.AddRange(byPost.Where(x => x.UnitPositionId == post.PostId).Select(x => new Grant(x.PermissionName, label)));
         }
 

@@ -578,6 +578,9 @@ namespace Nexus.OrgStructure.Infrastructure.Migrations.OrgStructure
 
             modelBuilder.Entity("Nexus.OrgStructure.Domain.PositionPermission", b =>
                 {
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<Guid>("PositionId")
                         .HasColumnType("uniqueidentifier");
 
@@ -588,7 +591,7 @@ namespace Nexus.OrgStructure.Infrastructure.Migrations.OrgStructure
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.HasKey("PositionId", "PermissionName");
+                    b.HasKey("CompanyId", "PositionId", "PermissionName");
 
                     b.HasIndex("TenantId");
 

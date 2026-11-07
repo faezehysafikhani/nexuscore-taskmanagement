@@ -101,16 +101,16 @@ public sealed class OrgStructureRepository(OrgStructureDbContext dbContext, Time
     public Task<Position?> GetPositionAsync(Guid tenantId, Guid id, CancellationToken cancellationToken) =>
         dbContext.Positions.SingleOrDefaultAsync(x => x.TenantId == tenantId && x.Id == id, cancellationToken);
 
-    public async Task<IReadOnlyList<string>> ListPositionPermissionNamesAsync(Guid tenantId, Guid positionId, CancellationToken cancellationToken) =>
-        await dbContext.PositionPermissions.Where(x => x.TenantId == tenantId && x.PositionId == positionId)
+    public async Task<IReadOnlyList<string>> ListPositionPermissionNamesAsync(Guid tenantId, Guid companyId, Guid positionId, CancellationToken cancellationToken) =>
+        await dbContext.PositionPermissions.Where(x => x.TenantId == tenantId && x.CompanyId == companyId && x.PositionId == positionId)
             .Select(x => x.PermissionName).OrderBy(x => x).ToListAsync(cancellationToken);
 
-    public async Task SetPositionPermissionsAsync(Guid tenantId, Guid positionId, IReadOnlyCollection<string> names, CancellationToken cancellationToken)
+    public async Task SetPositionPermissionsAsync(Guid tenantId, Guid companyId, Guid positionId, IReadOnlyCollection<string> names, CancellationToken cancellationToken)
     {
-        var current = await dbContext.PositionPermissions.Where(x => x.TenantId == tenantId && x.PositionId == positionId).ToListAsync(cancellationToken);
+        var current = await dbContext.PositionPermissions.Where(x => x.TenantId == tenantId && x.CompanyId == companyId && x.PositionId == positionId).ToListAsync(cancellationToken);
         dbContext.PositionPermissions.RemoveRange(current.Where(x => !names.Contains(x.PermissionName)));
         var have = current.Select(x => x.PermissionName).ToHashSet(StringComparer.Ordinal);
-        dbContext.PositionPermissions.AddRange(names.Where(name => !have.Contains(name)).Select(name => new PositionPermission(tenantId, positionId, name)));
+        dbContext.PositionPermissions.AddRange(names.Where(name => !have.Contains(name)).Select(name => new PositionPermission(tenantId, companyId, positionId, name)));
     }
 
     public Task<UnitPosition?> GetUnitPositionAsync(Guid tenantId, Guid id, CancellationToken cancellationToken) =>

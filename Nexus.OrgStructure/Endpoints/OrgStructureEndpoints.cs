@@ -116,12 +116,12 @@ public static class OrgStructureEndpoints
             .RequireAuthorization(OrgStructurePermissions.ManagePositions);
 
         // --- permissions each position / post gives to its holders
-        group.MapGet("/positions/{id:guid}/permissions", (Guid id, ICurrentUserContext user, IPositionPermissionService service, CancellationToken ct) =>
-                InTenant(user, tenant => service.GetPositionAsync(tenant, id, ct)))
+        group.MapGet("/positions/{id:guid}/permissions", (Guid id, Guid companyId, ICurrentUserContext user, IPositionPermissionService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.GetPositionAsync(tenant, companyId, id, ct)))
             .RequireAuthorization(OrgStructurePermissions.ManagePositionPermissions);
 
-        group.MapPut("/positions/{id:guid}/permissions", (Guid id, SetPositionPermissionsRequest request, ICurrentUserContext user, IPositionPermissionService service, CancellationToken ct) =>
-                InTenant(user, tenant => service.SetPositionAsync(tenant, id, request, ct)))
+        group.MapPut("/positions/{id:guid}/permissions", (Guid id, Guid companyId, SetPositionPermissionsRequest request, ICurrentUserContext user, IPositionPermissionService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.SetPositionAsync(tenant, companyId, id, request, ct)))
             .RequireAuthorization(OrgStructurePermissions.ManagePositionPermissions);
 
         group.MapGet("/unit-positions/{id:guid}/permissions", (Guid id, ICurrentUserContext user, IPositionPermissionService service, CancellationToken ct) =>

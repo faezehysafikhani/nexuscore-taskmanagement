@@ -12,13 +12,13 @@ public sealed record PositionPermissionsDto(Guid Id, IReadOnlyList<string> Permi
 public sealed record SetPositionPermissionsRequest(IReadOnlyList<string> PermissionNames);
 
 /// <summary>
-/// Which permissions each position (سِمَت) and each post gives to its holders. What a user ends up with
+/// Which permissions each position (سِمَت) gives to its holders IN EACH COMPANY, and each post to its holder. What a user ends up with
 /// is worked out by the Core (IPositionPermissionProvider); this only keeps the lists.
 /// </summary>
 public interface IPositionPermissionService
 {
-    Task<Result<PositionPermissionsDto>> GetPositionAsync(Guid tenantId, Guid positionId, CancellationToken cancellationToken);
-    Task<Result<PositionPermissionsDto>> SetPositionAsync(Guid tenantId, Guid positionId, SetPositionPermissionsRequest request, CancellationToken cancellationToken);
+    Task<Result<PositionPermissionsDto>> GetPositionAsync(Guid tenantId, Guid companyId, Guid positionId, CancellationToken cancellationToken);
+    Task<Result<PositionPermissionsDto>> SetPositionAsync(Guid tenantId, Guid companyId, Guid positionId, SetPositionPermissionsRequest request, CancellationToken cancellationToken);
     Task<Result<PositionPermissionsDto>> GetPostAsync(Guid tenantId, Guid unitPositionId, CancellationToken cancellationToken);
     Task<Result<PositionPermissionsDto>> SetPostAsync(Guid tenantId, Guid unitPositionId, SetPositionPermissionsRequest request, CancellationToken cancellationToken);
 }
@@ -26,8 +26,8 @@ public interface IPositionPermissionService
 /// <summary>What the permission lists of positions and posts need from the store (kept apart from the structure's own repository).</summary>
 public interface IPositionPermissionRepository
 {
-    Task<IReadOnlyList<string>> ListPositionPermissionNamesAsync(Guid tenantId, Guid positionId, CancellationToken cancellationToken);
-    Task SetPositionPermissionsAsync(Guid tenantId, Guid positionId, IReadOnlyCollection<string> names, CancellationToken cancellationToken);
+    Task<IReadOnlyList<string>> ListPositionPermissionNamesAsync(Guid tenantId, Guid companyId, Guid positionId, CancellationToken cancellationToken);
+    Task SetPositionPermissionsAsync(Guid tenantId, Guid companyId, Guid positionId, IReadOnlyCollection<string> names, CancellationToken cancellationToken);
     Task<UnitPosition?> GetUnitPositionAsync(Guid tenantId, Guid id, CancellationToken cancellationToken);
     Task<IReadOnlyList<string>> ListUnitPositionPermissionNamesAsync(Guid tenantId, Guid unitPositionId, CancellationToken cancellationToken);
     Task SetUnitPositionPermissionsAsync(Guid tenantId, Guid unitPositionId, IReadOnlyCollection<string> names, CancellationToken cancellationToken);
@@ -38,40 +38,58 @@ public sealed class PositionPermissionService(
     IPositionPermissionRepository repository,
     IOrgStructureUnitOfWork unitOfWork,
     IEnumerable<IPermissionCatalog> catalogs,
-    ICurrentUserContext currentUser) : IPositionPermissionService
+    ICurrentUserContext currentUser,
+    CompanyReachScope? companyReach = null) : IPositionPermissionService
 {
-    public async Task<Result<PositionPermissionsDto>> GetPositionAsync(Guid tenantId, Guid positionId, CancellationToken cancellationToken) =>
-        await structure.GetPositionAsync(tenantId, positionId, cancellationToken) is null
-            ? Result.Failure<PositionPermissionsDto>(Error.NotFound("سمت پیدا نشد."))
-            : Result.Success(new PositionPermissionsDto(positionId, await repository.ListPositionPermissionNamesAsync(tenantId, positionId, cancellationToken)));
-
-    public async Task<Result<PositionPermissionsDto>> SetPositionAsync(Guid tenantId, Guid positionId, SetPositionPermissionsRequest request, CancellationToken cancellationToken)
+    /// <summary>The position is one of this company's, and the company is one the caller reaches (not kept to another).</summary>
+    private async Task<Error?> CheckPositionInCompanyAsync(Guid tenantId, Guid companyId, Guid positionId, CancellationToken cancellationToken)
     {
-        if (await structure.GetPositionAsync(tenantId, positionId, cancellationToken) is null)
+        if (await structure.GetPositionAsync(tenantId, positionId, cancellationToken) is null
+            || await structure.GetCompanyAsync(tenantId, companyId, cancellationToken) is null
+            || !(await structure.ListPositionCompaniesAsync(tenantId, cancellationToken)).Any(x => x.PositionId == positionId && x.CompanyId == companyId))
         {
-            return Result.Failure<PositionPermissionsDto>(Error.NotFound("سمت پیدا نشد."));
+            return Error.NotFound("سمت در این شرکت پیدا نشد.");
         }
 
-        var current = await repository.ListPositionPermissionNamesAsync(tenantId, positionId, cancellationToken);
+        return await IsMineAsync(tenantId, companyId, cancellationToken) ? null : Error.Forbidden("فقط شرکت خودتان را می‌توانید ببینید و تغییر دهید.");
+    }
+
+    private async Task<bool> IsMineAsync(Guid tenantId, Guid companyId, CancellationToken cancellationToken) =>
+        companyReach is null || currentUser.UserId is not { } me
+        || await companyReach.GetCompaniesAsync(tenantId, me, cancellationToken) is not { } mine || mine.Contains(companyId);
+
+    public async Task<Result<PositionPermissionsDto>> GetPositionAsync(Guid tenantId, Guid companyId, Guid positionId, CancellationToken cancellationToken) =>
+        await CheckPositionInCompanyAsync(tenantId, companyId, positionId, cancellationToken) is { } problem
+            ? Result.Failure<PositionPermissionsDto>(problem)
+            : Result.Success(new PositionPermissionsDto(positionId, await repository.ListPositionPermissionNamesAsync(tenantId, companyId, positionId, cancellationToken)));
+
+    public async Task<Result<PositionPermissionsDto>> SetPositionAsync(Guid tenantId, Guid companyId, Guid positionId, SetPositionPermissionsRequest request, CancellationToken cancellationToken)
+    {
+        if (await CheckPositionInCompanyAsync(tenantId, companyId, positionId, cancellationToken) is { } problem)
+        {
+            return Result.Failure<PositionPermissionsDto>(problem);
+        }
+
+        var current = await repository.ListPositionPermissionNamesAsync(tenantId, companyId, positionId, cancellationToken);
         var names = Check(request.PermissionNames, current, out var failure);
         if (failure is not null)
         {
             return Result.Failure<PositionPermissionsDto>(failure);
         }
 
-        await repository.SetPositionPermissionsAsync(tenantId, positionId, names, cancellationToken);
+        await repository.SetPositionPermissionsAsync(tenantId, companyId, positionId, names, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success(new PositionPermissionsDto(positionId, names));
     }
 
     public async Task<Result<PositionPermissionsDto>> GetPostAsync(Guid tenantId, Guid unitPositionId, CancellationToken cancellationToken) =>
-        await repository.GetUnitPositionAsync(tenantId, unitPositionId, cancellationToken) is null
+        await repository.GetUnitPositionAsync(tenantId, unitPositionId, cancellationToken) is not { } seat || !await IsMineAsync(tenantId, seat.CompanyId, cancellationToken)
             ? Result.Failure<PositionPermissionsDto>(Error.NotFound("پست پیدا نشد."))
             : Result.Success(new PositionPermissionsDto(unitPositionId, await repository.ListUnitPositionPermissionNamesAsync(tenantId, unitPositionId, cancellationToken)));
 
     public async Task<Result<PositionPermissionsDto>> SetPostAsync(Guid tenantId, Guid unitPositionId, SetPositionPermissionsRequest request, CancellationToken cancellationToken)
     {
-        if (await repository.GetUnitPositionAsync(tenantId, unitPositionId, cancellationToken) is null)
+        if (await repository.GetUnitPositionAsync(tenantId, unitPositionId, cancellationToken) is not { } seat || !await IsMineAsync(tenantId, seat.CompanyId, cancellationToken))
         {
             return Result.Failure<PositionPermissionsDto>(Error.NotFound("پست پیدا نشد."));
         }

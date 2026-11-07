@@ -16,13 +16,14 @@ namespace Nexus.OrgStructure.Infrastructure.Migrations.OrgStructure
                 schema: "org_structure",
                 columns: table => new
                 {
+                    CompanyId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     PositionId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     PermissionName = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
                     TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_PositionPermissions", x => new { x.PositionId, x.PermissionName });
+                    table.PrimaryKey("PK_PositionPermissions", x => new { x.CompanyId, x.PositionId, x.PermissionName });
                 });
 
             migrationBuilder.CreateTable(

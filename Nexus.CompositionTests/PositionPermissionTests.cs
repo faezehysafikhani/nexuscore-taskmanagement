@@ -18,6 +18,8 @@ public sealed class PositionPermissionTests
     private static OrgStructureDbContext NewContext() =>
         new(new DbContextOptionsBuilder<OrgStructureDbContext>().UseInMemoryDatabase("pos-perm-" + Guid.NewGuid()).Options);
 
+    private Guid _company = Guid.NewGuid();
+
     private Position AddPosition(OrgStructureDbContext db, string title, bool active = true, params string[] permissions)
     {
         var position = new Position(Guid.NewGuid(), _tenant, title);
@@ -27,13 +29,13 @@ public sealed class PositionPermissionTests
         }
 
         db.Positions.Add(position);
-        db.PositionPermissions.AddRange(permissions.Select(name => new PositionPermission(_tenant, position.Id, name)));
+        db.PositionPermissions.AddRange(permissions.Select(name => new PositionPermission(_tenant, _company, position.Id, name)));
         return position;
     }
 
     private UnitPosition AddPost(OrgStructureDbContext db, Position position, string code, params string[] permissions)
     {
-        var post = new UnitPosition(Guid.NewGuid(), _tenant, Guid.NewGuid(), Guid.NewGuid(), position.Id, 0, code);
+        var post = new UnitPosition(Guid.NewGuid(), _tenant, _company, Guid.NewGuid(), position.Id, 0, code);
         db.UnitPositions.Add(post);
         db.UnitPositionPermissions.AddRange(permissions.Select(name => new UnitPositionPermission(_tenant, post.Id, name)));
         return post;
@@ -123,5 +125,26 @@ public sealed class PositionPermissionTests
         Appoint(db, Guid.NewGuid(), vacant);
         await db.SaveChangesAsync();
         Assert.Equal(["tasks.view"], await Provider(db).GetPermissionNamesAsync(standIn, default));
+    }
+
+    [Fact]
+    public async Task APositionsPermissions_AreSeparatePerCompany()
+    {
+        using var db = NewContext();
+        var first = _company;
+        var expert = AddPosition(db, "کارشناس", true, "tasks.view");
+        var inFirst = Guid.NewGuid();
+        Appoint(db, inFirst, AddPost(db, expert, "A"));
+
+        // The same position in another company: its own list (here a different permission).
+        _company = Guid.NewGuid();
+        db.PositionPermissions.Add(new PositionPermission(_tenant, _company, expert.Id, "reports.view"));
+        var inSecond = Guid.NewGuid();
+        Appoint(db, inSecond, AddPost(db, expert, "B"));
+        await db.SaveChangesAsync();
+
+        Assert.Equal(["tasks.view"], await Provider(db).GetPermissionNamesAsync(inFirst, default));
+        Assert.Equal(["reports.view"], await Provider(db).GetPermissionNamesAsync(inSecond, default));
+        Assert.NotEqual(first, _company);
     }
 }

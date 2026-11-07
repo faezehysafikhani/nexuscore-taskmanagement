@@ -188,7 +188,7 @@ public sealed class PositionPermissionConfiguration : IEntityTypeConfiguration<P
     public void Configure(EntityTypeBuilder<PositionPermission> builder)
     {
         builder.ToTable("PositionPermissions", OrgStructureSchema.Name);
-        builder.HasKey(x => new { x.PositionId, x.PermissionName });
+        builder.HasKey(x => new { x.CompanyId, x.PositionId, x.PermissionName });
         builder.Property(x => x.PermissionName).HasMaxLength(200).IsRequired();
         builder.HasIndex(x => x.TenantId);
     }
