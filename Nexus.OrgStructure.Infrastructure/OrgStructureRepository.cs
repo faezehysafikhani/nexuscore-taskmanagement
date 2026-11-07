@@ -82,7 +82,12 @@ public sealed class OrgStructureRepository(OrgStructureDbContext dbContext, Time
     public async Task AddCompanyAsync(Company company, CancellationToken cancellationToken) =>
         await dbContext.Companies.AddAsync(company, cancellationToken);
 
-    public void RemoveCompany(Company company) => dbContext.Companies.Remove(company);
+    public void RemoveCompany(Company company)
+    {
+        // What its positions gave there goes with it: a company made later never inherits it.
+        dbContext.PositionPermissions.RemoveRange(dbContext.PositionPermissions.Where(x => x.CompanyId == company.Id).ToList());
+        dbContext.Companies.Remove(company);
+    }
 
     public async Task<IReadOnlyList<CompanyUnit>> ListCompanyUnitsAsync(Guid tenantId, CancellationToken cancellationToken) =>
         await dbContext.CompanyUnits.Where(x => x.TenantId == tenantId).ToListAsync(cancellationToken);
@@ -134,7 +139,11 @@ public sealed class OrgStructureRepository(OrgStructureDbContext dbContext, Time
     public async Task AddPositionAsync(Position position, CancellationToken cancellationToken) =>
         await dbContext.Positions.AddAsync(position, cancellationToken);
 
-    public void RemovePosition(Position position) => dbContext.Positions.Remove(position);
+    public void RemovePosition(Position position)
+    {
+        dbContext.PositionPermissions.RemoveRange(dbContext.PositionPermissions.Where(x => x.PositionId == position.Id).ToList());
+        dbContext.Positions.Remove(position);
+    }
 
     public async Task<IReadOnlyList<UserAssignment>> ListAssignmentsAsync(Guid tenantId, CancellationToken cancellationToken) =>
         await dbContext.UserAssignments.Where(x => x.TenantId == tenantId).ToListAsync(cancellationToken);
@@ -153,7 +162,13 @@ public sealed class OrgStructureRepository(OrgStructureDbContext dbContext, Time
     public async Task AddPositionCompanyAsync(PositionCompany positionCompany, CancellationToken cancellationToken) =>
         await dbContext.PositionCompanies.AddAsync(positionCompany, cancellationToken);
 
-    public void RemovePositionCompany(PositionCompany positionCompany) => dbContext.PositionCompanies.Remove(positionCompany);
+    public void RemovePositionCompany(PositionCompany positionCompany)
+    {
+        // The position leaves the company: what it gave there is gone, and is not back if it returns.
+        dbContext.PositionPermissions.RemoveRange(dbContext.PositionPermissions
+            .Where(x => x.CompanyId == positionCompany.CompanyId && x.PositionId == positionCompany.PositionId).ToList());
+        dbContext.PositionCompanies.Remove(positionCompany);
+    }
 
     public async Task<IReadOnlyList<TaskPost>> ListTaskPostsAsync(
         Guid tenantId, IReadOnlyCollection<Guid>? taskIds, IReadOnlyCollection<Guid>? postIds, CancellationToken cancellationToken)
@@ -231,7 +246,11 @@ public sealed class OrgStructureRepository(OrgStructureDbContext dbContext, Time
     public async Task AddUnitPositionAsync(UnitPosition unitPosition, CancellationToken cancellationToken) =>
         await dbContext.UnitPositions.AddAsync(unitPosition, cancellationToken);
 
-    public void RemoveUnitPosition(UnitPosition unitPosition) => dbContext.UnitPositions.Remove(unitPosition);
+    public void RemoveUnitPosition(UnitPosition unitPosition)
+    {
+        dbContext.UnitPositionPermissions.RemoveRange(dbContext.UnitPositionPermissions.Where(x => x.UnitPositionId == unitPosition.Id).ToList());
+        dbContext.UnitPositions.Remove(unitPosition);
+    }
 
     private DateTimeOffset Now => (clock ?? TimeProvider.System).GetUtcNow();
 

@@ -29,6 +29,7 @@ public sealed class PositionPermissionTests
         }
 
         db.Positions.Add(position);
+        db.PositionCompanies.Add(new PositionCompany(Guid.NewGuid(), _tenant, position.Id, _company));
         db.PositionPermissions.AddRange(permissions.Select(name => new PositionPermission(_tenant, _company, position.Id, name)));
         return position;
     }
@@ -138,6 +139,7 @@ public sealed class PositionPermissionTests
 
         // The same position in another company: its own list (here a different permission).
         _company = Guid.NewGuid();
+        db.PositionCompanies.Add(new PositionCompany(Guid.NewGuid(), _tenant, expert.Id, _company));
         db.PositionPermissions.Add(new PositionPermission(_tenant, _company, expert.Id, "reports.view"));
         var inSecond = Guid.NewGuid();
         Appoint(db, inSecond, AddPost(db, expert, "B"));
@@ -146,5 +148,61 @@ public sealed class PositionPermissionTests
         Assert.Equal(["tasks.view"], await Provider(db).GetPermissionNamesAsync(inFirst, default));
         Assert.Equal(["reports.view"], await Provider(db).GetPermissionNamesAsync(inSecond, default));
         Assert.NotEqual(first, _company);
+    }
+
+    [Fact]
+    public async Task ARowLeftBehind_NeverCounts_AndRemovingThePositionFromTheCompanyClearsItsPermissions()
+    {
+        using var db = NewContext();
+        var expert = AddPosition(db, "کارشناس", true, "tasks.view");
+        var user = Guid.NewGuid();
+        Appoint(db, user, AddPost(db, expert, "A"));
+        await db.SaveChangesAsync();
+        Assert.Equal(["tasks.view"], await Provider(db).GetPermissionNamesAsync(user, default));
+
+        // Through the repository: the position leaves the company, the permissions go with it...
+        var repository = new OrgStructureRepository(db);
+        var link = await db.PositionCompanies.SingleAsync();
+        repository.RemovePositionCompany(link);
+        await db.SaveChangesAsync();
+        Assert.Empty(await db.PositionPermissions.ToListAsync());
+        Assert.Empty(await Provider(db).GetPermissionNamesAsync(user, default));
+
+        // ...and are not back when the position returns to the company.
+        db.PositionCompanies.Add(new PositionCompany(Guid.NewGuid(), _tenant, expert.Id, _company));
+        await db.SaveChangesAsync();
+        Assert.Empty(await Provider(db).GetPermissionNamesAsync(user, default));
+    }
+
+    [Fact]
+    public async Task ALeftoverRow_ForAPositionNoLongerInTheCompany_GivesNothing()
+    {
+        using var db = NewContext();
+        var expert = AddPosition(db, "کارشناس", true, "tasks.view");
+        var user = Guid.NewGuid();
+        Appoint(db, user, AddPost(db, expert, "A"));
+        await db.SaveChangesAsync();
+        db.PositionCompanies.RemoveRange(await db.PositionCompanies.ToListAsync());   // the link is gone, the permission row is not
+        await db.SaveChangesAsync();
+
+        Assert.Empty(await Provider(db).GetPermissionNamesAsync(user, default));
+    }
+
+    [Fact]
+    public async Task RemovingAPostOrAPosition_ClearsWhatItGave()
+    {
+        using var db = NewContext();
+        var expert = AddPosition(db, "کارشناس", true, "tasks.view");
+        var post = AddPost(db, expert, "A", "reports.view");
+        await db.SaveChangesAsync();
+        var repository = new OrgStructureRepository(db);
+
+        repository.RemoveUnitPosition(post);
+        await db.SaveChangesAsync();
+        Assert.Empty(await db.UnitPositionPermissions.ToListAsync());
+
+        repository.RemovePosition(expert);
+        await db.SaveChangesAsync();
+        Assert.Empty(await db.PositionPermissions.ToListAsync());
     }
 }

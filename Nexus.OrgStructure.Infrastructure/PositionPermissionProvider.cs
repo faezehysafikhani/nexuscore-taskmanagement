@@ -71,8 +71,10 @@ public sealed class PositionPermissionProvider(OrgStructureDbContext dbContext, 
         var activePostIds = posts.Select(x => x.PostId).ToList();
         // A position's permissions are per company: only the ones of the company the post is in count.
         var companyIds = posts.Select(x => x.CompanyId).Distinct().ToList();
+        // ...and only while the position is still for that company (a leftover row never counts).
         var byPosition = await dbContext.PositionPermissions.IgnoreQueryFilters()
-            .Where(x => positionIds.Contains(x.PositionId) && companyIds.Contains(x.CompanyId))
+            .Where(x => positionIds.Contains(x.PositionId) && companyIds.Contains(x.CompanyId)
+                && dbContext.PositionCompanies.IgnoreQueryFilters().Any(link => link.PositionId == x.PositionId && link.CompanyId == x.CompanyId))
             .Select(x => new { x.CompanyId, x.PositionId, x.PermissionName })
             .ToListAsync(cancellationToken);
         var byPost = await dbContext.UnitPositionPermissions.IgnoreQueryFilters()
