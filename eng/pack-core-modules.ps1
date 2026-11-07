@@ -509,6 +509,19 @@ $calendarHolidayProjects = @(
 
 
 # ============================================================
+# 26. Bundles (one package per product shape; they only compose the packages above)
+# ============================================================
+
+$bundleProjects = @(
+
+    "Nexus.Bundles.Platform/Nexus.Bundles.Platform.csproj",
+
+    "Nexus.Bundles.ProjectManagement/Nexus.Bundles.ProjectManagement.csproj"
+
+)
+
+
+# ============================================================
 # Combine package projects
 # ============================================================
 
@@ -570,6 +583,7 @@ $projects = @(
     $reportingAnalyticsProjects
     $calendarHolidayProjects
     $integrationProjects
+    $bundleProjects
 
 ) | ForEach-Object { $_ } | Select-Object -Unique
 
