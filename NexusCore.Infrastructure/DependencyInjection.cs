@@ -67,6 +67,8 @@ public static class DependencyInjection
         services.Replace(ServiceDescriptor.Singleton<ISessionConnectionRegistry>(provider => provider.GetRequiredService<InMemorySessionConnectionRegistry>()));
         services.Configure<Microsoft.AspNetCore.SignalR.HubOptions>(options => options.AddFilter<SessionHubFilter>());
         services.AddHostedService<SessionMaintenanceService>();
+        // A permission a module adds reaches the Administrator role even where Database:SeedOnStartup is off.
+        services.AddHostedService<PermissionCatalogSync>();
         services.AddScoped<IPlatformRepository, PlatformRepository>();
         services.AddScoped<IPasswordHasher, BCryptPasswordHasher>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
