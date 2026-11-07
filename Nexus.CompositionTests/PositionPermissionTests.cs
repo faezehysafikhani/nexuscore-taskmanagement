@@ -88,6 +88,29 @@ public sealed class PositionPermissionTests
     }
 
     [Fact]
+    public async Task WorkingAsOnePost_GivesOnlyThatPostsPermissions_AndNeverMore()
+    {
+        using var db = NewContext();
+        var a = AddPosition(db, "الف", true, "tasks.view");
+        var b = AddPosition(db, "ب", true, "reports.view");
+        var user = Guid.NewGuid();
+        var postA = AddPost(db, a, "A");
+        var postB = AddPost(db, b, "B");
+        var notMine = AddPost(db, AddPosition(db, "ج", true, "users.delete"), "C");
+        Appoint(db, user, postA);
+        Appoint(db, user, postB);
+        await db.SaveChangesAsync();
+
+        Assert.Equal(["tasks.view"], await Provider(db).GetPermissionNamesAsync(user, [postA.Id], default));
+        Assert.Equal(["reports.view"], await Provider(db).GetPermissionNamesAsync(user, [postB.Id], default));
+        Assert.Equal(["reports.view", "tasks.view"], (await Provider(db).GetPermissionNamesAsync(user, [postA.Id, postB.Id], default)).Order());
+        // A post the person does not hold adds nothing; a choice that matches nothing held falls back to all their posts.
+        Assert.Equal(["tasks.view"], await Provider(db).GetPermissionNamesAsync(user, [postA.Id, notMine.Id], default));
+        Assert.Equal(["reports.view", "tasks.view"], (await Provider(db).GetPermissionNamesAsync(user, [notMine.Id], default)).Order());
+        Assert.Equal(["reports.view", "tasks.view"], (await Provider(db).GetPermissionNamesAsync(user, null, default)).Order());
+    }
+
+    [Fact]
     public async Task AnAppointmentGivesAccessOnlyInItsPeriod()
     {
         using var db = NewContext();

@@ -16,6 +16,14 @@ public interface IPositionPermissionProvider
     Task<IReadOnlyList<string>> GetPermissionNamesAsync(Guid userId, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Like <see cref="GetPermissionNamesAsync(Guid, CancellationToken)"/>, but only from these posts (the ones the
+    /// person chose to work as; those not held now are ignored, so this can only narrow). Null, or none of them
+    /// held, means all the posts, as before.
+    /// </summary>
+    Task<IReadOnlyList<string>> GetPermissionNamesAsync(Guid userId, IReadOnlyCollection<Guid>? onlyPosts, CancellationToken cancellationToken) =>
+        GetPermissionNamesAsync(userId, cancellationToken);
+
+    /// <summary>
     /// Which posts grant each permission to this user, keyed by permission name (a readable label per post,
     /// for the access page to explain a grant that is not changed on the user).
     /// </summary>

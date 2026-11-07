@@ -12,17 +12,20 @@ namespace Nexus.OrgStructure.Infrastructure;
 /// </summary>
 public sealed class PositionPermissionProvider(OrgStructureDbContext dbContext, TimeProvider? clock = null) : IPositionPermissionProvider
 {
-    public async Task<IReadOnlyList<string>> GetPermissionNamesAsync(Guid userId, CancellationToken cancellationToken) =>
-        (await GrantsAsync(userId, cancellationToken)).Select(grant => grant.Name).Distinct(StringComparer.Ordinal).ToList();
+    public Task<IReadOnlyList<string>> GetPermissionNamesAsync(Guid userId, CancellationToken cancellationToken) =>
+        GetPermissionNamesAsync(userId, null, cancellationToken);
+
+    public async Task<IReadOnlyList<string>> GetPermissionNamesAsync(Guid userId, IReadOnlyCollection<Guid>? onlyPosts, CancellationToken cancellationToken) =>
+        (await GrantsAsync(userId, onlyPosts, cancellationToken)).Select(grant => grant.Name).Distinct(StringComparer.Ordinal).ToList();
 
     public async Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> GetGrantingPositionsAsync(Guid userId, CancellationToken cancellationToken) =>
-        (await GrantsAsync(userId, cancellationToken))
+        (await GrantsAsync(userId, null, cancellationToken))
             .GroupBy(grant => grant.Name, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => (IReadOnlyList<string>)group.Select(grant => grant.Label).Distinct().OrderBy(label => label).ToList(), StringComparer.Ordinal);
 
     private sealed record Grant(string Name, string Label);
 
-    private async Task<List<Grant>> GrantsAsync(Guid userId, CancellationToken cancellationToken)
+    private async Task<List<Grant>> GrantsAsync(Guid userId, IReadOnlyCollection<Guid>? onlyPosts, CancellationToken cancellationToken)
     {
         var now = (clock ?? TimeProvider.System).GetUtcNow();
 
@@ -35,6 +38,13 @@ public sealed class PositionPermissionProvider(OrgStructureDbContext dbContext, 
         if (held.Count == 0)
         {
             return [];
+        }
+
+        // Working as one post (or one unit's posts): only those count, and only the stand-ins they carry. A choice
+        // that matches nothing held now (left, ended) is ignored, so it can narrow but never add.
+        if (onlyPosts is { Count: > 0 } && held.Where(onlyPosts.Contains).ToList() is { Count: > 0 } chosen)
+        {
+            held = chosen;
         }
 
         // Posts stood in for: a dated stand-in in its time, an undated one while the vacant post has no holder.
