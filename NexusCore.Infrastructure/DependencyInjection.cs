@@ -58,6 +58,8 @@ public static class DependencyInjection
 
         services.AddScoped<IUnitOfWork>(provider => provider.GetRequiredService<NexusCoreDbContext>());
         services.AddScoped<IIdentityRepository, IdentityRepository>();
+        // Nothing from posts unless the organization structure registers its own (it wins whichever runs first).
+        services.TryAddScoped<IPositionPermissionProvider, NullPositionPermissionProvider>();
         services.AddScoped<ISessionRepository, SessionRepository>();
         // Hub connections: every call re-checks the session, and a session that ends closes its connections.
         services.AddSingleton<InMemorySessionConnectionRegistry>();

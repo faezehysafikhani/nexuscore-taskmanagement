@@ -115,6 +115,23 @@ public static class OrgStructureEndpoints
                 InTenant(user, tenant => service.DeletePositionAsync(tenant, id, ct)))
             .RequireAuthorization(OrgStructurePermissions.ManagePositions);
 
+        // --- permissions each position / post gives to its holders
+        group.MapGet("/positions/{id:guid}/permissions", (Guid id, ICurrentUserContext user, IPositionPermissionService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.GetPositionAsync(tenant, id, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ManagePositionPermissions);
+
+        group.MapPut("/positions/{id:guid}/permissions", (Guid id, SetPositionPermissionsRequest request, ICurrentUserContext user, IPositionPermissionService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.SetPositionAsync(tenant, id, request, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ManagePositionPermissions);
+
+        group.MapGet("/unit-positions/{id:guid}/permissions", (Guid id, ICurrentUserContext user, IPositionPermissionService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.GetPostAsync(tenant, id, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ManagePositionPermissions);
+
+        group.MapPut("/unit-positions/{id:guid}/permissions", (Guid id, SetPositionPermissionsRequest request, ICurrentUserContext user, IPositionPermissionService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.SetPostAsync(tenant, id, request, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ManagePositionPermissions);
+
         // --- posts: each unit's (deputy's) in its order, and those directly in a company; one holder each
         group.MapGet("/unit-positions", (Guid? unitId, ICurrentUserContext user, IOrgStructureService service, CancellationToken ct) =>
                 InTenant(user, tenant => service.ListUnitPositionsAsync(tenant, unitId, ct)))

@@ -518,3 +518,47 @@ public sealed class UserHonorific : AuditableEntity<Guid>
 
     public void Change(Guid honorificId) => HonorificId = honorificId;
 }
+
+/// <summary>
+/// A permission given to everyone who holds a post of this position (سِمَت), by the permission's name
+/// (the stable identifier). One more source of a user's permissions next to roles, groups and direct
+/// grants; an explicit denial on the user still wins. Nothing is inherited from the position above.
+/// </summary>
+public sealed class PositionPermission
+{
+    private PositionPermission()
+    {
+        PermissionName = string.Empty;
+    }
+
+    public PositionPermission(Guid tenantId, Guid positionId, string permissionName)
+    {
+        TenantId = tenantId;
+        PositionId = positionId;
+        PermissionName = permissionName;
+    }
+
+    public Guid TenantId { get; private set; }
+    public Guid PositionId { get; private set; }
+    public string PermissionName { get; private set; }
+}
+
+/// <summary>A permission given to the holder of one post only (on top of what its position gives), by name.</summary>
+public sealed class UnitPositionPermission
+{
+    private UnitPositionPermission()
+    {
+        PermissionName = string.Empty;
+    }
+
+    public UnitPositionPermission(Guid tenantId, Guid unitPositionId, string permissionName)
+    {
+        TenantId = tenantId;
+        UnitPositionId = unitPositionId;
+        PermissionName = permissionName;
+    }
+
+    public Guid TenantId { get; private set; }
+    public Guid UnitPositionId { get; private set; }
+    public string PermissionName { get; private set; }
+}

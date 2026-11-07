@@ -576,6 +576,25 @@ namespace Nexus.OrgStructure.Infrastructure.Migrations.OrgStructure
                     b.ToTable("PositionCompanies", "org_structure");
                 });
 
+            modelBuilder.Entity("Nexus.OrgStructure.Domain.PositionPermission", b =>
+                {
+                    b.Property<Guid>("PositionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("PermissionName")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("PositionId", "PermissionName");
+
+                    b.HasIndex("TenantId");
+
+                    b.ToTable("PositionPermissions", "org_structure");
+                });
+
             modelBuilder.Entity("Nexus.OrgStructure.Domain.PostActing", b =>
                 {
                     b.Property<Guid>("Id")
@@ -902,6 +921,25 @@ namespace Nexus.OrgStructure.Infrastructure.Migrations.OrgStructure
                         .IsUnique();
 
                     b.ToTable("UnitPositions", "org_structure");
+                });
+
+            modelBuilder.Entity("Nexus.OrgStructure.Domain.UnitPositionPermission", b =>
+                {
+                    b.Property<Guid>("UnitPositionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("PermissionName")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("UnitPositionId", "PermissionName");
+
+                    b.HasIndex("TenantId");
+
+                    b.ToTable("UnitPositionPermissions", "org_structure");
                 });
 
             modelBuilder.Entity("Nexus.OrgStructure.Domain.UserAssignment", b =>

@@ -4,7 +4,7 @@ using Nexus.OrgStructure.Domain;
 
 namespace Nexus.OrgStructure.Infrastructure;
 
-public sealed class OrgStructureRepository(OrgStructureDbContext dbContext, TimeProvider? clock = null) : IOrgStructureRepository
+public sealed class OrgStructureRepository(OrgStructureDbContext dbContext, TimeProvider? clock = null) : IOrgStructureRepository, IPositionPermissionRepository
 {
     public async Task<IReadOnlyList<NodeType>> ListNodeTypesAsync(Guid tenantId, CancellationToken cancellationToken) =>
         await dbContext.NodeTypes.Where(x => x.TenantId == tenantId).OrderBy(x => x.SortOrder).ThenBy(x => x.Name).ToListAsync(cancellationToken);
@@ -100,6 +100,33 @@ public sealed class OrgStructureRepository(OrgStructureDbContext dbContext, Time
 
     public Task<Position?> GetPositionAsync(Guid tenantId, Guid id, CancellationToken cancellationToken) =>
         dbContext.Positions.SingleOrDefaultAsync(x => x.TenantId == tenantId && x.Id == id, cancellationToken);
+
+    public async Task<IReadOnlyList<string>> ListPositionPermissionNamesAsync(Guid tenantId, Guid positionId, CancellationToken cancellationToken) =>
+        await dbContext.PositionPermissions.Where(x => x.TenantId == tenantId && x.PositionId == positionId)
+            .Select(x => x.PermissionName).OrderBy(x => x).ToListAsync(cancellationToken);
+
+    public async Task SetPositionPermissionsAsync(Guid tenantId, Guid positionId, IReadOnlyCollection<string> names, CancellationToken cancellationToken)
+    {
+        var current = await dbContext.PositionPermissions.Where(x => x.TenantId == tenantId && x.PositionId == positionId).ToListAsync(cancellationToken);
+        dbContext.PositionPermissions.RemoveRange(current.Where(x => !names.Contains(x.PermissionName)));
+        var have = current.Select(x => x.PermissionName).ToHashSet(StringComparer.Ordinal);
+        dbContext.PositionPermissions.AddRange(names.Where(name => !have.Contains(name)).Select(name => new PositionPermission(tenantId, positionId, name)));
+    }
+
+    public Task<UnitPosition?> GetUnitPositionAsync(Guid tenantId, Guid id, CancellationToken cancellationToken) =>
+        dbContext.UnitPositions.SingleOrDefaultAsync(x => x.TenantId == tenantId && x.Id == id, cancellationToken);
+
+    public async Task<IReadOnlyList<string>> ListUnitPositionPermissionNamesAsync(Guid tenantId, Guid unitPositionId, CancellationToken cancellationToken) =>
+        await dbContext.UnitPositionPermissions.Where(x => x.TenantId == tenantId && x.UnitPositionId == unitPositionId)
+            .Select(x => x.PermissionName).OrderBy(x => x).ToListAsync(cancellationToken);
+
+    public async Task SetUnitPositionPermissionsAsync(Guid tenantId, Guid unitPositionId, IReadOnlyCollection<string> names, CancellationToken cancellationToken)
+    {
+        var current = await dbContext.UnitPositionPermissions.Where(x => x.TenantId == tenantId && x.UnitPositionId == unitPositionId).ToListAsync(cancellationToken);
+        dbContext.UnitPositionPermissions.RemoveRange(current.Where(x => !names.Contains(x.PermissionName)));
+        var have = current.Select(x => x.PermissionName).ToHashSet(StringComparer.Ordinal);
+        dbContext.UnitPositionPermissions.AddRange(names.Where(name => !have.Contains(name)).Select(name => new UnitPositionPermission(tenantId, unitPositionId, name)));
+    }
 
     public Task<bool> PositionTitleExistsAsync(Guid tenantId, string title, Guid? excludeId, CancellationToken cancellationToken) =>
         dbContext.Positions.AnyAsync(x => x.TenantId == tenantId && x.Title == title && x.Id != excludeId, cancellationToken);
