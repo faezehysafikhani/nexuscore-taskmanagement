@@ -32,6 +32,8 @@ public static class DependencyInjection
         services.AddScoped<IOrgTemplateService>(sp => sp.GetRequiredService<OrgNodeService>());
         services.AddScoped<IOrgImpactPreview, OrgImpactPreview>();
         services.AddScoped<IHonorificService, HonorificService>();
+        // The permissions each position / post gives to its holders (the Core adds them to a user's own).
+        services.AddScoped<IPositionPermissionService, PositionPermissionService>();
         services.AddSingleton<IPermissionCatalog, OrgStructurePermissionCatalog>();
         // Work-team builders add their own deputy's people (more with TeamMembersFromAnyUnit).
         // The Core registers its unlimited default with TryAdd, so this one wins whichever runs first.

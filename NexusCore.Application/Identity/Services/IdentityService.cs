@@ -37,7 +37,8 @@ public sealed class IdentityService(
     ISessionRepository sessionRepository,
     ISessionSecurityNotifier sessionNotifier,
     IUserReachScope? reachScope = null,
-    IOptions<SignInSessionOptions>? sessionOptions = null) : IIdentityService
+    IOptions<SignInSessionOptions>? sessionOptions = null,
+    IPositionPermissionProvider? positionPermissions = null) : IIdentityService
 {
     private readonly ManagedPermissionOptions _managed = managedPermissionOptions.Value;
     private readonly SignInSessionOptions _session = sessionOptions?.Value ?? new SignInSessionOptions();
@@ -600,6 +601,9 @@ public sealed class IdentityService(
             .GroupBy(pair => pair.PermissionId)
             .ToDictionary(group => group.Key, group => (IReadOnlyList<string>)group.Select(pair => pair.Name).Distinct().ToList());
         var grantingGroups = await groupPermissions.GetGrantingGroupsAsync(user.Id, cancellationToken);
+        var grantingPositions = positionPermissions is null
+            ? new Dictionary<string, IReadOnlyList<string>>()
+            : await positionPermissions.GetGrantingPositionsAsync(user.Id, cancellationToken);
         var direct = user.Permissions.Where(entry => !entry.IsDenied).Select(entry => entry.PermissionId).ToHashSet();
         var denied = user.Permissions.Where(entry => entry.IsDenied).Select(entry => entry.PermissionId).ToHashSet();
         // Exactly what the authorization checks use, so the page cannot disagree with the server.
@@ -612,13 +616,16 @@ public sealed class IdentityService(
                 var byRole = grantingRoles.GetValueOrDefault(permission.Id, []);
                 var byGroup = grantingGroups.GetValueOrDefault(permission.Id, []);
                 var isDirect = direct.Contains(permission.Id);
+                var byPosition = grantingPositions.GetValueOrDefault(permission.Name, []);
                 var isEffective = effective.Contains(permission.Name);
                 return new UserPermissionEntryDto(
                     permission.Id, permission.Name, permission.Module, permission.Description,
                     isDirect, byRole.Count > 0, byRole, byGroup.Count > 0, byGroup,
                     DeniedForUser: denied.Contains(permission.Id),
                     Effective: isEffective,
-                    GrantedAsPrerequisite: isEffective && !isDirect && byRole.Count == 0 && byGroup.Count == 0);
+                    GrantedAsPrerequisite: isEffective && !isDirect && byRole.Count == 0 && byGroup.Count == 0 && byPosition.Count == 0,
+                    GrantedByPosition: byPosition.Count > 0,
+                    GrantingPositions: byPosition);
             })
             .ToList();
 

@@ -174,7 +174,7 @@ public sealed class DefaultDataSeeder(
         }
     }
 
-    private static Guid CreateStableGuid(string value)
+    internal static Guid CreateStableGuid(string value)
     {
         var bytes = System.Security.Cryptography.MD5.HashData(System.Text.Encoding.UTF8.GetBytes(value));
         return new Guid(bytes);

@@ -23,6 +23,8 @@ public sealed class OrgStructureDbContext(DbContextOptions<OrgStructureDbContext
     public DbSet<PostActing> PostActings => Set<PostActing>();
     public DbSet<UnitPosition> UnitPositions => Set<UnitPosition>();
     public DbSet<UserPosition> UserPositions => Set<UserPosition>();
+    public DbSet<PositionPermission> PositionPermissions => Set<PositionPermission>();
+    public DbSet<UnitPositionPermission> UnitPositionPermissions => Set<UnitPositionPermission>();
     public DbSet<Honorific> Honorifics => Set<Honorific>();
     public DbSet<UserHonorific> UserHonorifics => Set<UserHonorific>();
     public DbSet<NodeType> NodeTypes => Set<NodeType>();

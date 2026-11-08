@@ -8,8 +8,28 @@ namespace NexusCore.Infrastructure.Persistence.Repositories;
 
 public sealed class IdentityRepository(
     NexusCoreDbContext dbContext,
-    IUserGroupPermissionProvider groupPermissions) : IIdentityRepository
+    IUserGroupPermissionProvider groupPermissions,
+    IPositionPermissionProvider positionPermissions,
+    Microsoft.AspNetCore.Http.IHttpContextAccessor? httpContextAccessor = null) : IIdentityRepository
 {
+    /// <summary>The posts a person chose to work as (X-Active-Posts: ids with commas), for their own requests only.</summary>
+    public const string ActivePostsHeader = "X-Active-Posts";
+
+    private IReadOnlyCollection<Guid>? ActivePostsOf(Guid userId)
+    {
+        var http = httpContextAccessor?.HttpContext;
+        var subject = http?.User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub)?.Value
+            ?? http?.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (http is null || !Guid.TryParse(subject, out var me) || me != userId || !http.Request.Headers.TryGetValue(ActivePostsHeader, out var raw))
+        {
+            return null;
+        }
+
+        var ids = raw.ToString().Split(',', 50, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(part => Guid.TryParse(part, out var id) ? id : (Guid?)null).Where(id => id is not null).Select(id => id!.Value).Distinct().ToList();
+        return ids.Count == 0 ? null : ids;
+    }
+
     public Task<User?> GetUserByIdAsync(Guid userId, CancellationToken cancellationToken) =>
         IncludeUserGraph(dbContext.Users).SingleOrDefaultAsync(user => user.Id == userId, cancellationToken);
 
@@ -279,12 +299,14 @@ public sealed class IdentityRepository(
         var direct = set.Where(entry => !entry.IsDenied).Select(entry => entry.Name);
         var denied = set.Where(entry => entry.IsDenied).Select(entry => entry.Name).ToHashSet(StringComparer.Ordinal);
         var fromGroups = await groupPermissions.GetPermissionNamesAsync(userId, cancellationToken);
+        // Posts held (and posts stood in for): one more source, unioned like roles and groups.
+        var fromPositions = await positionPermissions.GetPermissionNamesAsync(userId, ActivePostsOf(userId), cancellationToken);
 
         // Plus what those permissions need to be usable (e.g. users.create needs users.view) -
         // minus what was explicitly denied to this user, which wins over every source, implied
         // prerequisites included. This is the one place effective permissions are computed: the
         // token claims (refreshed on every request), /me and the escalation checks all use it.
-        return PermissionPrerequisites.Expand(fromRoles.Concat(direct).Concat(fromGroups))
+        return PermissionPrerequisites.Expand(fromRoles.Concat(direct).Concat(fromGroups).Concat(fromPositions))
             .Where(permission => !denied.Contains(permission))
             .ToList();
     }

@@ -25,7 +25,9 @@ public sealed record UserPermissionEntryDto(
     IReadOnlyList<string> GrantingGroups,
     bool DeniedForUser = false,
     bool Effective = false,
-    bool GrantedAsPrerequisite = false);
+    bool GrantedAsPrerequisite = false,
+    bool GrantedByPosition = false,
+    IReadOnlyList<string>? GrantingPositions = null);
 
 public sealed record UserPermissionsDto(
     Guid UserId,

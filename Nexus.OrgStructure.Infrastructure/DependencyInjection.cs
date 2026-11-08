@@ -23,7 +23,11 @@ public static class DependencyInjection
                     provider.GetRequiredService<DomainEventDispatchInterceptor>()));
 
         services.AddScoped<IOrgStructureUnitOfWork>(provider => provider.GetRequiredService<OrgStructureDbContext>());
-        services.AddScoped<IOrgStructureRepository, OrgStructureRepository>();
+        services.AddScoped<OrgStructureRepository>();
+        services.AddScoped<IOrgStructureRepository>(provider => provider.GetRequiredService<OrgStructureRepository>());
+        services.AddScoped<IPositionPermissionRepository>(provider => provider.GetRequiredService<OrgStructureRepository>());
+        // The permissions posts give to their holders join the user's own (replaces the Core's null default).
+        services.AddScoped<NexusCore.Application.Identity.Interfaces.IPositionPermissionProvider, PositionPermissionProvider>();
         // One structure change at a time per organization (on SQL Server across every server).
         services.AddScoped<IOrgStructureWriteLock, SqlOrgStructureWriteLock>();
         services.AddHostedService<TaskPostsStartup>();

@@ -9,6 +9,9 @@ public static class OrgStructurePermissions
     public const string ManagePositions = "org_structure.manage_positions";
     public const string ManageAssignments = "org_structure.manage_assignments";
 
+    /// <summary>Choosing the permissions each position (and each post) gives to its holders.</summary>
+    public const string ManagePositionPermissions = "org_structure.manage_position_permissions";
+
     /// <summary>
     /// The builder of a work team may add people of other deputies too (without it, only their own
     /// deputy's). Not one of <see cref="All"/>: it gives no access to the structure itself.
@@ -94,6 +97,7 @@ public static class OrgStructurePermissions
         new(ManageCompanies, "Organization", "مدیریت شرکت‌ها و تعیین معاونت‌های هر شرکت"),
         new(ManagePositions, "Organization", "مدیریت سمت‌های سازمانی"),
         new(ManageAssignments, "Organization", "تعیین شرکت، معاونت، سمت و مدیر کاربران"),
+        new(ManagePositionPermissions, "Organization", "تعیین دسترسی‌های هر سمت و هر پست"),
         new(NodeView, "Organization", "مشاهده گره‌های ساختار سازمانی"),
         new(NodeCreate, "Organization", "ایجاد گره در ساختار سازمانی"),
         new(NodeUpdate, "Organization", "ویرایش نام و جزء چارتِ گره‌های ساختار سازمانی"),

@@ -182,3 +182,25 @@ public sealed class UserHonorificConfiguration : IEntityTypeConfiguration<UserHo
         builder.HasIndex(x => x.HonorificId);
     }
 }
+
+public sealed class PositionPermissionConfiguration : IEntityTypeConfiguration<PositionPermission>
+{
+    public void Configure(EntityTypeBuilder<PositionPermission> builder)
+    {
+        builder.ToTable("PositionPermissions", OrgStructureSchema.Name);
+        builder.HasKey(x => new { x.CompanyId, x.PositionId, x.PermissionName });
+        builder.Property(x => x.PermissionName).HasMaxLength(200).IsRequired();
+        builder.HasIndex(x => x.TenantId);
+    }
+}
+
+public sealed class UnitPositionPermissionConfiguration : IEntityTypeConfiguration<UnitPositionPermission>
+{
+    public void Configure(EntityTypeBuilder<UnitPositionPermission> builder)
+    {
+        builder.ToTable("UnitPositionPermissions", OrgStructureSchema.Name);
+        builder.HasKey(x => new { x.UnitPositionId, x.PermissionName });
+        builder.Property(x => x.PermissionName).HasMaxLength(200).IsRequired();
+        builder.HasIndex(x => x.TenantId);
+    }
+}

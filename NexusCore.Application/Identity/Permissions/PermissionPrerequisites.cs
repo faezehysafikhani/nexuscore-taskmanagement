@@ -57,6 +57,7 @@ public static class PermissionPrerequisites
         // and needs user visibility/management because company/assignment operations involve users.
         ["org_structure.manage_companies"] = new[] { "org_structure.view", IdentityPermissions.UsersView, IdentityPermissions.UsersUpdate },
         ["org_structure.manage_positions"] = new[] { "org_structure.view", IdentityPermissions.UsersView, IdentityPermissions.UsersUpdate },
+        ["org_structure.manage_position_permissions"] = new[] { "org_structure.view", IdentityPermissions.PermissionsView },
         ["org_structure.manage_assignments"] = new[] { "org_structure.view", IdentityPermissions.UsersView, IdentityPermissions.UsersUpdate },
 
         // Org structure scope switches only widen what the view permission already shows.
