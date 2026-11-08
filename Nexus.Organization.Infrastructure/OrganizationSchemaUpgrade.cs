@@ -14,6 +14,71 @@ public static class OrganizationSchemaUpgrade
     internal static readonly string[] Statements =
     [
         """
+        IF COL_LENGTH(N'organization.OrganizationUnits', N'NodeTypeId') IS NULL
+            ALTER TABLE [organization].[OrganizationUnits] ADD [NodeTypeId] uniqueidentifier NULL;
+        """,
+
+        """
+        IF COL_LENGTH(N'organization.OrganizationUnits', N'ParentUnitId') IS NULL
+            ALTER TABLE [organization].[OrganizationUnits] ADD [ParentUnitId] uniqueidentifier NULL;
+        """,
+
+        """
+        IF COL_LENGTH(N'organization.OrganizationUnits', N'ValidFrom') IS NULL
+            ALTER TABLE [organization].[OrganizationUnits] ADD [ValidFrom] datetimeoffset NULL;
+        """,
+
+        """
+        IF COL_LENGTH(N'organization.OrganizationUnits', N'ValidTo') IS NULL
+            ALTER TABLE [organization].[OrganizationUnits] ADD [ValidTo] datetimeoffset NULL;
+        """,
+
+        """
+        IF COL_LENGTH(N'organization.OrganizationUnits', N'SortOrder') IS NULL
+            ALTER TABLE [organization].[OrganizationUnits] ADD [SortOrder] int NOT NULL CONSTRAINT [DF_OrganizationUnits_SortOrder] DEFAULT 0;
+        """,
+
+        """
+        IF COL_LENGTH(N'organization.OrganizationUnits', N'Address') IS NULL
+            ALTER TABLE [organization].[OrganizationUnits] ADD [Address] nvarchar(500) NULL;
+        """,
+
+        """
+        IF COL_LENGTH(N'organization.OrganizationUnits', N'CorrespondenceTitle') IS NULL
+            ALTER TABLE [organization].[OrganizationUnits] ADD [CorrespondenceTitle] nvarchar(200) NULL;
+        """,
+
+        """
+        IF COL_LENGTH(N'organization.OrganizationUnits', N'LatinName') IS NULL
+            ALTER TABLE [organization].[OrganizationUnits] ADD [LatinName] nvarchar(200) NULL;
+        """,
+
+        """
+        IF COL_LENGTH(N'organization.OrganizationUnits', N'NodeCode') IS NULL
+            ALTER TABLE [organization].[OrganizationUnits] ADD [NodeCode] nvarchar(40) NULL;
+        """,
+
+        """
+        IF COL_LENGTH(N'organization.OrganizationUnits', N'Phone') IS NULL
+            ALTER TABLE [organization].[OrganizationUnits] ADD [Phone] nvarchar(40) NULL;
+        """,
+
+        """
+        IF COL_LENGTH(N'organization.OrganizationUnits', N'RowVersion') IS NULL
+            ALTER TABLE [organization].[OrganizationUnits] ADD [RowVersion] rowversion;
+        """,
+
+        """
+        IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_OrganizationUnits_NodeTypeId' AND object_id = OBJECT_ID(N'[organization].[OrganizationUnits]'))
+            CREATE INDEX [IX_OrganizationUnits_NodeTypeId] ON [organization].[OrganizationUnits] ([NodeTypeId]);
+        """,
+
+        """
+        IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_OrganizationUnits_ParentUnitId' AND object_id = OBJECT_ID(N'[organization].[OrganizationUnits]'))
+            CREATE INDEX [IX_OrganizationUnits_ParentUnitId] ON [organization].[OrganizationUnits] ([ParentUnitId]);
+        """,
+
+        """
         IF OBJECT_ID(N'[organization].[OrganizationUnitMembers]', N'U') IS NULL
             CREATE TABLE [organization].[OrganizationUnitMembers] (
                 [Id] uniqueidentifier NOT NULL,

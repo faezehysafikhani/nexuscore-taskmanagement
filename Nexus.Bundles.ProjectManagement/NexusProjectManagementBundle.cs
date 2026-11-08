@@ -209,5 +209,23 @@ public static class NexusProjectManagementBundle
         await ModuleSchemaInitializer.EnsureCreatedAsync(sp.GetRequiredService<ItemDelegationDbContext>(), cancellationToken);
 
         await ModuleSchemaInitializer.EnsureCreatedAsync(sp.GetRequiredService<StrategyAlignmentDbContext>(), cancellationToken);
+
+        // EnsureCreated never adds a column or table to a schema that already exists: bring an older database up to date.
+        await ActionsSchemaUpgrade.EnsureCurrentAsync(sp.GetRequiredService<ActionsDbContext>(), cancellationToken);
+        await ActionsPlanningSchemaUpgrade.EnsureCurrentAsync(sp.GetRequiredService<ActionsDbContext>(), cancellationToken);
+        await StrategySchemaUpgrade.EnsureCurrentAsync(sp.GetRequiredService<StrategyManagementDbContext>(), cancellationToken);
+        await WaterfallSchemaUpgrade.EnsureCurrentAsync(sp.GetRequiredService<WaterfallDbContext>(), cancellationToken);
+        await WaterfallPlanningSchemaUpgrade.EnsureCurrentAsync(sp.GetRequiredService<WaterfallDbContext>(), cancellationToken);
+        await AgileSchemaUpgrade.EnsureCurrentAsync(sp.GetRequiredService<AgileDbContext>(), cancellationToken);
+        await AgileTaskStatusSchemaUpgrade.EnsureCurrentAsync(sp.GetRequiredService<AgileDbContext>(), cancellationToken);
+        await RiskSchemaUpgrade.EnsureCurrentAsync(sp.GetRequiredService<RiskManagementDbContext>(), cancellationToken);
+        await RiskResponseSchemaUpgrade.EnsureCurrentAsync(sp.GetRequiredService<RiskManagementDbContext>(), cancellationToken);
+        await StakeholderSchemaUpgrade.EnsureCurrentAsync(sp.GetRequiredService<StakeholderManagementDbContext>(), cancellationToken);
+        await ProgressSchemaUpgrade.EnsureCurrentAsync(sp.GetRequiredService<ProgressDbContext>(), cancellationToken);
+        await DocumentsSchemaUpgrade.EnsureCurrentAsync(sp.GetRequiredService<ProjectDocumentsDbContext>(), cancellationToken);
+        await ContractsSchemaUpgrade.EnsureCurrentAsync(sp.GetRequiredService<ContractsDbContext>(), cancellationToken);
+        await ContractsPartiesSchemaUpgrade.EnsureCurrentAsync(sp.GetRequiredService<ContractsDbContext>(), cancellationToken);
+        await ProjectHistorySchemaUpgrade.EnsureCurrentAsync(sp.GetRequiredService<ProjectHistoryDbContext>(), cancellationToken);
+        await ItemDelegationSchemaUpgrade.EnsureCurrentAsync(sp.GetRequiredService<ItemDelegationDbContext>(), cancellationToken);
     }
 }

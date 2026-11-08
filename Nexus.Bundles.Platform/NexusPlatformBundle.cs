@@ -311,6 +311,12 @@ public static class NexusPlatformBundle
                 // Personal events (the management calendar). No host created its schema before: it came from a script.
                 await ModuleSchemaInitializer.EnsureCreatedAsync(sp.GetRequiredService<EventsDbContext>(), cancellationToken);
             }
+
+            // EnsureCreated never adds a column or table to a schema that already exists: bring an older database up to date.
+            await OrganizationSchemaUpgrade.EnsureCurrentAsync(sp.GetRequiredService<OrganizationDbContext>(), cancellationToken);
+            await CalendarSchemaUpgrade.EnsureCurrentAsync(sp.GetRequiredService<CalendarDbContext>(), cancellationToken);
+            await WorkflowSchemaUpgrade.EnsureCurrentAsync(sp.GetRequiredService<WorkflowDbContext>(), cancellationToken);
+            await WorkflowApproverPlaceholdersSchemaUpgrade.EnsureCurrentAsync(sp.GetRequiredService<WorkflowDbContext>(), cancellationToken);
         }
 
         if (options.OrgStructure)
