@@ -13,6 +13,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
 using Nexus.Calendar;
@@ -22,6 +23,11 @@ using Nexus.Calendar.IranianHolidays;
 using Nexus.Organization;
 using Nexus.Organization.Endpoints;
 using Nexus.Organization.Infrastructure;
+using Nexus.OrgStructure;
+using Nexus.OrgStructure.Application;
+using Nexus.OrgStructure.Domain;
+using Nexus.OrgStructure.Endpoints;
+using Nexus.OrgStructure.Infrastructure;
 using Nexus.Workflow;
 using Nexus.Workflow.Endpoints;
 using Nexus.Workflow.Infrastructure;
@@ -58,6 +64,12 @@ public sealed class NexusPlatformOptions
     /// <summary>Registers Iran's official holidays for the calendar.</summary>
     public bool IranianHolidays { get; set; } = true;
 
+    /// <summary>
+    /// The organization structure (nested units, node types, companies, positions). The units screen of the UI creates a
+    /// unit placed under another one through it (<c>/api/org-structure/nodes</c>), so a product with that screen needs it.
+    /// </summary>
+    public bool OrgStructure { get; set; } = true;
+
     /// <summary>Chat, ticketing, events and notifications (with their SignalR hubs). Turn off for a host that only needs identity and organization.</summary>
     public bool Collaboration { get; set; } = true;
 }
@@ -84,6 +96,10 @@ public static class NexusPlatformBundle
         // Application tier
         services.AddApplication();
         services.AddOrganizationApplication();
+        if (options.OrgStructure)
+        {
+            services.AddOrgStructure();
+        }
         services.AddCalendarApplication(o => o.SingleDefaultPerTenant = options.CalendarSingleDefaultPerTenant);
         if (options.IranianHolidays)
         {
@@ -101,6 +117,10 @@ public static class NexusPlatformBundle
         // Infrastructure tier: one DbContext per module, same database, isolated by schema.
         services.AddInfrastructure(configuration);
         services.AddOrganizationInfrastructure(configuration);
+        if (options.OrgStructure)
+        {
+            services.AddOrgStructureInfrastructure(configuration);
+        }
         services.AddCalendarInfrastructure(configuration);
         services.AddWorkflowInfrastructure(configuration);
         if (options.Collaboration)
@@ -238,6 +258,10 @@ public static class NexusPlatformBundle
         }
 
         app.MapOrganizationEndpoints();
+        if (options.OrgStructure)
+        {
+            app.MapOrgStructureEndpoints();
+        }
         app.MapCalendarEndpoints();
         app.MapWorkflowEndpoints();
 
@@ -273,6 +297,11 @@ public static class NexusPlatformBundle
 
             await sp.GetRequiredService<DefaultDataSeeder>().SeedAsync(cancellationToken);
             await ModuleSchemaInitializer.EnsureCreatedAsync(sp.GetRequiredService<OrganizationDbContext>(), cancellationToken);
+            if (options.OrgStructure)
+            {
+                await ModuleSchemaInitializer.EnsureCreatedAsync(sp.GetRequiredService<OrgStructureDbContext>(), cancellationToken);
+                await EnsureDefaultUnitTypeAsync(sp, cancellationToken);
+            }
             await ModuleSchemaInitializer.EnsureCreatedAsync(sp.GetRequiredService<CalendarDbContext>(), cancellationToken);
             await ModuleSchemaInitializer.EnsureCreatedAsync(sp.GetRequiredService<WorkflowDbContext>(), cancellationToken);
             if (options.Collaboration)
@@ -294,6 +323,35 @@ public static class NexusPlatformBundle
                 "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Conversations_TeamId' AND object_id = OBJECT_ID(N'dbo.Conversations')) " +
                 "CREATE UNIQUE INDEX IX_Conversations_TeamId ON dbo.Conversations(TeamId) WHERE TeamId IS NOT NULL;",
                 cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// A schema made by EnsureCreated has no node types (only the upgrade scripts add them), and with no rule for
+    /// «what may sit under what» the structure is flat: every unit placed under another is refused. So each organization
+    /// gets the plain «unit» type and the rules "a unit may be at the top" and "a unit may sit under a unit", only when
+    /// it has no types and no rules of its own. An organization that already shaped its structure is left alone.
+    /// </summary>
+    private static async Task EnsureDefaultUnitTypeAsync(IServiceProvider sp, CancellationToken cancellationToken)
+    {
+        var repository = sp.GetRequiredService<IOrgStructureRepository>();
+        var unitOfWork = sp.GetRequiredService<IOrgStructureUnitOfWork>();
+        var tenantIds = await sp.GetRequiredService<NexusCoreDbContext>().Tenants
+            .AsNoTracking().Select(tenant => tenant.Id).ToListAsync(cancellationToken);
+
+        foreach (var tenantId in tenantIds)
+        {
+            if ((await repository.ListNodeTypesAsync(tenantId, cancellationToken)).Count > 0
+                || (await repository.ListNodeTypeRulesAsync(tenantId, cancellationToken)).Count > 0)
+            {
+                continue;
+            }
+
+            var unit = new NodeType(Guid.NewGuid(), tenantId, OrgNodeService.PlainUnitCode, "واحد", isDomainBoundary: false, sortOrder: 0);
+            await repository.AddNodeTypeAsync(unit, cancellationToken);
+            await repository.AddNodeTypeRuleAsync(new NodeTypeRule(Guid.NewGuid(), tenantId, null, unit.Id), cancellationToken);
+            await repository.AddNodeTypeRuleAsync(new NodeTypeRule(Guid.NewGuid(), tenantId, unit.Id, unit.Id), cancellationToken);
+            await unitOfWork.SaveChangesAsync(cancellationToken);
         }
     }
 }
