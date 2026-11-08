@@ -374,3 +374,6 @@ FodyWeavers.xsd
 
 # Database upgrade scripts are deliverables, not build output.
 !docs/upgrade/*.sql
+
+# graphify knowledge graph (rebuilt per branch)
+graphify-out/

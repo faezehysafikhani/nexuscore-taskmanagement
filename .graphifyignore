@@ -1,0 +1,11 @@
+# Not worth indexing: generated, huge, or no logic
+**/Migrations/**
+**/*.Designer.cs
+**/bin/**
+**/obj/**
+dist/
+dist-org-sandbox/
+node_modules/
+public/
+*.min.js
+package-lock.json
