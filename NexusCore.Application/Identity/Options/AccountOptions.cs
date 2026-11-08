@@ -12,6 +12,13 @@ public sealed class IdentitySeedOptions
     public List<SeedRoleOptions> SeedRoles { get; set; } = [];
 
     /// <summary>
+    /// Identity:DefaultRoleName - the role every new user starts with. Empty: the built-in «کاربر عادی». A product whose
+    /// users need more than that to work at all (project management: a user without a project role sees nothing) names
+    /// its own role here; if the organization has no role of that name the built-in one is used.
+    /// </summary>
+    public string? DefaultRoleName { get; set; }
+
+    /// <summary>
     /// Identity:AdminUsername - the sign-in name of the built-in administrator account the seeder
     /// creates. Users sign in with a username or mobile number only, so that account needs one.
     /// </summary>
