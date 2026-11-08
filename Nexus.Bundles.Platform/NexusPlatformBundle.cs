@@ -313,6 +313,13 @@ public static class NexusPlatformBundle
             }
         }
 
+        if (options.OrgStructure)
+        {
+            // Additive tables a later Core release added: without them every sign-in fails, so this runs with seeding off too.
+            using var upgradeScope = app.Services.CreateScope();
+            await OrgStructureSchemaUpgrade.EnsureCurrentAsync(upgradeScope.ServiceProvider.GetRequiredService<OrgStructureDbContext>(), cancellationToken);
+        }
+
         if (options.Collaboration)
         {
             using var chatScope = app.Services.CreateScope();
