@@ -7,6 +7,7 @@ using Chat.Infrastructure.Persistence;
 using Events.Api.Endpoints;
 using Events.Application;
 using Events.Infrastructure;
+using Events.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
@@ -307,6 +308,8 @@ public static class NexusPlatformBundle
             if (options.Collaboration)
             {
                 await ModuleSchemaInitializer.EnsureCreatedAsync(sp.GetRequiredService<NotificationDbContext>(), cancellationToken);
+                // Personal events (the management calendar). No host created its schema before: it came from a script.
+                await ModuleSchemaInitializer.EnsureCreatedAsync(sp.GetRequiredService<EventsDbContext>(), cancellationToken);
             }
         }
 
