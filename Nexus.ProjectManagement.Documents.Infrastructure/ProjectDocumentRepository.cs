@@ -12,6 +12,12 @@ public sealed class ProjectDocumentRepository(ProjectDocumentsDbContext dbContex
     public Task<ProjectDocument?> GetByIdAsync(Guid tenantId, Guid id, CancellationToken cancellationToken) =>
         dbContext.ProjectDocuments.SingleOrDefaultAsync(document => document.Id == id && document.TenantId == tenantId, cancellationToken);
 
+    public async Task<IReadOnlyList<ProjectDocument>> ListByProjectsAsync(Guid tenantId, IReadOnlyCollection<Guid> projectIds, CancellationToken cancellationToken) =>
+        await dbContext.ProjectDocuments
+            .Where(document => document.TenantId == tenantId && projectIds.Contains(document.ProjectId))
+            .OrderByDescending(document => document.RegisterDate)
+            .ToListAsync(cancellationToken);
+
     public async Task<IReadOnlyList<ProjectDocument>> ListByProjectAsync(Guid tenantId, Guid projectId, CancellationToken cancellationToken) =>
         await dbContext.ProjectDocuments
             .Where(document => document.TenantId == tenantId && document.ProjectId == projectId)
@@ -26,6 +32,23 @@ public sealed class ProjectDocumentRepository(ProjectDocumentsDbContext dbContex
     public Task RemoveAsync(ProjectDocument document, CancellationToken cancellationToken)
     {
         dbContext.ProjectDocuments.Remove(document);
+        return Task.CompletedTask;
+    }
+
+    public async Task<IReadOnlyList<ProjectDocumentVersion>> ListVersionsAsync(Guid documentId, CancellationToken cancellationToken) =>
+        await dbContext.ProjectDocumentVersions
+            .Where(version => version.DocumentId == documentId)
+            .OrderBy(version => version.VersionNumber)
+            .ToListAsync(cancellationToken);
+
+    public async Task AddVersionAsync(ProjectDocumentVersion version, CancellationToken cancellationToken)
+    {
+        await dbContext.ProjectDocumentVersions.AddAsync(version, cancellationToken);
+    }
+
+    public Task RemoveVersionsAsync(IReadOnlyCollection<ProjectDocumentVersion> versions, CancellationToken cancellationToken)
+    {
+        dbContext.ProjectDocumentVersions.RemoveRange(versions);
         return Task.CompletedTask;
     }
 }

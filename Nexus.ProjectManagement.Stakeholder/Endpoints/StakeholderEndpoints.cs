@@ -18,6 +18,26 @@ public static class StakeholderEndpoints
                 (await service.ListByProjectAsync(projectId, cancellationToken)).ToApiResult())
             .RequireAuthorization(StakeholderPermissions.View);
 
+        group.MapPost("/for-projects", async (ListStakeholdersForProjectsRequest request, IStakeholderService service, CancellationToken cancellationToken) =>
+                (await service.ListForProjectsAsync(request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(StakeholderPermissions.View);
+
+        group.MapGet("/settings", async (Guid projectId, IStakeholderService service, CancellationToken cancellationToken) =>
+                (await service.GetSettingsAsync(projectId, cancellationToken)).ToApiResult())
+            .RequireAuthorization(StakeholderPermissions.View);
+
+        group.MapPost("/settings/for-projects", async (StakeholderSettingsForProjectsRequest request, IStakeholderService service, CancellationToken cancellationToken) =>
+                (await service.GetSettingsForProjectsAsync(request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(StakeholderPermissions.View);
+
+        group.MapPut("/settings", async (SaveStakeholderSettingsRequest request, IStakeholderService service, CancellationToken cancellationToken) =>
+                (await service.SaveSettingsAsync(request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(StakeholderPermissions.Edit);
+
+        group.MapGet("/matrix", async (Guid projectId, IStakeholderService service, CancellationToken cancellationToken) =>
+                (await service.GetMatrixAsync(projectId, cancellationToken)).ToApiResult())
+            .RequireAuthorization(StakeholderPermissions.View);
+
         group.MapGet("/{id:guid}", async (Guid id, IStakeholderService service, CancellationToken cancellationToken) =>
                 (await service.GetAsync(id, cancellationToken)).ToApiResult())
             .RequireAuthorization(StakeholderPermissions.View);
@@ -29,6 +49,10 @@ public static class StakeholderEndpoints
         group.MapPut("/{id:guid}", async (Guid id, UpdateStakeholderRequest request, IStakeholderService service, CancellationToken cancellationToken) =>
                 (await service.UpdateAsync(id, request, cancellationToken)).ToApiResult())
             .RequireAuthorization(StakeholderPermissions.Edit);
+
+        group.MapDelete("/{id:guid}", async (Guid id, IStakeholderService service, CancellationToken cancellationToken) =>
+                (await service.DeleteAsync(id, cancellationToken)).ToApiResult())
+            .RequireAuthorization(StakeholderPermissions.Delete);
 
         group.MapPost("/{id:guid}/submit-for-approval", async (Guid id, IStakeholderService service, CancellationToken cancellationToken) =>
                 (await service.SubmitForApprovalAsync(id, cancellationToken)).ToApiResult())

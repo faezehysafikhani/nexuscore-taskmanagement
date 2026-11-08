@@ -18,6 +18,7 @@ public static class DependencyInjection
 
         services.AddScoped<IProgressUnitOfWork>(provider => provider.GetRequiredService<ProgressDbContext>());
         services.AddScoped<IProgressRepository, ProgressRepository>();
+        services.AddScoped<IDelayReasonRepository, DelayReasonRepository>();
 
         return services;
     }

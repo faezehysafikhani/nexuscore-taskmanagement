@@ -1,8 +1,11 @@
+using Nexus.ProjectManagement.Core.Application;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Nexus.ProjectManagement.Waterfall.Application;
 using Nexus.ProjectManagement.Waterfall.Application.Dtos;
 using Nexus.ProjectManagement.Waterfall.Application.EventHandlers;
+using Nexus.ProjectManagement.Waterfall.Application.Scheduling;
 using Nexus.ProjectManagement.Waterfall.Application.Validators;
 using Nexus.ProjectManagement.Waterfall.Permissions;
 using NexusCore.Application.Approvals;
@@ -15,16 +18,40 @@ public static class DependencyInjection
 {
     /// <summary>Requires AddProjectManagementCore() to already be registered. Optional:
     /// AddWorkflowApplication() (works standalone without it) and any IWbsGenerator.</summary>
-    public static IServiceCollection AddWaterfallPlanning(this IServiceCollection services)
+    public static IServiceCollection AddWaterfallPlanning(this IServiceCollection services, Action<WaterfallOptions>? configure = null)
     {
-        services.AddScoped<IActivityService, ActivityService>();
+        var options = new WaterfallOptions();
+        configure?.Invoke(options);
+        services.AddSingleton(options);
+        
+        services.AddScoped<IProjectDeletionParticipant, WaterfallProjectDeletionParticipant>();services.AddScoped<IActivityService, ActivityService>();
+        services.AddScoped<IActivityDependencyService, ActivityDependencyService>();
+        services.AddScoped<IScheduleService, ScheduleService>();
+        services.AddScoped<IWaterfallSettingsService, WaterfallSettingsService>();
+        services.AddScoped<Nexus.ProjectManagement.Core.Application.IProjectSubmissionCheck, ScheduleWeightsSubmissionCheck>();
+        services.AddScoped<Nexus.ProjectManagement.Core.Application.IProjectProgressSource, WaterfallProjectProgressSource>();
+        services.AddScoped<IActivityProgressSubmissionService, ActivityProgressSubmissionService>();
+        services.AddScoped<IScheduleBaselineService, ScheduleBaselineService>();
+        services.AddScoped<IProgressCurveService, ProgressCurveService>();
+        services.AddScoped<IMsProjectService, MsProjectService>();
+
+        // Defaults that an installed integration replaces: no calendars known (every day is a
+        // working day), and the system clock.
+        services.TryAddScoped<IWorkingDayCalendarProvider, NullWorkingDayCalendarProvider>();
+        services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<IValidator<CreateActivityRequest>, CreateActivityRequestValidator>();
         services.AddScoped<IValidator<UpdateActivityRequest>, UpdateActivityRequestValidator>();
         services.AddScoped<IValidator<UpdateActivityProgressRequest>, UpdateActivityProgressRequestValidator>();
+        services.AddScoped<IValidator<CreateActivityDependencyRequest>, CreateActivityDependencyRequestValidator>();
+        services.AddScoped<IValidator<UpdateActivityDependencyRequest>, UpdateActivityDependencyRequestValidator>();
+        services.AddScoped<IValidator<CreateScheduleBaselineRequest>, CreateScheduleBaselineRequestValidator>();
+        services.AddScoped<IValidator<CreateProgressSnapshotRequest>, CreateProgressSnapshotRequestValidator>();
         services.AddSingleton<IPermissionCatalog, WaterfallPermissionCatalog>();
 
         services.AddScoped<IDomainEventHandler<ApprovalGranted>, ActivityApprovalGrantedHandler>();
         services.AddScoped<IDomainEventHandler<ApprovalRejected>, ActivityApprovalRejectedHandler>();
+        services.AddScoped<IDomainEventHandler<ApprovalGranted>, ActivityProgressApprovalGrantedHandler>();
+        services.AddScoped<IDomainEventHandler<ApprovalRejected>, ActivityProgressApprovalRejectedHandler>();
 
         services.AddAuthorization(options =>
         {

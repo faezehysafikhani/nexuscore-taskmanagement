@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+	  <OutputType>Library</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Deliberately no reference to Waterfall, Agile or Actions: it only remembers who handed which item
+         (of a kind, by id) to whom. Whoever shows the item is the one that changes its assignee. -->
+    <ProjectReference Include="..\NexusCore.Application\NexusCore.Application.csproj" />
+    <ProjectReference Include="..\NexusCore.SharedKernel\NexusCore.SharedKernel.csproj" />
+  </ItemGroup>
+
+</Project>

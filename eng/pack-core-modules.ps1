@@ -441,9 +441,82 @@ $integrationProjects = @(
 
     "Nexus.Integrations.TaskReporting/Nexus.Integrations.TaskReporting.csproj",
 
+    "Nexus.Integrations.ProjectCalendar/Nexus.Integrations.ProjectCalendar.csproj",
+
+    "Nexus.Integrations.ProjectVisibility/Nexus.Integrations.ProjectVisibility.csproj",
+
+    "Nexus.Integrations.ProjectDeletion/Nexus.Integrations.ProjectDeletion.csproj",
+
+    "Nexus.Integrations.ProjectGovernance/Nexus.Integrations.ProjectGovernance.csproj",
+
     "Nexus.Integrations.CalendarTasks/Nexus.Integrations.CalendarTasks.csproj",
 
     "Nexus.Integrations.CalendarOrgStructure/Nexus.Integrations.CalendarOrgStructure.csproj"
+
+)
+
+
+# ============================================================
+# Project Management: contracts, history, delegation
+# (independent capabilities; each is opt-in in the host)
+# ============================================================
+
+$contractsProjects = @(
+
+    "Nexus.ProjectManagement.Contracts/Nexus.ProjectManagement.Contracts.csproj",
+
+    "Nexus.ProjectManagement.Contracts.Infrastructure/Nexus.ProjectManagement.Contracts.Infrastructure.csproj"
+
+)
+
+$historyProjects = @(
+
+    "Nexus.ProjectManagement.History/Nexus.ProjectManagement.History.csproj",
+
+    "Nexus.ProjectManagement.History.Infrastructure/Nexus.ProjectManagement.History.Infrastructure.csproj"
+
+)
+
+$delegationProjects = @(
+
+    "Nexus.ProjectManagement.Delegation/Nexus.ProjectManagement.Delegation.csproj",
+
+    "Nexus.ProjectManagement.Delegation.Infrastructure/Nexus.ProjectManagement.Delegation.Infrastructure.csproj"
+
+)
+
+
+# ============================================================
+# Reporting analytics (opt-in, reads the other modules)
+# ============================================================
+
+$reportingAnalyticsProjects = @(
+
+    "Nexus.Reporting.Analytics/Nexus.Reporting.Analytics.csproj"
+
+)
+
+
+# ============================================================
+# Iranian public holidays for Calendar (optional add-on)
+# ============================================================
+
+$calendarHolidayProjects = @(
+
+    "Nexus.Calendar.IranianHolidays/Nexus.Calendar.IranianHolidays.csproj"
+
+)
+
+
+# ============================================================
+# 26. Bundles (one package per product shape; they only compose the packages above)
+# ============================================================
+
+$bundleProjects = @(
+
+    "Nexus.Bundles.Platform/Nexus.Bundles.Platform.csproj",
+
+    "Nexus.Bundles.ProjectManagement/Nexus.Bundles.ProjectManagement.csproj"
 
 )
 
@@ -504,7 +577,13 @@ $projects = @(
 
     $teamProjects
 
+    $contractsProjects
+    $historyProjects
+    $delegationProjects
+    $reportingAnalyticsProjects
+    $calendarHolidayProjects
     $integrationProjects
+    $bundleProjects
 
 ) | ForEach-Object { $_ } | Select-Object -Unique
 

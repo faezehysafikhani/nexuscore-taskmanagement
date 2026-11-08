@@ -38,7 +38,7 @@ public sealed class ArchitectureDependencyTests
             "Nexus.ProjectManagement.Team", "Nexus.ProjectManagement.Deliverables",
             "Nexus.ProjectManagement.Kpi", "Nexus.ProjectManagement.Risk",
             "Nexus.ProjectManagement.Stakeholder", "Nexus.ProjectManagement.Progress",
-            "Nexus.ProjectManagement.Documents", "Nexus.Workflow"
+            "Nexus.ProjectManagement.Documents", "Nexus.ProjectManagement.Contracts", "Nexus.Workflow"
         };
 
         foreach (var project in new[]
@@ -103,6 +103,38 @@ public sealed class ArchitectureDependencyTests
     }
 
     [Fact]
+    public void ProjectHistory_ListensThroughNexusCoreOnly_ReferencesNoModule()
+    {
+        foreach (var project in new[]
+                 {
+                     "Nexus.ProjectManagement.History/Nexus.ProjectManagement.History.csproj",
+                     "Nexus.ProjectManagement.History.Infrastructure/Nexus.ProjectManagement.History.Infrastructure.csproj"
+                 })
+        {
+            var references = GetProjectReferences(project);
+            Assert.DoesNotContain(references, r => r.StartsWith("Nexus.", StringComparison.Ordinal) && !r.StartsWith("Nexus.ProjectManagement.History", StringComparison.Ordinal));
+        }
+    }
+
+    [Fact]
+    public void ReportingReadsTheModules_NoModuleReferencesReporting()
+    {
+        foreach (var project in new[]
+                 {
+                     "Nexus.ProjectManagement.Contracts/Nexus.ProjectManagement.Contracts.csproj",
+                     "Nexus.ProjectManagement.Progress/Nexus.ProjectManagement.Progress.csproj",
+                     "Nexus.ProjectManagement.Core/Nexus.ProjectManagement.Core.csproj",
+                     "Nexus.Organization/Nexus.Organization.csproj",
+                     "Nexus.Strategy/Nexus.Strategy.csproj",
+                     "Nexus.Integrations.ProjectStrategyAlignment/Nexus.Integrations.ProjectStrategyAlignment.csproj",
+                     "Nexus.Actions/Nexus.Actions.csproj"
+                 })
+        {
+            Assert.DoesNotContain("Nexus.Reporting", GetProjectReferences(project));
+        }
+    }
+
+    [Fact]
     public void PortfolioAndReporting_OwnNoDatabase()
     {
         Assert.False(Directory.Exists(Path.Combine(SolutionRoot, "Nexus.Portfolio.Infrastructure")));
@@ -115,6 +147,20 @@ public sealed class ArchitectureDependencyTests
         AssertNoReferenceStartingWith("Nexus.ProjectManagement.Core/Nexus.ProjectManagement.Core.csproj", "Nexus.Integrations.");
         AssertNoReferenceStartingWith("Nexus.Workflow/Nexus.Workflow.csproj", "Nexus.Integrations.");
         AssertNoReferenceStartingWith("Nexus.Strategy/Nexus.Strategy.csproj", "Nexus.Integrations.");
+        AssertNoReferenceStartingWith("Nexus.Portfolio/Nexus.Portfolio.csproj", "Nexus.Integrations.");
+        AssertNoReferenceStartingWith("Nexus.ProjectManagement.Team/Nexus.ProjectManagement.Team.csproj", "Nexus.Integrations.");
+        AssertNoReferenceStartingWith("Nexus.Organization/Nexus.Organization.csproj", "Nexus.Integrations.");
+
+        // The modules that hold data about a project without referencing Core are joined to Core's delete only by an integration.
+        foreach (var module in new[] { "Nexus.ProjectManagement.Team", "Nexus.ProjectManagement.Deliverables", "Nexus.ProjectManagement.Kpi", "Nexus.Actions" })
+        {
+            AssertNoReferenceStartingWith($"{module}/{module}.csproj", "Nexus.Integrations.");
+        }
+
+        foreach (var module in new[] { "Nexus.ProjectManagement.Team", "Nexus.ProjectManagement.Deliverables", "Nexus.ProjectManagement.Kpi", "Nexus.Actions" })
+        {
+            Assert.DoesNotContain("Nexus.ProjectManagement.Core", GetProjectReferences($"{module}/{module}.csproj"));
+        }
     }
 
     [Fact]
@@ -123,6 +169,46 @@ public sealed class ArchitectureDependencyTests
         var references = GetProjectReferences("Nexus.Integrations.ProjectStrategyAlignment/Nexus.Integrations.ProjectStrategyAlignment.csproj");
         Assert.Contains("Nexus.ProjectManagement.Core", references);
         Assert.Contains("Nexus.Strategy", references);
+    }
+
+    [Fact]
+    public void Waterfall_DoesNotDependOnCalendar_TheCalendarIntegrationJoinsTheTwo()
+    {
+        foreach (var project in new[]
+                 {
+                     "Nexus.ProjectManagement.Waterfall/Nexus.ProjectManagement.Waterfall.csproj",
+                     "Nexus.ProjectManagement.Waterfall.Infrastructure/Nexus.ProjectManagement.Waterfall.Infrastructure.csproj"
+                 })
+        {
+            Assert.DoesNotContain("Nexus.Calendar", GetProjectReferences(project));
+            AssertNoReferenceStartingWith(project, "Nexus.Integrations.");
+        }
+
+        foreach (var project in new[] { "Nexus.Calendar/Nexus.Calendar.csproj", "Nexus.Calendar.Infrastructure/Nexus.Calendar.Infrastructure.csproj" })
+        {
+            AssertNoReferenceStartingWith(project, "Nexus.ProjectManagement.");
+            AssertNoReferenceStartingWith(project, "Nexus.Integrations.");
+        }
+
+        var integration = GetProjectReferences("Nexus.Integrations.ProjectCalendar/Nexus.Integrations.ProjectCalendar.csproj");
+        Assert.Contains("Nexus.Calendar", integration);
+        Assert.Contains("Nexus.ProjectManagement.Waterfall", integration);
+    }
+
+    /// <summary>Other projects already use these modules. What was added to them since must stay optional:
+    /// a module may not start requiring another one. If one of these lists has to grow, put the new dependency in
+    /// an integration (or an opt-in add-on project such as Nexus.Reporting.Analytics) instead.</summary>
+    [Theory]
+    [InlineData("Nexus.Reporting", new[] { "Nexus.ProjectManagement.Core", "Nexus.Actions", "Nexus.ProjectManagement.Progress" })]
+    [InlineData("Nexus.Calendar", new string[0])]
+    [InlineData("Nexus.Organization", new string[0])]
+    [InlineData("Nexus.Workflow", new string[0])]
+    [InlineData("Nexus.Portfolio", new[] { "Nexus.ProjectManagement.Core", "Nexus.Actions" })]
+    [InlineData("Nexus.Actions", new[] { "Nexus.Organization", "Nexus.Calendar" })]
+    public void SharedModules_KeepTheirOriginalDependencies(string project, string[] allowed)
+    {
+        var modules = GetProjectReferences($"{project}/{project}.csproj").Where(r => r.StartsWith("Nexus.", StringComparison.Ordinal));
+        Assert.Empty(modules.Except(allowed));
     }
 
     private static void AssertNoReferenceStartingWith(string relativeProjectPath, string forbiddenPrefix)

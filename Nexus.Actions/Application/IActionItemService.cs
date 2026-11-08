@@ -13,4 +13,11 @@ public interface IActionItemService
     Task<Result<ActionItemDto>> UpdateAsync(Guid id, UpdateActionItemRequest request, CancellationToken cancellationToken);
     Task<Result<ActionItemDto>> ChangeStatusAsync(Guid id, ChangeActionStatusRequest request, CancellationToken cancellationToken);
     Task<Result<ActionItemDto>> SubmitForApprovalAsync(Guid id, CancellationToken cancellationToken);
+
+    /// <summary>Default interface members, so another implementation of this interface keeps compiling.</summary>
+    Task<Result<IReadOnlyList<ActionOccurrenceDto>>> ListOccurrencesAsync(Guid id, CancellationToken cancellationToken) =>
+        Task.FromResult(Result.Failure<IReadOnlyList<ActionOccurrenceDto>>(Error.NotFound("Not supported.")));
+
+    Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken) =>
+        Task.FromResult(Result.Failure(Error.NotFound("Not supported.")));
 }

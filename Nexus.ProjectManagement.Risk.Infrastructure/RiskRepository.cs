@@ -15,8 +15,20 @@ public sealed class RiskRepository(RiskManagementDbContext dbContext) : IRiskRep
             .OrderByDescending(risk => risk.CreatedAtUtc)
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<Risk>> ListByProjectsAsync(IReadOnlyCollection<Guid> projectIds, CancellationToken cancellationToken) =>
+        await dbContext.Risks
+            .Where(risk => projectIds.Contains(risk.ProjectId))
+            .OrderByDescending(risk => risk.CreatedAtUtc)
+            .ToListAsync(cancellationToken);
+
     public async Task AddAsync(Risk risk, CancellationToken cancellationToken)
     {
         await dbContext.Risks.AddAsync(risk, cancellationToken);
+    }
+
+    public Task RemoveAsync(Risk risk, CancellationToken cancellationToken)
+    {
+        dbContext.Risks.Remove(risk);
+        return Task.CompletedTask;
     }
 }

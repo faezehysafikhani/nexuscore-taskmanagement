@@ -22,4 +22,10 @@ public sealed class WorkCalendarException : Entity<Guid>
     /// <summary>False = holiday (override a working day off). True = extra working day (override a weekend on).</summary>
     public bool IsWorkingDay { get; private set; }
     public string? Description { get; private set; }
+
+    internal void Change(bool isWorkingDay, string? description)
+    {
+        IsWorkingDay = isWorkingDay;
+        Description = description;
+    }
 }

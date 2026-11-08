@@ -30,6 +30,14 @@ public sealed class WorkCalendar : AuditableEntity<Guid>
     public string? Description { get; private set; }
     public DayOfWeekMask WorkingDays { get; private set; }
     public bool IsDefault { get; private set; }
+
+    /// <summary>Length of a working day in hours (1-24); 8 unless set.</summary>
+    public int WorkHoursPerDay { get; private set; } = 8;
+
+    /// <summary>Whether the country's official holidays (an installed <c>IOfficialHolidayProvider</c>) also count
+    /// as non-working days. A calendar that predates this setting has it off, so nothing already scheduled moves.</summary>
+    public bool ApplyOfficialHolidays { get; private set; }
+
     public IReadOnlyCollection<WorkCalendarException> Exceptions => _exceptions.AsReadOnly();
 
     public void Update(string name, string? description, DayOfWeekMask workingDays, bool isDefault)
@@ -40,6 +48,12 @@ public sealed class WorkCalendar : AuditableEntity<Guid>
         IsDefault = isDefault;
     }
 
+    public void SetPolicy(int workHoursPerDay, bool applyOfficialHolidays)
+    {
+        WorkHoursPerDay = workHoursPerDay;
+        ApplyOfficialHolidays = applyOfficialHolidays;
+    }
+
     public void AddException(Guid exceptionId, DateOnly date, bool isWorkingDay, string? description)
     {
         if (_exceptions.Any(exception => exception.Date == date))
@@ -48,6 +62,26 @@ public sealed class WorkCalendar : AuditableEntity<Guid>
         }
 
         _exceptions.Add(new WorkCalendarException(exceptionId, Id, date, isWorkingDay, description));
+    }
+
+    /// <summary>Makes the calendar's date-specific exceptions exactly these (one per date; the last given for a date wins).
+    /// Exceptions that stay keep their identity.</summary>
+    public void ReplaceExceptions(IEnumerable<(DateOnly Date, bool IsWorkingDay, string? Description)> exceptions)
+    {
+        var wanted = exceptions.GroupBy(e => e.Date).ToDictionary(g => g.Key, g => g.Last());
+        _exceptions.RemoveAll(existing => !wanted.ContainsKey(existing.Date));
+        foreach (var (date, entry) in wanted)
+        {
+            var existing = _exceptions.FirstOrDefault(e => e.Date == date);
+            if (existing is null)
+            {
+                _exceptions.Add(new WorkCalendarException(Guid.NewGuid(), Id, date, entry.IsWorkingDay, entry.Description));
+            }
+            else
+            {
+                existing.Change(entry.IsWorkingDay, entry.Description);
+            }
+        }
     }
 
     public void RemoveException(Guid exceptionId) =>

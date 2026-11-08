@@ -15,7 +15,19 @@ public sealed class WorkflowInstanceRepository(WorkflowDbContext dbContext) : IW
             .Where(i => i.SubjectType == subjectType && i.SubjectId == subjectId && i.Status == WorkflowInstanceStatus.InProgress)
             .SingleOrDefaultAsync(cancellationToken);
 
-    public async Task<IReadOnlyList<WorkflowInstance>> ListPendingForApproverAsync(Guid tenantId, Guid approverUserId, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<WorkflowInstance>> ListForSubjectsAsync(
+        Guid tenantId, string subjectType, IReadOnlyCollection<Guid> subjectIds, CancellationToken cancellationToken) =>
+        await dbContext.WorkflowInstances
+            .Include(i => i.Decisions)
+            .Where(i => i.TenantId == tenantId && i.SubjectType == subjectType && subjectIds.Contains(i.SubjectId))
+            .OrderByDescending(i => i.CreatedAtUtc)
+            .ToListAsync(cancellationToken);
+
+    public Task<IReadOnlyList<WorkflowInstance>> ListPendingForApproverAsync(Guid tenantId, Guid approverUserId, CancellationToken cancellationToken) =>
+        ListPendingForApproverAsync(tenantId, approverUserId, [], cancellationToken);
+
+    public async Task<IReadOnlyList<WorkflowInstance>> ListPendingForApproverAsync(
+        Guid tenantId, Guid approverUserId, IReadOnlyCollection<ActingFor> actingFor, CancellationToken cancellationToken)
     {
         var pending = await dbContext.WorkflowInstances
             .Include(i => i.Decisions)
@@ -37,13 +49,41 @@ public sealed class WorkflowInstanceRepository(WorkflowDbContext dbContext) : IW
         // fragile multi-table LINQ-to-SQL join over a computed "current step" concept.
         return pending.Where(instance =>
         {
-            if (!definitions.TryGetValue(instance.WorkflowDefinitionId, out var definition))
+            // The approver the approval captured when it started; approvals older than that read the definition.
+            Guid? designated;
+            if (instance.GetSteps() is { } snapshot)
             {
-                return false;
+                var snapshotStep = snapshot.SingleOrDefault(step => step.Order == instance.CurrentStepOrder);
+                if (snapshotStep is null)
+                {
+                    return false;
+                }
+
+                designated = snapshotStep.ApproverUserId;
+            }
+            else
+            {
+                if (!definitions.TryGetValue(instance.WorkflowDefinitionId, out var definition))
+                {
+                    return false;
+                }
+
+                var currentStep = definition.Steps.SingleOrDefault(step => step.Order == instance.CurrentStepOrder);
+                if (currentStep is null)
+                {
+                    return false;
+                }
+
+                designated = currentStep.ApproverUserId;
             }
 
-            var currentStep = definition.Steps.SingleOrDefault(step => step.Order == instance.CurrentStepOrder);
-            return currentStep is not null && (currentStep.ApproverUserId is null || currentStep.ApproverUserId == approverUserId);
+            if (designated is null || designated == approverUserId)
+            {
+                return true;
+            }
+
+            // A step designated to someone the user is standing in for today.
+            return actingFor.Any(a => a.DelegatorUserId == designated && (a.SubjectType is null || a.SubjectType == instance.SubjectType));
         }).ToList();
     }
 

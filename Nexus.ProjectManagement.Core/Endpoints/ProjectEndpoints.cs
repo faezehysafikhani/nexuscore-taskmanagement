@@ -33,8 +33,25 @@ public static class ProjectEndpoints
             })
             .RequireAuthorization(ProjectPermissions.View);
 
+        // Planned / actual progress of several projects at once, read from whichever planning modules are installed.
+        group.MapPost("/progress", async (ProjectProgressRequest request, ICurrentUserContext currentUser, IProjectProgressService service, CancellationToken cancellationToken) =>
+            {
+                if (currentUser.TenantId is null)
+                {
+                    return Results.Unauthorized();
+                }
+
+                return (await service.GetAsync(currentUser.TenantId.Value, request, cancellationToken)).ToApiResult();
+            })
+            .RequireAuthorization(ProjectPermissions.View);
+
         group.MapGet("/{id:guid}", async (Guid id, IProjectService service, CancellationToken cancellationToken) =>
                 (await service.GetAsync(id, cancellationToken)).ToApiResult())
+            .RequireAuthorization(ProjectPermissions.View);
+
+        // A dry run of create/update (add ?projectId= for an existing project): answers 204 if the project would be accepted, otherwise the same problem save would.
+        group.MapPost("/check", async (CreateProjectRequest request, Guid? projectId, IProjectService service, CancellationToken cancellationToken) =>
+                (await service.CheckAsync(request, projectId, cancellationToken)).ToApiResult())
             .RequireAuthorization(ProjectPermissions.View);
 
         group.MapPost("/", async (CreateProjectRequest request, IProjectService service, CancellationToken cancellationToken) =>
@@ -48,6 +65,14 @@ public static class ProjectEndpoints
         group.MapPost("/{id:guid}/archive", async (Guid id, IProjectService service, CancellationToken cancellationToken) =>
                 (await service.ArchiveAsync(id, cancellationToken)).ToApiResult())
             .RequireAuthorization(ProjectPermissions.Delete);
+
+        group.MapPut("/{id:guid}/status", async (Guid id, ChangeProjectStatusRequest request, IProjectService service, CancellationToken cancellationToken) =>
+                (await service.ChangeStatusAsync(id, request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(ProjectPermissions.Edit);
+
+        group.MapDelete("/{id:guid}", async (Guid id, IProjectService service, CancellationToken cancellationToken) =>
+                (await service.DeleteAsync(id, cancellationToken)).ToApiResult())
+            .RequireAuthorization(ProjectPermissions.Remove);
 
         group.MapPost("/{id:guid}/submit-for-approval", async (Guid id, IProjectService service, CancellationToken cancellationToken) =>
                 (await service.SubmitForApprovalAsync(id, cancellationToken)).ToApiResult())

@@ -19,6 +19,7 @@ public static class DependencyInjection
         services.AddScoped<IWorkflowUnitOfWork>(provider => provider.GetRequiredService<WorkflowDbContext>());
         services.AddScoped<IWorkflowDefinitionRepository, WorkflowDefinitionRepository>();
         services.AddScoped<IWorkflowInstanceRepository, WorkflowInstanceRepository>();
+        services.AddScoped<IWorkflowDelegationRepository, WorkflowDelegationRepository>();
 
         return services;
     }

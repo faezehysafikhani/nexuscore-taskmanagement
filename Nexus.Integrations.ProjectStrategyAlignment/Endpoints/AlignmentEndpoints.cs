@@ -25,6 +25,21 @@ public static class AlignmentEndpoints
             })
             .RequireAuthorization(AlignmentPermissions.View);
 
+        group.MapPost("/scores", async (ICurrentUserContext currentUser, ProjectAlignmentScoresRequest request, IAlignmentService service, CancellationToken cancellationToken) =>
+            {
+                if (currentUser.TenantId is null)
+                {
+                    return Results.Unauthorized();
+                }
+
+                return (await service.GetScoresAsync(currentUser.TenantId.Value, request, cancellationToken)).ToApiResult();
+            })
+            .RequireAuthorization(AlignmentPermissions.View);
+
+        group.MapPut("/levels", async (SetProjectAlignmentRequest request, IAlignmentService service, CancellationToken cancellationToken) =>
+                (await service.SetLevelsAsync(request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(AlignmentPermissions.Manage);
+
         group.MapPost("/", async (CreateAlignmentRequest request, IAlignmentService service, CancellationToken cancellationToken) =>
                 (await service.CreateAsync(request, cancellationToken)).ToApiResult())
             .RequireAuthorization(AlignmentPermissions.Manage);

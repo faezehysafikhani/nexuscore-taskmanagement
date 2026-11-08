@@ -12,8 +12,18 @@ public sealed class TeamRepository(TeamDbContext dbContext) : ITeamRepository
     public async Task<IReadOnlyList<ProjectMember>> ListMembersAsync(Guid projectId, CancellationToken cancellationToken) =>
         await dbContext.ProjectMembers.Where(member => member.ProjectId == projectId).ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<ProjectMember>> ListMembersForProjectsAsync(IReadOnlyCollection<Guid> projectIds, CancellationToken cancellationToken) =>
+        await dbContext.ProjectMembers.Where(member => projectIds.Contains(member.ProjectId)).ToListAsync(cancellationToken);
+
     public Task<bool> IsMemberAsync(Guid projectId, Guid userId, CancellationToken cancellationToken) =>
         dbContext.ProjectMembers.AnyAsync(member => member.ProjectId == projectId && member.UserId == userId, cancellationToken);
+
+    public async Task<IReadOnlyList<Guid>> ListProjectIdsForUserAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken) =>
+        await dbContext.ProjectMembers
+            .Where(member => member.TenantId == tenantId && member.UserId == userId)
+            .Select(member => member.ProjectId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
 
     public async Task AddMemberAsync(ProjectMember member, CancellationToken cancellationToken)
     {
@@ -35,5 +45,11 @@ public sealed class TeamRepository(TeamDbContext dbContext) : ITeamRepository
     public async Task AddGovernanceRoleAsync(GovernanceRole role, CancellationToken cancellationToken)
     {
         await dbContext.GovernanceRoles.AddAsync(role, cancellationToken);
+    }
+
+    public Task RemoveGovernanceRoleAsync(GovernanceRole role, CancellationToken cancellationToken)
+    {
+        dbContext.GovernanceRoles.Remove(role);
+        return Task.CompletedTask;
     }
 }

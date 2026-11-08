@@ -29,6 +29,10 @@ public static class KpiEndpoints
                 (await service.UpdateAsync(id, request, cancellationToken)).ToApiResult())
             .RequireAuthorization(KpiPermissions.Edit);
 
+        group.MapDelete("/{id:guid}", async (Guid id, IKpiService service, CancellationToken cancellationToken) =>
+                (await service.DeleteAsync(id, cancellationToken)).ToApiResult())
+            .RequireAuthorization(KpiPermissions.Delete);
+
         return app;
     }
 }

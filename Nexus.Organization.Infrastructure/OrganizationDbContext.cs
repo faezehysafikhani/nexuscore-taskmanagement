@@ -13,6 +13,7 @@ public sealed class OrganizationDbContext(DbContextOptions<OrganizationDbContext
     private Guid? TenantFilterId => tenantScope?.FilterTenantIdFor(nameof(OrganizationDbContext));
 
     public DbSet<OrganizationUnit> OrganizationUnits => Set<OrganizationUnit>();
+    public DbSet<OrganizationUnitMember> OrganizationUnitMembers => Set<OrganizationUnitMember>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

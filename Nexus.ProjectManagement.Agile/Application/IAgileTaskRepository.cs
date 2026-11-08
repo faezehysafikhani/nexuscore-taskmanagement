@@ -10,6 +10,9 @@ public interface IAgileTaskRepository
     /// "Sprint View" - board scoped to one sprint.</summary>
     Task<IReadOnlyList<AgileTask>> ListByProjectAsync(Guid projectId, int? sprintNumber, CancellationToken cancellationToken);
 
+    /// <summary>Several tasks by id; ids that do not exist are simply absent from the result.</summary>
+    Task<IReadOnlyList<AgileTask>> ListByIdsAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken);
+
     Task AddAsync(AgileTask task, CancellationToken cancellationToken);
     Task RemoveAsync(AgileTask task, CancellationToken cancellationToken);
 }

@@ -18,6 +18,10 @@ public static class ProgressEndpoints
                 (await service.ListByProjectAsync(projectId, cancellationToken)).ToApiResult())
             .RequireAuthorization(ProgressPermissions.View);
 
+        group.MapPost("/for-projects", async (ListProgressUpdatesForProjectsRequest request, IProgressService service, CancellationToken cancellationToken) =>
+                (await service.ListForProjectsAsync(request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(ProgressPermissions.View);
+
         group.MapGet("/{id:guid}", async (Guid id, IProgressService service, CancellationToken cancellationToken) =>
                 (await service.GetAsync(id, cancellationToken)).ToApiResult())
             .RequireAuthorization(ProgressPermissions.View);
@@ -29,6 +33,10 @@ public static class ProgressEndpoints
         group.MapPut("/{id:guid}", async (Guid id, UpdateProgressUpdateRequest request, IProgressService service, CancellationToken cancellationToken) =>
                 (await service.UpdateAsync(id, request, cancellationToken)).ToApiResult())
             .RequireAuthorization(ProgressPermissions.Edit);
+
+        group.MapDelete("/{id:guid}", async (Guid id, IProgressService service, CancellationToken cancellationToken) =>
+                (await service.DeleteAsync(id, cancellationToken)).ToApiResult())
+            .RequireAuthorization(ProgressPermissions.Delete);
 
         group.MapPost("/{id:guid}/submit-for-approval", async (Guid id, IProgressService service, CancellationToken cancellationToken) =>
                 (await service.SubmitForApprovalAsync(id, cancellationToken)).ToApiResult())
@@ -45,6 +53,8 @@ public static class ProgressEndpoints
                 return Results.Ok(summary);
             })
             .RequireAuthorization(ProgressPermissions.View);
+
+        app.MapDelayReasonEndpoints();
 
         return app;
     }

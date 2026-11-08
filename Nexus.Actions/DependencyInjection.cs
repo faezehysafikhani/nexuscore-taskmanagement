@@ -5,6 +5,7 @@ using Nexus.Actions.Application.Dtos;
 using Nexus.Actions.Application.EventHandlers;
 using Nexus.Actions.Application.Validators;
 using Nexus.Actions.Permissions;
+using Nexus.Calendar.Application;
 using NexusCore.Application.Approvals;
 using NexusCore.Application.Identity.Permissions;
 using NexusCore.SharedKernel.Domain;
@@ -16,15 +17,22 @@ public static class DependencyInjection
     /// <summary>Requires AddOrganizationApplication() and AddCalendarApplication() (hard
     /// dependencies). ProjectManagement.Core and Workflow are both optional - this module has
     /// no reference to either.</summary>
-    public static IServiceCollection AddActionManagement(this IServiceCollection services)
+    public static IServiceCollection AddActionManagement(this IServiceCollection services, Action<ActionsOptions>? configure = null)
     {
+        var options = new ActionsOptions();
+        configure?.Invoke(options);
+        services.AddSingleton(options);
+        services.AddScoped<IActionStatusSubmissionService, ActionStatusSubmissionService>();
         services.AddScoped<IActionItemService, ActionItemService>();
+        services.AddScoped<ICalendarUsageChecker, ActionCalendarUsageChecker>();
         services.AddScoped<IValidator<CreateActionItemRequest>, CreateActionItemRequestValidator>();
         services.AddScoped<IValidator<UpdateActionItemRequest>, UpdateActionItemRequestValidator>();
         services.AddSingleton<IPermissionCatalog, ActionPermissionCatalog>();
 
         services.AddScoped<IDomainEventHandler<ApprovalGranted>, ActionApprovalGrantedHandler>();
         services.AddScoped<IDomainEventHandler<ApprovalRejected>, ActionApprovalRejectedHandler>();
+        services.AddScoped<IDomainEventHandler<ApprovalGranted>, ActionStatusApprovalGrantedHandler>();
+        services.AddScoped<IDomainEventHandler<ApprovalRejected>, ActionStatusApprovalRejectedHandler>();
 
         services.AddAuthorization(options =>
         {

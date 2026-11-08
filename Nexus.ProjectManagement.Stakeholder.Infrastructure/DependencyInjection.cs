@@ -18,6 +18,7 @@ public static class DependencyInjection
 
         services.AddScoped<IStakeholderUnitOfWork>(provider => provider.GetRequiredService<StakeholderManagementDbContext>());
         services.AddScoped<IStakeholderRepository, StakeholderRepository>();
+        services.AddScoped<IStakeholderSettingsRepository, StakeholderSettingsRepository>();
 
         return services;
     }

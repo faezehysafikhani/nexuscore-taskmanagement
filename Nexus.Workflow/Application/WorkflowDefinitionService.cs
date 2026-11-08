@@ -48,7 +48,7 @@ public sealed class WorkflowDefinitionService(
             return Result.Failure<WorkflowDefinitionDto>(Error.Validation("Step name is required."));
         }
 
-        definition.AddStep(Guid.NewGuid(), request.Name, request.ApproverUserId, request.ApproverRoleId);
+        definition.AddStep(Guid.NewGuid(), request.Name, request.ApproverUserId, request.ApproverRoleId, request.ApproverKey, request.IsOptional);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success(ToDto(definition));
     }
@@ -79,6 +79,37 @@ public sealed class WorkflowDefinitionService(
         return Result.Success(ToDto(definition));
     }
 
+    public async Task<Result<WorkflowDefinitionDto>> SetStepsAsync(SetWorkflowStepsRequest request, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.SubjectType))
+        {
+            return Result.Failure<WorkflowDefinitionDto>(Error.Validation("Subject type is required."));
+        }
+
+        if (request.Steps.Any(step => string.IsNullOrWhiteSpace(step.Name)))
+        {
+            return Result.Failure<WorkflowDefinitionDto>(Error.Validation("Step name is required."));
+        }
+
+        var scopeType = string.IsNullOrWhiteSpace(request.ScopeType) ? WorkflowDefinition.GeneralScope : request.ScopeType.Trim();
+        var definition = await repository.FindExactAsync(request.TenantId, request.SubjectType.Trim(), scopeType, request.ScopeId, cancellationToken);
+        if (definition is null)
+        {
+            var name = string.IsNullOrWhiteSpace(request.Name) ? $"{request.SubjectType.Trim()} approval" : request.Name;
+            definition = new WorkflowDefinition(Guid.NewGuid(), request.TenantId, name, request.SubjectType, scopeType, request.ScopeId);
+            await repository.AddAsync(definition, cancellationToken);
+        }
+        else
+        {
+            definition.SetActive(true);
+        }
+
+        definition.ReplaceSteps(request.Steps.Select(step =>
+            (step.Name, step.ApproverUserId, step.ApproverRoleId, step.ApproverKey, step.IsOptional)));
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result.Success(ToDto(definition));
+    }
+
     public async Task<Result> ResetToDefaultAsync(Guid id, CancellationToken cancellationToken)
     {
         var definition = await repository.GetByIdAsync(id, cancellationToken);
@@ -99,5 +130,5 @@ public sealed class WorkflowDefinitionService(
 
     private static WorkflowDefinitionDto ToDto(WorkflowDefinition definition) => new(
         definition.Id, definition.TenantId, definition.Name, definition.SubjectType, definition.ScopeType, definition.ScopeId, definition.IsActive,
-        definition.Steps.OrderBy(s => s.Order).Select(s => new WorkflowStepDto(s.Id, s.Order, s.Name, s.ApproverUserId, s.ApproverRoleId)).ToList());
+        definition.Steps.OrderBy(s => s.Order).Select(s => new WorkflowStepDto(s.Id, s.Order, s.Name, s.ApproverUserId, s.ApproverRoleId, s.ApproverKey, s.IsOptional)).ToList());
 }

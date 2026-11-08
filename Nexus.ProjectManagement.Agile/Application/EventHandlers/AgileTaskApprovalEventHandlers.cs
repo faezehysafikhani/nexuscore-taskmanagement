@@ -44,3 +44,48 @@ public sealed class AgileTaskApprovalRejectedHandler(IAgileTaskRepository reposi
         await unitOfWork.SaveChangesAsync(cancellationToken);
     }
 }
+
+/// <summary>A status change was confirmed: the task moves to the column that was asked for.</summary>
+public sealed class AgileTaskStatusApprovalGrantedHandler(
+    IAgileTaskStatusSubmissionRepository submissions, IAgileTaskService tasks, IAgileUnitOfWork unitOfWork)
+    : IDomainEventHandler<ApprovalGranted>
+{
+    public async Task HandleAsync(ApprovalGranted domainEvent, CancellationToken cancellationToken)
+    {
+        if (domainEvent.SubjectType != AgileTaskStatusSubmissionService.SubjectType)
+        {
+            return;
+        }
+
+        var submission = await submissions.GetByIdAsync(domainEvent.SubjectId, cancellationToken);
+        if (submission is null)
+        {
+            return;
+        }
+
+        submission.Approve();
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        await tasks.ChangeStatusAsync(submission.TaskId, new Dtos.ChangeAgileTaskStatusRequest(submission.SubmittedStatus), cancellationToken);
+    }
+}
+
+public sealed class AgileTaskStatusApprovalRejectedHandler(IAgileTaskStatusSubmissionRepository submissions, IAgileUnitOfWork unitOfWork)
+    : IDomainEventHandler<ApprovalRejected>
+{
+    public async Task HandleAsync(ApprovalRejected domainEvent, CancellationToken cancellationToken)
+    {
+        if (domainEvent.SubjectType != AgileTaskStatusSubmissionService.SubjectType)
+        {
+            return;
+        }
+
+        var submission = await submissions.GetByIdAsync(domainEvent.SubjectId, cancellationToken);
+        if (submission is null)
+        {
+            return;
+        }
+
+        submission.Reject();
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+    }
+}

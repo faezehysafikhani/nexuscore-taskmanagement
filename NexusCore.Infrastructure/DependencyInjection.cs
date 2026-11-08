@@ -80,7 +80,9 @@ public static class DependencyInjection
         // An endpoint that names an unregistered policy gets the standard permission policy (403
         // for users without it) instead of an InvalidOperationException (500).
         services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
-        services.AddScoped<IApprovalRequester, NullApprovalRequester>();
+        // TryAdd, not Add: Nexus.Workflow replaces this default, and a host that registers its application tier (and so Workflow)
+        // before AddInfrastructure must not get the default back - every approval would then be approved at once.
+        services.TryAddScoped<IApprovalRequester, NullApprovalRequester>();
         services.AddScoped<IFileStorage, LocalDiskFileStorage>();
         services.AddScoped<IUserDirectory, UserDirectory>();
         // Used only by modules that keep users' titles (Nexus.OrgStructure); changes no table.

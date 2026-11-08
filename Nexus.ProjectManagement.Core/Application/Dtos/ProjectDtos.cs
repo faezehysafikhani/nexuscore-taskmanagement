@@ -26,10 +26,11 @@ public sealed record ProjectDto(
     string? Charter,
     DateTimeOffset CreatedAtUtc);
 
+/// <summary>Code omitted (or blank) = the next free automatic code ("P0001", "P0002"...) is assigned.</summary>
 public sealed record CreateProjectRequest(
     Guid TenantId,
     string Name,
-    string Code,
+    string? Code,
     ProjectType Type,
     Guid? ManagerUserId,
     Guid? OwnerUserId,
@@ -62,6 +63,9 @@ public sealed record UpdateProjectRequest(
     string? Description,
     string? Charter);
 
+/// <summary>The lifecycle status to move a project to. Archived is reached through the archive call, not this one.</summary>
+public sealed record ChangeProjectStatusRequest(ProjectStatus Status);
+
 public sealed record ListProjectsRequest(
     Guid TenantId,
     int PageNumber = 1,
@@ -72,7 +76,8 @@ public sealed record ListProjectsRequest(
     Guid? OrganizationUnitId = null,
     Guid? ManagerUserId = null,
     ProjectSortBy SortBy = ProjectSortBy.CreatedAtUtc,
-    bool SortDescending = true);
+    bool SortDescending = true,
+    Guid? WorkCalendarId = null);
 
 public enum ProjectSortBy
 {
@@ -83,3 +88,12 @@ public enum ProjectSortBy
     Status,
     CreatedAtUtc
 }
+
+public sealed record ProjectProgressRequest(IReadOnlyList<Guid> ProjectIds);
+
+/// <summary>Where a project stands. Planned is what the schedule (or, lacking one, the project's dates) says should be done by today,
+/// Actual what has been done; Performance is Actual as a percent of Planned (100 when nothing was due yet but something is done).
+/// The task counts are given for projects planned in tasks.</summary>
+public sealed record ProjectProgressDto(
+    Guid ProjectId, ProjectType Type, decimal PlannedProgress, decimal ActualProgress, decimal Performance,
+    int? TotalTasks = null, int? TodoTasks = null, int? DoingTasks = null, int? DoneTasks = null);

@@ -18,6 +18,14 @@ public static class TeamEndpoints
                 (await service.ListMembersAsync(projectId, cancellationToken)).ToApiResult())
             .RequireAuthorization(TeamPermissions.View);
 
+        members.MapPost("/for-projects", async (ListMembersForProjectsRequest request, ITeamService service, CancellationToken cancellationToken) =>
+                (await service.ListMembersForProjectsAsync(request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(TeamPermissions.View);
+
+        members.MapPut("/set", async (SetProjectTeamRequest request, ITeamService service, CancellationToken cancellationToken) =>
+                (await service.SetTeamAsync(request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(TeamPermissions.ManageMembers);
+
         members.MapGet("/available-users", async (ICurrentUserContext currentUser, Guid projectId, ITeamService service, CancellationToken cancellationToken) =>
             {
                 if (currentUser.TenantId is null)
@@ -31,6 +39,10 @@ public static class TeamEndpoints
 
         members.MapPost("/", async (AddProjectMemberRequest request, ITeamService service, CancellationToken cancellationToken) =>
                 (await service.AddMemberAsync(request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(TeamPermissions.ManageMembers);
+
+        members.MapPut("/{memberId:guid}", async (Guid memberId, UpdateProjectMemberRequest request, ITeamService service, CancellationToken cancellationToken) =>
+                (await service.UpdateMemberAsync(memberId, request, cancellationToken)).ToApiResult())
             .RequireAuthorization(TeamPermissions.ManageMembers);
 
         members.MapDelete("/{memberId:guid}", async (Guid memberId, ITeamService service, CancellationToken cancellationToken) =>
@@ -49,6 +61,10 @@ public static class TeamEndpoints
 
         governance.MapPut("/{id:guid}", async (Guid id, UpdateGovernanceRoleRequest request, ITeamService service, CancellationToken cancellationToken) =>
                 (await service.UpdateGovernanceRoleAsync(id, request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(TeamPermissions.ManageGovernance);
+
+        governance.MapDelete("/{id:guid}", async (Guid id, ITeamService service, CancellationToken cancellationToken) =>
+                (await service.DeleteGovernanceRoleAsync(id, cancellationToken)).ToApiResult())
             .RequireAuthorization(TeamPermissions.ManageGovernance);
 
         return app;

@@ -15,9 +15,18 @@ public static class ProjectManagementSubjectTypes
     public const string Risk = "Risk";
     public const string Stakeholder = "Stakeholder";
     public const string ProgressUpdate = "ProgressUpdate";
+    public const string DelayReason = "DelayReason";
     public const string ProjectDocument = "ProjectDocument";
     public const string Action = "Action";
+    public const string Contract = "Contract";
+    public const string ContractAddendum = "ContractAddendum";
+    public const string ContractInvoice = "ContractInvoice";
+    public const string ActivityProgress = "ActivityProgress";
+    public const string AgileTaskStatus = "AgileTaskStatus";
+    public const string ActionStatus = "ActionStatus";
+    public const string RiskResponseStatus = "RiskResponseStatus";
 
     public static IReadOnlyList<string> All { get; } =
-        [Project, WaterfallActivity, AgileTask, Risk, Stakeholder, ProgressUpdate, ProjectDocument, Action];
+        [Project, WaterfallActivity, AgileTask, Risk, Stakeholder, ProgressUpdate, DelayReason, ProjectDocument, Action, Contract, ContractAddendum, ContractInvoice,
+         ActivityProgress, AgileTaskStatus, ActionStatus, RiskResponseStatus];
 }

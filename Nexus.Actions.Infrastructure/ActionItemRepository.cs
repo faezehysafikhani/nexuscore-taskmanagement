@@ -25,4 +25,10 @@ public sealed class ActionItemRepository(ActionsDbContext dbContext) : IActionIt
     {
         await dbContext.Actions.AddAsync(action, cancellationToken);
     }
+
+    public Task RemoveAsync(ActionItem action, CancellationToken cancellationToken)
+    {
+        dbContext.Actions.Remove(action);
+        return Task.CompletedTask;
+    }
 }

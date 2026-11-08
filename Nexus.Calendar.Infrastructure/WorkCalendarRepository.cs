@@ -17,6 +17,12 @@ public sealed class WorkCalendarRepository(CalendarDbContext dbContext) : IWorkC
             .OrderBy(calendar => calendar.Name)
             .ToListAsync(cancellationToken);
 
+    public Task RemoveAsync(WorkCalendar calendar, CancellationToken cancellationToken)
+    {
+        dbContext.WorkCalendars.Remove(calendar);
+        return Task.CompletedTask;
+    }
+
     public async Task AddAsync(WorkCalendar calendar, CancellationToken cancellationToken)
     {
         await dbContext.WorkCalendars.AddAsync(calendar, cancellationToken);

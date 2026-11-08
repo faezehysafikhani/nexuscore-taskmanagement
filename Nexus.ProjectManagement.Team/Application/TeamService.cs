@@ -17,6 +17,39 @@ public sealed class TeamService(
         return Result.Success<IReadOnlyList<ProjectMemberDto>>(members.Select(ToDto).ToList());
     }
 
+    public async Task<Result<IReadOnlyList<ProjectMemberDto>>> ListMembersForProjectsAsync(ListMembersForProjectsRequest request, CancellationToken cancellationToken)
+    {
+        var ids = request.ProjectIds.Distinct().ToList();
+        if (ids.Count == 0)
+        {
+            return Result.Success<IReadOnlyList<ProjectMemberDto>>([]);
+        }
+
+        var members = await repository.ListMembersForProjectsAsync(ids, cancellationToken);
+        return Result.Success<IReadOnlyList<ProjectMemberDto>>(members.Select(ToDto).ToList());
+    }
+
+    public async Task<Result<IReadOnlyList<ProjectMemberDto>>> SetTeamAsync(SetProjectTeamRequest request, CancellationToken cancellationToken)
+    {
+        var wanted = request.UserIds.Distinct().ToHashSet();
+        var current = await repository.ListMembersAsync(request.ProjectId, cancellationToken);
+
+        foreach (var member in current.Where(m => !wanted.Contains(m.UserId)))
+        {
+            await repository.RemoveMemberAsync(member, cancellationToken);
+        }
+
+        var present = current.Select(m => m.UserId).ToHashSet();
+        foreach (var userId in wanted.Where(id => !present.Contains(id)))
+        {
+            await repository.AddMemberAsync(new ProjectMember(Guid.NewGuid(), request.TenantId, request.ProjectId, userId, null), cancellationToken);
+        }
+
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result.Success<IReadOnlyList<ProjectMemberDto>>(
+            (await repository.ListMembersAsync(request.ProjectId, cancellationToken)).Select(ToDto).ToList());
+    }
+
     public async Task<Result<ProjectMemberDto>> AddMemberAsync(AddProjectMemberRequest request, CancellationToken cancellationToken)
     {
         if (await repository.IsMemberAsync(request.ProjectId, request.UserId, cancellationToken))
@@ -26,6 +59,19 @@ public sealed class TeamService(
 
         var member = new ProjectMember(Guid.NewGuid(), request.TenantId, request.ProjectId, request.UserId, request.RoleTitle);
         await repository.AddMemberAsync(member, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result.Success(ToDto(member));
+    }
+
+    public async Task<Result<ProjectMemberDto>> UpdateMemberAsync(Guid memberId, UpdateProjectMemberRequest request, CancellationToken cancellationToken)
+    {
+        var member = await repository.GetMemberByIdAsync(memberId, cancellationToken);
+        if (member is null)
+        {
+            return Result.Failure<ProjectMemberDto>(Error.NotFound("Project member not found."));
+        }
+
+        member.UpdateRoleTitle(string.IsNullOrWhiteSpace(request.RoleTitle) ? null : request.RoleTitle.Trim());
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success(ToDto(member));
     }
@@ -95,6 +141,19 @@ public sealed class TeamService(
         role.UpdateDetails(request.Title, request.UserId, request.PersonnelNumber, request.Phone, request.Email, request.ServiceLocation);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success(ToDto(role));
+    }
+
+    public async Task<Result> DeleteGovernanceRoleAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var role = await repository.GetGovernanceRoleByIdAsync(id, cancellationToken);
+        if (role is null)
+        {
+            return Result.Failure(Error.NotFound("Governance role not found."));
+        }
+
+        await repository.RemoveGovernanceRoleAsync(role, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result.Success();
     }
 
     private static ProjectMemberDto ToDto(ProjectMember member) =>

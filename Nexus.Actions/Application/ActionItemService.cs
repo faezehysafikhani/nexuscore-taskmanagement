@@ -19,7 +19,8 @@ public sealed class ActionItemService(
     IOrganizationUnitRepository organizationUnitRepository,
     IWorkCalendarRepository workCalendarRepository,
     IActionsUnitOfWork unitOfWork,
-    IApprovalRequester approvalRequester) : IActionItemService
+    IApprovalRequester approvalRequester,
+    ActionsOptions? options = null) : IActionItemService
 {
     public async Task<Result<IReadOnlyList<ActionItemDto>>> ListAsync(Guid tenantId, Guid? projectId, CancellationToken cancellationToken)
     {
@@ -35,11 +36,23 @@ public sealed class ActionItemService(
             : Result.Success(ToDto(action));
     }
 
+    public const string EndNotAfterStartErrorCode = "action.end_not_after_start";
+
+    private Error? CheckDates(DateOnly? start, DateOnly? end) =>
+        options?.RequireEndAfterStart == true && start is { } from && end is { } to && to <= from
+            ? new Error(EndNotAfterStartErrorCode, "The end date must be after the start date.")
+            : null;
+
     public async Task<Result<ActionItemDto>> CreateAsync(CreateActionItemRequest request, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Title))
         {
             return Result.Failure<ActionItemDto>(Error.Validation("Title is required."));
+        }
+
+        if (CheckDates(request.StartDate, request.EndDate) is { } datesError)
+        {
+            return Result.Failure<ActionItemDto>(datesError);
         }
 
         var referenceError = await ValidateRequiredReferencesAsync(request.OrganizationUnitId, request.WorkCalendarId, cancellationToken);
@@ -52,6 +65,27 @@ public sealed class ActionItemService(
         action.UpdateDetails(
             request.Title, request.Description, request.OwnerUserId, request.ResponsibleUserId,
             request.OrganizationUnitId, request.WorkCalendarId, request.ProjectId, request.StartDate, request.EndDate);
+        if (request.Priority is { } priority)
+        {
+            action.ChangePriority(priority);
+        }
+
+        action.SetSource(request.SourceType, request.SourceId);
+        if (request.ApproverUserIds is { } approvers)
+        {
+            if (ApproversError(approvers) is { } approversError)
+            {
+                return Result.Failure<ActionItemDto>(approversError);
+            }
+
+            action.SetApprovers(approvers);
+        }
+
+        var recurrenceError = ApplyRecurrence(action, request.Recurrence);
+        if (recurrenceError is not null)
+        {
+            return Result.Failure<ActionItemDto>(recurrenceError);
+        }
 
         await repository.AddAsync(action, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -77,9 +111,46 @@ public sealed class ActionItemService(
             return Result.Failure<ActionItemDto>(referenceError);
         }
 
+        // Only changed dates are checked, so an action saved before the rule existed can still be edited.
+        if ((request.StartDate != action.StartDate || request.EndDate != action.EndDate) && CheckDates(request.StartDate, request.EndDate) is { } datesError)
+        {
+            return Result.Failure<ActionItemDto>(datesError);
+        }
+
         action.UpdateDetails(
             request.Title, request.Description, request.OwnerUserId, request.ResponsibleUserId,
             request.OrganizationUnitId, request.WorkCalendarId, request.ProjectId, request.StartDate, request.EndDate);
+        // Omitted (null) leaves the stored priority alone, so a client that predates this field
+        // can still edit an action without resetting it.
+        if (request.Priority is { } priority)
+        {
+            action.ChangePriority(priority);
+        }
+
+        // Likewise for the approvers: omitting the list keeps them; an empty list clears them.
+        if (request.ApproverUserIds is { } approvers)
+        {
+            if (ApproversError(approvers) is { } approversError)
+            {
+                return Result.Failure<ActionItemDto>(approversError);
+            }
+
+            action.SetApprovers(approvers);
+        }
+
+        // Likewise for the source: omitting it keeps the stored link.
+        if (request.SourceType is not null)
+        {
+            action.SetSource(request.SourceType, request.SourceId);
+        }
+
+        // Likewise, omitting the recurrence leaves the stored rule alone. Dates are validated against
+        // the details just applied, so a rule is never left on an action with no dates to move.
+        var recurrenceError = ApplyRecurrence(action, request.Recurrence);
+        if (recurrenceError is not null)
+        {
+            return Result.Failure<ActionItemDto>(recurrenceError);
+        }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success(ToDto(action));
@@ -93,9 +164,48 @@ public sealed class ActionItemService(
             return Result.Failure<ActionItemDto>(Error.NotFound("Action not found."));
         }
 
+        var wasCompleted = action.Status == ActionStatus.Completed;
         action.ChangeStatus(request.Status);
+
+        // Completing a repeating action creates the next occurrence in the same save. Re-completing one
+        // that was reopened creates nothing more (the action remembers its next occurrence).
+        if (options?.CreateNextOccurrenceOnCompletion != false && request.Status == ActionStatus.Completed && !wasCompleted)
+        {
+            var next = action.CreateNextOccurrence(Guid.NewGuid());
+            if (next is not null)
+            {
+                await repository.AddAsync(next, cancellationToken);
+            }
+        }
+
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success(ToDto(action));
+    }
+
+    public async Task<Result<IReadOnlyList<ActionOccurrenceDto>>> ListOccurrencesAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var action = await repository.GetByIdAsync(id, cancellationToken);
+        return action is null
+            ? Result.Failure<IReadOnlyList<ActionOccurrenceDto>>(Error.NotFound("Action not found."))
+            : Result.Success(ActionOccurrenceCalculator.Calculate(action));
+    }
+
+    public async Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var action = await repository.GetByIdAsync(id, cancellationToken);
+        if (action is null)
+        {
+            return Result.Failure(Error.NotFound("Action not found."));
+        }
+
+        if (action.ApprovalStatus == ApprovalStatus.PendingApproval)
+        {
+            return Result.Failure(Error.Conflict("An action that is waiting for approval cannot be deleted."));
+        }
+
+        await repository.RemoveAsync(action, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result.Success();
     }
 
     public async Task<Result<ActionItemDto>> SubmitForApprovalAsync(Guid id, CancellationToken cancellationToken)
@@ -107,7 +217,8 @@ public sealed class ActionItemService(
         }
 
         var subject = new ApprovalSubject("Action", action.Id, action.TenantId,
-            ScopeType: action.ProjectId is null ? null : "Project", ScopeId: action.ProjectId);
+            ScopeType: action.ProjectId is null ? null : "Project", ScopeId: action.ProjectId,
+            Participants: action.ApprovalParticipants());
         var outcome = await approvalRequester.RequestApprovalAsync(subject, cancellationToken);
 
         if (outcome == ApprovalRequestOutcome.Submitted)
@@ -121,6 +232,72 @@ public sealed class ActionItemService(
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success(ToDto(action));
+    }
+
+    private static Error? ApproversError(IReadOnlyList<Guid> approvers) =>
+        approvers.Count > 3 || approvers.Distinct().Count() != approvers.Count
+            ? Error.Validation("An action has up to three different approvers.")
+            : null;
+
+    /// <summary>Null recurrence = leave the action's rule as it is; a Unit of null removes it.</summary>
+    private static Error? ApplyRecurrence(ActionItem action, ActionRecurrenceRequest? recurrence)
+    {
+        if (recurrence is null)
+        {
+            return null;
+        }
+
+        if (recurrence.Unit is not { } unit)
+        {
+            action.ClearRecurrence();
+            return null;
+        }
+
+        if (!Enum.IsDefined(unit) || recurrence.Interval is < 1 or > 365)
+        {
+            return Error.Validation("The recurrence needs a known unit and an interval between 1 and 365.");
+        }
+
+        if (action.StartDate is null && action.EndDate is null)
+        {
+            return Error.Validation("A repeating action needs a start or end date to repeat from.");
+        }
+
+        var first = action.StartDate ?? action.EndDate;
+        if (recurrence.EndDate is { } last && last < first)
+        {
+            return Error.Validation("The recurrence end date cannot be before the action's own dates.");
+        }
+
+        var days = recurrence.DaysOfWeek is { Count: > 0 } d ? d : null;
+        var months = recurrence.Months is { Count: > 0 } m && m.Count < 12 ? m : null;
+        if (days is not null && days.Any(day => day is < 0 or > 6))
+        {
+            return Error.Validation("Days of the week must be between 0 (Sunday) and 6 (Saturday).");
+        }
+
+        if (months is not null && months.Any(month => month is < 1 or > 12))
+        {
+            return Error.Validation("Months must be between 1 and 12.");
+        }
+
+        if (recurrence.DayOfMonth is < 1 or > 31)
+        {
+            return Error.Validation("The day of the month must be between 1 and 31.");
+        }
+
+        if (recurrence.DurationHours is < 0 or > 24)
+        {
+            return Error.Validation("The hours of an occurrence must be between 0 and 24.");
+        }
+
+        action.SetRecurrence(unit, recurrence.Interval, recurrence.EndDate);
+        action.SetRecurrencePattern(
+            days?.Aggregate(0, (mask, day) => mask | (1 << day)),
+            recurrence.DayOfMonth,
+            months?.Aggregate(0, (mask, month) => mask | (1 << (month - 1))),
+            recurrence.DurationHours);
+        return null;
     }
 
     private async Task<Error?> ValidateRequiredReferencesAsync(Guid organizationUnitId, Guid workCalendarId, CancellationToken cancellationToken)
@@ -142,5 +319,15 @@ public sealed class ActionItemService(
         action.Id, action.TenantId, action.Title, action.Description,
         action.OwnerUserId, action.ResponsibleUserId, action.Status,
         action.OrganizationUnitId, action.WorkCalendarId, action.ProjectId,
-        action.StartDate, action.EndDate, action.ApprovalStatus);
+        action.StartDate, action.EndDate, action.ApprovalStatus, action.Priority,
+        action.RecurrenceUnit is { } unit
+            ? new ActionRecurrenceDto(
+                unit, action.RecurrenceInterval ?? 1, action.RecurrenceEndDate,
+                action.RecurrenceDaysOfWeek is { } dm ? Enumerable.Range(0, 7).Where(d => (dm & (1 << d)) != 0).ToList() : null,
+                action.RecurrenceDayOfMonth,
+                action.RecurrenceMonths is { } mm ? Enumerable.Range(1, 12).Where(m => (mm & (1 << (m - 1))) != 0).ToList() : null,
+                action.RecurrenceDurationHours)
+            : null,
+        action.RecurrenceSourceId, action.NextOccurrenceId, action.SourceType, action.SourceId,
+        action.ApproverUserIds.Count == 0 ? null : action.ApproverUserIds);
 }

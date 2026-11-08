@@ -18,6 +18,11 @@ public static class DependencyInjection
 
         services.AddScoped<IWaterfallUnitOfWork>(provider => provider.GetRequiredService<WaterfallDbContext>());
         services.AddScoped<IActivityRepository, ActivityRepository>();
+        services.AddScoped<IActivityDependencyRepository, ActivityDependencyRepository>();
+        services.AddScoped<IScheduleBaselineRepository, ScheduleBaselineRepository>();
+        services.AddScoped<IProgressSnapshotRepository, ProgressSnapshotRepository>();
+        services.AddScoped<IWaterfallSettingsRepository, WaterfallSettingsRepository>();
+        services.AddScoped<IActivityProgressSubmissionRepository, ActivityProgressSubmissionRepository>();
 
         return services;
     }

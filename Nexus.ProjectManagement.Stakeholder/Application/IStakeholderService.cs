@@ -6,8 +6,23 @@ namespace Nexus.ProjectManagement.StakeholderManagement.Application;
 public interface IStakeholderService
 {
     Task<Result<IReadOnlyList<StakeholderDto>>> ListByProjectAsync(Guid projectId, CancellationToken cancellationToken);
+    /// <summary>The stakeholders of several projects in one call.</summary>
+    Task<Result<IReadOnlyList<StakeholderDto>>> ListForProjectsAsync(ListStakeholdersForProjectsRequest request, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    Task<Result<StakeholderSettingsDto>> GetSettingsAsync(Guid projectId, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    Task<Result<IReadOnlyList<StakeholderSettingsDto>>> GetSettingsForProjectsAsync(StakeholderSettingsForProjectsRequest request, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    Task<Result<StakeholderSettingsDto>> SaveSettingsAsync(SaveStakeholderSettingsRequest request, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    Task<Result<StakeholderMatrixDto>> GetMatrixAsync(Guid projectId, CancellationToken cancellationToken);
     Task<Result<StakeholderDto>> GetAsync(Guid id, CancellationToken cancellationToken);
     Task<Result<StakeholderDto>> CreateAsync(CreateStakeholderRequest request, CancellationToken cancellationToken);
     Task<Result<StakeholderDto>> UpdateAsync(Guid id, UpdateStakeholderRequest request, CancellationToken cancellationToken);
+    Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken);
     Task<Result<StakeholderDto>> SubmitForApprovalAsync(Guid id, CancellationToken cancellationToken);
 }

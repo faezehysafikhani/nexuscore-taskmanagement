@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+	  <OutputType>Library</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The integration joins Project Management Core's visibility extension point with the modules that
+         know who is on a team, who manages a unit and who has to approve something. None of those modules
+         references this one; each provider treats its module as optional. -->
+    <ProjectReference Include="..\Nexus.ProjectManagement.Core\Nexus.ProjectManagement.Core.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Team\Nexus.ProjectManagement.Team.csproj" />
+    <ProjectReference Include="..\Nexus.Organization\Nexus.Organization.csproj" />
+    <ProjectReference Include="..\Nexus.Workflow\Nexus.Workflow.csproj" />
+    <ProjectReference Include="..\NexusCore.Application\NexusCore.Application.csproj" />
+    <ProjectReference Include="..\NexusCore.SharedKernel\NexusCore.SharedKernel.csproj" />
+  </ItemGroup>
+
+</Project>

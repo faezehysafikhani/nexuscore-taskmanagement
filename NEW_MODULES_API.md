@@ -56,6 +56,7 @@ at the end for every value's meaning.
 14. [Stakeholders](#14-stakeholders)
 15. [Progress](#15-progress)
 16. [Project Documents](#16-project-documents)
+    - [16a. Contracts](#16a-contracts-nexusprojectmanagementcontracts)
 17. [Project Workflow (integration)](#17-project-workflow-integration)
 18. [Project-Strategy Alignment (integration)](#18-project-strategy-alignment-integration)
 19. [Portfolio](#19-portfolio)
@@ -95,6 +96,12 @@ Response:
 ```
 
 Status Codes: 200, 401, 403
+
+**Placing people in the chart, paths, loops, branches** *(added for the PMPB UI)*. `code` is optional on create (omitted = the next free `U0001`-style code). `DELETE` deactivates the unit as it always did; **`DELETE …?includeBranch=true`** deactivates its whole branch too. Either is refused (409) while anyone is placed in what would be deactivated. Every unit now carries `path` (its full path from the top, `"Organization > Engineering > Civil"`).
+`GET /api/organization/units?activeOnly=true` hides deactivated units. A unit cannot be moved under itself or one of its own descendants (400), nor under a
+missing parent. A person belongs to at most one unit: `GET /api/organization/members?unitId=` lists `{ userId, unitId, unitName, unitPath }`;
+`PUT /api/organization/users/{userId}/unit` with `{ "unitId": "guid | null" }` places them (null removes them; an inactive or other-tenant unit is refused). Needs
+`organization_units.view` / `organization_units.update`. **Existing databases need `docs/upgrade/2026-10-10-add-organization-members.sql` first** (a new table).
 
 ---
 
@@ -213,6 +220,21 @@ Response:
 ```
 
 Status Codes: 200, 401, 403
+
+**Working hours, official holidays, day-by-day view** *(added for the PMPB UI)*. A calendar now has `workHoursPerDay` (1-24, default 8) and
+`applyOfficialHolidays`. Create takes both optionally (omitted = 8 hours, **not** following official holidays — a caller that never heard of the setting gets exactly what it always got); update leaves omitted values unchanged. Official holidays come
+from an optional `IOfficialHolidayProvider`: the host registers one (`AddIranianOfficialHolidays()` from `Nexus.Calendar.IranianHolidays` ships Iran's — solar
+holidays every year, religious ones from a per-year table that currently covers Jalali years 1402-1407 and must be extended yearly). Without a provider nothing changes.
+The rule everywhere (including Waterfall scheduling through the calendar integration): a date-specific exception of the calendar wins; otherwise the weekly pattern;
+a working weekday is still closed when the calendar follows official holidays and one falls on it.
+`GET /api/calendar/work-calendars/{id}/days?from=&to=` returns each day as `{ date, isWorkingDay, source (0 weekly, 1 exception, 2 official holiday), reason }` (at most
+1,000 days); `GET /api/calendar/work-calendars/official-holidays?from=&to=` lists `{ date, reason }` (empty when no provider). **Saving a whole calendar, one default, delete.** Create/update also accept `exceptions` (`[{ date, isWorkingDay, description }]`): when given they **replace**
+the calendar's date-specific exceptions (a screen can save the whole calendar in one call; exceptions that stay keep their id; omitted = unchanged, `[]` = clear).
+**Opt-in:** `AddCalendarApplication(o => o.SingleDefaultPerTenant = true)` makes a tenant have one default calendar (making a calendar the default un-defaults the others); without it the `isDefault` flags are left as they were set, as before. `DELETE /api/calendar/work-calendars/{id}` (new permission
+`work_calendars.delete`) is refused (409) for the default calendar and while anything still uses the calendar — each module that points at a calendar reports it through an
+`ICalendarUsageChecker` (Actions and, via the project-calendar integration, projects), so the Calendar module itself knows none of them.
+**Existing databases need
+`docs/upgrade/2026-10-10-add-calendar-policy.sql` first** (two columns; existing calendars do not start following official holidays, so nothing already scheduled moves).
 
 ---
 
@@ -496,6 +518,48 @@ Request Body:
 Response: the updated instance.
 Status Codes: 200, 400, 401, 403, 404
 
+### Module: Workflow - Delegation (substitution)
+
+An approver can hand their approvals to a substitute for a period (a holiday, a mission). For the days from `startDate` to
+`endDate` inclusive, the substitute sees the approver's pending approvals in their own Approval Center, and a decision they make
+is recorded as made **on the approver's behalf**. Optional `subjectType` limits it to one kind of approval (`"Risk"`); omitted =
+all of them. It applies to a step designated to that approver (`approverUserId`), and only to the step currently waiting; it is
+not transitive (A→B and B→C does not give C A's work). Anyone with `Workflow.Approve` may delegate their **own** approvals;
+delegating someone else's, or revoking another person's delegation, needs `Workflow.Configure`. A delegation is never deleted —
+it is *revoked*, so the record of who could act stays. Decisions by a person who is not the designated approver and holds no
+delegation are still accepted exactly as before (existing behaviour is unchanged); they are simply not marked as on anyone's behalf.
+**Existing databases need `docs/upgrade/2026-10-04-add-workflow-delegation.sql` first** (a new table and one nullable column).
+
+What changes in existing responses (all additive): an instance now carries `currentApproverUserId` (the designated approver of its
+current step, or null) and `delegatedFromUserId` (set on a pending-list item that reached you through a delegation — whose work it
+is); each decision carries `onBehalfOfUserId` (null = decided in their own right).
+
+Method: GET
+Route: /api/workflow/delegations
+Description: The delegations you have given and received, newest first, with whether each is in force today. Needs `Workflow.View`.
+Response:
+```json
+[ { "id": "guid", "tenantId": "guid", "delegatorUserId": "guid", "delegateUserId": "guid",
+    "startDate": "2026-06-10", "endDate": "2026-06-20", "subjectType": "string | null", "reason": "string | null",
+    "isRevoked": false, "isActiveNow": true } ]
+```
+
+Method: POST
+Route: /api/workflow/delegations
+Description: Delegate approvals. Needs `Workflow.Approve`. `delegatorUserId` omitted = you.
+Request Body:
+```json
+{ "delegateUserId": "guid", "startDate": "2026-06-10", "endDate": "2026-06-20", "subjectType": "string | null", "reason": "string | null", "delegatorUserId": "guid | null" }
+```
+Response: the created delegation.
+Status Codes: 200, 400 (delegate is the delegator, end before start, already ended), 403 (delegating someone else's without `Workflow.Configure`), 409 (the same pair already has an overlapping delegation for the same subject type)
+
+Method: POST
+Route: /api/workflow/delegations/{id}/revoke
+Description: End a delegation now (repeatable). Only the delegator, or a holder of `Workflow.Configure`. Needs `Workflow.Approve`.
+Response: the delegation with `isRevoked: true`.
+Status Codes: 200, 401, 403, 404
+
 ---
 
 ## 4. Actions
@@ -503,6 +567,22 @@ Status Codes: 200, 400, 401, 403, 404
 Fully standalone action-item tracker — usable with or without Project Management installed
 (`projectId` is always optional). Permission namespace: `Actions.*` (`View`, `Create`, `Edit`, `Submit`).
 Base route: `/api/actions`.
+
+Every action has a `priority` (see [ActionPriority](#actionpriority-actions): Low 0, Normal 1, High 2, Urgent 3), returned on
+every action. Create takes an optional `priority` (omitted = Normal); update takes an optional `priority`
+(omitted = leave unchanged). **Existing databases need `docs/upgrade/2026-10-03-add-action-priority.sql` first.**
+
+**Repeating actions.** An action can carry a repeat rule: `recurrence: { "unit": 0|1|2|3, "interval": 1, "endDate": "2026-12-31 | null" }`
+with `unit` = `ActionRecurrenceUnit` (Daily 0, Weekly 1, Monthly 2, Yearly 3; "every `interval` units", 1–365). When a repeating
+action is changed to `Completed`, the **next occurrence is created in the same save**: the same title, description, people, unit,
+calendar, project and priority, status `Open`, approval `NotSubmitted`, with `startDate`/`endDate` moved on by one interval (months and
+years keep the day of month, or the last day of a shorter month) and the same rule. Nothing is created when the next one would start
+after the rule's `endDate`, or when the action has no dates to move. `nextOccurrenceId` on the completed action points at the new one
+(and stops a reopen-then-complete from creating a duplicate); `recurrenceSourceId` on the new one points back. Only completing repeats —
+cancelling does not. The rule is set on create/update via the optional `recurrence` field (a repeating action needs a start or end date);
+**omitted = leave the stored rule unchanged**, and `{ "unit": null }` removes it. Every action response carries `recurrence`
+(null for a one-off), `recurrenceSourceId` and `nextOccurrenceId`. **Existing databases need `docs/upgrade/2026-10-04-add-action-recurrence.sql`
+first** (five nullable columns; existing actions are simply one-offs).
 
 ### Module: Actions
 Method: GET
@@ -810,7 +890,7 @@ Status Codes: 200, 401, 403, 404
 ### Module: Projects
 Method: POST
 Route: /api/project-management/projects
-Description: Create a project. Starts in Draft status, NotSubmitted approval status.
+Description: Create a project. Starts in Draft status, NotSubmitted approval status. `code` may be omitted or blank: the next free automatic code (`P0001`, `P0002`...) is assigned *(added for the PMPB UI, whose form has no code field)*.
 
 Request Body:
 ```json
@@ -859,10 +939,72 @@ Status Codes: 200, 401, 403, 404
 
 ---
 
+### Module: Projects
+Method: POST
+Route: /api/project-management/projects/check
+Description: *(added for the PMPB UI)* A dry run of create and update: the same checks (required parts, the charter rules, unique name, unique code, end date after start) without saving. Add `?projectId=` to check an edit of that project (its own name and code do not clash with themselves). Needs `Projects.View`.
+Body: as for create. Response: empty (204) when the project would be accepted; otherwise the same problem save would answer (400 / 409 with the codes above).
+Status Codes: 204, 400, 401, 403, 409
+
+---
+
+### Module: Projects
+Method: PUT
+Route: /api/project-management/projects/{id}/status
+Description: *(added for the PMPB UI)* Move a project between the working statuses. Needs `Projects.Edit`.
+Body: `{ "status": 0|1|2|3 }` (Draft 0, Active 1, OnHold 2, Completed 3). Archived (4) is refused (400, use `/archive`), and an archived project cannot change status (409).
+Response: the updated project.
+Status Codes: 200, 400, 401, 403, 404, 409
+
+---
+
+### Module: Projects
+Method: DELETE
+Route: /api/project-management/projects/{id}
+Description: *(added for the PMPB UI; the "hard delete guard" item)* Delete a project for good. New permission **`Projects.Remove`** (archiving stays `Projects.Delete`).
+Refused (409) while any installed module still holds data about the project; the message says what (`"... still has: 3 risk(s); 2 document(s) ..."`). Each module takes part through
+`IProjectDeletionParticipant` (Core's extension point, registered by the module itself - Agile, Waterfall, Risk, Stakeholder, Progress, Documents, Contracts, strategy alignment - or, for Team, Deliverables, KPIs and Actions,
+which do not reference Core, by the optional `Nexus.Integrations.ProjectDeletion`: `services.AddProjectDeletionIntegration()`). Once the project is gone the team list and governance roles go with it. With no participant registered nothing blocks the delete.
+Response: empty body.
+Status Codes: 204, 401, 403, 404, 409
+
+---
+
+### Module: Projects
+**Opt-in charter rules.** `AddProjectManagementCore(o => o.ValidateCharter = true)` makes create and update require a complete charter - manager, owning unit, both dates, goal and requirements - and refuse meaningless charter text
+(under four characters, or placeholder words such as "test"). Each failure has its own code (`title` of the problem response): `project.charter.{name|manager|unit|start_date|end_date|goal|requirements}_required`
+and `project.charter.{goal|requirements|constraints|assumptions|description}_meaningless`, all 400, so a client can show the message in the user's language. Off by default: existing callers see no change.
+`o.RequireUniqueName = true` makes two projects of a tenant unable to share a name (ignoring case): create/update answer 400 with code `project.name_exists`. Also off by default.
+
+---
+
+### Module: Portfolio
+Method: GET
+Route: /api/portfolio/projects
+Description: *(added for the PMPB UI)* The projects the caller may see, **in full** (same fields as `GET /projects/{id}`), by the portfolio's visibility rule: the caller's own and managed projects, plus what the installed visibility providers grant
+(team membership, unit manager, pending approval); `Portfolio.ViewAll` sees all. Archived projects are left out unless `includeArchived=true`.
+Query: organizationUnitId, status, search, involvedUserId, type, approvalStatus, includeArchived (all optional).
+Response: array of project objects, newest first.
+Status Codes: 200, 401, 403
+
+---
+
 ## 8. Waterfall Activities
 
 Requires ProjectManagement.Core. Permission namespace: `WaterfallActivities.*` (`View`, `Create`,
-`Edit`, `Delete`, `Submit`). Base route: `/api/project-management/waterfall/activities`.
+`Edit`, `Delete`, `Submit`) plus `WaterfallSchedule.Manage` for everything that shapes the plan rather
+than one activity (dependencies, applying a schedule, baselines, progress snapshots, MS Project import).
+Base route: `/api/project-management/waterfall/activities`; the scheduling features below live under
+`/api/project-management/waterfall/...` and are mapped by the same `MapWaterfallEndpoints()` call.
+
+**Existing databases need `docs/upgrade/2026-10-03-add-waterfall-scheduling.sql` first** (one new column
+and four new tables).
+
+Activity changes in this release: a `milestone` flag (`isMilestone`, in every response; optional on
+create and update — on update, omitted means unchanged). A milestone has `durationDays: 0`, its end date
+is its start date, and it is always a leaf. **Opt-in:** `AddWaterfallPlanning(o => o.ValidateActivityHierarchy = true)` makes a parent have to exist in the same project, not be a
+milestone, not be the activity itself or one of its own descendants, and not carry dependency
+links (checked only when the parent changes); without it any parent id is accepted, as before.
 
 ### Module: Waterfall Activities
 Method: GET
@@ -878,7 +1020,7 @@ Response:
     "responsibleUserId": "guid | null", "approverUserId": "guid | null",
     "startDate": "2026-01-01 | null", "endDate": "2026-01-01 | null",
     "durationDays": 5, "manHours": 40.0, "weight": 1.0,
-    "plannedProgress": 0.0, "actualProgress": 0.0, "approvalStatus": 0
+    "plannedProgress": 0.0, "actualProgress": 0.0, "approvalStatus": 0, "isMilestone": false
   }
 ]
 ```
@@ -978,11 +1120,300 @@ Status Codes: 200 (if a provider is plugged in), 401, 403, 501 (default — no p
 
 ---
 
+### Module: Waterfall Dependencies
+Method: GET
+Route: /api/project-management/waterfall/dependencies
+Description: A project's dependency links.
+Query Parameters: projectId (Guid, required)
+Response:
+```json
+[ { "id": "guid", "tenantId": "guid", "projectId": "guid", "predecessorActivityId": "guid", "successorActivityId": "guid", "type": 0, "lagDays": 0 } ]
+```
+`type`: see [DependencyType](#dependencytype-waterfall). `lagDays` is in working days; negative means the
+successor may overlap the predecessor (a lead).
+
+Status Codes: 200, 401, 403
+
+---
+
+### Module: Waterfall Dependencies
+Method: POST
+Route: /api/project-management/waterfall/dependencies
+Description: Link two activities. Needs `WaterfallSchedule.Manage`.
+Request Body:
+```json
+{ "tenantId": "guid", "projectId": "guid", "predecessorActivityId": "guid", "successorActivityId": "guid", "type": 0, "lagDays": 0 }
+```
+`type` defaults to FinishToStart (0) and `lagDays` to 0; `lagDays` must be between -365 and 365.
+Rules: both activities must exist in the project (404) and must have no sub-activities (400 — a summary's
+dates are the span of its children); an activity cannot depend on itself (400); a pair of activities has at most
+one link (409) and a link may not close a loop (409).
+Response: the created link.
+Status Codes: 200, 400, 401, 403, 404, 409
+
+---
+
+### Module: Waterfall Dependencies
+Method: PUT
+Route: /api/project-management/waterfall/dependencies/{id}
+Description: Change a link's type and lag. Needs `WaterfallSchedule.Manage`.
+Request Body: `{ "type": 1, "lagDays": 2 }`
+Response: the updated link.
+Status Codes: 200, 400, 401, 403, 404
+
+---
+
+### Module: Waterfall Dependencies
+Method: DELETE
+Route: /api/project-management/waterfall/dependencies/{id}
+Description: Remove a link. Needs `WaterfallSchedule.Manage`. (Deleting an activity removes its links too.)
+Response: empty on success.
+Status Codes: 200, 401, 403, 404
+
+---
+
+### Module: Waterfall Schedule
+Method: GET
+Route: /api/project-management/waterfall/schedule
+Description: Calculate the project's critical-path schedule. Changes nothing.
+Query Parameters: projectId (Guid, required)
+Response:
+```json
+{
+  "projectId": "guid", "projectStart": "2026-03-02", "projectFinish": "2026-03-13", "projectDurationDays": 10,
+  "usesWorkCalendar": true, "plannedProgress": 40.0, "actualProgress": 25.0,
+  "criticalPath": ["guid", "guid"],
+  "activities": [
+    {
+      "id": "guid", "parentActivityId": "guid | null", "name": "string", "isSummary": false, "isMilestone": false,
+      "start": "2026-03-02", "finish": "2026-03-04", "durationDays": 3,
+      "lateStart": "2026-03-02", "lateFinish": "2026-03-04", "totalFloatDays": 0, "isCritical": true,
+      "plannedProgress": 40.0, "actualProgress": 25.0, "usedDefaultDuration": false
+    }
+  ],
+  "warnings": ["string"], "applied": false
+}
+```
+How it is calculated: durations, lags and float are in working days of the project's work calendar (every
+day counts when the project has none, or the Calendar integration is not installed — `usesWorkCalendar`
+says which). Each dependency type becomes a constraint on the successor (FS: starts after the predecessor
+finishes; SS: starts after it starts; FF: finishes after it finishes; SF: finishes after it starts), plus the lag.
+An activity with no predecessor starts on its own `startDate`, or on the project's start; an activity with
+predecessors is driven by them alone (its stored dates are ignored). `totalFloatDays` is how long an activity can
+slip without delaying the project; zero means critical, and `criticalPath` lists the critical leaf activities in
+start order. Milestones sit on the day the work before them finishes. A summary spans its children, and its
+float is its children's smallest. `plannedProgress`/`actualProgress` are the weighted roll-up of the stored
+per-activity progress: by `weight` when any sibling has one, else by duration, else equally. An activity with
+no duration and no dates is given one day (`usedDefaultDuration`, and a warning).
+
+Errors: 404 unknown project; 409 the stored links contain a cycle; 400 a calendar with no working days or a duration over 36500 days.
+
+Status Codes: 200, 400, 401, 403, 404, 409
+
+---
+
+### Module: Waterfall Schedule
+Method: POST
+Route: /api/project-management/waterfall/schedule/apply
+Description: Calculate the schedule and write each activity's start, end and duration back to it (summaries included). Idempotent: applying twice changes nothing the second time. Needs `WaterfallSchedule.Manage`.
+Query Parameters: projectId (Guid, required)
+Response: the same as the GET above, with `applied: true`.
+Status Codes: 200, 400, 401, 403, 404, 409
+
+---
+
+### Module: Waterfall Baselines
+Method: GET
+Route: /api/project-management/waterfall/baselines
+Description: A project's baselines, in number order.
+Query Parameters: projectId (Guid, required)
+Response:
+```json
+[ { "id": "guid", "tenantId": "guid", "projectId": "guid", "number": 1, "name": "Approved plan", "note": "string | null",
+    "projectStart": "2026-03-02", "projectFinish": "2026-06-30", "activityCount": 12, "createdAtUtc": "2026-03-01T09:00:00+00:00", "createdByUserId": "guid | null" } ]
+```
+A baseline is a frozen copy of the project's *calculated* schedule (dependencies and calendar applied, not just
+stored dates), numbered 1, 2, 3… per project, never edited. It keeps describing activities as they were even if they
+are later renamed, moved or deleted.
+
+Status Codes: 200, 401, 403
+
+---
+
+### Module: Waterfall Baselines
+Method: GET
+Route: /api/project-management/waterfall/baselines/{id}
+Description: One baseline with its per-activity rows.
+Path Parameters: id (Guid, required)
+Response: `{ "baseline": { …as above… }, "activities": [ { "activityId": "guid", "parentActivityId": "guid | null", "name": "string", "isSummary": false, "isMilestone": false, "startDate": "2026-03-02", "endDate": "2026-03-04", "durationDays": 3 } ] }`
+Status Codes: 200, 401, 403, 404
+
+---
+
+### Module: Waterfall Baselines
+Method: POST
+Route: /api/project-management/waterfall/baselines
+Description: Freeze the project's current calculated schedule as the next baseline. Needs `WaterfallSchedule.Manage`.
+Request Body: `{ "tenantId": "guid", "projectId": "guid", "name": "Approved plan", "note": "string | null" }`
+Response: the created baseline with its rows. A project holds at most 50 baselines (409); a project with no activities has nothing to baseline (400). A new baseline takes the highest existing number plus one.
+Status Codes: 200, 400, 401, 403, 404, 409
+
+---
+
+### Module: Waterfall Baselines
+Method: GET
+Route: /api/project-management/waterfall/baselines/{id}/variance
+Description: Compare the project's current calculated schedule with a baseline.
+Path Parameters: id (Guid, required)
+Response:
+```json
+{
+  "baselineId": "guid", "number": 1, "name": "Approved plan", "projectId": "guid",
+  "baselineProjectStart": "2026-03-02", "baselineProjectFinish": "2026-06-30",
+  "currentProjectStart": "2026-03-02", "currentProjectFinish": "2026-07-08",
+  "projectStartVarianceDays": 0, "projectFinishVarianceDays": 8,
+  "onTrackCount": 7, "lateCount": 4, "earlyCount": 1, "addedCount": 1, "removedCount": 0,
+  "activities": [
+    {
+      "activityId": "guid", "name": "string", "isSummary": false, "isMilestone": false, "status": 1,
+      "baselineStart": "2026-03-02", "baselineFinish": "2026-03-04", "baselineDurationDays": 3,
+      "currentStart": "2026-03-02", "currentFinish": "2026-03-06", "currentDurationDays": 5,
+      "startVarianceDays": 0, "finishVarianceDays": 2, "durationVarianceDays": 2
+    }
+  ]
+}
+```
+Variances are current minus baseline: positive means later/longer. Start and finish variances are in **calendar
+days**; the duration variance is in working days. `status` (see [VarianceStatus](#variancestatus-waterfall)) is judged
+by the finish. For an added or removed activity the missing side's fields are `null`.
+
+Status Codes: 200, 400, 401, 403, 404, 409
+
+---
+
+### Module: Waterfall Baselines
+Method: DELETE
+Route: /api/project-management/waterfall/baselines/{id}
+Description: Delete a baseline and its rows. Needs `WaterfallSchedule.Manage`.
+Path Parameters: id (Guid, required)
+Response: empty on success.
+Status Codes: 200, 401, 403, 404
+
+---
+
+### Module: Waterfall Progress Curve
+Method: GET
+Route: /api/project-management/waterfall/s-curve
+Description: The data behind a project's S-curve.
+Query Parameters: projectId (Guid, required), stepDays (int, optional, 1-90, default 7)
+Response:
+```json
+{
+  "projectId": "guid", "projectStart": "2026-03-02", "projectFinish": "2026-06-30", "stepDays": 7, "today": "2026-04-01",
+  "planned": [ { "date": "2026-03-02", "plannedProgress": 3.5 }, { "date": "2026-03-09", "plannedProgress": 11.0 } ],
+  "actual": [ { "date": "2026-03-16", "actualProgress": 9.0, "plannedProgress": 17.0 } ],
+  "currentPlannedProgress": 42.0, "currentActualProgress": 35.5, "progressVariance": -6.5, "schedulePerformanceIndex": 0.85
+}
+```
+`planned` is calculated from the schedule alone — each activity completes evenly over its working days (a milestone
+all at once), combined with the same weighting as the roll-up — sampled every `stepDays` days from start to finish; the
+finish date is always the last point, and a very long project is sampled more coarsely (about 1000 points at most;
+`stepDays` in the response is the step actually used). `actual` is the project's snapshots, oldest first: progress
+history is stored nowhere else, so take snapshots periodically. `schedulePerformanceIndex` is actual ÷ planned today
+(`null` while nothing is planned yet); below 1 is behind schedule.
+
+Status Codes: 200, 400, 401, 403, 404, 409
+
+---
+
+### Module: Waterfall Progress Curve
+Method: GET
+Route: /api/project-management/waterfall/progress-snapshots
+Description: A project's progress snapshots, oldest first.
+Query Parameters: projectId (Guid, required)
+Response: `[ { "id": "guid", "tenantId": "guid", "projectId": "guid", "snapshotDate": "2026-03-16", "plannedProgress": 17.0, "actualProgress": 9.0, "note": "string | null", "createdByUserId": "guid | null" } ]`
+Status Codes: 200, 401, 403
+
+---
+
+### Module: Waterfall Progress Curve
+Method: POST
+Route: /api/project-management/waterfall/progress-snapshots
+Description: Record the project's progress as of a date. Needs `WaterfallSchedule.Manage`.
+Request Body: `{ "tenantId": "guid", "projectId": "guid", "snapshotDate": "2026-03-16 | null (today)", "note": "string | null" }`
+Response: the snapshot. `plannedProgress` is what the schedule says should be done by the end of that date; `actualProgress` is the roll-up of the entered activity progress right now. A project has one snapshot per date; posting again for the same date refreshes it.
+Status Codes: 200, 400, 401, 403, 404, 409
+
+---
+
+### Module: Waterfall Progress Curve
+Method: DELETE
+Route: /api/project-management/waterfall/progress-snapshots/{id}
+Description: Delete a snapshot. Needs `WaterfallSchedule.Manage`.
+Path Parameters: id (Guid, required)
+Response: empty on success.
+Status Codes: 200, 401, 403, 404
+
+---
+
+### Module: Waterfall MS Project
+Method: POST
+Route: /api/project-management/waterfall/msproject/import
+Description: Build a project's WBS and dependencies from an MS Project XML (MSPDI) file. Needs `WaterfallSchedule.Manage`.
+Content-Type: **multipart/form-data**
+
+Request Body (form fields / query):
+```
+file: <binary, 1 byte - 20 MB>
+projectId: guid (query)
+replaceExisting: bool (query, optional, default false)
+```
+Response:
+```json
+{ "activitiesImported": 42, "dependenciesImported": 51, "activitiesReplaced": 0, "warnings": ["string"] }
+```
+Outline levels become the tree; milestones, durations (converted to working days using the file's minutes per day),
+percent complete and all four link types with their lags are kept. Resources, assignments, costs, constraints and
+calendars are not imported, and dates are then this system's own calculation (apply the schedule to refresh them).
+A project that already has activities is refused (409) unless `replaceExisting=true`, which deletes every existing
+activity and dependency of the project first; the file is fully validated before anything is deleted, so a bad file
+never costs the existing plan. Links that cannot be kept — to or from summary tasks, to tasks not in the file,
+duplicates, or ones that would form a cycle — are skipped and listed in `warnings`. At most 5000 tasks. DTDs are not
+processed.
+
+Status Codes: 200, 400, 401, 403, 404, 409
+
+---
+
+### Module: Waterfall MS Project
+Method: GET
+Route: /api/project-management/waterfall/msproject/export
+Description: The project's calculated schedule as an MS Project XML file.
+Query Parameters: projectId (Guid, required)
+Response: **an XML file** (`application/xml`, named from the project's code) — not JSON. It contains a project-summary row, the WBS in outline order with start, finish, duration (hours of an 8-hour day), milestone/summary flags, percent complete and predecessor links, and one calendar with the project's working week and holidays.
+Status Codes: 200, 401, 403, 404, 409
+
+---
+
 ## 9. Agile Tasks
 
 Requires ProjectManagement.Core. Explicitly independent of Waterfall (neither references the
 other) — a project can use one, the other, both, or neither. Permission namespace:
-`AgileTasks.*` (`View`, `Create`, `Edit`, `Delete`, `Submit`). Base route: `/api/project-management/agile/tasks`.
+`AgileTasks.*` (`View`, `Create`, `Edit`, `Delete`, `Submit`) plus `AgileSprints.Manage` for creating, editing,
+starting, completing and deleting sprints and putting tasks into them. Base route: `/api/project-management/agile/tasks`;
+the board, backlog, sprint, checklist and chart endpoints below live under `/api/project-management/agile/...` and are
+mapped by the same `MapAgileTaskEndpoints()` call.
+
+**Existing databases need `docs/upgrade/2026-10-03-add-agile-sprints.sql` first** (two new columns and three new tables;
+it also numbers existing tasks so boards come out in a stable order).
+
+Task changes in this release: every task response carries `storyPoints` (null = not estimated) and `rank` (its position
+within its status column, lowest first). `storyPoints` is optional on create and update; **on update, omitted leaves the
+estimate unchanged**, so a client that predates the field cannot wipe it — use `PUT .../{id}/estimate` to set it or to
+clear it with an explicit `null`. A new status `UnderReview` (value 3) sits between InProgress and Done on the board. A
+task joins a sprint through its `sprintNumber`, as before; a task in no sprint is in the **backlog**. A sprint number does
+not need a Sprint behind it (older data keeps working), but a *completed* sprint accepts no more tasks (409). Changing a
+task's status through `PUT .../{id}/status` puts the card at the bottom of its new column.
 
 ### Module: Agile Tasks
 Method: GET
@@ -995,7 +1426,8 @@ Response:
   {
     "id": "guid", "tenantId": "guid", "projectId": "guid", "title": "string", "description": "string | null",
     "status": 0, "responsibleUserId": "guid | null", "approverUserId": "guid | null",
-    "dueDate": "2026-01-01 | null", "priority": 1, "sprintNumber": 3, "approvalStatus": 0
+    "dueDate": "2026-01-01 | null", "priority": 1, "sprintNumber": 3, "approvalStatus": 0,
+    "storyPoints": 5, "rank": 0
   }
 ]
 ```
@@ -1094,6 +1526,209 @@ Status Codes: 200 (if a provider is plugged in), 401, 403, 501 (default)
 
 ---
 
+### Module: Agile Board
+Method: GET
+Route: /api/project-management/agile/board
+Description: The Kanban board: four columns, in order ToDo, InProgress, UnderReview, Done.
+Query Parameters: projectId (Guid, required), sprintNumber (int, optional — the sprint's board), responsibleUserId (Guid, optional), priority (AgileTaskPriority, optional)
+Response:
+```json
+{
+  "projectId": "guid", "sprintNumber": null,
+  "columns": [
+    {
+      "status": 0, "cardCount": 2, "points": 8,
+      "cards": [
+        { "id": "guid", "title": "string", "status": 0, "priority": 1, "responsibleUserId": "guid | null",
+          "dueDate": "2026-01-01 | null", "sprintNumber": 3, "storyPoints": 5, "rank": 0,
+          "checklistDone": 1, "checklistTotal": 3, "approvalStatus": 0 }
+      ]
+    }
+  ]
+}
+```
+Cards are in rank order within each column. `points` is the sum of the column's story points.
+
+Status Codes: 200, 401, 403
+
+---
+
+### Module: Agile Board
+Method: GET
+Route: /api/project-management/agile/backlog
+Description: The tasks in no sprint that are not done, in board order (status column, then rank).
+Query Parameters: projectId (Guid, required)
+Response: `{ "projectId": "guid", "cards": [ …cards as above… ], "totalPoints": 13, "unestimatedCount": 2 }`
+Status Codes: 200, 401, 403
+
+---
+
+### Module: Agile Board
+Method: POST
+Route: /api/project-management/agile/tasks/{id}/move
+Description: Drag and drop: put a task in a column at a position. Needs `AgileTasks.Edit`.
+Path Parameters: id (Guid, required)
+Request Body: `{ "status": 1, "beforeTaskId": "guid | null" }`
+The card is inserted in front of `beforeTaskId`, which must be a card of the destination column, or at the end when null.
+The ranks of the column it joins — and of the one it left — are renumbered 0, 1, 2… Dropping a card on itself changes
+nothing. Moving into or out of Done inside a sprint is recorded in that sprint's history.
+Response: the updated task.
+Status Codes: 200, 400, 401, 403, 404
+
+---
+
+### Module: Agile Board
+Method: PUT
+Route: /api/project-management/agile/tasks/{id}/estimate
+Description: Set a task's story points, or clear them with an explicit `null`. Needs `AgileTasks.Edit`. 0-1000.
+Request Body: `{ "storyPoints": 5 }` or `{ "storyPoints": null }`
+Response: the updated task.
+Status Codes: 200, 400, 401, 403, 404
+
+---
+
+### Module: Agile Board
+Method: GET / POST / PUT / DELETE
+Route: /api/project-management/agile/tasks/{id}/checklist  and  .../checklist/{itemId}
+Description: A task's checklist — the small steps shown on its card (the card's `checklistDone` / `checklistTotal`). Reading needs `AgileTasks.View`, changing needs `AgileTasks.Edit`.
+Request Body (POST): `{ "text": "string (1-500)" }` — added at the end; at most 100 items per task (409).
+Request Body (PUT .../{itemId}): `{ "text": "string", "isDone": true }`
+Response: `{ "id": "guid", "taskId": "guid", "text": "string", "isDone": false, "order": 0 }` (a list for GET; empty for DELETE)
+Status Codes: 200, 400, 401, 403, 404, 409
+
+---
+
+### Module: Agile Sprints
+Method: GET
+Route: /api/project-management/agile/sprints
+Description: A project's sprints, by number.
+Query Parameters: projectId (Guid, required)
+Response:
+```json
+[ { "id": "guid", "tenantId": "guid", "projectId": "guid", "number": 1, "name": "Sprint 1", "goal": "string | null",
+    "startDate": "2026-03-02 | null", "endDate": "2026-03-15 | null", "status": 0,
+    "taskCount": 6, "totalPoints": 21, "donePoints": 8 } ]
+```
+`status`: see [SprintStatus](#sprintstatus-agile-tasks). `taskCount`/`totalPoints`/`donePoints` describe the tasks in the sprint right now.
+
+Status Codes: 200, 401, 403
+
+---
+
+### Module: Agile Sprints
+Method: GET
+Route: /api/project-management/agile/sprints/{id}
+Description: One sprint.
+Path Parameters: id (Guid, required)
+Response: one item shaped as above.
+Status Codes: 200, 401, 403, 404
+
+---
+
+### Module: Agile Sprints
+Method: POST
+Route: /api/project-management/agile/sprints
+Description: Create a sprint. Needs `AgileSprints.Manage`.
+Request Body: `{ "tenantId": "guid", "projectId": "guid", "name": "string | null", "goal": "string | null", "startDate": "2026-03-02 | null", "endDate": "2026-03-15 | null" }`
+The number is the project's highest plus one; the name defaults to "Sprint N"; dates may wait until the sprint starts but the end may not precede the start.
+Response: the sprint, `status: 0` (Planned).
+Status Codes: 200, 400, 401, 403
+
+---
+
+### Module: Agile Sprints
+Method: PUT
+Route: /api/project-management/agile/sprints/{id}
+Description: Edit a sprint's name, goal and dates. A completed sprint can no longer be edited (409). Needs `AgileSprints.Manage`.
+Request Body: `{ "name": "string", "goal": "string | null", "startDate": "…|null", "endDate": "…|null" }`
+Status Codes: 200, 400, 401, 403, 404, 409
+
+---
+
+### Module: Agile Sprints
+Method: POST
+Route: /api/project-management/agile/sprints/{id}/start
+Description: Planned → Active. Needs `AgileSprints.Manage`.
+Request Body: `{ "startDate": "…|null", "endDate": "…|null" }` — dates given here replace the sprint's; both must be known by now (400). Only a planned sprint can start, and a project has at most one active sprint (409).
+Response: the sprint, `status: 1`.
+Status Codes: 200, 400, 401, 403, 404, 409
+
+---
+
+### Module: Agile Sprints
+Method: POST
+Route: /api/project-management/agile/sprints/{id}/complete
+Description: Active → Completed. Needs `AgileSprints.Manage`.
+Request Body: `{ "moveIncompleteToSprintId": "guid | null" }`
+Tasks that are Done stay in the sprint. Unfinished ones move to the given sprint (another sprint of the same project that is not completed) or back to the backlog when null; their status is kept. A completed sprint's history is frozen: carrying work over is recorded as "carried over", not as a change of scope.
+Response: `{ "sprint": { …, "status": 2 }, "completedTasks": 5, "carriedOverTasks": 2 }`
+Status Codes: 200, 400, 401, 403, 404, 409
+
+---
+
+### Module: Agile Sprints
+Method: DELETE
+Route: /api/project-management/agile/sprints/{id}
+Description: Delete a sprint. Only a planned sprint with no tasks can be deleted (409): an active or completed one is part of the project's history. Needs `AgileSprints.Manage`.
+Status Codes: 200, 401, 403, 404, 409
+
+---
+
+### Module: Agile Sprints
+Method: POST / DELETE
+Route: /api/project-management/agile/sprints/{id}/tasks  and  .../tasks/{taskId}
+Description: Put tasks into a sprint in bulk, or take one back to the backlog. A completed sprint accepts neither (409). Needs `AgileSprints.Manage`.
+Request Body (POST): `{ "taskIds": ["guid", "guid"] }` — every task must exist in the sprint's project, otherwise nothing is assigned (404).
+Response: the sprint.
+Status Codes: 200, 400, 401, 403, 404, 409
+
+---
+
+### Module: Agile Sprints
+Method: GET
+Route: /api/project-management/agile/sprints/{id}/burn
+Description: One series that serves both the burn-up and the burn-down chart.
+Query Parameters: metric (`Points` or `Count`, optional, default `Points`)
+Response:
+```json
+{
+  "sprintId": "guid", "sprintNumber": 1, "name": "Sprint 1", "status": 1, "metric": 0,
+  "startDate": "2026-03-02", "endDate": "2026-03-06",
+  "committedScope": 8, "currentScope": 10, "currentCompleted": 5, "currentRemaining": 5,
+  "points": [
+    { "date": "2026-03-02", "scope": 8, "completed": 0, "remaining": 8, "idealRemaining": 8.0 },
+    { "date": "2026-03-04", "scope": 10, "completed": 5, "remaining": 5, "idealRemaining": 4.0 },
+    { "date": "2026-03-06", "scope": null, "completed": null, "remaining": null, "idealRemaining": 0.0 }
+  ],
+  "warnings": ["string"]
+}
+```
+Burn-up plots `scope` and `completed`; burn-down plots `remaining` against `idealRemaining` (a straight line from the committed scope to zero on the last day). `scope` is what the sprint holds by the end of each day, so work added mid-sprint raises it and work that leaves lowers it; `completed` counts tasks that were Done, and a task that is reopened stops counting. `committedScope` is the scope at the end of the first day. The first three fields are `null` for days that have not happened yet. Days are UTC dates. The figures are replayed from a recorded history of scope and status changes, so they only cover changes made since the upgrade. A sprint with no story points on any task returns a warning — chart it with `metric=Count`.
+
+Status Codes: 200, 400, 401, 403, 404
+
+---
+
+### Module: Agile Sprints
+Method: GET
+Route: /api/project-management/agile/velocity
+Description: The velocity of a project's most recent completed sprints.
+Query Parameters: projectId (Guid, required), sprints (int, optional, 1-50, default 5), metric (`Points` or `Count`, optional)
+Response:
+```json
+{
+  "projectId": "guid", "metric": 0,
+  "sprints": [ { "sprintId": "guid", "number": 1, "name": "Sprint 1", "startDate": "2026-03-02", "endDate": "2026-03-15",
+                 "committed": 8, "finalScope": 13, "completed": 10, "carriedOver": 3, "completionPercent": 76.9 } ],
+  "averageVelocity": 9.0, "averageCommitted": 9.0
+}
+```
+Oldest first. `committed` is the scope at the end of the first day, `finalScope` the scope at the end, `completed` is the velocity, `carriedOver` the unfinished work that moved on. Averages are over the sprints listed.
+
+Status Codes: 200, 400, 401, 403
+
+---
+
 ## 10. Project Team
 
 Requires ProjectManagement.Core. Two sub-areas: team **members** (a user assigned to a project,
@@ -1110,6 +1745,26 @@ Response:
 ```json
 [ { "id": "guid", "tenantId": "guid", "projectId": "guid", "userId": "guid", "roleTitle": "string | null" } ]
 ```
+Status Codes: 200, 401, 403
+
+---
+
+### Module: Project Team
+Method: POST
+Route: /api/project-management/team/members/for-projects
+Description: *(added for the PMPB UI)* The members of several projects in one call (the project list screens need everybody's team at once). Needs `ProjectTeam.View`.
+Body: `{ "projectIds": ["guid", ...] }`
+Response: array of members (`id, tenantId, projectId, userId, roleTitle`) for those projects.
+Status Codes: 200, 401, 403
+
+---
+
+### Module: Project Team
+Method: PUT
+Route: /api/project-management/team/members/set
+Description: *(added for the PMPB UI)* Make a project's team exactly the given people: missing ones are added (no role title), the rest removed, those who stay keep their member id and role title. Needs `ProjectTeam.ManageMembers`.
+Body: `{ "tenantId": "guid", "projectId": "guid", "userIds": ["guid", ...] }`
+Response: the resulting members.
 Status Codes: 200, 401, 403
 
 ---
@@ -1186,6 +1841,32 @@ Path Parameters: id (Guid, required)
 Request Body: same shape as create, minus `tenantId`/`projectId`.
 Response: the updated role.
 Status Codes: 200, 400, 401, 403, 404
+
+---
+
+### Module: Project Team
+Method: PUT
+Route: /api/project-management/team/members/{memberId}
+Description: Change a member's role title. Needs `ProjectTeam.ManageMembers`. A blank title clears it.
+
+Path Parameters: memberId (Guid, required)
+Request Body:
+```json
+{ "roleTitle": "string | null" }
+```
+Response: the updated member.
+Status Codes: 200, 401, 403, 404
+
+---
+
+### Module: Project Team
+Method: DELETE
+Route: /api/project-management/team/governance-roles/{id}
+Description: Delete a governance role. Needs `ProjectTeam.ManageGovernance`.
+
+Path Parameters: id (Guid, required)
+Response: empty on success.
+Status Codes: 200, 401, 403, 404
 
 ---
 
@@ -1314,6 +1995,17 @@ Status Codes: 200, 400, 401, 403, 404
 
 ---
 
+### Module: KPI
+Method: DELETE
+Route: /api/project-management/kpis/{id}
+Description: Delete a KPI definition. Needs the `Kpi.Delete` permission.
+
+Path Parameters: id (Guid, required)
+Response: empty on success.
+Status Codes: 200, 401, 403, 404
+
+---
+
 ## 13. Risks
 
 Requires ProjectManagement.Core. RPN (Risk Priority Number) is computed server-side
@@ -1400,6 +2092,34 @@ Response (when configured):
 Response (default): RFC 7807 Problem Details, `status: 501`.
 
 Status Codes: 200 (if a provider is plugged in), 401, 403, 501 (default)
+
+---
+
+### Module: Risks
+Method: GET
+Route: /api/project-management/risks/matrix
+Description: Probability x impact grid for a project. Only occupied cells are returned; a client renders the full 5x5 grid and treats a missing cell as empty. Colouring is left to the client.
+
+Query Parameters: projectId (Guid, required)
+Response:
+```json
+{
+  "projectId": "guid", "totalRisks": 3,
+  "cells": [ { "probabilityScore": 2, "impactScore": 3, "count": 2, "riskIds": ["guid", "guid"] } ]
+}
+```
+Status Codes: 200, 401, 403
+
+---
+
+### Module: Risks
+Method: DELETE
+Route: /api/project-management/risks/{id}
+Description: Delete a risk. Needs `Risks.Delete`. Items that are `PendingApproval` cannot be deleted (409), so a workflow instance never points at a missing subject.
+
+Path Parameters: id (Guid, required)
+Response: empty on success.
+Status Codes: 200, 401, 403, 404, 409
 
 ---
 
@@ -1491,13 +2211,46 @@ Status Codes: 200 (if a provider is plugged in), 401, 403, 501 (default)
 
 ---
 
+### Module: Stakeholders
+Method: GET
+Route: /api/project-management/stakeholders/matrix
+Description: Power x interest grid for a project. Only occupied cells are returned. `quadrant` is the engagement strategy for the cell: `High` is the high side of each axis, `Medium`/`Low` the low side; a client that wants another split can ignore it.
+
+Query Parameters: projectId (Guid, required)
+Response:
+```json
+{
+  "projectId": "guid", "totalStakeholders": 3,
+  "cells": [
+    { "power": 2, "interest": 2, "quadrant": 3,
+      "stakeholders": [ { "id": "guid", "name": "string", "isInternal": true } ] }
+  ]
+}
+```
+`quadrant` values: see [StakeholderQuadrant](#stakeholderquadrant-stakeholders).
+
+Status Codes: 200, 401, 403
+
+---
+
+### Module: Stakeholders
+Method: DELETE
+Route: /api/project-management/stakeholders/{id}
+Description: Delete a stakeholder. Needs `Stakeholders.Delete`. Items that are `PendingApproval` cannot be deleted (409), so a workflow instance never points at a missing subject.
+
+Path Parameters: id (Guid, required)
+Response: empty on success.
+Status Codes: 200, 401, 403, 404, 409
+
+---
+
 ## 15. Progress
 
 Requires ProjectManagement.Core. Explicitly does **not** reference Waterfall — Deviation and
 PerformanceClassification are computed server-side from Planned/Actual progress and are never
 accepted as input. `ConfirmedProgress` is set only when the update is approved (via
 `SubmitForApproval` → Workflow, or the default auto-approve). Permission namespace:
-`Progress.*` (`View`, `Create`, `Edit`, `Submit`). Base route: `/api/project-management/progress-updates`.
+`Progress.*` (`View`, `Create`, `Edit`, `Delete`, `Submit`). Base route: `/api/project-management/progress-updates`.
 
 ### Module: Progress
 Method: GET
@@ -1588,11 +2341,119 @@ Status Codes: 200 (if a provider is plugged in), 401, 403, 501 (default)
 
 ---
 
+### Module: Progress
+Method: DELETE
+Route: /api/project-management/progress-updates/{id}
+Description: Delete a progress update. Needs `ProjectProgress.Delete`. Items that are `PendingApproval` cannot be deleted (409), so a workflow instance never points at a missing subject.
+
+Path Parameters: id (Guid, required)
+Response: empty on success.
+Status Codes: 200, 401, 403, 404, 409
+
+---
+
+## 15a. Delay Reasons (Progress module)
+
+A structured register of why a project is behind: root cause, days and rials lost, and the
+corrective action. Lives in the Progress module, requires nothing beyond it, and has the same
+optional-approval flow as progress updates (`SubjectType` = `"DelayReason"`, also listed by
+`/api/integrations/project-workflow/subject-types`). The free-text `delayReasons` on a progress
+update is a separate, older field and is unchanged. Permission namespace: `DelayReasons.*`
+(`View`, `Create`, `Edit`, `Delete`, `Submit`). Base route: `/api/project-management/delay-reasons`.
+**Existing databases need `docs/upgrade/2026-10-03-add-delay-reasons.sql` first** (a new table).
+
+### Module: Delay Reasons
+Method: GET
+Route: /api/project-management/delay-reasons
+Description: List a project's delay reasons, newest first.
+Query Parameters: projectId (Guid, required)
+Response:
+```json
+[
+  {
+    "id": "guid", "tenantId": "guid", "projectId": "guid", "registerDate": "2026-01-01",
+    "rootCause": 1, "description": "string", "timeImpactDays": 14, "costImpact": 250000000,
+    "correctiveAction": "string | null", "approvalStatus": 0, "createdByUserId": "guid | null"
+  }
+]
+```
+`rootCause`: see [DelayRootCause](#delayrootcause-progress). `costImpact` is in rials.
+
+Status Codes: 200, 401, 403
+
+---
+
+### Module: Delay Reasons
+Method: GET
+Route: /api/project-management/delay-reasons/{id}
+Description: Get one delay reason.
+Path Parameters: id (Guid, required)
+Response: one item shaped as above.
+Status Codes: 200, 401, 403, 404
+
+---
+
+### Module: Delay Reasons
+Method: POST
+Route: /api/project-management/delay-reasons
+Description: Register a delay reason.
+Request Body:
+```json
+{ "tenantId": "guid", "projectId": "guid", "registerDate": "2026-01-01", "rootCause": 1, "description": "string (required, max 2000)", "timeImpactDays": 14, "costImpact": 250000000, "correctiveAction": "string | null" }
+```
+`timeImpactDays` and `costImpact` are optional and must not be negative.
+Response: the created record, `approvalStatus: 0`.
+Status Codes: 200, 400, 401, 403
+
+---
+
+### Module: Delay Reasons
+Method: PUT
+Route: /api/project-management/delay-reasons/{id}
+Description: Update a delay reason.
+Path Parameters: id (Guid, required)
+Request Body:
+```json
+{ "registerDate": "2026-01-01", "rootCause": 1, "description": "string", "timeImpactDays": 14, "costImpact": 250000000, "correctiveAction": "string | null" }
+```
+Response: the updated record.
+Status Codes: 200, 400, 401, 403, 404
+
+---
+
+### Module: Delay Reasons
+Method: DELETE
+Route: /api/project-management/delay-reasons/{id}
+Description: Delete a delay reason. Items that are `PendingApproval` cannot be deleted (409), so a workflow instance never points at a missing subject.
+Path Parameters: id (Guid, required)
+Response: empty on success.
+Status Codes: 200, 401, 403, 404, 409
+
+---
+
+### Module: Delay Reasons
+Method: POST
+Route: /api/project-management/delay-reasons/{id}/submit-for-approval
+Description: Send the delay reason for approval. With Workflow installed it becomes `PendingApproval(1)`; without it, it is approved directly (`Approved(2)`), like every other approvable record.
+Path Parameters: id (Guid, required)
+Response: the updated record.
+Status Codes: 200, 401, 403, 404
+
+---
+
 ## 16. Project Documents
 
 Requires ProjectManagement.Core. Uses NexusCore's shared local-disk `IFileStorage`. Permission
 namespace: `ProjectDocuments.*` (`View`, `Upload`, `Edit`, `Delete`, `Submit`). Base route:
 `/api/project-management/documents`.
+
+**Version history.** Every file uploaded for a document is kept. The document itself always describes
+its *current* (newest) file, so every endpoint below that does not mention versions behaves as before:
+`fileName`, `contentType`, `sizeBytes` and `/download` are the current version's. `currentVersion` says
+which version that is (1 for a document that has only ever had one file). Uploading a new version never
+overwrites or deletes an older file, and deleting the document deletes all of its files.
+**Existing databases need `docs/upgrade/2026-10-03-add-document-versions.sql` first** (a new table and a
+new column; it also records every existing document as version 1).
 
 ### Module: Project Documents
 Method: GET
@@ -1605,7 +2466,7 @@ Response:
   {
     "id": "guid", "tenantId": "guid", "projectId": "guid", "description": "string",
     "documentType": 0, "registerDate": "2026-01-01", "fileName": "string", "contentType": "string",
-    "sizeBytes": 12345, "approvalStatus": 0, "createdByUserId": "guid | null"
+    "sizeBytes": 12345, "approvalStatus": 0, "createdByUserId": "guid | null", "currentVersion": 1
   }
 ]
 ```
@@ -1655,6 +2516,60 @@ Status Codes: 200, 400, 401, 403, 404
 ---
 
 ### Module: Project Documents
+Method: GET
+Route: /api/project-management/documents/{id}/versions
+Description: A document's full file history, newest first. Exactly one entry has `isCurrent: true`.
+Path Parameters: id (Guid, required)
+Response:
+```json
+[
+  {
+    "id": "guid | null", "documentId": "guid", "versionNumber": 2, "fileName": "plan-v2.pdf",
+    "contentType": "application/pdf", "sizeBytes": 20480, "comment": "string | null",
+    "isCurrent": true, "createdByUserId": "guid | null", "createdAtUtc": "2026-10-03T10:00:00+00:00"
+  }
+]
+```
+`id` is `null` only for a document uploaded before version history existed and not yet given a second file:
+its one file is reported as version 1 without a stored row. Needs `ProjectDocuments.View`.
+
+Status Codes: 200, 401, 403, 404
+
+---
+
+### Module: Project Documents
+Method: POST
+Route: /api/project-management/documents/{id}/versions
+Description: Upload a new file as the document's next version. It becomes the current file; the previous files stay downloadable. Needs `ProjectDocuments.Upload`.
+Content-Type: **multipart/form-data**
+
+Path Parameters: id (Guid, required)
+Request Body (form fields / query):
+```
+file: <binary>
+comment: string (optional, max 1000 — what changed)
+```
+Response: the created version, shaped as in the list above, with `isCurrent: true`.
+
+Rules: a document that is `PendingApproval(1)` refuses a new version (409), because approvers are reviewing the
+current file. Any other document accepts one and goes back to `approvalStatus: 0` (NotSubmitted) — the new file has
+not been approved, so an earlier approval does not carry over.
+
+Status Codes: 200, 400, 401, 403, 404, 409
+
+---
+
+### Module: Project Documents
+Method: GET
+Route: /api/project-management/documents/{id}/versions/{versionNumber}/download
+Description: Download one specific version's file.
+Path Parameters: id (Guid, required), versionNumber (int, required)
+Response: **binary file stream** — not JSON.
+Status Codes: 200, 401, 403, 404
+
+---
+
+### Module: Project Documents
 Method: PUT
 Route: /api/project-management/documents/{id}
 Description: Update a document's description/type (not the file content).
@@ -1671,7 +2586,7 @@ Status Codes: 200, 400, 401, 403, 404
 ### Module: Project Documents
 Method: DELETE
 Route: /api/project-management/documents/{id}
-Description: Delete a document (metadata and stored file).
+Description: Delete a document: its metadata and the stored file of every version.
 Path Parameters: id (Guid, required)
 Response: empty body.
 Status Codes: 204, 401, 403, 404
@@ -1721,6 +2636,93 @@ Status Codes: 200 (if a provider is plugged in), 401, 403, 501 (default)
 
 ---
 
+## 16a. Contracts (Nexus.ProjectManagement.Contracts)
+
+Contracts signed for a project, their addenda and their invoices — money in **rials**, every amount and date also
+returned the Persian way (`...Fa` dates in Jalali with Persian digits; `MoneyDto` with the amount in words, grouped
+digits and the toman equivalent). Requires ProjectManagement.Core; Workflow is optional (without it everything is
+approved on submit). Register with `AddContractManagement()` + `AddContractManagementInfrastructure(configuration)`,
+map with `MapContractEndpoints()`, and run `ModuleSchemaInitializer.EnsureCreatedAsync` for `ContractsDbContext`.
+Subject types: `"Contract"`, `"ContractAddendum"`, `"ContractInvoice"`. Permission namespace: `Contracts.*`
+(`View`, `Create`, `Edit`, `Delete`, `Submit`, `ManageAddenda`, `ManageInvoices`, `RecordPayments`). Base route:
+`/api/project-management/contracts`. The schema is new, so a host that runs EnsureCreated gets it automatically;
+`docs/upgrade/2026-10-03-add-contracts.sql` creates it by script.
+
+**The money rules.** `currentAmount` = original amount + approved addenda (0 until the contract is approved);
+`invoicedAmount` = approved invoices; invoices that are not rejected are *reserved*, and a new invoice must fit in
+`currentAmount − reserved`; `remainingCommitment` = current − invoiced; `outstandingPayable` = invoiced − paid;
+`currentEndDate` = end date + approved extension days. `isOverInvoiced` flags a contract billed above its value.
+
+### Module: Contracts
+Method: GET
+Route: /api/project-management/contracts
+Description: A project's contracts (sorted by number), each with its computed `summary`. Query: projectId (Guid, required). Needs `Contracts.View`.
+
+Method: GET
+Route: /api/project-management/contracts/summary
+Description: The project's contracts added up (counts approved money only): totals, percentages and `overInvoicedContracts`. Query: projectId (Guid, required).
+
+Method: GET
+Route: /api/project-management/contracts/{id}
+Description: One contract with its addenda (by number) and invoices (by date).
+
+Method: POST
+Route: /api/project-management/contracts
+Description: Create a contract (starts `Draft`, `NotSubmitted`). The number is stored with plain 0-9 digits (`"۱۴۰۵/۱۲"` = `"1405/12"`) and is unique per project (409).
+Request Body: `{ "tenantId", "projectId", "contractNumber", "title", "counterparty", "description", "signDate", "startDate", "endDate", "originalAmount" }`
+Status Codes: 200, 400, 409
+
+Method: PUT
+Route: /api/project-management/contracts/{id}
+Description: Edit. Refused while `PendingApproval` (409); once approved the original amount can no longer change — use an addendum. Needs `Contracts.Edit`.
+
+Method: PUT
+Route: /api/project-management/contracts/{id}/status
+Description: Request body `{ "status": 0|1|2|3 }` (Draft, Active, Completed, Terminated). Only an approved contract can leave Draft (409).
+
+Method: DELETE
+Route: /api/project-management/contracts/{id}
+Description: Refused (409) while pending approval, when it has any invoice, or any approved/pending addendum. Draft/rejected addenda are removed with it.
+
+Method: POST
+Route: /api/project-management/contracts/{id}/submit-for-approval
+Description: With Workflow it becomes `PendingApproval(1)`; without it, `Approved(2)` directly.
+
+### Module: Contract Addenda
+Method: GET / POST
+Route: /api/project-management/contracts/{contractId}/addenda
+Description: List / create. Body `{ "tenantId", "title", "description", "addendumDate", "amountChange", "extensionDays" }` — `amountChange` is negative for a reduction; at least one of amount/days must be non-zero. Numbered 1, 2, 3… per contract. The contract must be approved and not terminated (409). Needs `Contracts.ManageAddenda`.
+
+Method: PUT / DELETE
+Route: /api/project-management/contracts/{contractId}/addenda/{addendumId}
+Description: Edit / delete; refused (409) once pending approval or approved.
+
+Method: POST
+Route: /api/project-management/contracts/{contractId}/addenda/{addendumId}/submit-for-approval
+Description: A reduction that would take the contract below what is already invoiced/reserved is refused (409). Takes effect on the contract only when approved.
+
+### Module: Contract Invoices
+Method: GET / POST
+Route: /api/project-management/contracts/{contractId}/invoices
+Description: List / create. Body `{ "tenantId", "invoiceNumber", "invoiceDate", "amount", "description" }`. The number is digit-normalised and unique per contract (409); amount > 0 and must fit under the contract (409). Needs `Contracts.ManageInvoices`.
+
+Method: PUT / DELETE
+Route: /api/project-management/contracts/{contractId}/invoices/{invoiceId}
+Description: Edit / delete; refused (409) once pending approval or approved, and an invoice with payments cannot be deleted.
+
+Method: POST
+Route: /api/project-management/contracts/{contractId}/invoices/{invoiceId}/submit-for-approval
+Description: Re-checks that the invoice still fits the contract.
+
+Method: PUT
+Route: /api/project-management/contracts/{contractId}/invoices/{invoiceId}/payment
+Description: Body `{ "paidAmount", "paymentDate" }` — the **total paid so far**, not an increment (0 clears it). Only for an approved invoice; 0 ≤ paid ≤ amount; a date is required when paid > 0 and cannot precede the invoice date. Needs `Contracts.RecordPayments`.
+
+### ContractStatus
+`0` Draft · `1` Active · `2` Completed · `3` Terminated
+
+---
+
 ## 17. Project Workflow (integration)
 
 Family × Workflow integration: lets an admin create a Project-scoped override of a Workflow
@@ -1735,7 +2737,7 @@ Description: List the fixed catalog of SubjectType strings the ProjectManagement
 Request Body: none
 Response:
 ```json
-["Project", "WaterfallActivity", "AgileTask", "Risk", "Stakeholder", "ProgressUpdate", "ProjectDocument", "Action"]
+["Project", "WaterfallActivity", "AgileTask", "Risk", "Stakeholder", "ProgressUpdate", "DelayReason", "ProjectDocument", "Action", "Contract", "ContractAddendum", "ContractInvoice"]
 ```
 Status Codes: 200, 401, 403
 
@@ -1765,6 +2767,19 @@ Request Body:
 
 Response: the created `WorkflowDefinitionDto` (`scopeType: "Project"`, `scopeId: projectId`, `steps: []`).
 Status Codes: 200, 400, 401, 403, 404 (project must exist)
+
+---
+
+## 17a. Project Calendar (integration)
+
+Waterfall × Calendar integration (`Nexus.Integrations.ProjectCalendar`): makes Waterfall's schedule honour each project's
+work calendar — the weekly working days and the holidays/extra working days of the `WorkCalendar` the project points
+at. Neither Waterfall nor Calendar references this project; it depends on both. It owns no data and exposes no
+endpoints. Register it with `AddProjectCalendarIntegration()` (before or after `AddWaterfallPlanning()`).
+
+Without it, Waterfall still works but every day counts as a working day (`usesWorkCalendar: false` on the schedule). A
+project whose calendar cannot be loaded — unknown id, or a calendar of another tenant — falls back the same way and
+the schedule carries a warning.
 
 ---
 
@@ -1832,6 +2847,24 @@ Query Parameters:
 - tenantId (Guid, required)
 - organizationUnitId (Guid, optional)
 - status (string, optional — matches either a ProjectStatus or ActionStatus name, e.g. "Active")
+- search (string, optional — a project's name or code, or an action's title; case-insensitive)
+- involvedUserId (Guid, optional — a project's owner or manager, or an action's owner or responsible)
+- type (string, optional — "Waterfall" or "Agile" returns projects only; "Action" returns actions only)
+- approvalStatus (string, optional — an ApprovalStatus name, e.g. "PendingApproval")
+- priority (string, optional — "Low", "Normal", "High" or "Urgent"; actions only, so projects are left out)
+
+All filters are optional and only ever narrow the result: they are applied on top of the visibility rule, never instead of it.
+
+**Wider visibility (optional integration).** By default a user without `Portfolio.ViewAll` sees only the projects they own or manage and the
+actions they own or are responsible for. Installing `Nexus.Integrations.ProjectVisibility` (`AddProjectVisibilityIntegration()`; no endpoints,
+no data, no schema) adds, for such users, everything the installed sources grant — **the union**, never less than before:
+- **Team membership** (needs Team): the projects they are a team member of, and the actions of those projects.
+- **Organisation unit manager** (needs Organization): the projects and actions of every unit they manage **and of all units below it** — so the
+  manager of a top-level unit sees the whole branch of the chart.
+- **Pending approvals** (needs Workflow): the projects and actions currently waiting for their approval, including ones they hold as a
+  substitute through a delegation. Other subject types (a risk, a document) are not mapped to a project and add nothing.
+A source whose module is not installed grants nothing. `ViewAll` skips all of this. Filters still narrow what a grant shows. Extension point:
+implement `IVisibilityProvider` (in Project Management Core) and register it to add your own rule.
 
 Request Body: none
 Response:
@@ -1841,11 +2874,11 @@ Response:
     {
       "id": "guid", "name": "string", "code": "string", "type": "Waterfall", "status": "Active",
       "organizationUnitId": "guid | null", "managerUserId": "guid | null", "ownerUserId": "guid | null",
-      "approvalStatus": "Approved"
+      "approvalStatus": "Approved", "startDate": "2026-01-01 | null", "endDate": "2026-12-31 | null"
     }
   ],
   "actions": [
-    { "id": "guid", "title": "string", "status": "Open", "organizationUnitId": "guid", "responsibleUserId": "guid | null", "ownerUserId": "guid | null", "approvalStatus": "NotSubmitted" }
+    { "id": "guid", "title": "string", "status": "Open", "organizationUnitId": "guid", "responsibleUserId": "guid | null", "ownerUserId": "guid | null", "approvalStatus": "NotSubmitted", "startDate": "2026-01-01 | null", "endDate": "2026-01-31 | null", "priority": "Normal" }
   ]
 }
 ```
@@ -1923,6 +2956,311 @@ progress updates yet. Note `status`/`performanceClassification` here are also st
 
 Status Codes: 200, 401, 403, 404
 
+### Module: Reporting — analytics reports
+
+**Separate, optional project `Nexus.Reporting.Analytics`.** `Nexus.Reporting` itself is unchanged (it still references only Core, Actions and Progress). A host that wants these reports references `Nexus.Reporting.Analytics`, calls `services.AddReportingAnalytics()` and `app.MapReportingAnalyticsEndpoints()` (routes stay under `/api/reporting`); a host that does not never loads Contracts, Organization, Strategy or the alignment integration because of Reporting.
+
+Read-only reports over what the other modules already hold; nothing is stored and no new schema or permission is
+needed. Every one is **tenant-wide and needs `Reporting.ViewAll`** (checked in the endpoint, like `/summary`) and reads the
+caller's own tenant. Archived projects are left out of all of them. Their data sources are optional: Progress (progress
+and classification), Contracts (actual cost), Organization (units), Strategy + Project-Strategy Alignment — a report
+that needs a missing one returns `409`, and figures that only need a missing one are `null`, never a made-up zero.
+Projects are read up to the first 1,000 per tenant, like the summary.
+
+Method: GET
+Route: /api/reporting/projects/{projectId}/performance
+Description: Earned-value and schedule performance of one project (the same project dashboard plus the numbers a steering committee asks for). Query: `asOf` (date, optional — default today; uses the latest progress update on or before it).
+Response (all index/percent/money fields are `null` when they cannot be worked out):
+```json
+{
+  "projectId": "guid", "name": "string", "code": "string", "status": "Active", "organizationUnitId": "guid | null", "managerUserId": "guid | null",
+  "startDate": "2026-01-01", "endDate": "2026-12-31", "asOf": "2026-06-01",
+  "plannedProgress": 50.0, "actualProgress": 40.0, "progressDate": "2026-05-01",
+  "budgetAtCompletion": 1000, "plannedValue": 500, "earnedValue": 400, "scheduleVariance": -100, "spi": 0.8,
+  "actualCost": 500, "costVariance": -100, "cpi": 0.8,
+  "estimateAtCompletion": 1250, "estimateToComplete": 750, "varianceAtCompletion": -250,
+  "forecastEnd": "2026-05-06", "forecastDelayDays": 25, "isOverdue": true, "health": 3,
+  "contractedAmount": 900, "invoicedAmount": 500, "paidAmount": 200, "contractsAvailable": true, "progressAvailable": true
+}
+```
+Formulas: budget = the project's `cost`; PV = budget × planned %; EV = budget × actual %; SPI = actual % ÷ planned %; actual cost =
+the **approved invoices** of the project's contracts (null while it has none); CPI = EV ÷ AC; EAC = budget ÷ CPI;
+forecast end = start + planned days ÷ SPI. `health` is `HealthStatus`: the worse of SPI and CPI — ≥ 0.95 Green, ≥ 0.85 Amber, below Red.
+Status Codes: 200, 401, 403, 404
+
+Method: GET
+Route: /api/reporting/units/performance
+Description: Performance of the organisation chart at a level. Query: `level` (int, default **2**; 1 = top-level units), `asOf` (date, optional). A project assigned to a unit deeper than `level` is counted under that unit's ancestor at `level`; one assigned to a unit above it stays with its own unit (its `level` field says so); projects with no unit are in a row with `unitId: null`. Every unit at the level appears, even with no projects.
+Response: `{ "level", "maxLevel", "asOf", "units": [ { "unitId", "unitName", "unitCode", "level", "projectCount", "runningProjects", "completedProjects", "overdueProjects", "totalBudget", "projectsWithProgress", "averagePlannedProgress", "averageActualProgress", "averageDeviation", "onTrack", "atRisk", "behind" } ] }`. `running` = Active or OnHold; `overdue` = running, past its end date, not at 100 %; the on-track/at-risk/behind counts are the `PerformanceClassification` of each project's latest progress update.
+Status Codes: 200, 400 (level < 1), 401, 403, 409 (Organization not installed)
+
+Method: GET
+Route: /api/reporting/units/status-matrix
+Description: Units (at `level`, same roll-up as above) × project status. Query: `level` (default 2).
+Response: `{ "level", "statuses": ["Draft","Active","OnHold","Completed","Archived"], "rows": [ { "unitId", "unitName", "unitCode", "counts": [0,1,0,1,0], "total" } ], "columnTotals": [..], "total" }` — `counts` follow the order of `statuses` (a status nobody has is a zero column).
+Status Codes: 200, 400, 401, 403, 409
+
+Method: GET
+Route: /api/reporting/project-managers/evaluation
+Description: How each project manager's projects are doing. Query: `asOf` (optional). Managers with the most projects first; projects with no manager are grouped under `managerUserId: null`.
+Response: `{ "asOf", "managers": [ { "managerUserId", "projectCount", "runningProjects", "completedProjects", "overdueProjects", "totalBudget", "projectsWithProgress", "averagePlannedProgress", "averageActualProgress", "averageDeviation", "onTrack", "atRisk", "behind", "onTrackShare", "openActions" } ] }` — `onTrackShare` is the percentage of the manager's reported projects that are on track; `openActions` counts Open/InProgress actions the person is responsible for.
+Status Codes: 200, 401, 403
+
+Method: GET
+Route: /api/reporting/strategy-alignment-matrix
+Description: The complete Project × Strategy matrix. Every project is a row and every strategy a column whether or not a link exists (missing links are level `"None"`); `cells` follow the order of `strategies`.
+Response:
+```json
+{
+  "strategies": [ { "strategyId": "guid", "name": "string", "parentStrategyId": "guid | null", "depth": 1, "weight": 2.0,
+                    "directProjects": 1, "projectsIncludingChildren": 2, "highAlignedProjects": 1, "averagePercentage": 80.0 } ],
+  "projects": [ { "projectId": "guid", "name": "string", "code": "string", "cells": [ { "level": "High", "percentage": 80.0 } ],
+                  "alignedStrategies": 2, "averagePercentage": 50.0, "weightedPercentage": 50.0 } ],
+  "uncoveredStrategyIds": ["guid"], "unalignedProjectIds": ["guid"]
+}
+```
+A project counts as aligned to a strategy when the level is not `None`. Averages use only cells that carry a percentage (a level without one is never guessed at); `weightedPercentage` weights by the strategy's `weight`. `projectsIncludingChildren` counts each project once if it is aligned to the strategy or any strategy below it. `uncoveredStrategyIds` / `unalignedProjectIds` are the gaps.
+Status Codes: 200, 401, 403, 409 (Strategy or Alignment not installed)
+
+### HealthStatus (Reporting)
+`0` Unknown · `1` Green · `2` Amber · `3` Red
+
+## 20a. Project History (Nexus.ProjectManagement.History)
+
+A per-project change history: one row for every create, edit or delete of anything that belongs to a project — the project itself,
+and every record that carries a `ProjectId` (activities, risks, stakeholders, progress, documents, contracts, team members, ...) —
+with who did it, when, and the old and new value of each property that changed. Independent of every other module: it listens through
+NexusCore's `IEntityChangeObserver` (called by the `AuditingInterceptor` that every module's DbContext already uses, only after the
+save has succeeded; an observer that throws is logged and never fails the business operation), so it records whatever is installed.
+Register with `AddProjectHistory()` + `AddProjectHistoryInfrastructure(configuration)`, map with `MapProjectHistoryEndpoints()`, and run
+`ModuleSchemaInitializer.EnsureCreatedAsync` for `ProjectHistoryDbContext`. Permission: `ProjectHistory.View`. The schema is new, so a
+host that runs EnsureCreated gets it automatically; `docs/upgrade/2026-10-04-add-project-history.sql` creates it by script.
+
+What is recorded: audit stamps, ids and the tenant are not "changes"; values are cut at 500 characters; an edit that changed nothing is not
+recorded; the system's own bookkeeping rows (`SprintEvent`, `ScheduleBaselineActivity`) are left out. Children identified only by their parent
+(contract addenda and invoices, document versions, checklist items) have no `ProjectId` and are not recorded. History starts when the module is
+installed — earlier changes are not reconstructed.
+
+Method: GET
+Route: /api/project-management/history
+Description: A project's changes, newest first. Only the caller's own tenant's rows are ever returned.
+Query Parameters: projectId (Guid, required); entityName (string, optional — e.g. "Risk"); kind (0 Added, 1 Modified, 2 Deleted, optional); userId (Guid, optional — who made the change); from / to (date-time, optional); skip (int, default 0); take (int, default 50, at most 200)
+Response:
+```json
+{
+  "items": [
+    { "id": "guid", "projectId": "guid", "entityName": "Risk", "entityId": "guid", "kind": 1,
+      "changedByUserId": "guid | null", "changedAtUtc": "2026-06-10T09:30:00+00:00",
+      "changes": [ { "property": "Title", "oldValue": "old", "newValue": "new" } ] }
+  ],
+  "total": 42, "skip": 0, "take": 50
+}
+```
+For `kind` 0 every set property appears with `oldValue: null`; for 2 every property with `newValue: null`.
+Status Codes: 200, 400, 401, 403
+
+### ProjectChangeKind (History)
+`0` Added · `1` Modified · `2` Deleted
+
+---
+
+## 20b. Registers: several projects at once, risk levels and per-project settings
+
+Added for the project screens that show every project's items (and for the UI's risk / stakeholder
+settings). All additions are optional: a client that does not call them sees no change, except that
+Risk and Stakeholder responses carry extra trailing fields.
+
+### Several projects in one call
+
+Method: POST — body `{ "projectIds": ["guid", ...] }` (duplicates ignored, empty list → `[]`). Response: the same
+items the per-project `GET` returns, for all the given projects. Same view permission as the per-project list.
+
+| Route | Returns |
+|---|---|
+| `/api/project-management/risks/for-projects` | risks |
+| `/api/project-management/stakeholders/for-projects` | stakeholders |
+| `/api/project-management/progress-updates/for-projects` | status updates |
+| `/api/project-management/delay-reasons/for-projects` | delay reasons |
+| `/api/project-management/documents/for-projects` | documents |
+
+### Workflow: approvals of a set of subjects
+
+Method: POST
+Route: /api/workflow/approval-center/for-subjects
+Description: The approval instances (with their decisions and current approver) started for the given subjects of one kind; what a register screen shows next to each item. Needs `Workflow.View`; scoped to the caller's tenant.
+Request Body: `{ "subjectType": "Risk", "subjectIds": ["guid", ...] }`
+Response: list of workflow instances (same shape as the approval-center list).
+Status Codes: 200, 401, 403
+
+### Risks
+
+Responses gain trailing fields `probabilityLevel` / `impactLevel` ("low" | "medium" | "high"), `level`
+("green" | "yellow" | "red", from the project's matrix defaults) and `responseStatus` (`RiskResponseStatus`).
+Create / update accept optional `probabilityLevel` / `impactLevel` instead of the 1–5 scores (low=1, medium=3,
+high=5; a level wins over the matching score; severity follows impact). `rpn` is still computed server-side.
+
+Method: PUT
+Route: /api/project-management/risks/{id}/response-status
+Description: Execution state of the risk's response plan. Needs `Risks.Edit`.
+Request Body: `{ "status": 0 }` (`RiskResponseStatus`)
+Status Codes: 200, 400, 401, 403, 404
+
+Method: GET / PUT
+Route: /api/project-management/risks/settings?projectId=...  (GET, `Risks.View`) · /api/project-management/risks/settings (PUT, `Risks.Edit`)
+Description: What a project says about its risks: wording of the six low/medium/high bands for probability and impact, and the colour of each of the nine matrix cells. `isDefault` = nothing set (defaults shown). PUT body: `{ "tenantId", "projectId", "definitions": [{axis,level,range,description}] | null, "matrixColors": [{probability,impact,color}] | null }`; a part left out is unchanged, an empty list resets it to the default, otherwise it must name all six bands / all nine cells once.
+
+Method: POST
+Route: /api/project-management/risks/settings/for-projects
+Description: The settings of several projects (`{ "projectIds": [...] }`).
+
+### Stakeholders
+
+Responses gain `quadrant` (`StakeholderQuadrant`, from power × interest) and `strategy` (the stakeholder's own
+strategy text if written, otherwise the project's wording for the quadrant, otherwise the default wording).
+
+Method: GET / PUT / POST
+Route: /api/project-management/stakeholders/settings (GET `?projectId=`, PUT) · /settings/for-projects (POST)
+Description: How a project words the strategy for each quadrant (`manageClosely`, `keepSatisfied`, `keepInformed`, `monitor`, `isDefault`). PUT body `{ tenantId, projectId, manageClosely, keepSatisfied, keepInformed, monitor }`; a null/blank text puts that quadrant back on the default.
+
+Schema: tables `risk_management.RiskProjectSettings`, `stakeholder_management.StakeholderProjectSettings` and column
+`risk_management.Risks.ResponseStatus` — apply `docs/upgrade/2026-10-12-add-risk-response-and-settings.sql` and
+`docs/upgrade/2026-10-12-add-stakeholder-settings.sql` (or call `RiskSchemaUpgrade` / `StakeholderSchemaUpgrade`).
+
+---
+
+## 20c. Planning and progress: weighting, plans, progress reports (Waterfall, Agile, Core)
+
+Added for the schedule / agile screens. Everything is optional: a project (or host) that does not use it behaves exactly as before.
+
+### Waterfall
+
+* **Activities** gain `cost` (decimal, null = not estimated), `importance` and `complexity` (`ActivityLevel`: 0 Low, 1 Medium, 2 High) in the
+  response and, as optional trailing fields, in create / update (omitted on update = unchanged). New activities get a `position`
+  (after the existing ones); siblings, and WBS codes, follow it.
+* `DELETE /api/project-management/waterfall/activities/{id}?withSubActivities=true` deletes the activity with everything under it (and their links);
+  without the flag a parent is still refused (409).
+* `PUT /api/project-management/waterfall/dependencies/predecessor` — `{ tenantId, projectId, successorActivityId, predecessorActivityId | null, type, lagDays }`
+  makes that activity the successor's single predecessor (replacing the links into it; null removes them). Same rules as create (leaf activities, no cycles). Needs `WaterfallSchedule.Manage`.
+* **Settings** `GET /waterfall/settings?projectId`, `POST /waterfall/settings/for-projects { projectIds }`, `PUT /waterfall/settings`
+  `{ tenantId, projectId, weighting, timeFactor, costFactor, complexityFactor, plannedProgress }` (`WeightingMode`: 0 Manual, 1 Time, 2 Cost, 3 Complexity, 4 Combined;
+  `PlannedProgressMode`: 0 Stored, 1 Continuous, 2 ZeroHundred). `combined` needs three factors (0–100) adding up to 100. `isDefault` = no row; the defaults are
+  Manual / host default (`WaterfallOptions.DefaultPlannedProgress`, Stored unless the host says otherwise). Needs `WaterfallSchedule.Manage` to save.
+* **Schedule** (`GET /waterfall/schedule?projectId`) activities now also carry `wbsCode`, `level`, the effective `weight` (a group's is the sum of its children's),
+  rolled-up `cost` and `manHours`; the schedule carries `weighting` and `plannedProgressMode`. With a weighting other than Manual, each leaf weighs its share of
+  the total duration / cost / complexity score (low 1, medium 2, high 3) or the blend; groups roll up by what is inside them (also when the host sets
+  `WaterfallOptions.RollUpSummaryWeights`). With Continuous planned progress an activity's planned % grows evenly over its working days; ZeroHundred keeps it at 0 until its last day
+  is over; both are read for *today*. S-curve and snapshots follow the same modes.
+* **Plan** `GET /waterfall/schedule/plan?projectId` and `POST /waterfall/schedule/plans { projectIds }`: `{ projectId, settings, activities[], dependencies[], schedule }` in one call
+  (a project whose plan cannot be calculated is left out of the batch).
+* **Saved copies** (`/waterfall/baselines`): create takes an optional `kind` (0 Baseline, 1 ProgressInformation); the copy keeps the project's planned/actual progress and, per activity,
+  `weight`, `plannedProgress`, `actualProgress`, `responsibleUserId`, `wbsCode`.
+* **Progress reports** `/api/project-management/waterfall/progress-submissions`: `GET ?projectId=` or `?activityId=` (newest first), `POST /for-projects { projectIds }`,
+  `POST { tenantId, projectId, activityId, progress, comment, documentName }` (needs `WaterfallProgress.Submit`; leaf activities only; one pending report per activity),
+  `PUT /{id}/confirmed-progress { progress }` (needs `WaterfallActivities.Edit`; only while pending). Response: `{ id, projectId, activityId, submittedProgress, approvedProgress,
+  isPartialRejection, comment, documentName, approvalStatus, submittedByUserId, submittedAtUtc }`. Decided in the approval workflow (subject type `ActivityProgress`): on approval the
+  activity's actual progress becomes `approvedProgress ?? submittedProgress`; on rejection, if a confirmed figure was set first, that figure still applies (a "partial rejection"). With no workflow the report is confirmed at once.
+
+* **Free float** — every scheduled activity carries `freeFloatDays` (how long it can slip without delaying any successor; total float is unchanged).
+* **Progress-information copies feed the S-curve**: creating a saved copy of kind ProgressInformation also records a progress snapshot (actual and planned % of that day) used for the S-curve's actual line.
+* `PUT /api/project-management/waterfall/activities/{id}/actual-progress { actualProgress }` (0–100; `WaterfallActivities.Edit`) — a direct correction of how much is done, without a report or approval.
+* **MS Project import** (`POST /waterfall/msproject/import`) now disables antiforgery like the other multipart endpoints (bearer-token API; a multipart call from the UI was rejected otherwise).
+* **Weights must total 100 on submission** (opt-in): with `WaterfallOptions.RequireWeightsTotalOnSubmit` the project cannot be sent for approval while its leaf activities' effective weights do not add up to 100
+  (`project.schedule_weights_not_100`, 400; a project with no activities is not checked). It plugs into Core through the optional `IProjectSubmissionCheck` extension point (Core does not know Waterfall);
+  the host `PostBank.Api` turns the option on, others keep today's behaviour.
+
+### Agile
+
+* `POST /agile/tasks/for-projects`, `POST /agile/sprints/for-projects`, `POST /agile/status-submissions/for-projects` — `{ projectIds }`.
+* `PUT /agile/sprints/count` — `{ tenantId, projectId, count }`: the project gets exactly sprints 1..count (missing ones are created planned; surplus ones are removed from the end while
+  planned and empty, else 409).
+* **Status requests** `/agile/status-submissions`: `GET ?taskId=`, `POST { tenantId, projectId, taskId, status, comment }` (needs `AgileStatus.Submit`). Subject type `AgileTaskStatus`: on approval the
+  task moves to the asked column; with no workflow it moves at once. One pending request per task; asking for the column it is already in is a validation error.
+
+### Core
+
+`POST /api/project-management/projects/progress { projectIds }` → `[ { projectId, type, plannedProgress, actualProgress, performance, totalTasks?, todoTasks?, doingTasks?, doneTasks? } ]`
+(needs `Projects.View`). Waterfall projects report the schedule roll-up, agile projects the share of tasks that are done (a task under review counts as doing); a project with no
+planning module (or no activities) is reported from its dates alone (planned = share of the time gone by, actual 0). `performance` = actual as a percent of planned.
+Modules take part by registering an `IProjectProgressSource`; Core does not know them.
+
+Schema: apply `docs/upgrade/2026-10-13-add-waterfall-planning.sql` (`WaterfallPlanningSchemaUpgrade`) and `docs/upgrade/2026-10-13-add-agile-status-submissions.sql`
+(`AgileTaskStatusSchemaUpgrade`). New permissions: `WaterfallProgress.Submit`, `AgileStatus.Submit` (added to the host's seeded Project Manager / Project Team roles; existing roles keep what they had).
+
+---
+
+## 20d. Actions, risk-response reports, strategy tree, alignment scores, knowledge, contracts (phases 5 and 6)
+
+### Actions (`Nexus.Actions`)
+
+* `ActionStatus.OnHold = 4` (appended; the stored values 0-3 keep their meaning).
+* **Source link**: create / update take optional `sourceType` (an opaque label such as `"Risk"` or `"Stakeholder"`) and `sourceId`; the DTO returns them. Omitted on update = unchanged.
+* **Named approvers**: create / update take an optional `approverUserIds` (up to three different users, in order; an empty list clears them; omitted on update = unchanged); the DTO returns them. They are recorded with the action; which approvers a submission goes to is decided by the Workflow definition (item-level approvers are wired in phase 7).
+* **Pattern of a repeating action**: `recurrence` (request and DTO) gains optional `daysOfWeek` (0 Sunday ... 6 Saturday), `dayOfMonth` (1-31, Jalali), `months` (1-12, Jalali; all twelve = every month) and `durationHours` (0-24). A request replaces the whole rule, so a field left out is cleared.
+* `GET /api/actions/{id}/occurrences` → `[ { index, date, durationHours } ]`: the occurrences of the rule inside the action's own date range (daily every N days; weekly on the chosen weekdays, Saturday-Wednesday by default, every Nth week; monthly on the Jalali day of the chosen Jalali months, every Nth month, the last day for a day the month lacks; yearly). A one-off action has one occurrence. Capped at 100.
+* **Host switch** `ActionsOptions.CreateNextOccurrenceOnCompletion` (`AddActionManagement(o => ...)`, default `true` = the "chain" behaviour: completing a repeating action creates the next one). `PostBank.Api` sets it to `false`: its UI keeps all occurrences inside one action.
+* **Host switch** `ActionsOptions.RequireEndAfterStart` (default `false`; on in `PostBank.Api`): an action with both dates must end after it starts (400 `action.end_not_after_start`); an edit that leaves the dates unchanged is never refused.
+* `DELETE /api/actions/{id}` (needs `Actions.Delete`; 409 while the action waits for approval).
+* **Status requests** `/api/actions/status-submissions`: `GET ?actionId=` or `?projectId=` (newest first), `POST { tenantId, actionId, status, comment }` (needs `ActionStatus.Submit`). Subject type `ActionStatus` (scope Project when the action has a project): on approval the action takes the status; with no workflow it takes it at once. One pending request per action; asking for the status it already has is a validation error.
+
+### Risk (`Nexus.ProjectManagement.Risk`)
+
+* **Response reports** `/api/project-management/risks/response-submissions`: `POST /for-projects { projectIds }`, `GET ?riskId=`, `POST { tenantId, riskId, status, comment }` (needs `RiskResponse.Submit`; approved risks only; one pending report per risk). Subject type `RiskResponseStatus`: on verification the risk's response status becomes the reported one; with no workflow at once. The direct `PUT /{id}/response-status` stays as it was.
+
+### Strategy and alignment
+
+* `GET /api/strategy/tree` → `{ nodes: [ { id, name, description, storedWeight, effectiveWeight, parentStrategyId, level, isLeaf, sortOrder } ], totalWeight }`, a parent before its children. A strategy with sub-strategies weighs the sum of theirs; a leaf weighs its own.
+* `PUT /api/strategy/tree` (needs `Strategy.Edit`) saves the whole tree: `{ tenantId, items: [ { key, name, description, weight, parentKey } ] }`; `key` is the id of an existing strategy (updated) or any label (created); strategies not listed are deleted; list order is the shown order (`SortOrder`). The top-level weights must add up to 100 (rounded), else 400 `strategy.weights_not_100`; nothing is saved on a refusal. An empty list is fine.
+* `POST /api/integrations/project-strategy-alignment/scores { projectIds }` → per project its level on every leaf strategy and `percentage` (levels None 0 .. High 3, weighted by the leaf's weight, over the best possible). `PUT /levels { tenantId, projectId, levels: [ { strategyId, level } ] }` sets several leaf strategies at once and returns the score. Alignment rows left behind by a deleted strategy are ignored.
+
+### Knowledge
+
+* `KnowledgeDocumentType.Pamphlet = 4` (appended). The upload endpoint disables antiforgery like the other multipart endpoints (bearer-token API).
+
+### Contracts
+
+* Contract: optional `supervisorName`, `beneficiaryName` (the contractor stays `counterparty`). Addendum: optional `startDate`, `endDate` (the period it covers; the contract's end moves only by `extensionDays`). Invoice: optional `title`, `periodStartDate`, `periodEndDate`. Request fields are optional trailing ones (omitted on update = unchanged, empty text clears a name); DTOs return them (dates also as `...Fa`).
+* The project summary (`GET /summary?projectId=`) also carries `totalOriginalAmount` (the signed amounts) and `totalApprovedAddenda`, so a screen can show base, addenda and total without adding anything up.
+* `POST /api/project-management/contracts/for-projects { projectIds }` → every contract of those projects with its addenda and invoices (`ContractDetailDto[]`).
+
+Schema: apply `docs/upgrade/2026-10-14-add-action-status-and-patterns.sql` (`ActionsPlanningSchemaUpgrade`), `2026-10-14-add-risk-response-submissions.sql` (`RiskResponseSchemaUpgrade`), `2026-10-14-add-strategy-sort-order.sql` (`StrategySchemaUpgrade`) and `2026-10-14-add-contract-parties-and-billing.sql` (`ContractsPartiesSchemaUpgrade`). New permissions: `ActionStatus.Submit`, `RiskResponse.Submit` (added to the host's seeded Project Manager / Project Team roles; existing roles keep what they had).
+
+## 20e. Governance: approval chains, item delegation, visibility switches, project settings (phase 7)
+
+### Workflow (`Nexus.Workflow`) - approver placeholders
+
+* A step names its approver either as before (`approverUserId`) or by **placeholder**: `approverKey` is `Manager`, `Owner`, `Approver1`, `Approver2` or `Approver3` (opaque to Workflow; defined in `NexusCore.Application.Approvals.ApprovalParticipants`). `isOptional` leaves the step out of an approval whose subject has no such participant. Both are trailing optional fields of the step request/DTO.
+* **Who the participants are** is told to Workflow when the approval starts: `ApprovalSubject` gained an optional `participants` map (Actions passes its responsible person as `Manager`, its owner as `Owner` and its approvers 1-3 as `Approver1..3`; the first defaults to the responsible person), and an optional extension point `IApprovalParticipantResolver` can add more. `Nexus.Integrations.ProjectWorkflow` registers one that, for anything scoped to a project (or the project itself), answers `Manager` = project manager and `Owner` = project owner. `Owner` falls back to `Manager` when unknown. A required placeholder nobody fills leaves the step open to any holder of the approve permission.
+* **The steps are captured when the approval starts** (`WorkflowInstance.StepsSnapshot`, JSON): the step names and the people they resolved to. Editing the definition, or changing a project's manager, does not move an approval already running. The instance DTO returns them as `steps: [ { order, name, approverUserId } ]`. Approvals started before this keep reading their definition's steps. When every step is optional and none applies, no approval is started (the submitter's own direct-approve rule applies).
+* `PUT /api/workflow/definitions/by-scope` (needs `Workflow.Configure`) `{ subjectType, scopeType?, scopeId?, name?, steps: [ { name, approverUserId?, approverKey?, isOptional } ] }` creates (or brings back a reset) the definition of that scope and replaces its steps in one call. An empty `steps` list means "no approval needed" there.
+* **Host switch** `WorkflowOptions.RequireDesignatedApprover` (`AddWorkflowApplication(o => ...)`, default `false` = anyone with `Workflow.Approve`/`Reject` may decide any step, as before; on in `PostBank.Api`): a step with a designated approver can then only be decided by that person, by someone they have delegated to (period delegation, recorded as "on behalf of"), or by a holder of `Workflow.Configure`; anyone else gets 403 `forbidden`.
+
+### Approval settings by group (`Nexus.Integrations.ProjectWorkflow`)
+
+The screens edit one chain per **group** of things approved the same way; a saved chain is applied to every subject type of the group. Groups: `charter` (Project), `activity_progress` (ActivityProgress, AgileTaskStatus, WaterfallActivity, AgileTask), `risks` (Risk, RiskResponseStatus), `stakeholders`, `status_updates` (ProgressUpdate), `delay_reasons`, `documents`, `contracts` (Contract, ContractAddendum), `invoices`, `actions` (Action, ActionStatus). `ProjectManagementSubjectTypes` gained `ActivityProgress`, `AgileTaskStatus`, `ActionStatus`, `RiskResponseStatus`.
+
+* `GET /api/integrations/project-workflow/settings?projectId=` (needs `Workflow.View`) → per group `{ key, subjectTypes, isConfigured, isCustom, steps, defaultSteps }`. `isConfigured: false` = nothing defined, approvals in that group are not required (direct approve). With `projectId`, a project's own chain wins (`isCustom`).
+* `PUT /settings/{groupKey}` `{ steps }` (needs `ProjectWorkflow.Configure`): the organisation-wide chain; `steps: null` = the standard one. `POST /settings/apply-defaults` creates the standard chain only for groups that have none. Standard chains: one step "Final approval" by the `Manager` for every group; `documents` has two (`Manager`, then `Owner`); `actions` has `Approver1` and optional `Approver2`, `Approver3`.
+* `PUT /projects/{projectId}/settings/{groupKey}` and `DELETE` (back to the organisation's chain): by holders of `ProjectWorkflow.Configure` for any project, otherwise by the project's manager or owner for theirs (403 for anyone else). Step rules: a name, and exactly one of `approverUserId` / `approverKey` (400 otherwise or for an unknown key). An empty chain is allowed (no approval needed).
+
+### Item delegation (`Nexus.ProjectManagement.Delegation`, new, independent)
+
+A record of who handed an activity, task or action to whom (the existing Workflow delegation is a different thing: a period during which someone approves for someone else). Table `item_delegation.ItemDelegations`.
+
+* `GET /api/project-management/delegations?activeOnly=true` (`ItemDelegation.View`): those the caller handed out or received.
+* `POST /` `{ itemType: WaterfallActivity|AgileTask|Action (0-2), itemId, projectId?, delegateUserId }` (`ItemDelegation.Delegate`): the caller is the delegator. Refused (400/409): yourself, nobody, an unknown kind, an item the caller already handed over, or handing to someone who has handed it on (a loop).
+* `POST /{id}/end` (`ItemDelegation.Delegate`; only the delegator, or a holder of `ItemDelegation.Manage`): ends that hand-over and every hand-over of the item made after it (A to B to C: ending B's also ends C's); returns `{ restoreToUserId, endedIds }` - the person the item goes back to. **The module does not change the item**: the screen that shows it sets the assignee (the module owns no activity, task or action).
+
+### Governance switches and project settings (`Nexus.Integrations.ProjectGovernance`, new, opt-in, no tables)
+
+Stored as NexusCore `SystemSettings` (scope `ProjectGovernance`).
+
+* `GET /api/integrations/project-governance/settings` (any signed-in user) / `PUT` (`ProjectGovernance.Configure`): `{ visibility: { viewByOwner, viewByManagerOrResponsible, viewByApprovers, viewByResources, viewByOrgHeads }, allowConfirmedProgressOnRejection }`. Defaults: every visibility switch on, confirmed-progress-on-rejection off.
+* The visibility switches are read through the new Core extension point `IVisibilityRules` (default: all on): Portfolio applies owner / manager-or-responsible (projects and actions) and - only when rules are installed - an action's own approvers; the team-membership, organisation-head and pending-approval providers grant nothing when their switch is off. Users with `Portfolio.ViewAll` still see everything.
+* `allowConfirmedProgressOnRejection` is read by Waterfall through `IProgressRejectionPolicy` (default: allowed): with it off, `PUT /progress-submissions/{id}/confirmed-progress` is refused (403).
+* `GET /projects` (all projects' settings), `GET|PUT /projects/{projectId}/settings` (`Projects.Edit`) `{ enabledTabs?, contractAccess?, invoiceAccess? }`: the sections a project shows (`charter, schedule, team, risks, stakeholders, status, delays, docs, actions, contracts, invoices`; null = all; unknown names refused) and the per-project contract / invoice access matrices (`viewByAdmin, viewByPM, viewByTeam, manageByAdmin, manageByPM`). **The access matrices are stored but not enforced by the Contracts endpoints** (the UI never enforced them either; enforcement needs ownership-aware authorisation, see PLAN.md).
+
+Schema: apply `docs/upgrade/2026-10-15-add-workflow-approver-placeholders.sql` (`WorkflowApproverPlaceholdersSchemaUpgrade`) and `2026-10-15-add-item-delegation.sql` (`ItemDelegationSchemaUpgrade`). New permissions: `ItemDelegation.View`, `ItemDelegation.Delegate`, `ItemDelegation.Manage`, `ProjectGovernance.Configure` (the first two to the host's seeded Project Manager / Project Team roles, `Manage` to Project Manager; existing roles keep what they had).
+
 ---
 
 ## Enums Reference
@@ -1937,6 +3275,54 @@ Every enum below is serialized as its **raw integer** value in both requests and
 | 1 | InProgress |
 | 2 | Completed |
 | 3 | Cancelled |
+
+### ActionRecurrenceUnit (Actions)
+`0` Daily · `1` Weekly · `2` Monthly · `3` Yearly
+
+### ActionPriority (Actions)
+| Value | Name |
+|---|---|
+| 0 | Low |
+| 1 | Normal |
+| 2 | High |
+| 3 | Urgent |
+
+### RiskResponseStatus (Risks)
+`0 Planning`, `1 InProgress`, `2 OnHold`, `3 Completed`.
+
+### DelayRootCause (Progress)
+| Value | Name |
+|---|---|
+| 0 | Funding |
+| 1 | Procurement |
+| 2 | Permits |
+| 3 | HumanResources |
+| 4 | Other |
+
+### StakeholderQuadrant (Stakeholders)
+| Value | Name | Meaning |
+|---|---|---|
+| 0 | Monitor | low-to-medium power, low-to-medium interest |
+| 1 | KeepInformed | low-to-medium power, high interest |
+| 2 | KeepSatisfied | high power, low-to-medium interest |
+| 3 | ManageClosely | high power, high interest |
+
+### DependencyType (Waterfall)
+| Value | Name | Meaning |
+|---|---|---|
+| 0 | FinishToStart | the successor starts after the predecessor finishes |
+| 1 | StartToStart | the successor starts after the predecessor starts |
+| 2 | FinishToFinish | the successor finishes after the predecessor finishes |
+| 3 | StartToFinish | the successor finishes after the predecessor starts |
+
+### VarianceStatus (Waterfall)
+| Value | Name |
+|---|---|
+| 0 | OnTrack |
+| 1 | Late |
+| 2 | Early |
+| 3 | Added |
+| 4 | Removed |
 
 ### ApprovalStatus (shared across every capability that supports optional approval)
 | Value | Name |
@@ -1998,6 +3384,14 @@ Every enum below is serialized as its **raw integer** value in both requests and
 | 0 | ToDo |
 | 1 | InProgress |
 | 2 | Done |
+| 3 | UnderReview (appended: on the board it sits between InProgress and Done) |
+
+### SprintStatus (Agile Tasks)
+| Value | Name |
+|---|---|
+| 0 | Planned |
+| 1 | Active |
+| 2 | Completed |
 
 ### AgileTaskPriority (Agile Tasks)
 | Value | Name |
@@ -2066,3 +3460,32 @@ Every enum below is serialized as its **raw integer** value in both requests and
 against each module's DTO and service-interface source (response bodies, precise nullability, status
 codes) — see the final report in this session for the exact verification steps (real `dotnet build`,
 `dotnet test`, and a live run of NexusCore.Api).*
+
+## 20f. Reports and dashboards from the backend (phase 8)
+
+Nothing here is required: every change is an optional field, an optional constructor parameter or an opt-in switch, and a host that does not turn the switches on gets the old figures. No table changed, so there is **no SQL script** for this phase.
+
+### Analytics (`Nexus.Reporting.Analytics`)
+
+* **`AnalyticsOptions`** (`AddReportingAnalytics(o => ...)`, both default `false`; both on in `PostBank.Api`):
+  * `ProgressFromProjectPlan` - a project's planned / actual progress (and so the deviation and the on-track / at-risk / behind class) is what the planning modules work out from the schedule and the board (`IProjectProgressService`, the same figures the project screens show) instead of the latest progress update people registered. A project the service has no figure for keeps the old source.
+  * `OnlyApprovedProjects` - drafts, projects waiting for approval and rejected ones are left out of the unit and manager reports.
+* **New trailing fields** (old callers ignore them):
+  * `UnitPerformanceDto` / `ProjectManagerEvaluationDto`: `delayedProjects`, `averagePerformance` (average of each project's actual / planned, each capped at 100), `rating` (`Excellent` from 90, `Good` from 70, otherwise `NeedsImprovement`; null when no project has a figure) and `projectIds`.
+  * `UnitPerformanceReportDto.summary`: the whole organisation in one line (`projectCount`, `runningProjects`, `delayedProjects`, `averagePerformance`, `rating`).
+  * `UnitStatusRowDto.projectIdsByStatus`: per status column, the projects counted there (so a screen can open the list behind a number).
+* Classification bands stay -5 / -15 percentage points of deviation. Needs the existing `Reporting.ViewAll` permission (not added to the seeded roles by this phase).
+
+### Agile (`Nexus.ProjectManagement.Agile`)
+
+* `GET /api/project-management/agile/sprint-progress?projectId=&metric=` (needs `Agile.View`; `metric` `Count` (1, default) or `Points` (0)) returns `{ projectId, metric, sprints: [ { sprintNumber, name, sprintTotal, sprintCompleted, cumulativeTotal, cumulativeCompleted, cumulativeRemaining } ] }` for every sprint of the project: the data of the burn-up / burn-down chart. "Completed" means the board's approved-done status. `ISprintChartService.GetProjectProgressAsync` is a default interface member and `SprintChartService` takes the task repository as an optional trailing parameter, so other implementations and hosts are unaffected.
+
+## 20g. After merging the newest Core (feature/1405-08-07-orgNode) into this branch
+
+This branch carries the same shared-platform and security changes as `feature/1405-08-07-orgNode` (organization structure, sessions, tenant-scoped repositories and query filters, upload content checks and size limits, rate limiting, forwarded headers, meetings permissions). Where the two branches changed the same code, the newer Core's design was kept and the project-management additions were re-attached to it:
+
+* **Organization units.** A unit is the newer Core's flat unit plus its node fields; the old unit `Code` / `ParentId` columns no longer exist - the chart (parent, node type, node code) belongs to `Nexus.OrgStructure`. The project-management additions stay: **unit membership** (`/api/organization/members`, `/users/{id}/unit`, table `organization.OrganizationUnitMembers`), **paths** (`path` on each unit) and **branch deactivation** (`DELETE ...?includeBranch=true`, refused while people are placed in it). `OrganizationUnitDto` keeps `code` and `parentId` (read from the node code and the parent) as trailing optional fields; `UpdateOrganizationUnitRequest(Name, ManagerUserId, IsActive, Code?, ParentId?)` and `CreateOrganizationUnitRequest(TenantId, Name, Code?, ParentId?)` still accept them, but **a different place or code is refused** (`validation.error`) - change them in the organization structure. A unit is no longer given an automatic "U0001" code. Analytics and project visibility read `ParentUnitId` / `NodeCode`.
+* **Documents.** Repository calls are organization-scoped (`GetByIdAsync(tenantId, id)`, `ListByProjectAsync(tenantId, projectId)`, and the multi-project `ListByProjectsAsync(tenantId, projectIds)`); uploads are checked for a real file and size-limited and rate-limited.
+* **Product hosts are not in Core** (`PostBank.Api` and `TejaratBank.Api` were removed from Core on main). The PostBank host lives in the `POSTBANKPMAPI` repository and consumes the packages.
+* **Not changed by the merge, but failing on the newer Core itself:** `EffectivePermissionTests.AnotherModulesPermission_CannotBeAssigned_ButStaysWhereItIs_AndStillWorks` and `RecurringTaskReminderTests.IncompleteSmsSettings_AreReported_AndNothingIsSent`.
+* **Schema.** The newer Core applies its organization changes with EF migrations and `db/upgrade-sessions.sql`. The unit-membership table is still created by `docs/upgrade/2026-10-10-add-organization-members.sql` / `OrganizationSchemaUpgrade` (it is not part of the EF migration snapshot).

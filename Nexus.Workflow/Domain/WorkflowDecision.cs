@@ -8,13 +8,14 @@ public sealed class WorkflowDecision : Entity<Guid>
     {
     }
 
-    internal WorkflowDecision(Guid id, Guid workflowInstanceId, int stepOrder, Guid decidedByUserId, bool approved, string? comment) : base(id)
+    internal WorkflowDecision(Guid id, Guid workflowInstanceId, int stepOrder, Guid decidedByUserId, bool approved, string? comment, Guid? onBehalfOfUserId = null) : base(id)
     {
         WorkflowInstanceId = workflowInstanceId;
         StepOrder = stepOrder;
         DecidedByUserId = decidedByUserId;
         Approved = approved;
         Comment = comment;
+        OnBehalfOfUserId = onBehalfOfUserId;
         DecidedAtUtc = DateTimeOffset.UtcNow;
     }
 
@@ -23,5 +24,8 @@ public sealed class WorkflowDecision : Entity<Guid>
     public Guid DecidedByUserId { get; private set; }
     public bool Approved { get; private set; }
     public string? Comment { get; private set; }
+
+    /// <summary>Set when the decider acted as the substitute of the step's designated approver; that approver's id.</summary>
+    public Guid? OnBehalfOfUserId { get; private set; }
     public DateTimeOffset DecidedAtUtc { get; private set; }
 }

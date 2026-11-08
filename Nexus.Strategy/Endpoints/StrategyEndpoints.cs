@@ -25,6 +25,23 @@ public static class StrategyEndpoints
             })
             .RequireAuthorization(StrategyPermissions.View);
 
+        group.MapGet("/tree", async (ICurrentUserContext currentUser, IStrategyService service, CancellationToken cancellationToken) =>
+            {
+                if (currentUser.TenantId is null)
+                {
+                    return Results.Unauthorized();
+                }
+
+                return (await service.GetTreeAsync(currentUser.TenantId.Value, cancellationToken)).ToApiResult();
+            })
+            .RequireAuthorization(StrategyPermissions.View);
+
+        // Saves the whole tree at once (creates, updates and deletes), so it needs the permission to edit; deleting
+        // strategies through it is part of that.
+        group.MapPut("/tree", async (SaveStrategyTreeRequest request, IStrategyService service, CancellationToken cancellationToken) =>
+                (await service.SaveTreeAsync(request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(StrategyPermissions.Edit);
+
         group.MapGet("/{id:guid}", async (Guid id, IStrategyService service, CancellationToken cancellationToken) =>
                 (await service.GetAsync(id, cancellationToken)).ToApiResult())
             .RequireAuthorization(StrategyPermissions.View);

@@ -12,8 +12,17 @@ public sealed class StakeholderRepository(StakeholderManagementDbContext dbConte
     public async Task<IReadOnlyList<Stakeholder>> ListByProjectAsync(Guid projectId, CancellationToken cancellationToken) =>
         await dbContext.Stakeholders.Where(stakeholder => stakeholder.ProjectId == projectId).ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<Stakeholder>> ListByProjectsAsync(IReadOnlyCollection<Guid> projectIds, CancellationToken cancellationToken) =>
+        await dbContext.Stakeholders.Where(stakeholder => projectIds.Contains(stakeholder.ProjectId)).ToListAsync(cancellationToken);
+
     public async Task AddAsync(Stakeholder stakeholder, CancellationToken cancellationToken)
     {
         await dbContext.Stakeholders.AddAsync(stakeholder, cancellationToken);
+    }
+
+    public Task RemoveAsync(Stakeholder stakeholder, CancellationToken cancellationToken)
+    {
+        dbContext.Stakeholders.Remove(stakeholder);
+        return Task.CompletedTask;
     }
 }

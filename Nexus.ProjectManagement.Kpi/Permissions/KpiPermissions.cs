@@ -7,12 +7,14 @@ public static class KpiPermissions
     public const string View = "Kpi.View";
     public const string Create = "Kpi.Create";
     public const string Edit = "Kpi.Edit";
+    public const string Delete = "Kpi.Delete";
 
     public static IReadOnlyList<PermissionDefinition> All { get; } =
     [
         new(View, "Kpi", "مشاهده شاخص‌های کلیدی عملکرد"),
         new(Create, "Kpi", "ایجاد شاخص کلیدی عملکرد"),
-        new(Edit, "Kpi", "ویرایش شاخص‌های کلیدی عملکرد")
+        new(Edit, "Kpi", "ویرایش شاخص‌های کلیدی عملکرد"),
+        new(Delete, "Kpi", "حذف شاخص‌های کلیدی عملکرد")
     ];
 }
 

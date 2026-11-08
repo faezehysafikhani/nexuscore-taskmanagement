@@ -45,6 +45,34 @@ public static class ActionEndpoints
                 (await service.SubmitForApprovalAsync(id, cancellationToken)).ToApiResult())
             .RequireAuthorization(ActionPermissions.Submit);
 
+        group.MapGet("/{id:guid}/occurrences", async (Guid id, IActionItemService service, CancellationToken cancellationToken) =>
+                (await service.ListOccurrencesAsync(id, cancellationToken)).ToApiResult())
+            .RequireAuthorization(ActionPermissions.View);
+
+        group.MapDelete("/{id:guid}", async (Guid id, IActionItemService service, CancellationToken cancellationToken) =>
+                (await service.DeleteAsync(id, cancellationToken)).ToApiResult())
+            .RequireAuthorization(ActionPermissions.Delete);
+
+        var statusChanges = group.MapGroup("/status-submissions");
+
+        statusChanges.MapGet("/", async (
+                ICurrentUserContext currentUser, Guid? actionId, Guid? projectId, IActionStatusSubmissionService service, CancellationToken cancellationToken) =>
+            {
+                if (actionId is { } action)
+                {
+                    return (await service.ListByActionAsync(action, cancellationToken)).ToApiResult();
+                }
+
+                return currentUser.TenantId is null
+                    ? Results.Unauthorized()
+                    : (await service.ListAsync(currentUser.TenantId.Value, projectId, cancellationToken)).ToApiResult();
+            })
+            .RequireAuthorization(ActionPermissions.View);
+
+        statusChanges.MapPost("/", async (SubmitActionStatusRequest request, IActionStatusSubmissionService service, CancellationToken cancellationToken) =>
+                (await service.SubmitAsync(request, cancellationToken)).ToApiResult())
+            .RequireAuthorization(ActionPermissions.SubmitStatus);
+
         return app;
     }
 }

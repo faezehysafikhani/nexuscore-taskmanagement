@@ -30,6 +30,7 @@ public sealed class ProjectDocument : AuditableEntity<Guid>
         FileName = fileName;
         ContentType = contentType;
         SizeBytes = sizeBytes;
+        CurrentVersion = 1;
         ApprovalStatus = ApprovalStatus.NotSubmitted;
     }
 
@@ -42,12 +43,34 @@ public sealed class ProjectDocument : AuditableEntity<Guid>
     public string FileName { get; private set; }
     public string ContentType { get; private set; }
     public long SizeBytes { get; private set; }
+
+    /// <summary>The file fields above always describe this version; earlier versions are kept
+    /// as <see cref="ProjectDocumentVersion"/> rows, so the document's metadata, approval and
+    /// existing endpoints keep working on "the document as it is now".</summary>
+    public int CurrentVersion { get; private set; }
+
     public ApprovalStatus ApprovalStatus { get; private set; }
 
     public void UpdateDescription(string description, ProjectDocumentType documentType)
     {
         Description = description.Trim();
         DocumentType = documentType;
+    }
+
+    /// <summary>
+    /// Makes a newly uploaded file the current one. The previous file is NOT deleted - it stays
+    /// reachable through its <see cref="ProjectDocumentVersion"/> row. The new file has not been
+    /// reviewed, so any earlier approval (or rejection) no longer applies and the document goes
+    /// back to unsubmitted; the caller must refuse this while an approval is pending.
+    /// </summary>
+    public void ReplaceFile(string storageKey, string fileName, string contentType, long sizeBytes)
+    {
+        StorageKey = storageKey;
+        FileName = fileName;
+        ContentType = contentType;
+        SizeBytes = sizeBytes;
+        CurrentVersion++;
+        ApprovalStatus = ApprovalStatus.NotSubmitted;
     }
 
     public void MarkPendingApproval() => ApprovalStatus = ApprovalStatus.PendingApproval;

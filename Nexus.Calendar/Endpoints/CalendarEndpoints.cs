@@ -33,6 +33,14 @@ public static class CalendarEndpoints
                 (await service.IsWorkingDayAsync(id, date, cancellationToken)).ToApiResult())
             .RequireAuthorization(CalendarPermissions.View);
 
+        group.MapGet("/{id:guid}/days", async (Guid id, DateOnly from, DateOnly to, IWorkCalendarService service, CancellationToken cancellationToken) =>
+                (await service.GetDaysAsync(id, from, to, cancellationToken)).ToApiResult())
+            .RequireAuthorization(CalendarPermissions.View);
+
+        group.MapGet("/official-holidays", async (DateOnly from, DateOnly to, IWorkCalendarService service, CancellationToken cancellationToken) =>
+                (await service.ListOfficialHolidaysAsync(from, to, cancellationToken)).ToApiResult())
+            .RequireAuthorization(CalendarPermissions.View);
+
         group.MapPost("/", async (CreateWorkCalendarRequest request, IWorkCalendarService service, CancellationToken cancellationToken) =>
                 (await service.CreateAsync(request, cancellationToken)).ToApiResult())
             .RequireAuthorization(CalendarPermissions.Create);
@@ -40,6 +48,10 @@ public static class CalendarEndpoints
         group.MapPut("/{id:guid}", async (Guid id, UpdateWorkCalendarRequest request, IWorkCalendarService service, CancellationToken cancellationToken) =>
                 (await service.UpdateAsync(id, request, cancellationToken)).ToApiResult())
             .RequireAuthorization(CalendarPermissions.Update);
+
+        group.MapDelete("/{id:guid}", async (Guid id, IWorkCalendarService service, CancellationToken cancellationToken) =>
+                (await service.DeleteAsync(id, cancellationToken)).ToApiResult())
+            .RequireAuthorization(CalendarPermissions.Delete);
 
         group.MapPost("/{id:guid}/exceptions", async (Guid id, AddWorkCalendarExceptionRequest request, IWorkCalendarService service, CancellationToken cancellationToken) =>
                 (await service.AddExceptionAsync(id, request, cancellationToken)).ToApiResult())

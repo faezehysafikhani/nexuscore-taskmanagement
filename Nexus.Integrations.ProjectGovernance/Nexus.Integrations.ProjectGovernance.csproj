@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+	  <OutputType>Library</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Owns no tables: the organisation-wide switches and each project's own settings are kept as
+         NexusCore's SystemSettings (one row each), so installing it changes no schema. It depends on
+         the extension points of Project Management Core and Waterfall; neither depends on it. -->
+    <ProjectReference Include="..\Nexus.ProjectManagement.Core\Nexus.ProjectManagement.Core.csproj" />
+    <ProjectReference Include="..\Nexus.ProjectManagement.Waterfall\Nexus.ProjectManagement.Waterfall.csproj" />
+    <ProjectReference Include="..\NexusCore.Application\NexusCore.Application.csproj" />
+    <ProjectReference Include="..\NexusCore.SharedKernel\NexusCore.SharedKernel.csproj" />
+  </ItemGroup>
+
+</Project>

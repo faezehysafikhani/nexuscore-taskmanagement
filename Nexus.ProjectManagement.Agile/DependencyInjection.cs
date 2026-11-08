@@ -1,5 +1,7 @@
+using Nexus.ProjectManagement.Core.Application;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Nexus.ProjectManagement.Agile.Application;
 using Nexus.ProjectManagement.Agile.Application.Dtos;
 using Nexus.ProjectManagement.Agile.Application.EventHandlers;
@@ -18,13 +20,29 @@ public static class DependencyInjection
     /// is never required to run it - the two are independent siblings under Core.</summary>
     public static IServiceCollection AddAgilePlanning(this IServiceCollection services)
     {
-        services.AddScoped<IAgileTaskService, AgileTaskService>();
+        
+        services.AddScoped<IProjectDeletionParticipant, AgileProjectDeletionParticipant>();services.AddScoped<IAgileTaskService, AgileTaskService>();
+        services.AddScoped<ISprintService, SprintService>();
+        services.AddScoped<IAgileBoardService, AgileBoardService>();
+        services.AddScoped<ISprintChartService, SprintChartService>();
+        services.AddScoped<IAgileChecklistService, AgileChecklistService>();
+        services.AddScoped<IAgileTaskStatusSubmissionService, AgileTaskStatusSubmissionService>();
+        services.AddScoped<Nexus.ProjectManagement.Core.Application.IProjectProgressSource, AgileProjectProgressSource>();
+        services.AddScoped<SprintTracker>();
+        services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<IValidator<CreateAgileTaskRequest>, CreateAgileTaskRequestValidator>();
         services.AddScoped<IValidator<UpdateAgileTaskRequest>, UpdateAgileTaskRequestValidator>();
+        services.AddScoped<IValidator<SetStoryPointsRequest>, SetStoryPointsRequestValidator>();
+        services.AddScoped<IValidator<CreateSprintRequest>, CreateSprintRequestValidator>();
+        services.AddScoped<IValidator<UpdateSprintRequest>, UpdateSprintRequestValidator>();
+        services.AddScoped<IValidator<CreateChecklistItemRequest>, CreateChecklistItemRequestValidator>();
+        services.AddScoped<IValidator<UpdateChecklistItemRequest>, UpdateChecklistItemRequestValidator>();
         services.AddSingleton<IPermissionCatalog, AgilePermissionCatalog>();
 
         services.AddScoped<IDomainEventHandler<ApprovalGranted>, AgileTaskApprovalGrantedHandler>();
         services.AddScoped<IDomainEventHandler<ApprovalRejected>, AgileTaskApprovalRejectedHandler>();
+        services.AddScoped<IDomainEventHandler<ApprovalGranted>, AgileTaskStatusApprovalGrantedHandler>();
+        services.AddScoped<IDomainEventHandler<ApprovalRejected>, AgileTaskStatusApprovalRejectedHandler>();
 
         services.AddAuthorization(options =>
         {

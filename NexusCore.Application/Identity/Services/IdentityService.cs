@@ -38,7 +38,8 @@ public sealed class IdentityService(
     ISessionSecurityNotifier sessionNotifier,
     IUserReachScope? reachScope = null,
     IOptions<SignInSessionOptions>? sessionOptions = null,
-    IPositionPermissionProvider? positionPermissions = null) : IIdentityService
+    IPositionPermissionProvider? positionPermissions = null,
+    IOptions<IdentitySeedOptions>? identityOptions = null) : IIdentityService
 {
     private readonly ManagedPermissionOptions _managed = managedPermissionOptions.Value;
     private readonly SignInSessionOptions _session = sessionOptions?.Value ?? new SignInSessionOptions();
@@ -297,7 +298,12 @@ public sealed class IdentityService(
         user.SetPersonalDetails(request.Address, request.FatherName, request.BirthDate);
         user.SetAvatar(request.AvatarUrl);
         // Every new user starts with «کاربر عادی» (when the organization has it); roles chosen on the form are set afterwards.
-        if (await repository.GetRoleByNameAsync(request.TenantId, DefaultUserRole.Name, cancellationToken) is { } defaultRole)
+        var configuredRole = identityOptions?.Value.DefaultRoleName?.Trim();
+        var defaultRole = !string.IsNullOrEmpty(configuredRole)
+            ? await repository.GetRoleByNameAsync(request.TenantId, configuredRole, cancellationToken)
+            : null;
+        defaultRole ??= await repository.GetRoleByNameAsync(request.TenantId, DefaultUserRole.Name, cancellationToken);
+        if (defaultRole is not null)
         {
             user.AssignRole(defaultRole.Id);
         }

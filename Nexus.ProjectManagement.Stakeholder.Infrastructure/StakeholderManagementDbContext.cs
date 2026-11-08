@@ -8,6 +8,7 @@ public sealed class StakeholderManagementDbContext(DbContextOptions<StakeholderM
     : DbContext(options), IStakeholderUnitOfWork
 {
     public DbSet<Stakeholder> Stakeholders => Set<Stakeholder>();
+    public DbSet<StakeholderProjectSettings> ProjectSettings => Set<StakeholderProjectSettings>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

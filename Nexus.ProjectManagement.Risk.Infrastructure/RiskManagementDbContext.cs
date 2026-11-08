@@ -8,6 +8,8 @@ public sealed class RiskManagementDbContext(DbContextOptions<RiskManagementDbCon
     : DbContext(options), IRiskUnitOfWork
 {
     public DbSet<Risk> Risks => Set<Risk>();
+    public DbSet<RiskProjectSettings> ProjectSettings => Set<RiskProjectSettings>();
+    public DbSet<RiskResponseSubmission> ResponseSubmissions => Set<RiskResponseSubmission>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

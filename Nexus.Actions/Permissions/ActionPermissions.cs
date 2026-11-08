@@ -9,6 +9,7 @@ public static class ActionPermissions
     public const string Edit = "Actions.Edit";
     public const string Delete = "Actions.Delete";
     public const string Submit = "Actions.Submit";
+    public const string SubmitStatus = "ActionStatus.Submit";
 
     public static IReadOnlyList<PermissionDefinition> All { get; } =
     [
@@ -16,7 +17,8 @@ public static class ActionPermissions
         new(Create, "Actions", "ایجاد اقدام"),
         new(Edit, "Actions", "ویرایش اقدامات"),
         new(Delete, "Actions", "لغو اقدامات"),
-        new(Submit, "Actions", "ارسال اقدامات برای تأیید")
+        new(Submit, "Actions", "ارسال اقدامات برای تأیید"),
+        new(SubmitStatus, "Actions", "ارسال درخواست تغییر وضعیت اقدام برای تأیید")
     ];
 }
 

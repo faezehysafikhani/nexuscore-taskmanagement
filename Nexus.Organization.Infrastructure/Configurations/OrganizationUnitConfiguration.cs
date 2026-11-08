@@ -24,3 +24,17 @@ public sealed class OrganizationUnitConfiguration : IEntityTypeConfiguration<Org
         builder.Property(x => x.Address).HasMaxLength(500);
     }
 }
+
+public sealed class OrganizationUnitMemberConfiguration : IEntityTypeConfiguration<OrganizationUnitMember>
+{
+    public void Configure(EntityTypeBuilder<OrganizationUnitMember> builder)
+    {
+        builder.ToTable("OrganizationUnitMembers", "organization");
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+
+        // A person is in at most one unit of their tenant.
+        builder.HasIndex(x => new { x.TenantId, x.UserId }).IsUnique();
+        builder.HasIndex(x => x.UnitId);
+    }
+}

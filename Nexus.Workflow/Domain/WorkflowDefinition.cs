@@ -48,12 +48,23 @@ public sealed class WorkflowDefinition : AuditableEntity<Guid>
 
     public void SetActive(bool isActive) => IsActive = isActive;
 
-    public WorkflowStep AddStep(Guid stepId, string name, Guid? approverUserId, Guid? approverRoleId)
+    public WorkflowStep AddStep(Guid stepId, string name, Guid? approverUserId, Guid? approverRoleId, string? approverKey = null, bool isOptional = false)
     {
         var order = _steps.Count == 0 ? 1 : _steps.Max(step => step.Order) + 1;
-        var step = new WorkflowStep(stepId, Id, order, name, approverUserId, approverRoleId);
+        var step = new WorkflowStep(stepId, Id, order, name, approverUserId, approverRoleId, approverKey, isOptional);
         _steps.Add(step);
         return step;
+    }
+
+    /// <summary>Replaces every step at once (the editor saves the whole chain). Approvals already running keep
+    /// the steps they started with.</summary>
+    public void ReplaceSteps(IEnumerable<(string Name, Guid? ApproverUserId, Guid? ApproverRoleId, string? ApproverKey, bool IsOptional)> steps)
+    {
+        _steps.Clear();
+        foreach (var step in steps)
+        {
+            AddStep(Guid.NewGuid(), step.Name, step.ApproverUserId, step.ApproverRoleId, step.ApproverKey, step.IsOptional);
+        }
     }
 
     public void DeleteStep(Guid stepId)

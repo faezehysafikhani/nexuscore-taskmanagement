@@ -21,6 +21,11 @@ public sealed class ProjectRepository(ProjectManagementCoreDbContext dbContext) 
                 project.Name.Contains(request.Search) || project.Code.Contains(request.Search));
         }
 
+        if (request.WorkCalendarId is { } calendarId)
+        {
+            query = query.Where(project => project.WorkCalendarId == calendarId);
+        }
+
         if (request.Type is { } type)
         {
             query = query.Where(project => project.Type == type);
@@ -63,6 +68,34 @@ public sealed class ProjectRepository(ProjectManagementCoreDbContext dbContext) 
     public async Task AddAsync(Project project, CancellationToken cancellationToken)
     {
         await dbContext.Projects.AddAsync(project, cancellationToken);
+    }
+
+    public Task<bool> NameExistsAsync(Guid tenantId, string name, Guid? excludeId, CancellationToken cancellationToken)
+    {
+        var wanted = name.Trim().ToLower();
+        return dbContext.Projects.AnyAsync(
+            project => project.TenantId == tenantId && project.Name.ToLower() == wanted && project.Id != excludeId,
+            cancellationToken);
+    }
+
+    public async Task<string?> NextCodeAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        var codes = await dbContext.Projects
+            .Where(project => project.TenantId == tenantId && project.Code.StartsWith("P"))
+            .Select(project => project.Code)
+            .ToListAsync(cancellationToken);
+
+        var highest = codes
+            .Select(code => int.TryParse(code.AsSpan(1), out var number) ? number : 0)
+            .DefaultIfEmpty(0)
+            .Max();
+        return $"P{highest + 1:D4}";
+    }
+
+    public Task RemoveAsync(Project project, CancellationToken cancellationToken)
+    {
+        dbContext.Projects.Remove(project);
+        return Task.CompletedTask;
     }
 
     private static IQueryable<Project> ApplySort(IQueryable<Project> query, ProjectSortBy sortBy, bool descending) => sortBy switch

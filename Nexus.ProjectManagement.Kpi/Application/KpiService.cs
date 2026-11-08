@@ -62,6 +62,19 @@ public sealed class KpiService(
         return Result.Success(ToDto(kpi));
     }
 
+    public async Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var kpi = await repository.GetByIdAsync(id, cancellationToken);
+        if (kpi is null)
+        {
+            return Result.Failure(Error.NotFound("KPI not found."));
+        }
+
+        await repository.RemoveAsync(kpi, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result.Success();
+    }
+
     private static KpiDefinitionDto ToDto(KpiDefinition kpi) => new(
         kpi.Id, kpi.TenantId, kpi.ProjectId, kpi.DeliverableId, kpi.Type, kpi.Description, kpi.Formula, kpi.TargetValue);
 }

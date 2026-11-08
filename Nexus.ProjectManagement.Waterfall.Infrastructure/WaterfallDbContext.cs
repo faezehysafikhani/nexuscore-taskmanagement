@@ -8,6 +8,12 @@ public sealed class WaterfallDbContext(DbContextOptions<WaterfallDbContext> opti
     : DbContext(options), IWaterfallUnitOfWork
 {
     public DbSet<Activity> Activities => Set<Activity>();
+    public DbSet<ActivityDependency> ActivityDependencies => Set<ActivityDependency>();
+    public DbSet<ScheduleBaseline> ScheduleBaselines => Set<ScheduleBaseline>();
+    public DbSet<ProgressSnapshot> ProgressSnapshots => Set<ProgressSnapshot>();
+    public DbSet<ScheduleBaselineActivity> ScheduleBaselineActivities => Set<ScheduleBaselineActivity>();
+    public DbSet<WaterfallProjectSettings> ProjectSettings => Set<WaterfallProjectSettings>();
+    public DbSet<ActivityProgressSubmission> ProgressSubmissions => Set<ActivityProgressSubmission>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

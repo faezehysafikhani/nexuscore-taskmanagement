@@ -12,10 +12,15 @@ namespace Nexus.Workflow;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddWorkflowApplication(this IServiceCollection services)
+    public static IServiceCollection AddWorkflowApplication(this IServiceCollection services, Action<WorkflowOptions>? configure = null)
     {
+        var options = new WorkflowOptions();
+        configure?.Invoke(options);
+        services.AddSingleton(options);
         services.AddScoped<IWorkflowDefinitionService, WorkflowDefinitionService>();
         services.AddScoped<IWorkflowInstanceService, WorkflowInstanceService>();
+        services.AddScoped<IWorkflowDelegationService, WorkflowDelegationService>();
+        services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<IValidator<CreateWorkflowDefinitionRequest>, CreateWorkflowDefinitionRequestValidator>();
         services.AddScoped<IValidator<AddWorkflowStepRequest>, AddWorkflowStepRequestValidator>();
         services.AddSingleton<IPermissionCatalog, WorkflowPermissionCatalog>();

@@ -7,6 +7,7 @@ public static class CalendarPermissions
     public const string View = "work_calendars.view";
     public const string Create = "work_calendars.create";
     public const string Update = "work_calendars.update";
+    public const string Delete = "work_calendars.delete";
 
     public const string ViewMeetings = "Meetings.View";
     public const string CreateMeetings = "Meetings.Create";
@@ -20,6 +21,7 @@ public static class CalendarPermissions
         new(View, "Calendar", "مشاهده تقویم‌های کاری"),
         new(Create, "Calendar", "ایجاد تقویم کاری"),
         new(Update, "Calendar", "ویرایش تقویم‌های کاری و استثناهای آن‌ها"),
+        new(Delete, "Calendar", "حذف تقویم کاری"),
         new(ViewMeetings, "Meetings", "مشاهده جلسات در محدوده مجاز چارت سازمانی"),
         new(CreateMeetings, "Meetings", "ایجاد جلسه"),
         new(EditMeetings, "Meetings", "ویرایش جلسه‌های مجاز"),

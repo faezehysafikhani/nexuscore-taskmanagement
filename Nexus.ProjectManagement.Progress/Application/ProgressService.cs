@@ -12,6 +12,18 @@ public sealed class ProgressService(
     IProgressUnitOfWork unitOfWork,
     IApprovalRequester approvalRequester) : IProgressService
 {
+    public async Task<Result<IReadOnlyList<ProgressUpdateDto>>> ListForProjectsAsync(ListProgressUpdatesForProjectsRequest request, CancellationToken cancellationToken)
+    {
+        var ids = request.ProjectIds.Distinct().ToList();
+        if (ids.Count == 0)
+        {
+            return Result.Success<IReadOnlyList<ProgressUpdateDto>>([]);
+        }
+
+        var items = await repository.ListByProjectsAsync(ids, cancellationToken);
+        return Result.Success<IReadOnlyList<ProgressUpdateDto>>(items.Select(ToDto).ToList());
+    }
+
     public async Task<Result<IReadOnlyList<ProgressUpdateDto>>> ListByProjectAsync(Guid projectId, CancellationToken cancellationToken)
     {
         var updates = await repository.ListByProjectAsync(projectId, cancellationToken);
@@ -47,6 +59,26 @@ public sealed class ProgressService(
         update.UpdateDetails(request.StatusDescription, request.PlannedProgress, request.ActualProgress, request.DelayReasons);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success(ToDto(update));
+    }
+
+    public async Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var progressUpdate = await repository.GetByIdAsync(id, cancellationToken);
+        if (progressUpdate is null)
+        {
+            return Result.Failure(Error.NotFound("Progress update not found."));
+        }
+
+        // An approval request is already open for this progress update; deleting it now would leave the
+        // workflow instance pointing at a subject that no longer exists.
+        if (progressUpdate.ApprovalStatus == ApprovalStatus.PendingApproval)
+        {
+            return Result.Failure(Error.Conflict("A progress update that is pending approval cannot be deleted."));
+        }
+
+        await repository.RemoveAsync(progressUpdate, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result.Success();
     }
 
     public async Task<Result<ProgressUpdateDto>> SubmitForApprovalAsync(Guid id, CancellationToken cancellationToken)

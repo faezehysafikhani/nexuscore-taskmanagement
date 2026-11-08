@@ -1,5 +1,6 @@
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Nexus.ProjectManagement.Core.Application;
 using Nexus.ProjectManagement.Core.Application.Dtos;
 using Nexus.ProjectManagement.Core.Application.EventHandlers;
@@ -17,9 +18,14 @@ public static class DependencyInjection
     /// The one method Applications call to get Project CRUD. Every other ProjectManagement
     /// capability (Waterfall, Risk, Team, ...) requires this to be registered first.
     /// </summary>
-    public static IServiceCollection AddProjectManagementCore(this IServiceCollection services)
+    public static IServiceCollection AddProjectManagementCore(this IServiceCollection services, Action<ProjectOptions>? configure = null)
     {
+        var options = new ProjectOptions();
+        configure?.Invoke(options);
+        services.AddSingleton(options);
         services.AddScoped<IProjectService, ProjectService>();
+        services.AddScoped<IProjectProgressService, ProjectProgressService>();
+        services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<IValidator<CreateProjectRequest>, CreateProjectRequestValidator>();
         services.AddScoped<IValidator<UpdateProjectRequest>, UpdateProjectRequestValidator>();
         services.AddSingleton<IPermissionCatalog, ProjectPermissionCatalog>();

@@ -10,4 +10,11 @@ public interface IStrategyService
     Task<Result<StrategyDto>> CreateAsync(CreateStrategyRequest request, CancellationToken cancellationToken);
     Task<Result<StrategyDto>> UpdateAsync(Guid id, UpdateStrategyRequest request, CancellationToken cancellationToken);
     Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken);
+
+    /// <summary>Default interface members, so another implementation of this interface keeps compiling.</summary>
+    Task<Result<StrategyTreeDto>> GetTreeAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        Task.FromResult(Result.Failure<StrategyTreeDto>(Error.NotFound("Not supported.")));
+
+    Task<Result<StrategyTreeDto>> SaveTreeAsync(SaveStrategyTreeRequest request, CancellationToken cancellationToken) =>
+        Task.FromResult(Result.Failure<StrategyTreeDto>(Error.NotFound("Not supported.")));
 }

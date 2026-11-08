@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <OutputType>Library</OutputType>
+    <Description>NexusCore platform bundle: users / roles / sessions, organization, calendar, workflow, chat, events, ticketing and notifications behind one AddNexusPlatform() call.</Description>
+  </PropertyGroup>
+
+  <!-- A bundle owns no logic: it only composes the packages below (registration, endpoint mapping,
+       schema set-up). Referencing this one package brings the whole platform; hosts that want less
+       reference the individual packages instead. -->
+  <ItemGroup>
+    <ProjectReference Include="..\NexusCore.SharedKernel\NexusCore.SharedKernel.csproj" />
+    <ProjectReference Include="..\NexusCore.Application\NexusCore.Application.csproj" />
+    <ProjectReference Include="..\NexusCore.Infrastructure\NexusCore.Infrastructure.csproj" />
+    <ProjectReference Include="..\Chat.Api\Chat.Api.csproj" />
+    <ProjectReference Include="..\Chat.Application\Chat.Application.csproj" />
+    <ProjectReference Include="..\Chat.Infrastructure\Chat.Infrastructure.csproj" />
+    <ProjectReference Include="..\Events.Api\Events.Api.csproj" />
+    <ProjectReference Include="..\Events.Application\Events.Application.csproj" />
+    <ProjectReference Include="..\Events.Infrastructure\Events.Infrastructure.csproj" />
+    <ProjectReference Include="..\Ticketing.Api\Ticketing.Api.csproj" />
+    <ProjectReference Include="..\Ticketing.Application\Ticketing.Application.csproj" />
+    <ProjectReference Include="..\Ticketing.Infrastructure\Ticketing.Infrastructure.csproj" />
+    <ProjectReference Include="..\Notifications.Api\Notifications.Api.csproj" />
+    <ProjectReference Include="..\Notifications.Application\Notifications.Application.csproj" />
+    <ProjectReference Include="..\Notifications.Infrastructure\Notifications.Infrastructure.csproj" />
+    <ProjectReference Include="..\Nexus.Organization\Nexus.Organization.csproj" />
+    <ProjectReference Include="..\Nexus.Organization.Infrastructure\Nexus.Organization.Infrastructure.csproj" />
+    <ProjectReference Include="..\Nexus.OrgStructure\Nexus.OrgStructure.csproj" />
+    <ProjectReference Include="..\Nexus.OrgStructure.Infrastructure\Nexus.OrgStructure.Infrastructure.csproj" />
+    <ProjectReference Include="..\Nexus.Calendar\Nexus.Calendar.csproj" />
+    <ProjectReference Include="..\Nexus.Calendar.Infrastructure\Nexus.Calendar.Infrastructure.csproj" />
+    <ProjectReference Include="..\Nexus.Calendar.IranianHolidays\Nexus.Calendar.IranianHolidays.csproj" />
+    <ProjectReference Include="..\Nexus.Workflow\Nexus.Workflow.csproj" />
+    <ProjectReference Include="..\Nexus.Workflow.Infrastructure\Nexus.Workflow.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>
