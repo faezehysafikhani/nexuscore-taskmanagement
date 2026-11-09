@@ -9,14 +9,12 @@ public static class DefaultUserRole
 {
     public const string Name = "کاربر عادی";
 
-    public const string Description = "نقش پیش‌فرض هر کاربر تازه: دیدن و ساختن فعالیت، ثبت دیدگاه و دیدن ساختار سازمانی.";
+    public const string Description = "نقش پیش‌فرض هر کاربر تازه: دیدن و ساختن فعالیت و ثبت دیدگاه. دیدن ساختار سازمانی را مدیر سامانه به سمت یا پست می‌دهد.";
 
     public static readonly IReadOnlyList<string> Permissions =
     [
         "Tasks.View",
         "Tasks.Create",
         "Tasks.Comment",
-        "org_structure.view",
-        "org_structure.node.view",
     ];
 }
