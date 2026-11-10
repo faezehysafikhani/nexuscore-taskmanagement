@@ -86,7 +86,8 @@ public sealed class TaskService(
             task.ModifiedAtUtc,
             task.DueTime,
             task.ArchivedAtUtc,
-            task.CustomStatusId)).ToList();
+            task.CustomStatusId,
+            task.ReviewStatus)).ToList();
 
         return Result.Success(new PagedResult<TaskListItemDto>(
             items, page.PageNumber, page.PageSize, page.TotalCount));
@@ -524,6 +525,11 @@ public sealed class TaskService(
         }
 
         var newStatus = custom?.Category ?? request.Status!.Value;
+        if (task.IsInReview && newStatus == TaskItemStatus.Completed)
+        {
+            return Result.Failure<TaskDto>(Error.Conflict("This task is waiting for review; it is completed when the review approves it."));
+        }
+
         var previous = task.Status;
         // Past due and not done (finished and paused tasks are not "overdue"): whoever cares about
         // it is told when its status changes.
@@ -1398,6 +1404,10 @@ public sealed class TaskService(
             task.ParentTaskId,
             task.RowVersion is { Length: > 0 } version ? Convert.ToBase64String(version) : null,
             task.ArchivedAtUtc,
-            task.CustomStatusId);
+            task.CustomStatusId,
+            task.ReviewStatus,
+            task.ReviewSubmittedAtUtc,
+            task.ReviewDecidedAtUtc,
+            task.ReviewComment);
     }
 }

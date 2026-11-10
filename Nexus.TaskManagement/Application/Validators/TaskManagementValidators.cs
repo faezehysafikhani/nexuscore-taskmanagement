@@ -148,6 +148,11 @@ public sealed class ChangeTaskStatusRequestValidator : AbstractValidator<ChangeT
     }
 }
 
+public sealed class SubmitTaskReviewRequestValidator : AbstractValidator<SubmitTaskReviewRequest>
+{
+    public SubmitTaskReviewRequestValidator() => RuleFor(x => x.Comment).MaximumLength(1000);
+}
+
 public sealed class QuickCreateTaskRequestValidator : AbstractValidator<QuickCreateTaskRequest>
 {
     public QuickCreateTaskRequestValidator()

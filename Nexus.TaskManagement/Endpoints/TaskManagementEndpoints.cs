@@ -156,6 +156,17 @@ public static class TaskManagementEndpoints
             .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.Edit);
 
+        group.MapPost("/{id:guid}/submit-review", async (Guid id, SubmitTaskReviewRequest request, ITaskReviewService service, CancellationToken cancellationToken) =>
+                (await service.SubmitAsync(id, request, cancellationToken)).ToApiResult())
+            .WithSummary("Submit the task for review; the approval chain decides (none set up: it is completed at once)")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
+            .RequireAuthorization(TaskManagementPermissions.Edit);
+
+        group.MapPost("/in-review", async (TaskReviewItemsRequest request, ITaskReviewService service, CancellationToken cancellationToken) =>
+                (await service.ListInReviewAsync(request.Ids, cancellationToken)).ToApiResult())
+            .WithSummary("Title, due date and submitter of the tasks (among the ids) that are waiting for review - for the approver's list")
+            .RequireAuthorization(TaskManagementPermissions.View);
+
         group.MapPut("/{id:guid}", async (Guid id, UpdateTaskRequest request, ITaskService service, CancellationToken cancellationToken) =>
                 (await service.UpdateAsync(id, request, cancellationToken)).ToApiResult())
             .WithSummary("Update a task")

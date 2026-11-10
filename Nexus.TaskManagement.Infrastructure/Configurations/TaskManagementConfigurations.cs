@@ -27,6 +27,7 @@ internal sealed class TaskItemConfiguration : IEntityTypeConfiguration<TaskItem>
         builder.Ignore(x => x.IsRecurring);
         builder.Ignore(x => x.IsArchived);
         builder.Property(x => x.RowVersion).IsRowVersion();
+        builder.Property(x => x.ReviewComment).HasMaxLength(1000);
         builder.HasIndex(x => new { x.TenantId, x.CustomStatusId });
 
         // Real foreign keys into the shared identity schema. Restrict, never cascade:

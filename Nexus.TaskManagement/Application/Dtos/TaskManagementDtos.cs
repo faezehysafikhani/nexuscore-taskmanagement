@@ -134,7 +134,11 @@ public sealed record TaskDto(
     Guid? ParentTaskId = null,
     string? RowVersion = null,
     DateTimeOffset? ArchivedAtUtc = null,
-    Guid? CustomStatusId = null);
+    Guid? CustomStatusId = null,
+    NexusCore.Application.Approvals.ApprovalStatus ReviewStatus = NexusCore.Application.Approvals.ApprovalStatus.NotSubmitted,
+    DateTimeOffset? ReviewSubmittedAtUtc = null,
+    DateTimeOffset? ReviewDecidedAtUtc = null,
+    string? ReviewComment = null);
 
 /// <summary>
 /// Someone standing in for a vacant post of the task (جانشین): sees it and comments, nothing more.
@@ -172,7 +176,8 @@ public sealed record TaskListItemDto(
     DateTimeOffset? ModifiedAtUtc,
     TimeOnly? DueTime = null,
     DateTimeOffset? ArchivedAtUtc = null,
-    Guid? CustomStatusId = null);
+    Guid? CustomStatusId = null,
+    NexusCore.Application.Approvals.ApprovalStatus ReviewStatus = NexusCore.Application.Approvals.ApprovalStatus.NotSubmitted);
 
 public sealed record NoteDto(
     Guid Id,
@@ -270,6 +275,12 @@ public sealed record UpdateTaskRequest(
 public sealed record ChangeTaskStatusRequest(TaskItemStatus? Status = null, Guid? CustomStatusId = null);
 
 public sealed record ChangeTaskPriorityRequest(TaskPriority Priority);
+
+public sealed record SubmitTaskReviewRequest(string? Comment = null);
+
+/// <summary>A task waiting for the signed-in person's review - what "my reviews" shows next to the approval.</summary>
+public sealed record TaskReviewItemDto(Guid Id, string Title, DateOnly DueDate, UserSummaryDto? SubmittedBy, DateTimeOffset? SubmittedAtUtc, string? Comment);
+public sealed record TaskReviewItemsRequest(IReadOnlyList<Guid> Ids);
 
 /// <summary>Quick add: only a title is needed. Due today if no date is given; given to the person adding it.</summary>
 public sealed record QuickCreateTaskRequest(string Title, DateOnly? DueDate = null, TaskPriority Priority = TaskPriority.Medium);

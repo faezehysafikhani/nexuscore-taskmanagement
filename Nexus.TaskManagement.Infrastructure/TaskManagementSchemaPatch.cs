@@ -130,6 +130,19 @@ public static class TaskManagementSchema
         END
         """;
 
+    /// <summary>Submit-for-review state on tasks (phase 4). ReviewStatus: 0 none, 1 pending, 2 approved, 3 rejected.</summary>
+    public const string AddTaskReviewSql = """
+        IF OBJECT_ID(N'[task_management].[Tasks]') IS NOT NULL
+        BEGIN
+            IF COL_LENGTH(N'task_management.Tasks', N'ReviewStatus') IS NULL ALTER TABLE [task_management].[Tasks] ADD [ReviewStatus] int NOT NULL CONSTRAINT [DF_Tasks_ReviewStatus] DEFAULT 0;
+            IF COL_LENGTH(N'task_management.Tasks', N'ReviewSubmittedAtUtc') IS NULL ALTER TABLE [task_management].[Tasks] ADD [ReviewSubmittedAtUtc] datetimeoffset NULL;
+            IF COL_LENGTH(N'task_management.Tasks', N'ReviewSubmittedByUserId') IS NULL ALTER TABLE [task_management].[Tasks] ADD [ReviewSubmittedByUserId] uniqueidentifier NULL;
+            IF COL_LENGTH(N'task_management.Tasks', N'ReviewDecidedAtUtc') IS NULL ALTER TABLE [task_management].[Tasks] ADD [ReviewDecidedAtUtc] datetimeoffset NULL;
+            IF COL_LENGTH(N'task_management.Tasks', N'ReviewDecidedByUserId') IS NULL ALTER TABLE [task_management].[Tasks] ADD [ReviewDecidedByUserId] uniqueidentifier NULL;
+            IF COL_LENGTH(N'task_management.Tasks', N'ReviewComment') IS NULL ALTER TABLE [task_management].[Tasks] ADD [ReviewComment] nvarchar(1000) NULL;
+        END
+        """;
+
     /// <summary>The index on the new column, in its own batch.</summary>
     public const string AddCustomStatusIndexSql = """
         IF OBJECT_ID(N'[task_management].[Tasks]') IS NOT NULL AND COL_LENGTH(N'task_management.Tasks', N'CustomStatusId') IS NOT NULL
@@ -182,6 +195,7 @@ public sealed class TaskManagementSchemaPatcher(IServiceScopeFactory scopes, ILo
                 await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddArchiveIndexSql, cancellationToken);
                 await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddCustomStatusesSql, cancellationToken);
                 await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddCustomStatusIndexSql, cancellationToken);
+                await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddTaskReviewSql, cancellationToken);
             }
         }
         catch (Exception ex)

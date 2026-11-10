@@ -268,6 +268,13 @@ public sealed class TaskRepository(TaskManagementDbContext db) : ITaskRepository
     public Task<bool> UserGroupExistsAsync(Guid tenantId, Guid userGroupId, CancellationToken cancellationToken) =>
         db.UserGroups.AnyAsync(g => g.Id == userGroupId && g.TenantId == tenantId, cancellationToken);
 
+    public async Task<IReadOnlyList<TaskItem>> GetInReviewAsync(
+        Guid tenantId, IReadOnlyCollection<Guid> taskIds, CancellationToken cancellationToken) =>
+        await db.Tasks.IgnoreQueryFilters()
+            .Where(t => t.TenantId == tenantId && taskIds.Contains(t.Id) && t.ArchivedAtUtc == null
+                && t.ReviewStatus == NexusCore.Application.Approvals.ApprovalStatus.PendingApproval)
+            .ToListAsync(cancellationToken);
+
     public async Task<IReadOnlyDictionary<Guid, UserSummaryDto>> GetUserSummariesAsync(
         IReadOnlyCollection<Guid> userIds, CancellationToken cancellationToken)
     {

@@ -70,6 +70,9 @@ public interface ITaskRepository
 
     Task<bool> UserGroupExistsAsync(Guid tenantId, Guid userGroupId, CancellationToken cancellationToken);
 
+    /// <summary>The tasks among these that are waiting for review, whoever is signed in.</summary>
+    Task<IReadOnlyList<TaskItem>> GetInReviewAsync(Guid tenantId, IReadOnlyCollection<Guid> taskIds, CancellationToken cancellationToken);
+
     Task<IReadOnlyDictionary<Guid, UserSummaryDto>> GetUserSummariesAsync(
         IReadOnlyCollection<Guid> userIds, CancellationToken cancellationToken);
 
@@ -98,6 +101,15 @@ public interface ITaskStatusRepository
     Task AddAsync(TaskStatusDefinition status, CancellationToken cancellationToken);
     /// <summary>Removes the status and sets CustomStatusId to null on the tasks that had it (they keep their category).</summary>
     Task RemoveAsync(TaskStatusDefinition status, CancellationToken cancellationToken);
+}
+
+public interface ITaskReviewService
+{
+    /// <summary>Asks for the task to be reviewed. With an approval backend it waits for the decision; with none it is completed at once.</summary>
+    Task<Result<TaskDto>> SubmitAsync(Guid id, SubmitTaskReviewRequest request, CancellationToken cancellationToken);
+
+    /// <summary>Of these tasks, the ones waiting for review (no access check on the list: the approval backend decides who may decide).</summary>
+    Task<Result<IReadOnlyList<TaskReviewItemDto>>> ListInReviewAsync(IReadOnlyList<Guid> ids, CancellationToken cancellationToken);
 }
 
 public interface ITaskBatchService

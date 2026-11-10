@@ -27,6 +27,9 @@ public static class DependencyInjection
         services.AddScoped<ITagService, TagService>();
         services.AddScoped<ITaskStatusService, TaskStatusService>();
         services.AddScoped<ITaskBatchService, TaskBatchService>();
+        services.AddScoped<ITaskReviewService, TaskReviewService>();
+        services.AddScoped<NexusCore.SharedKernel.Domain.IDomainEventHandler<NexusCore.Application.Approvals.ApprovalGranted>, TaskReviewApprovedHandler>();
+        services.AddScoped<NexusCore.SharedKernel.Domain.IDomainEventHandler<NexusCore.Application.Approvals.ApprovalRejected>, TaskReviewRejectedHandler>();
         services.AddScoped<ITaskFileService, TaskFileService>();
         services.AddScoped<INoteService, NoteService>();
         services.AddScoped<ITaskCommentService, TaskCommentService>();
@@ -71,6 +74,7 @@ public static class DependencyInjection
         services.AddScoped<IValidator<ChangeSubTaskStatusRequest>, ChangeSubTaskStatusRequestValidator>();
         services.AddScoped<IValidator<CreateRepetitiveTaskRequest>, CreateRepetitiveTaskRequestValidator>();
         services.AddScoped<IValidator<UpdateRepetitiveTaskRequest>, UpdateRepetitiveTaskRequestValidator>();
+        services.AddScoped<IValidator<SubmitTaskReviewRequest>, SubmitTaskReviewRequestValidator>();
         services.AddScoped<IValidator<QuickCreateTaskRequest>, QuickCreateTaskRequestValidator>();
         services.AddScoped<IValidator<BulkTaskRequest>, BulkTaskRequestValidator>();
         services.AddScoped<IValidator<CreateTaskStatusRequest>, CreateTaskStatusRequestValidator>();

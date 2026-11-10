@@ -297,6 +297,49 @@ public sealed class TaskItem : AuditableEntity<Guid>
     /// <summary>The organization-defined status the task shows, if any; <see cref="Status"/> is then its category.</summary>
     public Guid? CustomStatusId { get; private set; }
 
+    // --- Review (phase 4): "submit for review", decided through the approval backend when one is installed ---
+
+    public NexusCore.Application.Approvals.ApprovalStatus ReviewStatus { get; private set; }
+    public DateTimeOffset? ReviewSubmittedAtUtc { get; private set; }
+    public Guid? ReviewSubmittedByUserId { get; private set; }
+    public DateTimeOffset? ReviewDecidedAtUtc { get; private set; }
+    public Guid? ReviewDecidedByUserId { get; private set; }
+
+    /// <summary>The submitter's note while pending; the reviewer's note once decided.</summary>
+    public string? ReviewComment { get; private set; }
+
+    public bool IsInReview => ReviewStatus == NexusCore.Application.Approvals.ApprovalStatus.PendingApproval;
+
+    public void SubmitForReview(Guid? byUserId, string? comment, DateTimeOffset nowUtc)
+    {
+        ReviewStatus = NexusCore.Application.Approvals.ApprovalStatus.PendingApproval;
+        ReviewSubmittedAtUtc = nowUtc;
+        ReviewSubmittedByUserId = byUserId;
+        ReviewDecidedAtUtc = null;
+        ReviewDecidedByUserId = null;
+        ReviewComment = comment;
+    }
+
+    /// <summary>Approved: the task is done.</summary>
+    public void ApproveReview(Guid? byUserId, string? comment, DateTimeOffset nowUtc)
+    {
+        ReviewStatus = NexusCore.Application.Approvals.ApprovalStatus.Approved;
+        ReviewDecidedAtUtc = nowUtc;
+        ReviewDecidedByUserId = byUserId;
+        ReviewComment = comment;
+        ChangeStatus(TaskItemStatus.Completed, nowUtc);
+    }
+
+    /// <summary>Rejected: back to work (بازکاری); it can be submitted again.</summary>
+    public void RejectReview(Guid? byUserId, string? comment, DateTimeOffset nowUtc)
+    {
+        ReviewStatus = NexusCore.Application.Approvals.ApprovalStatus.Rejected;
+        ReviewDecidedAtUtc = nowUtc;
+        ReviewDecidedByUserId = byUserId;
+        ReviewComment = comment;
+        ChangeStatus(TaskItemStatus.InProgress, nowUtc);
+    }
+
     /// <summary>The label goes; the task keeps its built-in status.</summary>
     public void ClearCustomStatus() => CustomStatusId = null;
 
