@@ -119,6 +119,7 @@ public sealed class TaskRepository(TaskManagementDbContext db) : ITaskRepository
         }
 
         if (request.Status is { } status) query = query.Where(t => t.Status == status);
+        if (request.CustomStatusId is { } customStatusId) query = query.Where(t => t.CustomStatusId == customStatusId);
         if (request.Priority is { } priority) query = query.Where(t => t.Priority == priority);
         if (request.IsProject is { } isProject) query = query.Where(t => t.IsProject == isProject);
         // Any of the task's responsible people, not only the first.
@@ -330,6 +331,38 @@ public sealed class RepetitiveTaskRepository(TaskManagementDbContext db) : IRepe
         await db.RepetitiveTasks.AddAsync(recurrence, cancellationToken);
 
     public void Remove(RepetitiveTask recurrence) => db.RepetitiveTasks.Remove(recurrence);
+}
+
+public sealed class TaskStatusRepository(TaskManagementDbContext db) : ITaskStatusRepository
+{
+    public Task<TaskStatusDefinition?> GetByIdAsync(Guid tenantId, Guid id, CancellationToken cancellationToken) =>
+        db.TaskStatuses.FirstOrDefaultAsync(s => s.TenantId == tenantId && s.Id == id, cancellationToken);
+
+    public Task<TaskStatusDefinition?> GetByNameAsync(Guid tenantId, string name, CancellationToken cancellationToken)
+    {
+        var normalized = name.Trim().ToUpperInvariant();
+        return db.TaskStatuses.FirstOrDefaultAsync(s => s.TenantId == tenantId && s.NormalizedName == normalized, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<TaskStatusDefinition>> ListAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        await db.TaskStatuses.Where(s => s.TenantId == tenantId).OrderBy(s => s.SortOrder).ThenBy(s => s.Name).ToListAsync(cancellationToken);
+
+    public async Task AddAsync(TaskStatusDefinition status, CancellationToken cancellationToken) =>
+        await db.TaskStatuses.AddAsync(status, cancellationToken);
+
+    public async Task RemoveAsync(TaskStatusDefinition status, CancellationToken cancellationToken)
+    {
+        // Tasks keep their category; only the label goes. Archived ones too, hence IgnoreQueryFilters.
+        var tasks = await db.Tasks.IgnoreQueryFilters()
+            .Where(t => t.TenantId == status.TenantId && t.CustomStatusId == status.Id)
+            .ToListAsync(cancellationToken);
+        foreach (var task in tasks)
+        {
+            task.ClearCustomStatus();
+        }
+
+        db.TaskStatuses.Remove(status);
+    }
 }
 
 public sealed class TagRepository(TaskManagementDbContext db) : ITagRepository

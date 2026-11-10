@@ -100,6 +100,7 @@ public sealed class SqlServerFixture : IAsyncLifetime
         services.AddScoped<ITaskRepository, TaskRepository>();
         services.AddScoped<IRepetitiveTaskRepository, RepetitiveTaskRepository>();
         services.AddScoped<ITagRepository, TagRepository>();
+        services.AddScoped<ITaskStatusRepository, TaskStatusRepository>();
         services.AddScoped<ITaskFileRepository, TaskFileRepository>();
         services.AddScoped<INoteRepository, NoteRepository>();
         services.AddScoped<ITaskCommentRepository, TaskCommentRepository>();

@@ -25,6 +25,7 @@ public static class TaskManagementEndpoints
         app.MapSubTaskEndpoints();
         app.MapRepetitiveTaskEndpoints();
         app.MapTaskTagEndpoints();
+        app.MapTaskStatusEndpoints();
         app.MapTaskFileEndpoints();
         app.MapNoteEndpoints();
         app.MapReminderSettingsEndpoints();
@@ -111,7 +112,7 @@ public static class TaskManagementEndpoints
                 int? pageNumber, int? pageSize, string? search,
                 TaskItemStatus? status, TaskPriority? priority,
                 bool? isProject, bool? isRecurring,
-                Guid? assignedUserId, Guid? assignedUserGroupId, Guid? tagId,
+                Guid? assignedUserId, Guid? assignedUserGroupId, Guid? tagId, Guid? customStatusId,
                 DateOnly? dueFrom, DateOnly? dueTo, bool? overdue,
                 TaskSortBy? sortBy, bool? sortDescending, bool? archived,
                 ITaskService service, CancellationToken cancellationToken) =>
@@ -125,7 +126,7 @@ public static class TaskManagementEndpoints
                     currentUser.TenantId.Value, pageNumber ?? 1, pageSize ?? 20, search,
                     status, priority, isProject, isRecurring, assignedUserId, assignedUserGroupId,
                     tagId, dueFrom, dueTo, overdue,
-                    sortBy ?? TaskSortBy.ModifiedAtUtc, sortDescending ?? true, archived ?? false);
+                    sortBy ?? TaskSortBy.ModifiedAtUtc, sortDescending ?? true, archived ?? false, customStatusId);
 
                 return (await service.ListAsync(request, cancellationToken)).ToApiResult();
             })
@@ -384,6 +385,38 @@ public static class TaskManagementEndpoints
                 (await service.DeleteAsync(id, cancellationToken)).ToApiResult())
             .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.ManageTags);
+
+        return app;
+    }
+
+    private static IEndpointRouteBuilder MapTaskStatusEndpoints(this IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/task-management/statuses")
+            .WithTags("Task statuses")
+            .RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi)
+            .AddEndpointFilter<RequestValidationFilter>();
+
+        group.MapGet("/", async (ITaskStatusService service, CancellationToken cancellationToken) =>
+                (await service.ListAsync(cancellationToken)).ToApiResult())
+            .WithSummary("The organization's custom task statuses (each counts as one of the four built-in statuses)")
+            .RequireAuthorization(TaskManagementPermissions.View);
+
+        group.MapPost("/", async (CreateTaskStatusRequest request, ITaskStatusService service, CancellationToken cancellationToken) =>
+                (await service.CreateAsync(request, cancellationToken)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
+            .RequireAuthorization(TaskManagementPermissions.ManageStatuses);
+
+        group.MapPut("/{id:guid}", async (Guid id, UpdateTaskStatusRequest request, ITaskStatusService service, CancellationToken cancellationToken) =>
+                (await service.UpdateAsync(id, request, cancellationToken)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
+            .RequireAuthorization(TaskManagementPermissions.ManageStatuses);
+
+        group.MapDelete("/{id:guid}", async (Guid id, ITaskStatusService service, CancellationToken cancellationToken) =>
+                (await service.DeleteAsync(id, cancellationToken)).ToApiResult())
+            .WithSummary("Delete a status; its tasks keep their built-in status")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
+            .RequireAuthorization(TaskManagementPermissions.ManageStatuses);
 
         return app;
     }

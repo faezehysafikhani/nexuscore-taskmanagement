@@ -14,6 +14,7 @@ public static class TaskManagementPermissions
     public const string UploadFiles = "Tasks.UploadFiles";
     public const string ManageNotes = "Notes.Manage";
     public const string Comment = "Tasks.Comment";
+    public const string ManageStatuses = "Tasks.ManageStatuses";
 
     /// <summary>
     /// See and manage every task of the organization. Without it a user sees only the tasks they
@@ -34,6 +35,7 @@ public static class TaskManagementPermissions
         new(UploadFiles, "TaskManagement", "افزودن و حذف پیوست فعالیت‌ها"),
         new(ManageNotes, "TaskManagement", "مدیریت یادداشت‌های شخصی"),
         new(Comment, "TaskManagement", "ثبت دیدگاه روی فعالیت‌ها"),
+        new(ManageStatuses, "TaskManagement", "مدیریت وضعیت‌های سفارشی فعالیت"),
         new(ManageAll, "TaskManagement", "مشاهده و مدیریت همه فعالیت‌های سازمان")
     ];
 }

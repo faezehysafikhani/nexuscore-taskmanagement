@@ -27,6 +27,7 @@ internal sealed class TaskItemConfiguration : IEntityTypeConfiguration<TaskItem>
         builder.Ignore(x => x.IsRecurring);
         builder.Ignore(x => x.IsArchived);
         builder.Property(x => x.RowVersion).IsRowVersion();
+        builder.HasIndex(x => new { x.TenantId, x.CustomStatusId });
 
         // Real foreign keys into the shared identity schema. Restrict, never cascade:
         // removing a person must not silently delete the work assigned to them.
@@ -212,6 +213,20 @@ internal sealed class TaskFileConfiguration : IEntityTypeConfiguration<TaskFile>
         builder.HasIndex(x => new { x.FileId, x.CommentId })
             .IsUnique()
             .HasFilter("[CommentId] IS NOT NULL");
+    }
+}
+
+internal sealed class TaskStatusDefinitionConfiguration : IEntityTypeConfiguration<TaskStatusDefinition>
+{
+    public void Configure(EntityTypeBuilder<TaskStatusDefinition> builder)
+    {
+        builder.ToTable("TaskStatuses", Schema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.Property(x => x.Name).HasMaxLength(100).IsRequired();
+        builder.Property(x => x.NormalizedName).HasMaxLength(100).IsRequired();
+        builder.Property(x => x.Color).HasMaxLength(30);
+        builder.HasIndex(x => new { x.TenantId, x.NormalizedName }).IsUnique();
     }
 }
 

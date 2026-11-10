@@ -25,6 +25,7 @@ public static class DependencyInjection
         services.AddScoped<ITaskService, TaskService>();
         services.AddScoped<IRepetitiveTaskService, RepetitiveTaskService>();
         services.AddScoped<ITagService, TagService>();
+        services.AddScoped<ITaskStatusService, TaskStatusService>();
         services.AddScoped<ITaskFileService, TaskFileService>();
         services.AddScoped<INoteService, NoteService>();
         services.AddScoped<ITaskCommentService, TaskCommentService>();
@@ -69,6 +70,8 @@ public static class DependencyInjection
         services.AddScoped<IValidator<ChangeSubTaskStatusRequest>, ChangeSubTaskStatusRequestValidator>();
         services.AddScoped<IValidator<CreateRepetitiveTaskRequest>, CreateRepetitiveTaskRequestValidator>();
         services.AddScoped<IValidator<UpdateRepetitiveTaskRequest>, UpdateRepetitiveTaskRequestValidator>();
+        services.AddScoped<IValidator<CreateTaskStatusRequest>, CreateTaskStatusRequestValidator>();
+        services.AddScoped<IValidator<UpdateTaskStatusRequest>, UpdateTaskStatusRequestValidator>();
         services.AddScoped<IValidator<CreateTagRequest>, CreateTagRequestValidator>();
         services.AddScoped<IValidator<UpdateTagRequest>, UpdateTagRequestValidator>();
         services.AddScoped<IValidator<AssignTagRequest>, AssignTagRequestValidator>();

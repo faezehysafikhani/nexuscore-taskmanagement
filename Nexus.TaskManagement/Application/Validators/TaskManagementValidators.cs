@@ -140,7 +140,32 @@ public sealed class UpdateTaskRequestValidator : AbstractValidator<UpdateTaskReq
 
 public sealed class ChangeTaskStatusRequestValidator : AbstractValidator<ChangeTaskStatusRequest>
 {
-    public ChangeTaskStatusRequestValidator() => RuleFor(x => x.Status).IsInEnum();
+    public ChangeTaskStatusRequestValidator()
+    {
+        RuleFor(x => x.Status).IsInEnum().When(x => x.Status is not null);
+        RuleFor(x => x).Must(x => (x.Status is null) != (x.CustomStatusId is null))
+            .WithMessage("Send either Status or CustomStatusId.");
+    }
+}
+
+public sealed class CreateTaskStatusRequestValidator : AbstractValidator<CreateTaskStatusRequest>
+{
+    public CreateTaskStatusRequestValidator()
+    {
+        RuleFor(x => x.Name).NotEmpty().MaximumLength(100);
+        RuleFor(x => x.Category).IsInEnum();
+        RuleFor(x => x.Color).MaximumLength(30);
+    }
+}
+
+public sealed class UpdateTaskStatusRequestValidator : AbstractValidator<UpdateTaskStatusRequest>
+{
+    public UpdateTaskStatusRequestValidator()
+    {
+        RuleFor(x => x.Name).NotEmpty().MaximumLength(100);
+        RuleFor(x => x.Category).IsInEnum();
+        RuleFor(x => x.Color).MaximumLength(30);
+    }
 }
 
 public sealed class ChangeTaskPriorityRequestValidator : AbstractValidator<ChangeTaskPriorityRequest>

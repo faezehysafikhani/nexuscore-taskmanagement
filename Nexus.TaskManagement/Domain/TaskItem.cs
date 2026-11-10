@@ -294,9 +294,22 @@ public sealed class TaskItem : AuditableEntity<Guid>
         CharterEndTime = endTime;
     }
 
+    /// <summary>The organization-defined status the task shows, if any; <see cref="Status"/> is then its category.</summary>
+    public Guid? CustomStatusId { get; private set; }
+
+    /// <summary>The label goes; the task keeps its built-in status.</summary>
+    public void ClearCustomStatus() => CustomStatusId = null;
+
+    public void ChangeCustomStatus(TaskStatusDefinition definition, DateTimeOffset nowUtc)
+    {
+        ChangeStatus(definition.Category, nowUtc);
+        CustomStatusId = definition.Id;
+    }
+
     public void ChangeStatus(TaskItemStatus status, DateTimeOffset nowUtc)
     {
         Status = status;
+        CustomStatusId = null;
         ActualCompletionDateUtc = status == TaskItemStatus.Completed
             ? ActualCompletionDateUtc ?? nowUtc
             : null;

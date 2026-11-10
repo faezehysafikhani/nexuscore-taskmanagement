@@ -104,6 +104,39 @@ public static class TaskManagementSchema
             CREATE INDEX [IX_Tasks_TenantId_ArchivedAtUtc] ON [task_management].[Tasks] ([TenantId], [ArchivedAtUtc]);
         """;
 
+    /// <summary>Organization-defined task statuses (CAT-252..254 design: a label on top of the four built-in statuses).</summary>
+    public const string AddCustomStatusesSql = """
+        IF OBJECT_ID(N'[task_management].[Tasks]') IS NOT NULL
+        BEGIN
+            IF COL_LENGTH(N'task_management.Tasks', N'CustomStatusId') IS NULL ALTER TABLE [task_management].[Tasks] ADD [CustomStatusId] uniqueidentifier NULL;
+        END
+        IF SCHEMA_ID(N'task_management') IS NOT NULL AND OBJECT_ID(N'[task_management].[TaskStatuses]') IS NULL
+        BEGIN
+            CREATE TABLE [task_management].[TaskStatuses] (
+                [Id] uniqueidentifier NOT NULL,
+                [TenantId] uniqueidentifier NOT NULL,
+                [Name] nvarchar(100) NOT NULL,
+                [NormalizedName] nvarchar(100) NOT NULL,
+                [Category] int NOT NULL,
+                [Color] nvarchar(30) NULL,
+                [SortOrder] int NOT NULL,
+                [IsActive] bit NOT NULL,
+                [CreatedAtUtc] datetimeoffset NOT NULL,
+                [CreatedByUserId] uniqueidentifier NULL,
+                [ModifiedAtUtc] datetimeoffset NULL,
+                [ModifiedByUserId] uniqueidentifier NULL,
+                CONSTRAINT [PK_TaskStatuses] PRIMARY KEY ([Id]));
+            CREATE UNIQUE INDEX [IX_TaskStatuses_TenantId_NormalizedName] ON [task_management].[TaskStatuses] ([TenantId], [NormalizedName]);
+        END
+        """;
+
+    /// <summary>The index on the new column, in its own batch.</summary>
+    public const string AddCustomStatusIndexSql = """
+        IF OBJECT_ID(N'[task_management].[Tasks]') IS NOT NULL AND COL_LENGTH(N'task_management.Tasks', N'CustomStatusId') IS NOT NULL
+            AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Tasks_TenantId_CustomStatusId' AND object_id = OBJECT_ID(N'[task_management].[Tasks]'))
+            CREATE INDEX [IX_Tasks_TenantId_CustomStatusId] ON [task_management].[Tasks] ([TenantId], [CustomStatusId]);
+        """;
+
     /// <summary>The notification outbox (RC-07 / OPEN-04).</summary>
     public const string AddNotificationOutboxSql = """
         IF SCHEMA_ID(N'task_management') IS NOT NULL AND OBJECT_ID(N'[task_management].[NotificationOutbox]') IS NULL
@@ -147,6 +180,8 @@ public sealed class TaskManagementSchemaPatcher(IServiceScopeFactory scopes, ILo
                 await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddNotificationOutboxSql, cancellationToken);
                 await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddConcurrencyAndArchiveSql, cancellationToken);
                 await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddArchiveIndexSql, cancellationToken);
+                await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddCustomStatusesSql, cancellationToken);
+                await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddCustomStatusIndexSql, cancellationToken);
             }
         }
         catch (Exception ex)

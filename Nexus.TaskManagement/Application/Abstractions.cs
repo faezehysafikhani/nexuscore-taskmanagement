@@ -90,6 +90,24 @@ public interface IRepetitiveTaskRepository
     void Remove(RepetitiveTask recurrence);
 }
 
+public interface ITaskStatusRepository
+{
+    Task<TaskStatusDefinition?> GetByIdAsync(Guid tenantId, Guid id, CancellationToken cancellationToken);
+    Task<TaskStatusDefinition?> GetByNameAsync(Guid tenantId, string name, CancellationToken cancellationToken);
+    Task<IReadOnlyList<TaskStatusDefinition>> ListAsync(Guid tenantId, CancellationToken cancellationToken);
+    Task AddAsync(TaskStatusDefinition status, CancellationToken cancellationToken);
+    /// <summary>Removes the status and sets CustomStatusId to null on the tasks that had it (they keep their category).</summary>
+    Task RemoveAsync(TaskStatusDefinition status, CancellationToken cancellationToken);
+}
+
+public interface ITaskStatusService
+{
+    Task<Result<IReadOnlyList<TaskStatusDto>>> ListAsync(CancellationToken cancellationToken);
+    Task<Result<TaskStatusDto>> CreateAsync(CreateTaskStatusRequest request, CancellationToken cancellationToken);
+    Task<Result<TaskStatusDto>> UpdateAsync(Guid id, UpdateTaskStatusRequest request, CancellationToken cancellationToken);
+    Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken);
+}
+
 public interface ITagRepository
 {
     Task<Tag?> GetByIdAsync(Guid tenantId, Guid id, CancellationToken cancellationToken);

@@ -11,6 +11,7 @@ namespace Nexus.TaskManagement.Application;
 public sealed class TaskService(
     ITaskRepository repository,
     ITagRepository tagRepository,
+    ITaskStatusRepository statusRepository,
     ITaskManagementUnitOfWork unitOfWork,
     ICurrentUserContext currentUser,
     ITaskActivityService activity,
@@ -84,7 +85,8 @@ public sealed class TaskService(
             task.CreatedAtUtc,
             task.ModifiedAtUtc,
             task.DueTime,
-            task.ArchivedAtUtc)).ToList();
+            task.ArchivedAtUtc,
+            task.CustomStatusId)).ToList();
 
         return Result.Success(new PagedResult<TaskListItemDto>(
             items, page.PageNumber, page.PageSize, page.TotalCount));
@@ -507,14 +509,37 @@ public sealed class TaskService(
                 Error.Forbidden("Only the task owner, a task manager, or the assigned user when status updates are allowed can change the status."));
         }
 
+        TaskStatusDefinition? custom = null;
+        if (request.CustomStatusId is { } customId)
+        {
+            custom = await statusRepository.GetByIdAsync(tenantId, customId, cancellationToken);
+            if (custom is null || !custom.IsActive)
+            {
+                return Result.Failure<TaskDto>(Error.Validation("Unknown or inactive status."));
+            }
+        }
+        else if (request.Status is null)
+        {
+            return Result.Failure<TaskDto>(Error.Validation("Send either Status or CustomStatusId."));
+        }
+
+        var newStatus = custom?.Category ?? request.Status!.Value;
         var previous = task.Status;
         // Past due and not done (finished and paused tasks are not "overdue"): whoever cares about
         // it is told when its status changes.
         var wasOverdue = task.Recurrence is null
             && previous is TaskItemStatus.Todo or TaskItemStatus.InProgress
             && DateTimeOffset.UtcNow >= DueMoment(task);
-        task.ChangeStatus(request.Status, DateTimeOffset.UtcNow);
-        if (wasOverdue && request.Status != previous)
+        if (custom is not null)
+        {
+            task.ChangeCustomStatus(custom, DateTimeOffset.UtcNow);
+        }
+        else
+        {
+            task.ChangeStatus(newStatus, DateTimeOffset.UtcNow);
+        }
+
+        if (wasOverdue && newStatus != previous)
         {
             task.RaiseOverdueStatusChanged(previous, currentUser.UserId);
         }
@@ -523,10 +548,10 @@ public sealed class TaskService(
         // A past-due task's change is told in full by its own notification (TaskItemOverdueStatusChanged)
         // to its creator and those responsible; the short "Status changed" one would only repeat it
         // for them. Everybody else of the task still gets it.
-        var toldInFull = wasOverdue && request.Status != previous
+        var toldInFull = wasOverdue && newStatus != previous
             ? TaskPeople.OverdueChangeRecipients(task, currentUser.UserId)
             : null;
-        await activity.RecordAsync(id, "Status changed", $"{previous} -> {request.Status}", cancellationToken, toldInFull);
+        await activity.RecordAsync(id, "Status changed", custom is null ? $"{previous} -> {newStatus}" : $"{previous} -> {newStatus} ({custom.Name})", cancellationToken, toldInFull);
 
         var updated = await repository.GetByIdAsync(tenantId, id, cancellationToken);
         return Result.Success(await ToDtoAsync(updated!, cancellationToken));
@@ -1372,6 +1397,7 @@ public sealed class TaskService(
                 .ToList(),
             task.ParentTaskId,
             task.RowVersion is { Length: > 0 } version ? Convert.ToBase64String(version) : null,
-            task.ArchivedAtUtc);
+            task.ArchivedAtUtc,
+            task.CustomStatusId);
     }
 }

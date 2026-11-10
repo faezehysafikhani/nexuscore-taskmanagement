@@ -16,6 +16,11 @@ public sealed record UserGroupSummaryDto(Guid Id, string Name);
 
 public sealed record TagDto(Guid Id, string Name, string? Color);
 
+/// <summary>Category is the built-in status (0 Todo, 1 InProgress, 2 Paused, 3 Completed) the status counts as.</summary>
+public sealed record TaskStatusDto(Guid Id, string Name, TaskItemStatus Category, string? Color, int SortOrder, bool IsActive);
+public sealed record CreateTaskStatusRequest(string Name, TaskItemStatus Category, string? Color = null, int SortOrder = 0);
+public sealed record UpdateTaskStatusRequest(string Name, TaskItemStatus Category, string? Color = null, int SortOrder = 0, bool IsActive = true);
+
 public sealed record TaskFileDto(
     Guid LinkId,
     Guid FileId,
@@ -128,7 +133,8 @@ public sealed record TaskDto(
     IReadOnlyList<TaskStandInDto>? StandIns = null,
     Guid? ParentTaskId = null,
     string? RowVersion = null,
-    DateTimeOffset? ArchivedAtUtc = null);
+    DateTimeOffset? ArchivedAtUtc = null,
+    Guid? CustomStatusId = null);
 
 /// <summary>
 /// Someone standing in for a vacant post of the task (جانشین): sees it and comments, nothing more.
@@ -165,7 +171,8 @@ public sealed record TaskListItemDto(
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset? ModifiedAtUtc,
     TimeOnly? DueTime = null,
-    DateTimeOffset? ArchivedAtUtc = null);
+    DateTimeOffset? ArchivedAtUtc = null,
+    Guid? CustomStatusId = null);
 
 public sealed record NoteDto(
     Guid Id,
@@ -259,7 +266,8 @@ public sealed record UpdateTaskRequest(
     IReadOnlyList<Guid>? AccessPostIds = null,
     string? RowVersion = null);
 
-public sealed record ChangeTaskStatusRequest(TaskItemStatus Status);
+/// <summary>Either a built-in Status or a CustomStatusId (not both, not neither).</summary>
+public sealed record ChangeTaskStatusRequest(TaskItemStatus? Status = null, Guid? CustomStatusId = null);
 
 public sealed record ChangeTaskPriorityRequest(TaskPriority Priority);
 
@@ -304,7 +312,8 @@ public sealed record ListTasksRequest(
     bool? Overdue = null,
     TaskSortBy SortBy = TaskSortBy.ModifiedAtUtc,
     bool SortDescending = true,
-    bool Archived = false);
+    bool Archived = false,
+    Guid? CustomStatusId = null);
 
 public sealed record CreateSubTaskRequest(
     string Title,
