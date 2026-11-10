@@ -100,6 +100,12 @@ public interface ITaskStatusRepository
     Task RemoveAsync(TaskStatusDefinition status, CancellationToken cancellationToken);
 }
 
+public interface ITaskBatchService
+{
+    Task<Result<TaskDto>> QuickCreateAsync(QuickCreateTaskRequest request, CancellationToken cancellationToken);
+    Task<Result<BulkTaskResult>> BulkAsync(BulkTaskRequest request, CancellationToken cancellationToken);
+}
+
 public interface ITaskStatusService
 {
     Task<Result<IReadOnlyList<TaskStatusDto>>> ListAsync(CancellationToken cancellationToken);

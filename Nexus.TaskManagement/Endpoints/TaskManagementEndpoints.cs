@@ -144,6 +144,18 @@ public static class TaskManagementEndpoints
             .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.Create);
 
+        group.MapPost("/quick", async (QuickCreateTaskRequest request, ITaskBatchService service, CancellationToken cancellationToken) =>
+                (await service.QuickCreateAsync(request, cancellationToken)).ToApiResult())
+            .WithSummary("Quick add: a title is enough (due today unless a date is given, given to the caller)")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
+            .RequireAuthorization(TaskManagementPermissions.Create);
+
+        group.MapPost("/bulk", async (BulkTaskRequest request, ITaskBatchService service, CancellationToken cancellationToken) =>
+                (await service.BulkAsync(request, cancellationToken)).ToApiResult())
+            .WithSummary("One action (status, custom status, priority, archive, restore) over up to 100 tasks; each task answers for itself")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
+            .RequireAuthorization(TaskManagementPermissions.Edit);
+
         group.MapPut("/{id:guid}", async (Guid id, UpdateTaskRequest request, ITaskService service, CancellationToken cancellationToken) =>
                 (await service.UpdateAsync(id, request, cancellationToken)).ToApiResult())
             .WithSummary("Update a task")

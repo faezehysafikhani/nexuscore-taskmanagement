@@ -148,6 +148,24 @@ public sealed class ChangeTaskStatusRequestValidator : AbstractValidator<ChangeT
     }
 }
 
+public sealed class QuickCreateTaskRequestValidator : AbstractValidator<QuickCreateTaskRequest>
+{
+    public QuickCreateTaskRequestValidator()
+    {
+        RuleFor(x => x.Title).NotEmpty().MaximumLength(200);
+        RuleFor(x => x.Priority).IsInEnum();
+    }
+}
+
+public sealed class BulkTaskRequestValidator : AbstractValidator<BulkTaskRequest>
+{
+    public BulkTaskRequestValidator()
+    {
+        RuleFor(x => x.Ids).NotNull();
+        RuleFor(x => x.Action).IsInEnum();
+    }
+}
+
 public sealed class CreateTaskStatusRequestValidator : AbstractValidator<CreateTaskStatusRequest>
 {
     public CreateTaskStatusRequestValidator()

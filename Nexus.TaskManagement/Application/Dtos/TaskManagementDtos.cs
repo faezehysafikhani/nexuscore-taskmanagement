@@ -271,6 +271,25 @@ public sealed record ChangeTaskStatusRequest(TaskItemStatus? Status = null, Guid
 
 public sealed record ChangeTaskPriorityRequest(TaskPriority Priority);
 
+/// <summary>Quick add: only a title is needed. Due today if no date is given; given to the person adding it.</summary>
+public sealed record QuickCreateTaskRequest(string Title, DateOnly? DueDate = null, TaskPriority Priority = TaskPriority.Medium);
+
+public enum BulkTaskAction { Status, CustomStatus, Priority, Archive, Restore }
+
+/// <summary>
+/// One action over many tasks. Status needs Status, CustomStatus needs CustomStatusId, Priority needs Priority;
+/// Archive and Restore need nothing more. Each task is done on its own, with the same rules as one at a time.
+/// </summary>
+public sealed record BulkTaskRequest(
+    IReadOnlyList<Guid> Ids,
+    BulkTaskAction Action,
+    TaskItemStatus? Status = null,
+    Guid? CustomStatusId = null,
+    TaskPriority? Priority = null);
+
+public sealed record BulkTaskFailure(Guid Id, string Code, string Message);
+public sealed record BulkTaskResult(IReadOnlyList<Guid> Succeeded, IReadOnlyList<BulkTaskFailure> Failed);
+
 /// <summary>
 /// ResponsibleUserIds (one or more) replaces who is responsible; without it AssignedUserId is
 /// the single responsible person, as older clients send it. AssigneeUserIds is the access list.
