@@ -39,6 +39,7 @@ public sealed class TaskManagementDbContext(
     public DbSet<SubTaskAssignee> SubTaskAssignees => Set<SubTaskAssignee>();
     public DbSet<TaskComment> TaskComments => Set<TaskComment>();
     public DbSet<PendingTaskSms> PendingSms => Set<PendingTaskSms>();
+    public DbSet<PendingTaskNotification> NotificationOutbox => Set<PendingTaskNotification>();
 
     // Read-only views onto the shared identity tables, for joins and FK targets only.
     public DbSet<User> Users => Set<User>();
@@ -48,8 +49,30 @@ public sealed class TaskManagementDbContext(
     // serves every user. See ITaskAccessScope for the rule.
     private bool AccessRestricted => access?.IsRestricted ?? false;
     private Guid? AccessUserId => access?.UserId;
+    /// <summary>
+    /// Archived tasks are hidden from every query (see the task filter). The repository turns this on for the moment it
+    /// reads the archive itself; nothing else sets it.
+    /// </summary>
+    public bool IncludeArchived { get; set; }
+
     private bool AccessReachLimited => access?.ReachUserIds is not null;
     private List<Guid> AccessReach => access?.ReachUserIds?.ToList() ?? [];
+
+    /// <summary>
+    /// Two people saving the same task: the second save finds the row changed and is refused, instead of overwriting
+    /// the first person's work. Said in this module's own words, so the application layer needs no EF.
+    /// </summary>
+    public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            throw new TaskConcurrencyException("The task was changed by someone else while you were editing it.", ex);
+        }
+    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -66,6 +89,7 @@ public sealed class TaskManagementDbContext(
         // A Tasks.ManageAll holder kept to their own company sees the tasks of its people.
         modelBuilder.Entity<TaskItem>().HasQueryFilter(task =>
             (TenantFilterId == null || task.TenantId == TenantFilterId)
+            && (IncludeArchived || task.ArchivedAtUtc == null)
             && ((!AccessRestricted
                 && (!AccessReachLimited
                     || (task.OwnerUserId != null && AccessReach.Contains(task.OwnerUserId.Value))

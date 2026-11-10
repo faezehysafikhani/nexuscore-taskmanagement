@@ -76,7 +76,8 @@ public sealed class EffectivePermissionTests(AccessControlTests.Host host) : ICl
         {
             var names = await scope.ServiceProvider.GetRequiredService<NexusCoreDbContext>().Roles
                 .Where(r => r.Id == ticketRole).SelectMany(r => r.Permissions).Select(p => p.Permission!.Name).ToListAsync();
-            Assert.Equal(new[] { TaskManagementPermissions.Create, TicketingPermissions.View }.Order(), names.Order());
+            // Tasks.Create needs Tasks.View (PermissionPrerequisites), so saving it brings Tasks.View along.
+            Assert.Equal(new[] { TaskManagementPermissions.Create, TaskManagementPermissions.View, TicketingPermissions.View }.Order(), names.Order());
         }
     }
 

@@ -113,7 +113,7 @@ public static class TaskManagementEndpoints
                 bool? isProject, bool? isRecurring,
                 Guid? assignedUserId, Guid? assignedUserGroupId, Guid? tagId,
                 DateOnly? dueFrom, DateOnly? dueTo, bool? overdue,
-                TaskSortBy? sortBy, bool? sortDescending,
+                TaskSortBy? sortBy, bool? sortDescending, bool? archived,
                 ITaskService service, CancellationToken cancellationToken) =>
             {
                 if (currentUser.TenantId is null)
@@ -125,11 +125,11 @@ public static class TaskManagementEndpoints
                     currentUser.TenantId.Value, pageNumber ?? 1, pageSize ?? 20, search,
                     status, priority, isProject, isRecurring, assignedUserId, assignedUserGroupId,
                     tagId, dueFrom, dueTo, overdue,
-                    sortBy ?? TaskSortBy.ModifiedAtUtc, sortDescending ?? true);
+                    sortBy ?? TaskSortBy.ModifiedAtUtc, sortDescending ?? true, archived ?? false);
 
                 return (await service.ListAsync(request, cancellationToken)).ToApiResult();
             })
-            .WithSummary("List tasks, projects and recurring tasks")
+            .WithSummary("List tasks, projects and recurring tasks (archived=true lists the archive instead)")
             .RequireAuthorization(TaskManagementPermissions.View);
 
         group.MapGet("/{id:guid}", async (Guid id, ITaskService service, CancellationToken cancellationToken) =>
@@ -146,6 +146,18 @@ public static class TaskManagementEndpoints
         group.MapPut("/{id:guid}", async (Guid id, UpdateTaskRequest request, ITaskService service, CancellationToken cancellationToken) =>
                 (await service.UpdateAsync(id, request, cancellationToken)).ToApiResult())
             .WithSummary("Update a task")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
+            .RequireAuthorization(TaskManagementPermissions.Edit);
+
+        group.MapPost("/{id:guid}/archive", async (Guid id, ITaskService service, CancellationToken cancellationToken) =>
+                (await service.ArchiveAsync(id, cancellationToken)).ToApiResult())
+            .WithSummary("Put a task or project in the archive: hidden everywhere, nothing is deleted")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
+            .RequireAuthorization(TaskManagementPermissions.Edit);
+
+        group.MapPost("/{id:guid}/restore", async (Guid id, ITaskService service, CancellationToken cancellationToken) =>
+                (await service.RestoreAsync(id, cancellationToken)).ToApiResult())
+            .WithSummary("Bring a task or project back from the archive")
             .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.Edit);
 

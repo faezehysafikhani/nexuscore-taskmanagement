@@ -82,6 +82,33 @@ public sealed class TaskItem : AuditableEntity<Guid>
 
     public void SetParentTask(Guid? parentTaskId) => ParentTaskId = parentTaskId;
 
+    /// <summary>
+    /// Changes with every save (SQL Server rowversion). A client that sends back the value it read is refused when
+    /// someone saved in between, instead of silently overwriting that work (CAT-209).
+    /// </summary>
+    public byte[]? RowVersion { get; private set; }
+
+    /// <summary>
+    /// When the task was put in the archive (CAT-210); null for a live task. An archived task is hidden from every
+    /// list, report and reminder, keeps all it has, and comes back with <see cref="Restore"/>.
+    /// </summary>
+    public DateTimeOffset? ArchivedAtUtc { get; private set; }
+    public Guid? ArchivedByUserId { get; private set; }
+
+    public bool IsArchived => ArchivedAtUtc is not null;
+
+    public void Archive(Guid? byUserId, DateTimeOffset now)
+    {
+        ArchivedAtUtc = now;
+        ArchivedByUserId = byUserId;
+    }
+
+    public void Restore()
+    {
+        ArchivedAtUtc = null;
+        ArchivedByUserId = null;
+    }
+
     public Guid? OwnerUserId { get; private set; }
     public User? OwnerUser { get; private set; }
 

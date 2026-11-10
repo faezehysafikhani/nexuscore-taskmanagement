@@ -42,6 +42,9 @@ public static class DependencyInjection
         // before any job below reads them.
         services.AddHostedService<TaskManagementSchemaPatcher>();
         services.AddScoped<ITaskSmsOutbox, TaskSmsOutbox>();
+        // Notifications are written down first and delivered from there: a failed one is retried, never repeated.
+        services.AddScoped<ITaskNotificationOutbox, TaskNotificationOutbox>();
+        services.AddHostedService<TaskNotificationOutboxService>();
         services.TryAddSingleton(TimeProvider.System);
 
         // Registered unconditionally; it checks its own Enabled flag and exits immediately

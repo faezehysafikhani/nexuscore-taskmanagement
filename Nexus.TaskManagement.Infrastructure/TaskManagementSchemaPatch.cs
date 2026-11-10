@@ -86,6 +86,48 @@ public static class TaskManagementSchema
             CREATE INDEX [IX_SubTaskAssignees_UserId] ON [task_management].[SubTaskAssignees] ([UserId]);
         END
         """;
+
+    /// <summary>Row version for edit conflicts (CAT-209) and the archive (CAT-210).</summary>
+    public const string AddConcurrencyAndArchiveSql = """
+        IF OBJECT_ID(N'[task_management].[Tasks]') IS NOT NULL
+        BEGIN
+            IF COL_LENGTH(N'task_management.Tasks', N'RowVersion') IS NULL ALTER TABLE [task_management].[Tasks] ADD [RowVersion] rowversion;
+            IF COL_LENGTH(N'task_management.Tasks', N'ArchivedAtUtc') IS NULL ALTER TABLE [task_management].[Tasks] ADD [ArchivedAtUtc] datetimeoffset NULL;
+            IF COL_LENGTH(N'task_management.Tasks', N'ArchivedByUserId') IS NULL ALTER TABLE [task_management].[Tasks] ADD [ArchivedByUserId] uniqueidentifier NULL;
+        END
+        """;
+
+    /// <summary>The archive's index, created after the column exists (a separate batch: SQL Server checks names per batch).</summary>
+    public const string AddArchiveIndexSql = """
+        IF OBJECT_ID(N'[task_management].[Tasks]') IS NOT NULL AND COL_LENGTH(N'task_management.Tasks', N'ArchivedAtUtc') IS NOT NULL
+            AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Tasks_TenantId_ArchivedAtUtc' AND object_id = OBJECT_ID(N'[task_management].[Tasks]'))
+            CREATE INDEX [IX_Tasks_TenantId_ArchivedAtUtc] ON [task_management].[Tasks] ([TenantId], [ArchivedAtUtc]);
+        """;
+
+    /// <summary>The notification outbox (RC-07 / OPEN-04).</summary>
+    public const string AddNotificationOutboxSql = """
+        IF SCHEMA_ID(N'task_management') IS NOT NULL AND OBJECT_ID(N'[task_management].[NotificationOutbox]') IS NULL
+        BEGIN
+            CREATE TABLE [task_management].[NotificationOutbox] (
+                [Id] uniqueidentifier NOT NULL,
+                [TenantId] uniqueidentifier NOT NULL,
+                [TaskId] uniqueidentifier NOT NULL,
+                [Title] nvarchar(200) NOT NULL,
+                [Description] nvarchar(4000) NULL,
+                [DueDate] date NOT NULL,
+                [DueAtText] nvarchar(100) NULL,
+                [RecipientUserId] uniqueidentifier NOT NULL,
+                [DedupeKey] nvarchar(120) NOT NULL,
+                [Attempts] int NOT NULL,
+                [NextAttemptAtUtc] datetimeoffset NOT NULL,
+                [DeliveredAtUtc] datetimeoffset NULL,
+                [LastError] nvarchar(500) NULL,
+                [CreatedAtUtc] datetimeoffset NOT NULL,
+                CONSTRAINT [PK_NotificationOutbox] PRIMARY KEY ([Id]));
+            CREATE UNIQUE INDEX [IX_NotificationOutbox_DedupeKey] ON [task_management].[NotificationOutbox] ([DedupeKey]);
+            CREATE INDEX [IX_NotificationOutbox_DeliveredAtUtc_NextAttemptAtUtc] ON [task_management].[NotificationOutbox] ([DeliveredAtUtc], [NextAttemptAtUtc]);
+        END
+        """;
 }
 
 /// <summary>Applies <see cref="TaskManagementSchema"/> when the host starts (SQL Server only), before the module's jobs run.</summary>
@@ -102,6 +144,9 @@ public sealed class TaskManagementSchemaPatcher(IServiceScopeFactory scopes, ILo
                 await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddRemindersSql, cancellationToken);
                 await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddPostOwnershipAndActingSql, cancellationToken);
                 await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddSubTaskAssigneesAndStatusSql, cancellationToken);
+                await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddNotificationOutboxSql, cancellationToken);
+                await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddConcurrencyAndArchiveSql, cancellationToken);
+                await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddArchiveIndexSql, cancellationToken);
             }
         }
         catch (Exception ex)

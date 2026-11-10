@@ -10,8 +10,17 @@ namespace Nexus.TaskManagement.Application;
 // around DbSet.
 // ---------------------------------------------------------------------------
 
+/// <summary>A save lost the race against another save of the same task (see TaskItem.RowVersion).</summary>
+public sealed class TaskConcurrencyException(string message, Exception? inner = null) : Exception(message, inner);
+
 public interface ITaskRepository
 {
+    /// <summary>
+    /// An archived task with its full graph, or null when it is not archived or not reachable. The ordinary reads never
+    /// see archived tasks.
+    /// </summary>
+    Task<TaskItem?> GetArchivedAsync(Guid tenantId, Guid id, CancellationToken cancellationToken);
+
     /// <summary>Full graph: subtasks, tags, files, assignees and recurrence.</summary>
     Task<TaskItem?> GetByIdAsync(Guid tenantId, Guid id, CancellationToken cancellationToken);
 
@@ -156,6 +165,13 @@ public interface ITaskService
     Task<Result<TaskDto>> CreateAsync(CreateTaskRequest request, CancellationToken cancellationToken);
     Task<Result<TaskDto>> UpdateAsync(Guid id, UpdateTaskRequest request, CancellationToken cancellationToken);
     Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken);
+
+    /// <summary>Puts a task (or project) in the archive: hidden everywhere, nothing deleted.</summary>
+    Task<Result<TaskDto>> ArchiveAsync(Guid id, CancellationToken cancellationToken);
+
+    /// <summary>Takes a task out of the archive, as it was.</summary>
+    Task<Result<TaskDto>> RestoreAsync(Guid id, CancellationToken cancellationToken);
+
     Task<Result<TaskDto>> ChangeStatusAsync(Guid id, ChangeTaskStatusRequest request, CancellationToken cancellationToken);
     Task<Result> AddActivityEntryAsync(Guid taskId, CreateTaskActivityRequest request, CancellationToken cancellationToken);
     Task<Result<TaskDto>> ChangePriorityAsync(Guid id, ChangeTaskPriorityRequest request, CancellationToken cancellationToken);

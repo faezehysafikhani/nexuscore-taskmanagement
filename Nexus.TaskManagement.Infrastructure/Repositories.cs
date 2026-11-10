@@ -23,6 +23,27 @@ public sealed class TaskRepository(TaskManagementDbContext db) : ITaskRepository
             .AsSplitQuery()
             .FirstOrDefaultAsync(t => t.TenantId == tenantId && t.Id == id, cancellationToken);
 
+    public async Task<TaskItem?> GetArchivedAsync(Guid tenantId, Guid id, CancellationToken cancellationToken)
+    {
+        // The archive is read with the archive filter off and only archived rows asked for; the access rules still apply.
+        db.IncludeArchived = true;
+        try
+        {
+            return await db.Tasks
+                .Include(t => t.SubTasks).ThenInclude(s => s.Assignees)
+                .Include(t => t.Tags).ThenInclude(tt => tt.Tag)
+                .Include(t => t.Files).ThenInclude(tf => tf.File)
+                .Include(t => t.Assignees)
+                .Include(t => t.Recurrence)
+                .AsSplitQuery()
+                .FirstOrDefaultAsync(t => t.TenantId == tenantId && t.Id == id && t.ArchivedAtUtc != null, cancellationToken);
+        }
+        finally
+        {
+            db.IncludeArchived = false;
+        }
+    }
+
     public Task<TaskItem?> GetPeopleOfAsync(Guid tenantId, Guid id, CancellationToken cancellationToken) =>
         db.Tasks.IgnoreQueryFilters()
             .Include(t => t.Assignees)
@@ -66,11 +87,30 @@ public sealed class TaskRepository(TaskManagementDbContext db) : ITaskRepository
 
     public async Task<PagedResult<TaskItem>> ListAsync(ListTasksRequest request, CancellationToken cancellationToken)
     {
+        // The archive is a list of its own: the archive filter is lifted for this one read and only archived rows come back.
+        db.IncludeArchived = request.Archived;
+        try
+        {
+            return await ListCoreAsync(request, cancellationToken);
+        }
+        finally
+        {
+            db.IncludeArchived = false;
+        }
+    }
+
+    private async Task<PagedResult<TaskItem>> ListCoreAsync(ListTasksRequest request, CancellationToken cancellationToken)
+    {
         var query = db.Tasks
             .Include(t => t.SubTasks)
             .Include(t => t.Tags).ThenInclude(tt => tt.Tag)
             .Include(t => t.Recurrence)
             .Where(t => t.TenantId == request.TenantId);
+
+        if (request.Archived)
+        {
+            query = query.Where(t => t.ArchivedAtUtc != null);
+        }
 
         if (!string.IsNullOrWhiteSpace(request.Search))
         {

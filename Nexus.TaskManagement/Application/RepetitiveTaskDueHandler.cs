@@ -16,10 +16,10 @@ namespace Nexus.TaskManagement.Application;
 /// order we want - the schedule is advanced first, so a failure here costs at most one
 /// notification and never the schedule itself.
 ///
-/// The consequence, stated plainly: delivery is at-most-once. If notification fails the
-/// occurrence is not retried, because retrying would mean holding the schedule back and
-/// risking the opposite failure - a task that fires repeatedly. Anything needing at-least-once
-/// delivery wants an outbox, which NexusCore does not have today.
+/// Delivery of the notification goes through the notification outbox (ITaskNotificationOutbox) when one is
+/// registered: the notification is written down first, so one that fails now is retried by the outbox job while the
+/// schedule itself is never held back, and the same occurrence is queued once so nobody is told twice. Without an
+/// outbox the notification is attempted once (at-most-once), as before.
 ///
 /// Every failure is swallowed and logged: one unreachable recipient must not abort the rest
 /// of the job's batch.
@@ -31,7 +31,8 @@ public sealed class RepetitiveTaskDueHandler(
     ITaskSmsSender smsSender,
     IUserDirectory userDirectory,
     IRecurrenceCalculator calculator,
-    ILogger<RepetitiveTaskDueHandler> logger) : IDomainEventHandler<RepetitiveTaskDue>
+    ILogger<RepetitiveTaskDueHandler> logger,
+    ITaskNotificationOutbox? outbox = null) : IDomainEventHandler<RepetitiveTaskDue>
 {
     public async Task HandleAsync(RepetitiveTaskDue domainEvent, CancellationToken cancellationToken)
     {
@@ -62,7 +63,7 @@ public sealed class RepetitiveTaskDueHandler(
             var when = FormatOccurrence(occurrence);
 
             // Independent: a failed notification does not stop the SMS, and the reverse.
-            await PublishNotificationAsync(task, recipients, DateOnly.FromDateTime(occurrence.DateTime), when, cancellationToken);
+            await PublishNotificationAsync(task, recipients, DateOnly.FromDateTime(occurrence.DateTime), when, domainEvent.DueAtUtc, cancellationToken);
 
             // The SMS is only for the task's responsible people - each of them who is among the
             // active users above, once. People on the access list and a creator who is not
@@ -118,14 +119,25 @@ public sealed class RepetitiveTaskDueHandler(
     }
 
     private async Task PublishNotificationAsync(
-        TaskItem task, IReadOnlyList<Guid> recipients, DateOnly occurrenceDate, string when, CancellationToken cancellationToken)
+        TaskItem task, IReadOnlyList<Guid> recipients, DateOnly occurrenceDate, string when, DateTimeOffset dueAtUtc, CancellationToken cancellationToken)
     {
         try
         {
-            await notificationPublisher.PublishAsync(
-                new TaskDueNotification(
-                    task.TenantId, task.Id, task.Title, task.Description, occurrenceDate, recipients, when),
-                cancellationToken);
+            var notification = new TaskDueNotification(
+                task.TenantId, task.Id, task.Title, task.Description, occurrenceDate, recipients, when);
+            if (outbox is null)
+            {
+                await notificationPublisher.PublishAsync(notification, cancellationToken);
+                return;
+            }
+
+            // Written down first, then delivered from the outbox: a turn that fails now is retried by the outbox job,
+            // and the same occurrence is queued once, so a retry never tells anyone twice.
+            var ids = await outbox.EnqueueAsync(notification, $"due:{dueAtUtc.UtcDateTime:yyyyMMddTHHmmssZ}", cancellationToken);
+            if (ids.Count > 0)
+            {
+                await outbox.DeliverAsync(ids, cancellationToken);
+            }
         }
         catch (Exception ex)
         {

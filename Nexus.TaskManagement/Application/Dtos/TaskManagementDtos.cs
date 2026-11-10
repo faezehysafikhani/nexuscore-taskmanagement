@@ -126,7 +126,9 @@ public sealed record TaskDto(
     IReadOnlyList<UserSummaryDto>? ResponsibleUsers = null,
     IReadOnlyList<TaskPostDto>? Posts = null,
     IReadOnlyList<TaskStandInDto>? StandIns = null,
-    Guid? ParentTaskId = null);
+    Guid? ParentTaskId = null,
+    string? RowVersion = null,
+    DateTimeOffset? ArchivedAtUtc = null);
 
 /// <summary>
 /// Someone standing in for a vacant post of the task (جانشین): sees it and comments, nothing more.
@@ -162,7 +164,8 @@ public sealed record TaskListItemDto(
     IReadOnlyList<TagDto> Tags,
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset? ModifiedAtUtc,
-    TimeOnly? DueTime = null);
+    TimeOnly? DueTime = null,
+    DateTimeOffset? ArchivedAtUtc = null);
 
 public sealed record NoteDto(
     Guid Id,
@@ -253,7 +256,8 @@ public sealed record UpdateTaskRequest(
     TimeOnly? CharterEndTime = null,
     IReadOnlyList<Guid>? ResponsibleUserIds = null,
     IReadOnlyList<Guid>? ResponsiblePostIds = null,
-    IReadOnlyList<Guid>? AccessPostIds = null);
+    IReadOnlyList<Guid>? AccessPostIds = null,
+    string? RowVersion = null);
 
 public sealed record ChangeTaskStatusRequest(TaskItemStatus Status);
 
@@ -299,7 +303,8 @@ public sealed record ListTasksRequest(
     DateOnly? DueTo = null,
     bool? Overdue = null,
     TaskSortBy SortBy = TaskSortBy.ModifiedAtUtc,
-    bool SortDescending = true);
+    bool SortDescending = true,
+    bool Archived = false);
 
 public sealed record CreateSubTaskRequest(
     string Title,

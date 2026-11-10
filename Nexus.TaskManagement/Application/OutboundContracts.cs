@@ -29,6 +29,34 @@ public interface ITaskNotificationPublisher
     Task PublishAsync(TaskDueNotification notification, CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// A publisher that can say whether the notification was really stored. The outbox needs it to tell a delivered
+/// notification from one to retry; a publisher without it is taken to have delivered whenever it did not throw.
+/// </summary>
+public interface IReliableTaskNotificationPublisher : ITaskNotificationPublisher
+{
+    /// <summary>False when the notification could not be stored (the caller retries later).</summary>
+    Task<bool> TryPublishAsync(TaskDueNotification notification, CancellationToken cancellationToken);
+}
+
+/// <summary>
+/// The notification outbox: what is to be told is written down first, then delivered, so a failed delivery is retried
+/// and the same notification is never delivered twice (RC-07 / OPEN-04).
+/// </summary>
+public interface ITaskNotificationOutbox
+{
+    /// <summary>
+    /// Writes one row per recipient and returns the ids of the rows that are new. <paramref name="occurrenceKey"/> names
+    /// what happened (for a recurring task, its due moment): the same occurrence is queued once.
+    /// </summary>
+    Task<IReadOnlyList<Guid>> EnqueueAsync(TaskDueNotification notification, string occurrenceKey, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Delivers the given rows, or every row that is due when <paramref name="ids"/> is null. Returns how many were delivered.
+    /// </summary>
+    Task<int> DeliverAsync(IReadOnlyCollection<Guid>? ids, CancellationToken cancellationToken);
+}
+
 /// <summary>Registered when no notification integration is installed.</summary>
 public sealed class NullTaskNotificationPublisher(ILogger<NullTaskNotificationPublisher> logger)
     : ITaskNotificationPublisher

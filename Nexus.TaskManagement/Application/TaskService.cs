@@ -83,7 +83,8 @@ public sealed class TaskService(
             task.Tags.Where(t => t.Tag is not null).Select(t => ToDto(t.Tag!)).ToList(),
             task.CreatedAtUtc,
             task.ModifiedAtUtc,
-            task.DueTime)).ToList();
+            task.DueTime,
+            task.ArchivedAtUtc)).ToList();
 
         return Result.Success(new PagedResult<TaskListItemDto>(
             items, page.PageNumber, page.PageSize, page.TotalCount));
@@ -256,6 +257,12 @@ public sealed class TaskService(
             return Result.Failure<TaskDto>(NotTaskOwner());
         }
 
+        // The client read the task at some version; if someone saved since, this edit would overwrite their work.
+        if (IsStale(request.RowVersion, task))
+        {
+            return Result.Failure<TaskDto>(ChangedByOthers());
+        }
+
         if (request.DueDate != task.DueDate)
         {
             var schedulingDecision = (schedulingDays ?? new AllowAllSchedulingDays()).Check(request.DueDate);
@@ -329,7 +336,15 @@ public sealed class TaskService(
             task.AssignUsers(request.AssigneeUserIds);
         }
 
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (TaskConcurrencyException)
+        {
+            return Result.Failure<TaskDto>(ChangedByOthers());
+        }
+
         if (plan.Value is { } updatedPlan)
         {
             await taskPosts.SetTaskPostsAsync(tenantId, id, null, updatedPlan.Responsible, updatedPlan.Access, cancellationToken);
@@ -350,6 +365,20 @@ public sealed class TaskService(
         }
 
         var task = await repository.GetByIdAsync(currentUser.TenantId.Value, id, cancellationToken);
+        if (task is null && await repository.GetArchivedAsync(currentUser.TenantId.Value, id, cancellationToken) is { } archived)
+        {
+            // An archived task can be deleted for good: it is brought back first (so everything under it is reachable
+            // to be removed with it) and then goes through the same steps as any other.
+            if (!access.CanManage(archived))
+            {
+                return Result.Failure(NotTaskOwner());
+            }
+
+            archived.Restore();
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+            task = await repository.GetByIdAsync(currentUser.TenantId.Value, id, cancellationToken);
+        }
+
         if (task is null)
         {
             return Result.Failure(Error.NotFound("Task not found."));
@@ -375,6 +404,81 @@ public sealed class TaskService(
         }
 
         return Result.Success();
+    }
+
+    private static bool IsStale(string? clientVersion, TaskItem task) =>
+        !string.IsNullOrEmpty(clientVersion)
+        && !string.Equals(clientVersion, task.RowVersion is { Length: > 0 } v ? Convert.ToBase64String(v) : null, StringComparison.Ordinal);
+
+    private static Error ChangedByOthers() =>
+        Error.Conflict("The task was changed by someone else while you were editing it. Reload it and apply your change again.");
+
+    public async Task<Result<TaskDto>> ArchiveAsync(Guid id, CancellationToken cancellationToken)
+    {
+        if (currentUser.TenantId is null)
+        {
+            return Result.Failure<TaskDto>(Error.Unauthorized());
+        }
+
+        var tenantId = currentUser.TenantId.Value;
+        var task = await repository.GetByIdAsync(tenantId, id, cancellationToken);
+        if (task is null)
+        {
+            return Result.Failure<TaskDto>(Error.NotFound("Task not found."));
+        }
+
+        if (!access.CanManage(task))
+        {
+            return Result.Failure<TaskDto>(NotTaskOwner());
+        }
+
+        var dto = await ToDtoAsync(task, cancellationToken);
+        task.Archive(currentUser.UserId, DateTimeOffset.UtcNow);
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (TaskConcurrencyException)
+        {
+            return Result.Failure<TaskDto>(ChangedByOthers());
+        }
+
+        await activity.RecordAsync(id, "Task archived", task.Title, cancellationToken);
+        return Result.Success(dto with { ArchivedAtUtc = task.ArchivedAtUtc });
+    }
+
+    public async Task<Result<TaskDto>> RestoreAsync(Guid id, CancellationToken cancellationToken)
+    {
+        if (currentUser.TenantId is null)
+        {
+            return Result.Failure<TaskDto>(Error.Unauthorized());
+        }
+
+        var tenantId = currentUser.TenantId.Value;
+        var task = await repository.GetArchivedAsync(tenantId, id, cancellationToken);
+        if (task is null)
+        {
+            return Result.Failure<TaskDto>(Error.NotFound("Archived task not found."));
+        }
+
+        if (!access.CanManage(task))
+        {
+            return Result.Failure<TaskDto>(NotTaskOwner());
+        }
+
+        task.Restore();
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (TaskConcurrencyException)
+        {
+            return Result.Failure<TaskDto>(ChangedByOthers());
+        }
+
+        await activity.RecordAsync(id, "Task restored", task.Title, cancellationToken);
+        var restored = await repository.GetByIdAsync(tenantId, id, cancellationToken);
+        return Result.Success(await ToDtoAsync(restored ?? task, cancellationToken));
     }
 
     /// <summary>The moment a task is due: its time on its date, or the end of that day when it has no time.</summary>
@@ -1266,6 +1370,8 @@ public sealed class TaskService(
                 .Where(a => a.IsActing && users.ContainsKey(a.UserId))
                 .Select(a => new TaskStandInDto(a.UserId, users[a.UserId].DisplayName, a.ActingNote))
                 .ToList(),
-            task.ParentTaskId);
+            task.ParentTaskId,
+            task.RowVersion is { Length: > 0 } version ? Convert.ToBase64String(version) : null,
+            task.ArchivedAtUtc);
     }
 }

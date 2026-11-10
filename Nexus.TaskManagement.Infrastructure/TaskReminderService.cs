@@ -118,7 +118,7 @@ public sealed class TaskReminderService(
         var tasks = await pass.Db.Tasks
             .IgnoreQueryFilters()
             .Include(t => t.Assignees)
-            .Where(t => t.Recurrence == null
+            .Where(t => t.Recurrence == null && t.ArchivedAtUtc == null
                         && t.Status != TaskItemStatus.Completed && t.Status != TaskItemStatus.Paused
                         && t.DueDate >= from && t.DueDate <= to)
             .AsSplitQuery()
@@ -177,7 +177,8 @@ public sealed class TaskReminderService(
         var horizon = pass.Now.AddMinutes(1440);
         var schedules = await pass.Db.RepetitiveTasks
             .IgnoreQueryFilters()
-            .Where(r => r.IsActive && r.NextExecutionAtUtc != null && r.NextExecutionAtUtc > pass.Now && r.NextExecutionAtUtc <= horizon)
+            .Where(r => r.IsActive && r.NextExecutionAtUtc != null && r.NextExecutionAtUtc > pass.Now && r.NextExecutionAtUtc <= horizon
+                        && r.Task!.ArchivedAtUtc == null)
             .ToListAsync(cancellationToken);
 
         foreach (var schedule in schedules)

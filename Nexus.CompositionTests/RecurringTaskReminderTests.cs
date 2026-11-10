@@ -482,7 +482,7 @@ public sealed class RecurringTaskReminderTests : IDisposable
 
         Assert.Single(_notifications.Sent);
         Assert.Empty(_smsProvider.Sent);
-        Assert.Contains(_logs.Entries, e => e.Level == LogLevel.Warning && e.Message.Contains("کلید API"));
+        Assert.Contains(_logs.Entries, e => e.Level == LogLevel.Warning && e.Message.Contains("اطلاعات ورود پنل پیامکی"));
     }
 
     [Fact]

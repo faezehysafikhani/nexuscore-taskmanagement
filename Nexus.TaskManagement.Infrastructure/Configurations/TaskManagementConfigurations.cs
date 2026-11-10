@@ -25,6 +25,8 @@ internal sealed class TaskItemConfiguration : IEntityTypeConfiguration<TaskItem>
         builder.Property(x => x.CharterProjectManager).HasMaxLength(200);
 
         builder.Ignore(x => x.IsRecurring);
+        builder.Ignore(x => x.IsArchived);
+        builder.Property(x => x.RowVersion).IsRowVersion();
 
         // Real foreign keys into the shared identity schema. Restrict, never cascade:
         // removing a person must not silently delete the work assigned to them.
@@ -62,6 +64,7 @@ internal sealed class TaskItemConfiguration : IEntityTypeConfiguration<TaskItem>
         builder.HasIndex(x => new { x.TenantId, x.Status });
         builder.HasIndex(x => new { x.TenantId, x.DueDate });
         builder.HasIndex(x => new { x.TenantId, x.IsProject });
+        builder.HasIndex(x => new { x.TenantId, x.ArchivedAtUtc });
         builder.HasIndex(x => new { x.TenantId, x.AssignedUserId });
         builder.HasIndex(x => new { x.TenantId, x.AssignedUserGroupId });
     }
@@ -327,6 +330,26 @@ internal sealed class PendingTaskSmsConfiguration : IEntityTypeConfiguration<Pen
 
         // The reminder job's "what may go now" scan.
         builder.HasIndex(x => x.SendAfterUtc);
+    }
+}
+
+internal sealed class PendingTaskNotificationConfiguration : IEntityTypeConfiguration<PendingTaskNotification>
+{
+    public void Configure(EntityTypeBuilder<PendingTaskNotification> builder)
+    {
+        builder.ToTable("NotificationOutbox", Schema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.Property(x => x.Title).HasMaxLength(200).IsRequired();
+        builder.Property(x => x.Description).HasMaxLength(4000);
+        builder.Property(x => x.DueAtText).HasMaxLength(100);
+        builder.Property(x => x.DedupeKey).HasMaxLength(120).IsRequired();
+        builder.Property(x => x.LastError).HasMaxLength(500);
+
+        // The same notification is never stored twice (retries and two servers included).
+        builder.HasIndex(x => x.DedupeKey).IsUnique();
+        // The dispatcher's "what is due" scan.
+        builder.HasIndex(x => new { x.DeliveredAtUtc, x.NextAttemptAtUtc });
     }
 }
 
