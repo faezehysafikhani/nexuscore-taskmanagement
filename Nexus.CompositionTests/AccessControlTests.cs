@@ -20,6 +20,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
+using Nexus.Calendar.Infrastructure.Meetings;
+using Nexus.Integrations.CalendarTasks;
 using Nexus.Integrations.TaskNotifications;
 using Notifications.Api.Endpoints;
 using Notifications.Application;
@@ -456,6 +458,11 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
             builder.Services.AddNotificationApplication();
             builder.Services.AddNotificationInfrastructure(builder.Configuration);
             builder.Services.AddSignalR();
+            // Meetings, and the bridge that turns their action items into tasks (people: everyone of the tenant).
+            builder.Services.AddCalendarMeetings(builder.Configuration);
+            builder.Services.AddCalendarTasksIntegration();
+            builder.Services.AddScoped<Nexus.Calendar.Application.Meetings.IMeetingPeopleScope, EveryoneOfTheTenantMeetingScope>();
+            builder.Services.AddSingleton<NexusCore.Application.Common.ISchedulingDayPolicy, NexusCore.Application.Common.AllowAllSchedulingDays>();
 
             // One in-memory store per context: each maps the shared identity tables with its own
             // model, which in-memory cannot share. Users and teams are mirrored into TaskManagement's
@@ -464,6 +471,7 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
             UseInMemory<TaskManagementDbContext>(builder.Services, Guid.NewGuid().ToString(), withInterceptors: true);
             UseInMemory<TicketingDbContext>(builder.Services, Guid.NewGuid().ToString(), withInterceptors: false);
             UseInMemory<NotificationDbContext>(builder.Services, Guid.NewGuid().ToString(), withInterceptors: false);
+            UseInMemory<Nexus.Calendar.Infrastructure.Meetings.MeetingDbContext>(builder.Services, Guid.NewGuid().ToString(), withInterceptors: false);
             // Chat's own database, on SQLite (a real relational engine): its unique indexes
             // (one conversation per pair, one per team) are actually enforced, unlike InMemory.
             builder.Services.RemoveAll<DbContextOptions<ChatDbContext>>();
@@ -504,6 +512,8 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
             _app.MapTicketEndpoints();
             _app.MapChatEndpoints();
             _app.MapNotificationEndpoints();
+            _app.MapMeetingEndpoints();
+            _app.MapCalendarTasksEndpoints();
             _app.MapHub<ChatHub>("/hubs/chat");
 
             using (var scope = _app.Services.CreateScope())
@@ -698,5 +708,16 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
                 // A leftover temp file is harmless.
             }
         }
+    }
+}
+
+/// <summary>The meeting people of a test: every active user of the caller's tenant.</summary>
+public sealed class EveryoneOfTheTenantMeetingScope(NexusCoreDbContext identity, NexusCore.SharedKernel.Interfaces.ICurrentUserContext current)
+    : Nexus.Calendar.Application.Meetings.IMeetingPeopleScope
+{
+    public async Task<Nexus.Calendar.Application.Meetings.MeetingPeopleOptions> GetAsync(CancellationToken cancellationToken)
+    {
+        var people = await identity.Users.Where(u => u.TenantId == current.TenantId && u.IsActive).ToListAsync(cancellationToken);
+        return new(true, true, people.Select(u => new Nexus.Calendar.Application.Meetings.MeetingPerson(u.Id, u.DisplayName, "", "peer")).ToList());
     }
 }

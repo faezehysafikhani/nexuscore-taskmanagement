@@ -12,6 +12,8 @@ namespace Nexus.TaskManagement.Application;
 /// <summary>Working-time arithmetic for SLAs: a due moment N hours on, where only working days (the calendar's holidays and weekends are not) count when asked.</summary>
 public static class SlaCalculator
 {
+    private static readonly TimeSpan IranOffset = TimeSpan.FromMinutes(210);
+
     public static DateTimeOffset DueAt(DateTimeOffset start, int hours, bool businessDaysOnly, ISchedulingDayPolicy days)
     {
         if (!businessDaysOnly)
@@ -19,13 +21,14 @@ public static class SlaCalculator
             return start.AddHours(hours);
         }
 
-        // Count the hours of working days only (24 a day); a non-working day's hours do not run.
+        // Count the hours of working days only (24 a day); a non-working day's hours do not run. Days are Iran's (UTC+3:30),
+        // the same as the calendar's own.
         var remaining = TimeSpan.FromHours(hours);
         var cursor = start;
         for (var guard = 0; guard < 4000 && remaining > TimeSpan.Zero; guard++)
         {
-            var day = DateOnly.FromDateTime(cursor.UtcDateTime);
-            var endOfDay = new DateTimeOffset(day.AddDays(1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+            var day = DateOnly.FromDateTime(cursor.ToOffset(IranOffset).DateTime);
+            var endOfDay = new DateTimeOffset(day.AddDays(1).ToDateTime(TimeOnly.MinValue), IranOffset);
             if (!days.Check(day).IsAllowed)
             {
                 cursor = endOfDay;

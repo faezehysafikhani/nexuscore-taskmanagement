@@ -8,6 +8,7 @@ public static class DependencyInjection
     public static IServiceCollection AddCalendarTasksIntegration(this IServiceCollection services)
     {
         services.AddScoped<IMeetingTaskDirectory, MeetingTaskDirectory>();
+        services.AddScoped<MeetingActionConverter>();
         return services;
     }
 }

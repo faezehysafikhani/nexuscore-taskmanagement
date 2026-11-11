@@ -112,13 +112,14 @@ public sealed class TaskAutomationTests(AccessControlTests.Host host) : IClassFi
     [Fact]
     public void BusinessDaySla_SkipsNonWorkingDays()
     {
-        // Friday and Saturday off.
-        var policy = new Closed(DayOfWeek.Friday, DayOfWeek.Saturday);
-        var thursdayNoon = new DateTimeOffset(2026, 11, 12, 12, 0, 0, TimeSpan.Zero); // a Thursday
+        // Friday off.
+        var policy = new Closed(DayOfWeek.Friday);
+        var iran = TimeSpan.FromMinutes(210);
+        var thursdayNoon = new DateTimeOffset(2026, 11, 12, 12, 0, 0, iran); // a Thursday in Iran
         Assert.Equal(DayOfWeek.Thursday, thursdayNoon.DayOfWeek);
 
-        // 12h left on Thursday, so 24h of working time ends on Sunday 12:00.
-        Assert.Equal(new DateTimeOffset(2026, 11, 15, 12, 0, 0, TimeSpan.Zero), SlaCalculator.DueAt(thursdayNoon, 24, true, policy));
+        // 12h left on Thursday, so 24h of working time ends on Saturday 12:00 (Friday does not count).
+        Assert.Equal(new DateTimeOffset(2026, 11, 14, 12, 0, 0, iran), SlaCalculator.DueAt(thursdayNoon, 24, true, policy));
         Assert.Equal(thursdayNoon.AddHours(24), SlaCalculator.DueAt(thursdayNoon, 24, false, policy));
     }
 

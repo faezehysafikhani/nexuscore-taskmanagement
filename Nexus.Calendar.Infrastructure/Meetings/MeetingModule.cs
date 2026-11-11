@@ -84,6 +84,16 @@ public sealed class MeetingService(MeetingDbContext db, NexusCoreDbContext ident
         return await taskDirectory.SearchAsync(search, pageNumber, pageSize, ids, ct);
     }
 
+    public async Task<Result<MeetingDto>> GetAsync(Guid id, CancellationToken ct)
+    {
+        if (current.TenantId is null || current.UserId is null) return Result.Failure<MeetingDto>(Error.Unauthorized());
+        if (!current.HasPermission(MeetingPermissions.View)) return Result.Failure<MeetingDto>(Error.Forbidden());
+        var row = await db.Meetings.Include(m => m.Participants).AsNoTracking().FirstOrDefaultAsync(m => m.TenantId == current.TenantId && m.Id == id, ct);
+        if (row is null) return Result.Failure<MeetingDto>(Error.NotFound("جلسه پیدا نشد."));
+        var visible = await VisiblePeopleAsync(ct);
+        return AccessAll || Touches(row, visible) ? Result.Success(Dto(row)) : Result.Failure<MeetingDto>(Error.NotFound("جلسه پیدا نشد."));
+    }
+
     public async Task<Result<IReadOnlyList<MeetingDto>>> ListAsync(DateOnly from, DateOnly to, CancellationToken ct)
     {
         if (current.TenantId is null || current.UserId is null) return Result.Failure<IReadOnlyList<MeetingDto>>(Error.Unauthorized());
@@ -272,6 +282,8 @@ services.AddAuthorization(options =>
             (await service.PeopleAsync(ct)).ToApiResult());
         group.MapGet("/task-options", async (string? search, int? pageNumber, int? pageSize, string? ids, MeetingService service, CancellationToken ct) =>
             (await service.SearchTasksAsync(search,pageNumber ?? 1,pageSize ?? 12,ids,ct)).ToApiResult()).RequireAuthorization(MeetingPermissions.View).RequireAuthorization("Tasks.View");
+        group.MapGet("/{id:guid}", async (Guid id, MeetingService service, CancellationToken ct) =>
+            (await service.GetAsync(id, ct)).ToApiResult()).RequireAuthorization(MeetingPermissions.View);
         group.MapGet("/", async (DateOnly from, DateOnly to, MeetingService service, CancellationToken ct) =>
             (await service.ListAsync(from, to, ct)).ToApiResult()).RequireAuthorization(MeetingPermissions.View);
         group.MapPost("/", async (MeetingInput input, MeetingService service, CancellationToken ct) =>
