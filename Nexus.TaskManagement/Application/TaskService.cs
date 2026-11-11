@@ -89,7 +89,9 @@ public sealed class TaskService(
             task.DueTime,
             task.ArchivedAtUtc,
             task.CustomStatusId,
-            task.ReviewStatus)).ToList();
+            task.ReviewStatus,
+            task.SlaDueAtUtc,
+            task.SlaBreachedAtUtc)).ToList();
 
         return Result.Success(new PagedResult<TaskListItemDto>(
             items, page.PageNumber, page.PageSize, page.TotalCount));

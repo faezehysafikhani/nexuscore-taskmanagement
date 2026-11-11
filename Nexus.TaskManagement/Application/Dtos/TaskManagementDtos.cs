@@ -183,7 +183,9 @@ public sealed record TaskListItemDto(
     TimeOnly? DueTime = null,
     DateTimeOffset? ArchivedAtUtc = null,
     Guid? CustomStatusId = null,
-    NexusCore.Application.Approvals.ApprovalStatus ReviewStatus = NexusCore.Application.Approvals.ApprovalStatus.NotSubmitted);
+    NexusCore.Application.Approvals.ApprovalStatus ReviewStatus = NexusCore.Application.Approvals.ApprovalStatus.NotSubmitted,
+    DateTimeOffset? SlaDueAtUtc = null,
+    DateTimeOffset? SlaBreachedAtUtc = null);
 
 public sealed record NoteDto(
     Guid Id,
