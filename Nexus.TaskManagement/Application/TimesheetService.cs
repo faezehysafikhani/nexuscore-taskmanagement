@@ -19,7 +19,8 @@ public sealed class TimesheetService(
     ITaskManagementUnitOfWork unitOfWork,
     ICurrentUserContext currentUser,
     ITaskAccessScope access,
-    IApprovalRequester approvalRequester) : ITimesheetService
+    IApprovalRequester approvalRequester,
+    NexusCore.Application.Identity.Interfaces.IManagementChainProvider? managers = null) : ITimesheetService
 {
     public const string SubjectType = "Timesheet";
     public const int MaxMinutesPerDay = 24 * 60;
@@ -333,9 +334,25 @@ public sealed class TimesheetService(
             entry.MarkSubmitted(submission.Id);
         }
 
+        // Owner is the person; Manager and Approver1/2 their managers in the organization structure (when installed).
+        var participants = new Dictionary<string, Guid> { [ApprovalParticipants.Owner] = userId };
+        if (managers is not null)
+        {
+            var chain = await managers.GetChainAsync(tenantId, userId, cancellationToken);
+            if (chain.Count > 0)
+            {
+                participants[ApprovalParticipants.Manager] = chain[0];
+                participants[ApprovalParticipants.Approver1] = chain[0];
+            }
+
+            if (chain.Count > 1)
+            {
+                participants[ApprovalParticipants.Approver2] = chain[1];
+            }
+        }
+
         var outcome = await approvalRequester.RequestApprovalAsync(
-            new ApprovalSubject(SubjectType, submission.Id, tenantId, Participants: new Dictionary<string, Guid> { [ApprovalParticipants.Owner] = userId }),
-            cancellationToken);
+            new ApprovalSubject(SubjectType, submission.Id, tenantId, Participants: participants), cancellationToken);
         if (outcome == ApprovalRequestOutcome.NotConfigured)
         {
             // No approval chain: nobody to wait for.

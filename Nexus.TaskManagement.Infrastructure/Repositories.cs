@@ -372,6 +372,33 @@ public sealed class TaskStatusRepository(TaskManagementDbContext db) : ITaskStat
     }
 }
 
+public sealed class AutomationRepository(TaskManagementDbContext db) : IAutomationRepository
+{
+    public async Task<IReadOnlyList<AutomationRule>> ListRulesAsync(Guid tenantId, AutomationTrigger? trigger, bool activeOnly, CancellationToken cancellationToken)
+    {
+        var query = db.AutomationRules.Where(r => r.TenantId == tenantId);
+        if (trigger is { } t) query = query.Where(r => r.Trigger == t);
+        if (activeOnly) query = query.Where(r => r.IsActive);
+        return await query.OrderBy(r => r.SortOrder).ThenBy(r => r.Name).ToListAsync(cancellationToken);
+    }
+
+    public Task<AutomationRule?> GetRuleAsync(Guid tenantId, Guid id, CancellationToken cancellationToken) =>
+        db.AutomationRules.FirstOrDefaultAsync(r => r.TenantId == tenantId && r.Id == id, cancellationToken);
+
+    public async Task AddRuleAsync(AutomationRule rule, CancellationToken cancellationToken) => await db.AutomationRules.AddAsync(rule, cancellationToken);
+
+    public void RemoveRule(AutomationRule rule) => db.AutomationRules.Remove(rule);
+
+    public async Task AddLogAsync(AutomationLogEntry entry, CancellationToken cancellationToken) => await db.AutomationLog.AddAsync(entry, cancellationToken);
+
+    public async Task<IReadOnlyList<AutomationLogEntry>> ListLogAsync(Guid tenantId, Guid? taskId, int take, CancellationToken cancellationToken)
+    {
+        var query = db.AutomationLog.Where(l => l.TenantId == tenantId);
+        if (taskId is { } id) query = query.Where(l => l.TaskId == id);
+        return await query.OrderByDescending(l => l.AtUtc).Take(take).ToListAsync(cancellationToken);
+    }
+}
+
 public sealed class TimesheetRepository(TaskManagementDbContext db) : ITimesheetRepository
 {
     public Task<TimeEntry?> GetEntryAsync(Guid tenantId, Guid id, CancellationToken cancellationToken) =>

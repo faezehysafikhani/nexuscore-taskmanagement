@@ -13,6 +13,7 @@ public sealed class TaskService(
     ITagRepository tagRepository,
     ITaskStatusRepository statusRepository,
     ITaskPlanningRepository planning,
+    ITaskAutomation? automation,
     ITaskManagementUnitOfWork unitOfWork,
     ICurrentUserContext currentUser,
     ITaskActivityService activity,
@@ -237,6 +238,10 @@ public sealed class TaskService(
         }
 
         await activity.RecordAsync(task.Id, "Task created", task.Title, cancellationToken);
+        if (automation is not null)
+        {
+            await automation.RunAsync(AutomationTrigger.TaskCreated, task, cancellationToken);
+        }
 
         var created = await repository.GetByIdAsync(tenantId, task.Id, cancellationToken);
         return Result.Success(await ToDtoAsync(created!, cancellationToken));
@@ -565,6 +570,10 @@ public sealed class TaskService(
             ? TaskPeople.OverdueChangeRecipients(task, currentUser.UserId)
             : null;
         await activity.RecordAsync(id, "Status changed", custom is null ? $"{previous} -> {newStatus}" : $"{previous} -> {newStatus} ({custom.Name})", cancellationToken, toldInFull);
+        if (automation is not null && newStatus != previous)
+        {
+            await automation.RunAsync(AutomationTrigger.StatusChanged, task, cancellationToken);
+        }
 
         var updated = await repository.GetByIdAsync(tenantId, id, cancellationToken);
         return Result.Success(await ToDtoAsync(updated!, cancellationToken));
@@ -1419,6 +1428,8 @@ public sealed class TaskService(
             task.SourceType,
             task.SourceId,
             task.BlockedReason,
-            task.EstimatedMinutes);
+            task.EstimatedMinutes,
+            task.SlaDueAtUtc,
+            task.SlaBreachedAtUtc);
     }
 }

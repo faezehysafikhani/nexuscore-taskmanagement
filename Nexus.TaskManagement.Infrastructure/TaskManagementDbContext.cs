@@ -33,6 +33,8 @@ public sealed class TaskManagementDbContext(
     public DbSet<TaskFileAsset> Files => Set<TaskFileAsset>();
     public DbSet<TaskFile> TaskFiles => Set<TaskFile>();
     public DbSet<Tag> Tags => Set<Tag>();
+    public DbSet<AutomationRule> AutomationRules => Set<AutomationRule>();
+    public DbSet<AutomationLogEntry> AutomationLog => Set<AutomationLogEntry>();
     public DbSet<TimeEntry> TimeEntries => Set<TimeEntry>();
     public DbSet<TimesheetSubmission> TimesheetSubmissions => Set<TimesheetSubmission>();
     public DbSet<RunningTimer> RunningTimers => Set<RunningTimer>();

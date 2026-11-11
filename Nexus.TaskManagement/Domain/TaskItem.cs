@@ -297,6 +297,21 @@ public sealed class TaskItem : AuditableEntity<Guid>
     /// <summary>The organization-defined status the task shows, if any; <see cref="Status"/> is then its category.</summary>
     public Guid? CustomStatusId { get; private set; }
 
+    // --- SLA (phase 7): a due moment set by an automation rule; the clock stops while the task is paused ---
+
+    public DateTimeOffset? SlaDueAtUtc { get; private set; }
+    public DateTimeOffset? SlaPausedAtUtc { get; private set; }
+    public DateTimeOffset? SlaBreachedAtUtc { get; private set; }
+
+    public void StartSla(DateTimeOffset dueAtUtc)
+    {
+        SlaDueAtUtc = dueAtUtc;
+        SlaPausedAtUtc = Status == TaskItemStatus.Paused ? DateTimeOffset.UtcNow : null;
+        SlaBreachedAtUtc = null;
+    }
+
+    public void MarkSlaBreached(DateTimeOffset nowUtc) => SlaBreachedAtUtc = nowUtc;
+
     /// <summary>How long the work is expected to take, in minutes (null = not estimated).</summary>
     public int? EstimatedMinutes { get; private set; }
 
@@ -369,8 +384,24 @@ public sealed class TaskItem : AuditableEntity<Guid>
         CustomStatusId = definition.Id;
     }
 
+    public void SetPriority(TaskPriority priority) => Priority = priority;
+
     public void ChangeStatus(TaskItemStatus status, DateTimeOffset nowUtc)
     {
+        // The SLA clock stops while the task is paused and runs on again afterwards.
+        if (SlaDueAtUtc is not null)
+        {
+            if (status == TaskItemStatus.Paused && SlaPausedAtUtc is null)
+            {
+                SlaPausedAtUtc = nowUtc;
+            }
+            else if (status != TaskItemStatus.Paused && SlaPausedAtUtc is { } pausedAt)
+            {
+                SlaDueAtUtc += nowUtc - pausedAt;
+                SlaPausedAtUtc = null;
+            }
+        }
+
         Status = status;
         CustomStatusId = null;
         ActualCompletionDateUtc = status == TaskItemStatus.Completed

@@ -19,7 +19,8 @@ public sealed class TaskReviewService(
     ITaskAccessScope access,
     IApprovalRequester approvalRequester,
     ITaskActivityService activity,
-    ITaskService tasks) : ITaskReviewService
+    ITaskService tasks,
+    NexusCore.Application.Identity.Interfaces.IManagementChainProvider? managers = null) : ITaskReviewService
 {
     public const string SubjectType = "TaskReview";
 
@@ -54,7 +55,7 @@ public sealed class TaskReviewService(
 
         var comment = string.IsNullOrWhiteSpace(request.Comment) ? null : request.Comment.Trim();
         var now = DateTimeOffset.UtcNow;
-        var subject = new ApprovalSubject(SubjectType, task.Id, tenantId, Participants: Participants(task));
+        var subject = new ApprovalSubject(SubjectType, task.Id, tenantId, Participants: await ParticipantsAsync(task, actor, cancellationToken));
         var outcome = await approvalRequester.RequestApprovalAsync(subject, cancellationToken);
 
         if (outcome == ApprovalRequestOutcome.Submitted)
@@ -97,8 +98,11 @@ public sealed class TaskReviewService(
             t.ReviewSubmittedAtUtc, t.ReviewComment)).ToList());
     }
 
-    /// <summary>The people a review step can name: whoever owns the task reviews it, and a manager step falls back to the owner.</summary>
-    private static IReadOnlyDictionary<string, Guid> Participants(TaskItem task)
+    /// <summary>
+    /// The people a review step can name: Owner is whoever owns the task. Manager (and Approver1/2) are the submitter's
+    /// managers in the organization structure when it is installed, and the owner otherwise.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<string, Guid>> ParticipantsAsync(TaskItem task, Guid? submitter, CancellationToken cancellationToken)
     {
         var participants = new Dictionary<string, Guid>();
         if (task.OwnerUserId is { } owner)
@@ -106,6 +110,21 @@ public sealed class TaskReviewService(
             participants[ApprovalParticipants.Owner] = owner;
             participants[ApprovalParticipants.Manager] = owner;
             participants[ApprovalParticipants.Approver1] = owner;
+        }
+
+        if (managers is not null && submitter is { } who)
+        {
+            var chain = await managers.GetChainAsync(task.TenantId, who, cancellationToken);
+            if (chain.Count > 0)
+            {
+                participants[ApprovalParticipants.Manager] = chain[0];
+                participants[ApprovalParticipants.Approver1] = chain[0];
+            }
+
+            if (chain.Count > 1)
+            {
+                participants[ApprovalParticipants.Approver2] = chain[1];
+            }
         }
 
         return participants;

@@ -31,6 +31,8 @@ public static class DependencyInjection
         services.AddScoped<ITaskRequestService, TaskRequestService>();
         services.AddScoped<ITaskPlanningService, TaskPlanningService>();
         services.AddScoped<ITimesheetService, TimesheetService>();
+        services.AddScoped<ITaskAutomation, TaskAutomationEngine>();
+        services.AddScoped<IAutomationService, AutomationService>();
         services.AddScoped<NexusCore.SharedKernel.Domain.IDomainEventHandler<NexusCore.Application.Approvals.ApprovalGranted>, TimesheetApprovedHandler>();
         services.AddScoped<NexusCore.SharedKernel.Domain.IDomainEventHandler<NexusCore.Application.Approvals.ApprovalRejected>, TimesheetRejectedHandler>();
         services.AddScoped<ITaskTemplateService, TaskTemplateService>();
@@ -81,6 +83,7 @@ public static class DependencyInjection
         services.AddScoped<IValidator<CreateRepetitiveTaskRequest>, CreateRepetitiveTaskRequestValidator>();
         services.AddScoped<IValidator<UpdateRepetitiveTaskRequest>, UpdateRepetitiveTaskRequestValidator>();
         services.AddScoped<IValidator<SubmitTaskReviewRequest>, SubmitTaskReviewRequestValidator>();
+        services.AddScoped<IValidator<SaveAutomationRuleRequest>, SaveAutomationRuleRequestValidator>();
         services.AddScoped<IValidator<LogTimeRequest>, LogTimeRequestValidator>();
         services.AddScoped<IValidator<UpdateTimeEntryRequest>, UpdateTimeEntryRequestValidator>();
         services.AddScoped<IValidator<SaveCriterionRequest>, SaveCriterionRequestValidator>();

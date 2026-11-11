@@ -41,6 +41,7 @@ public static class DependencyInjection
         // Tasks only to one's own level and below - when OrgStructure:LimitTaskAssignment is on.
         services.AddOptions<OrgStructureOptions>().BindConfiguration(OrgStructureOptions.SectionName);
         services.AddScoped<IWorkAssignmentScope, HierarchyWorkAssignmentScope>();
+        services.AddScoped<IManagementChainProvider, HierarchyManagementChainProvider>();
         // Everyone kept to their own company - when OrgStructure:LimitToOwnCompany is on.
         services.AddScoped<CompanyReachScope>();
         services.AddScoped<IUserReachScope>(provider => provider.GetRequiredService<CompanyReachScope>());

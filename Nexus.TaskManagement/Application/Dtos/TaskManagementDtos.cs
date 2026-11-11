@@ -142,7 +142,9 @@ public sealed record TaskDto(
     string? SourceType = null,
     Guid? SourceId = null,
     string? BlockedReason = null,
-    int? EstimatedMinutes = null);
+    int? EstimatedMinutes = null,
+    DateTimeOffset? SlaDueAtUtc = null,
+    DateTimeOffset? SlaBreachedAtUtc = null);
 
 /// <summary>
 /// Someone standing in for a vacant post of the task (جانشین): sees it and comments, nothing more.
@@ -341,6 +343,12 @@ public sealed record TimesheetReviewItemsRequest(IReadOnlyList<Guid> Ids);
 public sealed record WorkloadRowDto(
     UserSummaryDto User, int LoggedMinutes, int OpenTasks, int RemainingEstimatedMinutes, int CapacityMinutes, double Utilization);
 public sealed record WorkloadDto(DateOnly From, DateOnly To, int CapacityPerPersonMinutes, IReadOnlyList<WorkloadRowDto> People);
+
+public sealed record AutomationRuleDto(
+    Guid Id, string Name, AutomationTrigger Trigger, AutomationConditions Conditions, IReadOnlyList<AutomationAction> Actions, int SortOrder, bool IsActive);
+public sealed record SaveAutomationRuleRequest(
+    string Name, AutomationTrigger Trigger, AutomationConditions? Conditions, IReadOnlyList<AutomationAction> Actions, int SortOrder = 0, bool IsActive = true);
+public sealed record AutomationLogDto(Guid Id, Guid RuleId, string RuleName, Guid TaskId, AutomationTrigger Trigger, string Outcome, string? Detail, DateTimeOffset AtUtc);
 
 public sealed record SubmitTaskReviewRequest(string? Comment = null);
 

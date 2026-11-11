@@ -103,6 +103,31 @@ public interface ITaskStatusRepository
     Task RemoveAsync(TaskStatusDefinition status, CancellationToken cancellationToken);
 }
 
+public interface IAutomationRepository
+{
+    Task<IReadOnlyList<AutomationRule>> ListRulesAsync(Guid tenantId, AutomationTrigger? trigger, bool activeOnly, CancellationToken cancellationToken);
+    Task<AutomationRule?> GetRuleAsync(Guid tenantId, Guid id, CancellationToken cancellationToken);
+    Task AddRuleAsync(AutomationRule rule, CancellationToken cancellationToken);
+    void RemoveRule(AutomationRule rule);
+    Task AddLogAsync(AutomationLogEntry entry, CancellationToken cancellationToken);
+    Task<IReadOnlyList<AutomationLogEntry>> ListLogAsync(Guid tenantId, Guid? taskId, int take, CancellationToken cancellationToken);
+}
+
+/// <summary>Runs the organization's rules when something happens to a task. Never throws: a rule that fails is logged, the task's own change stands.</summary>
+public interface ITaskAutomation
+{
+    Task RunAsync(AutomationTrigger trigger, TaskItem task, CancellationToken cancellationToken);
+}
+
+public interface IAutomationService
+{
+    Task<Result<IReadOnlyList<AutomationRuleDto>>> ListAsync(CancellationToken cancellationToken);
+    Task<Result<AutomationRuleDto>> CreateAsync(SaveAutomationRuleRequest request, CancellationToken cancellationToken);
+    Task<Result<AutomationRuleDto>> UpdateAsync(Guid id, SaveAutomationRuleRequest request, CancellationToken cancellationToken);
+    Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken);
+    Task<Result<IReadOnlyList<AutomationLogDto>>> ListLogAsync(Guid? taskId, CancellationToken cancellationToken);
+}
+
 public interface ITimesheetRepository
 {
     Task<TimeEntry?> GetEntryAsync(Guid tenantId, Guid id, CancellationToken cancellationToken);

@@ -182,6 +182,16 @@ public sealed class TaskFromMessageRequestValidator : AbstractValidator<TaskFrom
     }
 }
 
+public sealed class SaveAutomationRuleRequestValidator : AbstractValidator<SaveAutomationRuleRequest>
+{
+    public SaveAutomationRuleRequestValidator()
+    {
+        RuleFor(x => x.Name).NotEmpty().MaximumLength(100);
+        RuleFor(x => x.Trigger).IsInEnum();
+        RuleFor(x => x.Actions).NotNull();
+    }
+}
+
 public sealed class LogTimeRequestValidator : AbstractValidator<LogTimeRequest>
 {
     public LogTimeRequestValidator()

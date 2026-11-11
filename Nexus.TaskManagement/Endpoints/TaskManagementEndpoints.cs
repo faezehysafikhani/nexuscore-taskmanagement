@@ -29,6 +29,7 @@ public static class TaskManagementEndpoints
         app.MapTaskRequestEndpoints();
         app.MapTaskPlanningEndpoints();
         app.MapTimesheetEndpoints();
+        app.MapAutomationEndpoints();
         app.MapTaskFileEndpoints();
         app.MapNoteEndpoints();
         app.MapReminderSettingsEndpoints();
@@ -418,6 +419,25 @@ public static class TaskManagementEndpoints
             .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.ManageTags);
 
+        return app;
+    }
+
+    private static IEndpointRouteBuilder MapAutomationEndpoints(this IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/task-management/automation").WithTags("Automation").RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi).AddEndpointFilter<RequestValidationFilter>();
+        const string Manage = TaskManagementPermissions.ManageAutomation;
+
+        group.MapGet("/rules", async (IAutomationService s, CancellationToken ct) => (await s.ListAsync(ct)).ToApiResult())
+            .WithSummary("The organization's automation rules (trigger, conditions, actions)").RequireAuthorization(Manage);
+        group.MapPost("/rules", async (SaveAutomationRuleRequest r, IAutomationService s, CancellationToken ct) => (await s.CreateAsync(r, ct)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(Manage);
+        group.MapPut("/rules/{id:guid}", async (Guid id, SaveAutomationRuleRequest r, IAutomationService s, CancellationToken ct) => (await s.UpdateAsync(id, r, ct)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(Manage);
+        group.MapDelete("/rules/{id:guid}", async (Guid id, IAutomationService s, CancellationToken ct) => (await s.DeleteAsync(id, ct)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(Manage);
+        group.MapGet("/log", async (Guid? taskId, IAutomationService s, CancellationToken ct) => (await s.ListLogAsync(taskId, ct)).ToApiResult())
+            .WithSummary("What the rules did (or why they failed), newest first").RequireAuthorization(Manage);
         return app;
     }
 

@@ -346,6 +346,35 @@ internal sealed class RunningTimerConfiguration : IEntityTypeConfiguration<Runni
     }
 }
 
+internal sealed class AutomationRuleConfiguration : IEntityTypeConfiguration<AutomationRule>
+{
+    public void Configure(EntityTypeBuilder<AutomationRule> builder)
+    {
+        builder.ToTable("AutomationRules", Schema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.Property(x => x.Name).HasMaxLength(100).IsRequired();
+        builder.Property(x => x.Conditions).IsRequired();
+        builder.Property(x => x.Actions).IsRequired();
+        builder.HasIndex(x => new { x.TenantId, x.Trigger, x.IsActive });
+    }
+}
+
+internal sealed class AutomationLogEntryConfiguration : IEntityTypeConfiguration<AutomationLogEntry>
+{
+    public void Configure(EntityTypeBuilder<AutomationLogEntry> builder)
+    {
+        builder.ToTable("AutomationLog", Schema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.Property(x => x.RuleName).HasMaxLength(100).IsRequired();
+        builder.Property(x => x.Outcome).HasMaxLength(20).IsRequired();
+        builder.Property(x => x.Detail).HasMaxLength(500);
+        builder.HasIndex(x => new { x.TenantId, x.AtUtc });
+        builder.HasIndex(x => x.TaskId);
+    }
+}
+
 internal sealed class TagConfiguration : IEntityTypeConfiguration<Tag>
 {
     public void Configure(EntityTypeBuilder<Tag> builder)

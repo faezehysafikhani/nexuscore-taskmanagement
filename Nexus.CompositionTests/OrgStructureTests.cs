@@ -223,6 +223,20 @@ public sealed class OrgStructureTests
         Assert.Equal("validation.error", (await world.Service.SetAssignmentAsync(Tenant, local, new SetUserAssignmentRequest(company, null, null, foreign), default)).Error.Code);
     }
 
+    [Fact]
+    public async Task ManagementChainProvider_GivesTheManagers_NearestFirst_AndNothingForThoseOutsideTheStructure()
+    {
+        var world = new World();
+        Guid ceo = world.User("ceo"), clerk = world.User("clerk");
+        var company = await world.CompanyAsync("CH", ceo);
+        Assert.True((await world.Service.SetAssignmentAsync(Tenant, clerk, new SetUserAssignmentRequest(company, null, await world.PositionAsync("کارمند"), null), default)).IsSuccess);
+
+        var provider = new HierarchyManagementChainProvider(world.Repository, world.UnitRepository);
+        Assert.Equal([ceo], await provider.GetChainAsync(Tenant, clerk, default));
+        Assert.Empty(await provider.GetChainAsync(Tenant, ceo, default));
+        Assert.Empty(await provider.GetChainAsync(Tenant, Guid.NewGuid(), default));
+    }
+
     // ------------------------------------------------------------------ optional by design
 
     [Fact]
@@ -283,8 +297,13 @@ public sealed class OrgStructureTests
             var name = Guid.NewGuid().ToString();
             _organization = new OrganizationDbContext(new DbContextOptionsBuilder<OrganizationDbContext>().UseInMemoryDatabase("org-" + name).Options);
             var structure = new OrgStructureDbContext(new DbContextOptionsBuilder<OrgStructureDbContext>().UseInMemoryDatabase("orgs-" + name).Options);
-            Service = new OrgStructureService(new OrgStructureRepository(structure), structure, new OrganizationUnitRepository(_organization), _users, new OrgChartTeamsAndTitlesTests.NoWorkTeams());
+            Repository = new OrgStructureRepository(structure);
+            UnitRepository = new OrganizationUnitRepository(_organization);
+            Service = new OrgStructureService(Repository, structure, UnitRepository, _users, new OrgChartTeamsAndTitlesTests.NoWorkTeams());
         }
+
+        public IOrgStructureRepository Repository { get; }
+        public Nexus.Organization.Application.IOrganizationUnitRepository UnitRepository { get; }
 
         public IOrgStructureService Service { get; }
 
