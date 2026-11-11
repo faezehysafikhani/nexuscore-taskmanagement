@@ -105,6 +105,10 @@ public sealed partial class OrgNodeApiTests
         var now = DateTimeOffset.UtcNow;
         Assert.Equal("validation.error", (await history.SetValidityAsync(Tenant, finance.Id, new NodeValidityRequest(now, now.AddDays(-1)), default)).Error.Code);
         await w.Ok(history.SetValidityAsync(Tenant, finance.Id, new NodeValidityRequest(now.AddMonths(1)), default));
+        // The node the API answers with carries its dates (the screens show what is saved).
+        var dated = await w.Ok(w.Nodes.GetNodeAsync(Tenant, finance.Id, default));
+        Assert.Equal(now.AddMonths(1), dated.ValidFrom);
+        Assert.Null(dated.ValidTo);
         Assert.Contains("معاونت مالی", await ChartNames(w, null));
         Assert.DoesNotContain("معاونت مالی", await ChartNames(w, now));
         Assert.Contains("معاونت مالی", await ChartNames(w, now.AddMonths(2)));

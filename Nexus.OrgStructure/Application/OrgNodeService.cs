@@ -946,7 +946,9 @@ public sealed partial class OrgNodeService(
         unit.LatinName,
         unit.CorrespondenceTitle,
         unit.Phone,
-        unit.Address);
+        unit.Address,
+        unit.ValidFrom,
+        unit.ValidTo);
 
     private static NodeTypeDto ToDto(NodeState state, NodeType type) => new(
         type.Id, type.Code, type.Name, type.Color, type.Icon, type.IsDomainBoundary, type.SortOrder, type.IsActive,

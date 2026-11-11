@@ -11,6 +11,7 @@ namespace Nexus.OrgStructure.Application.Dtos;
 /// its company (CompanyId, through its link) or under none. CompanyId: the company it belongs to,
 /// through itself or the nearest node above it that is linked to one. AutoLinkChoices (only right
 /// after it is made): automatic links with several possible targets, for the user to choose.
+/// ValidFrom / ValidTo: when the node exists (each null: no limit); only the chart on a day filters by them.
 /// </summary>
 public sealed record OrgNodeDto(
     Guid Id,
@@ -29,7 +30,9 @@ public sealed record OrgNodeDto(
     string? LatinName = null,
     string? CorrespondenceTitle = null,
     string? Phone = null,
-    string? Address = null);
+    string? Address = null,
+    DateTimeOffset? ValidFrom = null,
+    DateTimeOffset? ValidTo = null);
 
 /// <summary>ParentNodeId null: a top node, linked to CompanyId when given. NodeTypeId null: the plain «واحد» type.</summary>
 public sealed record CreateNodeRequest(string Name, Guid? ParentNodeId = null, Guid? CompanyId = null, Guid? NodeTypeId = null, string? Code = null);

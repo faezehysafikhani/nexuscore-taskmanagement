@@ -276,7 +276,9 @@ managers and everything else stay as they were, and a company with no parent is 
 Changes take effect at once. A node's dates only say when it exists: `PUT /nodes/{id}/validity
 { validFrom, validTo, rowVersion }` (each null: no limit). `GET /chart?asOf=<date>` shows only the
 nodes that exist on that day (a node under one that does not is left out too). Without `asOf` the
-chart is as always. It shows which nodes existed, not where they sat then.
+chart is as always. It shows which nodes existed, not where they sat then. `OrgNodeDto` (and so
+`GET /nodes`, `GET /nodes/{id}` and the answer of every change) carries the saved `validFrom` /
+`validTo`, so a screen can show and edit them without reading the log.
 
 `POST /nodes/{id}/merge { targetNodeId, effectiveDate?, rowVersion? }` (permission `node.move`)
 puts a node into another node of the same company: its child nodes (if the rules allow them there),
