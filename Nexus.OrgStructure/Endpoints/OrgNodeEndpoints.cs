@@ -224,6 +224,15 @@ public static class OrgNodeEndpoints
         group.MapGet("/users/{userId:guid}/positions/history", (Guid userId, ICurrentUserContext user, IOrgAppointmentService service, CancellationToken ct) =>
                 SelfOrReader(user, userId) ?? InTenant(user, tenant => service.GetUserHistoryAsync(tenant, userId, ct)));
 
+        // --- leaving and role transfer (phase 10): a person's posts in one change
+        group.MapPost("/users/{userId:guid}/offboard", (Guid userId, OffboardUserRequest? request, ICurrentUserContext user, IOrgAppointmentService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.OffboardUserAsync(tenant, userId, request ?? new OffboardUserRequest(), ct)))
+            .RequireAuthorization(OrgStructurePermissions.ManageAssignments);
+
+        group.MapPost("/users/{userId:guid}/transfer", (Guid userId, TransferPostsRequest request, ICurrentUserContext user, IOrgAppointmentService service, CancellationToken ct) =>
+                InTenant(user, tenant => service.TransferPostsAsync(tenant, userId, request, ct)))
+            .RequireAuthorization(OrgStructurePermissions.ManageAssignments);
+
         // --- company groups (phase 6.3)
         group.MapPut("/companies/{id:guid}/parent", (Guid id, SetParentCompanyRequest request, ICurrentUserContext user, IOrgCompanyGroupService service, CancellationToken ct) =>
                 InTenant(user, tenant => service.SetParentCompanyAsync(tenant, id, request, ct)))

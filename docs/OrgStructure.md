@@ -321,6 +321,25 @@ the task's history.
 | `org_structure.manage_companies` | the screen level; making a company (with or without a template) |
 | `org_structure.manage_templates` | saving and removing templates |
 
+## Leaving and role transfer (phase 10)
+
+A person leaving is the same appointment changes made for all their posts at once, in one save:
+every post they hold is freed from now, or those chosen go straight to a successor (`postIds`; null:
+all, empty: none), and appointments that had not started are dropped (removed, as a cancelled one;
+whoever was to end when they started stays on). The successor needs a place in each post's company,
+as when appointing one post. If the person was a company's head, the head's post goes to the
+successor who took it, or the company is left with no head (`headlessCompanyIds`).
+
+| | |
+|---|---|
+| `POST /users/{userId}/offboard` | `{ successorUserId?, postIds? }` (permission `manage_assignments`): `ended`, `transferred`, `cancelled`, `headlessCompanyIds` |
+| `POST /users/{userId}/transfer` | `{ toUserId, effectiveDate?, postIds? }` (permission `manage_assignments`): the person's posts move to someone else now or from a later day; `transferred` |
+
+Both end the old appointment and start the new one in one save inside the organization's turn, sync
+the posts' open tasks to their holders, and put both people's places in step with what they hold.
+Nothing about the person's account changes: disabling it stays in the identity module (a disabled
+account leaves its posts through `IUserDeactivationListener`).
+
 ## What stays, and what was cleaned up (phase 8)
 
 - The temporary `OrgStructure:AllowNesting` switch is gone. Nodes nest as soon as the organization has
