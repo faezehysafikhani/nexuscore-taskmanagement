@@ -115,6 +115,8 @@ public sealed class SqlServerFixture : IAsyncLifetime
         services.AddScoped<ITaskService, TaskService>();
         services.AddScoped<ITaskBatchService, TaskBatchService>();
         services.AddScoped<ITaskReviewService, TaskReviewService>();
+        services.AddScoped<ITaskRequestService, TaskRequestService>();
+        services.AddScoped<ITaskRequestRepository, TaskRequestRepository>();
         services.AddScoped<NexusCore.Application.Approvals.IApprovalRequester, NexusCore.Infrastructure.Approvals.NullApprovalRequester>();
         services.AddScoped<IRepetitiveTaskService, RepetitiveTaskService>();
         services.AddScoped<ITagService, TagService>();

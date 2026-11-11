@@ -1408,6 +1408,8 @@ public sealed class TaskService(
             task.ReviewStatus,
             task.ReviewSubmittedAtUtc,
             task.ReviewDecidedAtUtc,
-            task.ReviewComment);
+            task.ReviewComment,
+            task.SourceType,
+            task.SourceId);
     }
 }

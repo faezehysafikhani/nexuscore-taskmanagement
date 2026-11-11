@@ -372,6 +372,38 @@ public sealed class TaskStatusRepository(TaskManagementDbContext db) : ITaskStat
     }
 }
 
+public sealed class TaskRequestRepository(TaskManagementDbContext db) : ITaskRequestRepository
+{
+    public Task<RequestCategory?> GetCategoryAsync(Guid tenantId, Guid id, CancellationToken cancellationToken) =>
+        db.RequestCategories.FirstOrDefaultAsync(c => c.TenantId == tenantId && c.Id == id, cancellationToken);
+
+    public Task<RequestCategory?> GetCategoryByNameAsync(Guid tenantId, string name, CancellationToken cancellationToken)
+    {
+        var normalized = name.Trim().ToUpperInvariant();
+        return db.RequestCategories.FirstOrDefaultAsync(c => c.TenantId == tenantId && c.NormalizedName == normalized, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<RequestCategory>> ListCategoriesAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        await db.RequestCategories.Where(c => c.TenantId == tenantId).OrderBy(c => c.Name).ToListAsync(cancellationToken);
+
+    public async Task AddCategoryAsync(RequestCategory category, CancellationToken cancellationToken) =>
+        await db.RequestCategories.AddAsync(category, cancellationToken);
+
+    public Task<TaskRequest?> GetAsync(Guid tenantId, Guid id, CancellationToken cancellationToken) =>
+        db.TaskRequests.FirstOrDefaultAsync(r => r.TenantId == tenantId && r.Id == id, cancellationToken);
+
+    public async Task<IReadOnlyList<TaskRequest>> ListAsync(Guid tenantId, Guid? requesterUserId, TaskRequestStatus? status, CancellationToken cancellationToken)
+    {
+        var query = db.TaskRequests.Where(r => r.TenantId == tenantId);
+        if (requesterUserId is { } requester) query = query.Where(r => r.RequesterUserId == requester);
+        if (status is { } s) query = query.Where(r => r.Status == s);
+        return await query.OrderByDescending(r => r.CreatedAtUtc).Take(500).ToListAsync(cancellationToken);
+    }
+
+    public async Task AddAsync(TaskRequest request, CancellationToken cancellationToken) =>
+        await db.TaskRequests.AddAsync(request, cancellationToken);
+}
+
 public sealed class TagRepository(TaskManagementDbContext db) : ITagRepository
 {
     public Task<Tag?> GetByIdAsync(Guid tenantId, Guid id, CancellationToken cancellationToken) =>

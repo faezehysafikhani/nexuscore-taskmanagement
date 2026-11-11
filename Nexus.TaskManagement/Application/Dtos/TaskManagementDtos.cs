@@ -138,7 +138,9 @@ public sealed record TaskDto(
     NexusCore.Application.Approvals.ApprovalStatus ReviewStatus = NexusCore.Application.Approvals.ApprovalStatus.NotSubmitted,
     DateTimeOffset? ReviewSubmittedAtUtc = null,
     DateTimeOffset? ReviewDecidedAtUtc = null,
-    string? ReviewComment = null);
+    string? ReviewComment = null,
+    string? SourceType = null,
+    Guid? SourceId = null);
 
 /// <summary>
 /// Someone standing in for a vacant post of the task (جانشین): sees it and comments, nothing more.
@@ -275,6 +277,23 @@ public sealed record UpdateTaskRequest(
 public sealed record ChangeTaskStatusRequest(TaskItemStatus? Status = null, Guid? CustomStatusId = null);
 
 public sealed record ChangeTaskPriorityRequest(TaskPriority Priority);
+
+public sealed record RequestCategoryDto(Guid Id, string Name, Guid? RouteToUserId, Guid? UrgentRouteToUserId, TaskPriority DefaultPriority, bool IsActive);
+public sealed record SaveRequestCategoryRequest(string Name, Guid? RouteToUserId = null, Guid? UrgentRouteToUserId = null, TaskPriority DefaultPriority = TaskPriority.Medium, bool IsActive = true);
+
+public sealed record TaskRequestDto(
+    Guid Id, Guid? CategoryId, string? CategoryName, string Title, string? Description, TaskPriority Priority, DateOnly? NeededBy,
+    UserSummaryDto? Requester, UserSummaryDto? RoutedTo, TaskRequestStatus Status, string? DecisionNote, Guid? ConvertedTaskId,
+    DateTimeOffset CreatedAtUtc, DateTimeOffset? DecidedAtUtc);
+
+public sealed record SubmitTaskRequestRequest(string Title, string? Description = null, Guid? CategoryId = null, TaskPriority? Priority = null, DateOnly? NeededBy = null);
+
+/// <summary>Turning a request into a task. Without a DueDate the request's NeededBy is used, and without that a week from today.</summary>
+public sealed record ConvertTaskRequestRequest(DateOnly? DueDate = null, Guid? AssignedUserId = null);
+public sealed record RejectTaskRequestRequest(string? Note = null);
+
+/// <summary>A task made from a chat message: the text becomes the description, and the message is kept as the task's source.</summary>
+public sealed record TaskFromMessageRequest(Guid MessageId, string Text, string? Title = null, DateOnly? DueDate = null);
 
 public sealed record SubmitTaskReviewRequest(string? Comment = null);
 

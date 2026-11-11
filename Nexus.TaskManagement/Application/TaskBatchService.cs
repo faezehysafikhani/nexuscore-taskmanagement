@@ -1,4 +1,5 @@
 using Nexus.TaskManagement.Application.Dtos;
+using Nexus.TaskManagement.Domain;
 using NexusCore.SharedKernel.Interfaces;
 using NexusCore.SharedKernel.Results;
 
@@ -8,7 +9,7 @@ namespace Nexus.TaskManagement.Application;
 /// Quick add and bulk actions, built on <see cref="ITaskService"/> so every rule (who may change what,
 /// archived tasks, row versions, notifications) is the one-at-a-time rule - nothing is re-implemented here.
 /// </summary>
-public sealed class TaskBatchService(ITaskService tasks, ICurrentUserContext currentUser) : ITaskBatchService
+public sealed class TaskBatchService(ITaskService tasks, ITaskRepository taskRepository, ITaskManagementUnitOfWork unitOfWork, ICurrentUserContext currentUser) : ITaskBatchService
 {
     public const int MaxBulk = 100;
 
@@ -26,6 +27,35 @@ public sealed class TaskBatchService(ITaskService tasks, ICurrentUserContext cur
                 request.Priority,
                 AssignedUserId: userId),
             cancellationToken);
+    }
+
+    public async Task<Result<TaskDto>> FromMessageAsync(TaskFromMessageRequest request, CancellationToken cancellationToken)
+    {
+        if (currentUser.UserId is not { } userId || currentUser.TenantId is not { } tenantId)
+        {
+            return Result.Failure<TaskDto>(Error.Unauthorized());
+        }
+
+        var text = request.Text.Trim();
+        var title = string.IsNullOrWhiteSpace(request.Title) ? FirstLine(text) : request.Title.Trim();
+        var created = await tasks.CreateAsync(
+            new CreateTaskRequest(title, request.DueDate ?? DateOnly.FromDateTime(DateTime.UtcNow), TaskPriority.Medium, text, AssignedUserId: userId),
+            cancellationToken);
+        if (created.IsFailure)
+        {
+            return created;
+        }
+
+        var task = await taskRepository.GetForUpdateAsync(tenantId, created.Value.Id, cancellationToken);
+        task?.SetSource("ChatMessage", request.MessageId);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result.Success(created.Value with { SourceType = "ChatMessage", SourceId = request.MessageId });
+    }
+
+    private static string FirstLine(string text)
+    {
+        var line = text.Split('\n', 2)[0].Trim();
+        return line.Length <= 200 ? line : line[..200];
     }
 
     public async Task<Result<BulkTaskResult>> BulkAsync(BulkTaskRequest request, CancellationToken cancellationToken)

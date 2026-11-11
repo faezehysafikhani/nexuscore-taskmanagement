@@ -297,6 +297,16 @@ public sealed class TaskItem : AuditableEntity<Guid>
     /// <summary>The organization-defined status the task shows, if any; <see cref="Status"/> is then its category.</summary>
     public Guid? CustomStatusId { get; private set; }
 
+    /// <summary>Where the task came from ("Request", "ChatMessage") and the id of that thing: a task made from something keeps it.</summary>
+    public string? SourceType { get; private set; }
+    public Guid? SourceId { get; private set; }
+
+    public void SetSource(string sourceType, Guid sourceId)
+    {
+        SourceType = sourceType;
+        SourceId = sourceId;
+    }
+
     // --- Review (phase 4): "submit for review", decided through the approval backend when one is installed ---
 
     public NexusCore.Application.Approvals.ApprovalStatus ReviewStatus { get; private set; }

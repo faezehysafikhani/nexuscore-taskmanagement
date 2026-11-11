@@ -103,6 +103,34 @@ public interface ITaskStatusRepository
     Task RemoveAsync(TaskStatusDefinition status, CancellationToken cancellationToken);
 }
 
+public interface ITaskRequestRepository
+{
+    Task<RequestCategory?> GetCategoryAsync(Guid tenantId, Guid id, CancellationToken cancellationToken);
+    Task<RequestCategory?> GetCategoryByNameAsync(Guid tenantId, string name, CancellationToken cancellationToken);
+    Task<IReadOnlyList<RequestCategory>> ListCategoriesAsync(Guid tenantId, CancellationToken cancellationToken);
+    Task AddCategoryAsync(RequestCategory category, CancellationToken cancellationToken);
+
+    Task<TaskRequest?> GetAsync(Guid tenantId, Guid id, CancellationToken cancellationToken);
+
+    /// <summary>mine: only the caller's own. Otherwise everything of the tenant (the caller is a handler).</summary>
+    Task<IReadOnlyList<TaskRequest>> ListAsync(Guid tenantId, Guid? requesterUserId, TaskRequestStatus? status, CancellationToken cancellationToken);
+    Task AddAsync(TaskRequest request, CancellationToken cancellationToken);
+}
+
+public interface ITaskRequestService
+{
+    Task<Result<IReadOnlyList<RequestCategoryDto>>> ListCategoriesAsync(CancellationToken cancellationToken);
+    Task<Result<RequestCategoryDto>> CreateCategoryAsync(SaveRequestCategoryRequest request, CancellationToken cancellationToken);
+    Task<Result<RequestCategoryDto>> UpdateCategoryAsync(Guid id, SaveRequestCategoryRequest request, CancellationToken cancellationToken);
+
+    Task<Result<TaskRequestDto>> SubmitAsync(SubmitTaskRequestRequest request, CancellationToken cancellationToken);
+
+    /// <summary>mine = true: the caller's own requests. Otherwise the handler's inbox (needs Requests.Handle).</summary>
+    Task<Result<IReadOnlyList<TaskRequestDto>>> ListAsync(bool mine, TaskRequestStatus? status, CancellationToken cancellationToken);
+    Task<Result<TaskDto>> ConvertAsync(Guid id, ConvertTaskRequestRequest request, CancellationToken cancellationToken);
+    Task<Result<TaskRequestDto>> RejectAsync(Guid id, RejectTaskRequestRequest request, CancellationToken cancellationToken);
+}
+
 public interface ITaskReviewService
 {
     /// <summary>Asks for the task to be reviewed. With an approval backend it waits for the decision; with none it is completed at once.</summary>
@@ -115,6 +143,9 @@ public interface ITaskReviewService
 public interface ITaskBatchService
 {
     Task<Result<TaskDto>> QuickCreateAsync(QuickCreateTaskRequest request, CancellationToken cancellationToken);
+
+    /// <summary>"Message to task": the message text becomes the task, and the message is kept as its source.</summary>
+    Task<Result<TaskDto>> FromMessageAsync(TaskFromMessageRequest request, CancellationToken cancellationToken);
     Task<Result<BulkTaskResult>> BulkAsync(BulkTaskRequest request, CancellationToken cancellationToken);
 }
 

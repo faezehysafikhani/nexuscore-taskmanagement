@@ -148,6 +148,40 @@ public sealed class ChangeTaskStatusRequestValidator : AbstractValidator<ChangeT
     }
 }
 
+public sealed class SaveRequestCategoryRequestValidator : AbstractValidator<SaveRequestCategoryRequest>
+{
+    public SaveRequestCategoryRequestValidator()
+    {
+        RuleFor(x => x.Name).NotEmpty().MaximumLength(100);
+        RuleFor(x => x.DefaultPriority).IsInEnum();
+    }
+}
+
+public sealed class SubmitTaskRequestRequestValidator : AbstractValidator<SubmitTaskRequestRequest>
+{
+    public SubmitTaskRequestRequestValidator()
+    {
+        RuleFor(x => x.Title).NotEmpty().MaximumLength(200);
+        RuleFor(x => x.Description).MaximumLength(4000);
+        RuleFor(x => x.Priority).IsInEnum().When(x => x.Priority is not null);
+    }
+}
+
+public sealed class RejectTaskRequestRequestValidator : AbstractValidator<RejectTaskRequestRequest>
+{
+    public RejectTaskRequestRequestValidator() => RuleFor(x => x.Note).MaximumLength(1000);
+}
+
+public sealed class TaskFromMessageRequestValidator : AbstractValidator<TaskFromMessageRequest>
+{
+    public TaskFromMessageRequestValidator()
+    {
+        RuleFor(x => x.MessageId).NotEmpty();
+        RuleFor(x => x.Text).NotEmpty().MaximumLength(4000);
+        RuleFor(x => x.Title).MaximumLength(200);
+    }
+}
+
 public sealed class SubmitTaskReviewRequestValidator : AbstractValidator<SubmitTaskReviewRequest>
 {
     public SubmitTaskReviewRequestValidator() => RuleFor(x => x.Comment).MaximumLength(1000);

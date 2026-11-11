@@ -26,6 +26,7 @@ public static class TaskManagementEndpoints
         app.MapRepetitiveTaskEndpoints();
         app.MapTaskTagEndpoints();
         app.MapTaskStatusEndpoints();
+        app.MapTaskRequestEndpoints();
         app.MapTaskFileEndpoints();
         app.MapNoteEndpoints();
         app.MapReminderSettingsEndpoints();
@@ -147,6 +148,12 @@ public static class TaskManagementEndpoints
         group.MapPost("/quick", async (QuickCreateTaskRequest request, ITaskBatchService service, CancellationToken cancellationToken) =>
                 (await service.QuickCreateAsync(request, cancellationToken)).ToApiResult())
             .WithSummary("Quick add: a title is enough (due today unless a date is given, given to the caller)")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
+            .RequireAuthorization(TaskManagementPermissions.Create);
+
+        group.MapPost("/from-message", async (TaskFromMessageRequest request, ITaskBatchService service, CancellationToken cancellationToken) =>
+                (await service.FromMessageAsync(request, cancellationToken)).ToApiResult())
+            .WithSummary("Message to task: a chat message becomes a task (the message is kept as its source)")
             .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.Create);
 
@@ -408,6 +415,53 @@ public static class TaskManagementEndpoints
                 (await service.DeleteAsync(id, cancellationToken)).ToApiResult())
             .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.ManageTags);
+
+        return app;
+    }
+
+    private static IEndpointRouteBuilder MapTaskRequestEndpoints(this IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/task-management/requests")
+            .WithTags("Task requests")
+            .RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi)
+            .AddEndpointFilter<RequestValidationFilter>();
+
+        group.MapGet("/categories", async (ITaskRequestService service, CancellationToken cancellationToken) =>
+                (await service.ListCategoriesAsync(cancellationToken)).ToApiResult())
+            .RequireAuthorization(TaskManagementPermissions.SubmitRequests);
+
+        group.MapPost("/categories", async (SaveRequestCategoryRequest request, ITaskRequestService service, CancellationToken cancellationToken) =>
+                (await service.CreateCategoryAsync(request, cancellationToken)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
+            .RequireAuthorization(TaskManagementPermissions.ManageRequests);
+
+        group.MapPut("/categories/{id:guid}", async (Guid id, SaveRequestCategoryRequest request, ITaskRequestService service, CancellationToken cancellationToken) =>
+                (await service.UpdateCategoryAsync(id, request, cancellationToken)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
+            .RequireAuthorization(TaskManagementPermissions.ManageRequests);
+
+        group.MapGet("/", async (bool? mine, TaskRequestStatus? status, ITaskRequestService service, CancellationToken cancellationToken) =>
+                (await service.ListAsync(mine ?? true, status, cancellationToken)).ToApiResult())
+            .WithSummary("mine=true (default): my requests. mine=false: every request (request handlers)")
+            .RequireAuthorization(TaskManagementPermissions.SubmitRequests);
+
+        group.MapPost("/", async (SubmitTaskRequestRequest request, ITaskRequestService service, CancellationToken cancellationToken) =>
+                (await service.SubmitAsync(request, cancellationToken)).ToApiResult())
+            .WithSummary("Submit a request; it is routed by its category and urgency")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
+            .RequireAuthorization(TaskManagementPermissions.SubmitRequests);
+
+        group.MapPost("/{id:guid}/convert", async (Guid id, ConvertTaskRequestRequest request, ITaskRequestService service, CancellationToken cancellationToken) =>
+                (await service.ConvertAsync(id, request, cancellationToken)).ToApiResult())
+            .WithSummary("Turn the request into a task (the task keeps the request as its source)")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
+            .RequireAuthorization(TaskManagementPermissions.HandleRequests);
+
+        group.MapPost("/{id:guid}/reject", async (Guid id, RejectTaskRequestRequest request, ITaskRequestService service, CancellationToken cancellationToken) =>
+                (await service.RejectAsync(id, request, cancellationToken)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
+            .RequireAuthorization(TaskManagementPermissions.HandleRequests);
 
         return app;
     }

@@ -28,6 +28,7 @@ internal sealed class TaskItemConfiguration : IEntityTypeConfiguration<TaskItem>
         builder.Ignore(x => x.IsArchived);
         builder.Property(x => x.RowVersion).IsRowVersion();
         builder.Property(x => x.ReviewComment).HasMaxLength(1000);
+        builder.Property(x => x.SourceType).HasMaxLength(30);
         builder.HasIndex(x => new { x.TenantId, x.CustomStatusId });
 
         // Real foreign keys into the shared identity schema. Restrict, never cascade:
@@ -228,6 +229,35 @@ internal sealed class TaskStatusDefinitionConfiguration : IEntityTypeConfigurati
         builder.Property(x => x.NormalizedName).HasMaxLength(100).IsRequired();
         builder.Property(x => x.Color).HasMaxLength(30);
         builder.HasIndex(x => new { x.TenantId, x.NormalizedName }).IsUnique();
+    }
+}
+
+internal sealed class RequestCategoryConfiguration : IEntityTypeConfiguration<RequestCategory>
+{
+    public void Configure(EntityTypeBuilder<RequestCategory> builder)
+    {
+        builder.ToTable("RequestCategories", Schema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.Property(x => x.Name).HasMaxLength(100).IsRequired();
+        builder.Property(x => x.NormalizedName).HasMaxLength(100).IsRequired();
+        builder.HasIndex(x => new { x.TenantId, x.NormalizedName }).IsUnique();
+    }
+}
+
+internal sealed class TaskRequestConfiguration : IEntityTypeConfiguration<TaskRequest>
+{
+    public void Configure(EntityTypeBuilder<TaskRequest> builder)
+    {
+        builder.ToTable("TaskRequests", Schema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.Property(x => x.Title).HasMaxLength(200).IsRequired();
+        builder.Property(x => x.Description).HasMaxLength(4000);
+        builder.Property(x => x.DecisionNote).HasMaxLength(1000);
+        builder.HasIndex(x => new { x.TenantId, x.Status });
+        builder.HasIndex(x => new { x.TenantId, x.RequesterUserId });
+        builder.HasIndex(x => new { x.TenantId, x.RoutedToUserId });
     }
 }
 
