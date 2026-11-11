@@ -28,6 +28,7 @@ public static class TaskManagementEndpoints
         app.MapTaskStatusEndpoints();
         app.MapTaskRequestEndpoints();
         app.MapTaskPlanningEndpoints();
+        app.MapTimesheetEndpoints();
         app.MapTaskFileEndpoints();
         app.MapNoteEndpoints();
         app.MapReminderSettingsEndpoints();
@@ -416,6 +417,53 @@ public static class TaskManagementEndpoints
                 (await service.DeleteAsync(id, cancellationToken)).ToApiResult())
             .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.ManageTags);
+
+        return app;
+    }
+
+    private static IEndpointRouteBuilder MapTimesheetEndpoints(this IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/task-management/timesheets").WithTags("Timesheets").RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi).AddEndpointFilter<RequestValidationFilter>();
+        const string Log = TaskManagementPermissions.LogTime;
+
+        group.MapGet("/week", async (DateOnly? day, Guid? userId, ITimesheetService s, CancellationToken ct) =>
+                (await s.GetWeekAsync(day ?? DateOnly.FromDateTime(DateTime.UtcNow), userId, ct)).ToApiResult())
+            .WithSummary("A week (it opens on Saturday) of time entries with its approval state; userId needs Timesheets.ViewAll")
+            .RequireAuthorization(Log);
+        group.MapPost("/entries", async (LogTimeRequest r, ITimesheetService s, CancellationToken ct) => (await s.LogAsync(r, ct)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(Log);
+        group.MapPut("/entries/{id:guid}", async (Guid id, UpdateTimeEntryRequest r, ITimesheetService s, CancellationToken ct) => (await s.UpdateAsync(id, r, ct)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(Log);
+        group.MapDelete("/entries/{id:guid}", async (Guid id, ITimesheetService s, CancellationToken ct) => (await s.DeleteAsync(id, ct)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(Log);
+
+        group.MapGet("/timer", async (ITimesheetService s, CancellationToken ct) => (await s.GetTimerAsync(ct)).ToApiResult())
+            .WithSummary("The running timer, if any").RequireAuthorization(Log);
+        group.MapPost("/timer/start", async (StartTimerRequest r, ITimesheetService s, CancellationToken ct) => (await s.StartTimerAsync(r, ct)).ToApiResult())
+            .WithSummary("Start the timer on a task (a running one is stopped and logged first)")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(Log);
+        group.MapPost("/timer/stop", async (ITimesheetService s, CancellationToken ct) => (await s.StopTimerAsync(ct)).ToApiResult())
+            .WithSummary("Stop the timer: the elapsed time becomes a time entry")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(Log);
+
+        group.MapPost("/submit", async (SubmitTimesheetRequest r, ITimesheetService s, CancellationToken ct) => (await s.SubmitWeekAsync(r, ct)).ToApiResult())
+            .WithSummary("Send the week for approval (none set up: it is approved at once)")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(Log);
+        group.MapPost("/in-review", async (TimesheetReviewItemsRequest r, ITimesheetService s, CancellationToken ct) => (await s.ListInReviewAsync(r.Ids, ct)).ToApiResult())
+            .WithSummary("Who and which week, for the approver's list").RequireAuthorization(TaskManagementPermissions.View);
+
+        group.MapGet("/workload", async (DateOnly? from, DateOnly? to, int? capacityMinutes, ITimesheetService s, CancellationToken ct) =>
+                (await s.GetWorkloadAsync(from, to, capacityMinutes, ct)).ToApiResult())
+            .WithSummary("Per person: logged time, open tasks, estimate left and utilization of the capacity")
+            .RequireAuthorization(TaskManagementPermissions.ViewAllTime);
+
+        var tasks = app.MapGroup("/api/task-management/tasks").WithTags("Timesheets").RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi).AddEndpointFilter<TaskAccessScopeFilter>().AddEndpointFilter<RequestValidationFilter>();
+        tasks.MapGet("/{id:guid}/time", async (Guid id, ITimesheetService s, CancellationToken ct) => (await s.GetTaskTimeAsync(id, ct)).ToApiResult())
+            .WithSummary("Estimate against actual time on the task").RequireAuthorization(TaskManagementPermissions.View);
+        tasks.MapPut("/{id:guid}/estimate", async (Guid id, SetEstimateRequest r, ITimesheetService s, CancellationToken ct) => (await s.SetEstimateAsync(id, r, ct)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(TaskManagementPermissions.Edit);
 
         return app;
     }

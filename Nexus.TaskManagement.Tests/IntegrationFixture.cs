@@ -115,6 +115,8 @@ public sealed class SqlServerFixture : IAsyncLifetime
         services.AddScoped<ITaskService, TaskService>();
         services.AddScoped<ITaskBatchService, TaskBatchService>();
         services.AddScoped<ITaskReviewService, TaskReviewService>();
+        services.AddScoped<ITimesheetService, TimesheetService>();
+        services.AddScoped<ITimesheetRepository, TimesheetRepository>();
         services.AddScoped<ITaskPlanningService, TaskPlanningService>();
         services.AddScoped<ITaskTemplateService, TaskTemplateService>();
         services.AddScoped<ITaskPlanningRepository, TaskPlanningRepository>();

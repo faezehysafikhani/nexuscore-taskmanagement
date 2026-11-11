@@ -103,6 +103,51 @@ public interface ITaskStatusRepository
     Task RemoveAsync(TaskStatusDefinition status, CancellationToken cancellationToken);
 }
 
+public interface ITimesheetRepository
+{
+    Task<TimeEntry?> GetEntryAsync(Guid tenantId, Guid id, CancellationToken cancellationToken);
+    Task AddEntryAsync(TimeEntry entry, CancellationToken cancellationToken);
+    void RemoveEntry(TimeEntry entry);
+
+    /// <summary>One person's entries in a date range (inclusive).</summary>
+    Task<IReadOnlyList<TimeEntry>> ListEntriesAsync(Guid tenantId, Guid userId, DateOnly from, DateOnly to, CancellationToken cancellationToken);
+    Task<IReadOnlyList<TimeEntry>> ListEntriesForTaskAsync(Guid tenantId, Guid taskId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<TimeEntry>> ListEntriesOfSubmissionAsync(Guid tenantId, Guid submissionId, CancellationToken cancellationToken);
+    Task<int> SumMinutesOnDayAsync(Guid tenantId, Guid userId, DateOnly date, Guid? exceptEntryId, CancellationToken cancellationToken);
+
+    Task<TimesheetSubmission?> GetSubmissionAsync(Guid tenantId, Guid id, CancellationToken cancellationToken);
+    Task<TimesheetSubmission?> FindSubmissionAsync(Guid tenantId, Guid userId, DateOnly weekStart, CancellationToken cancellationToken);
+    Task<IReadOnlyList<TimesheetSubmission>> GetPendingSubmissionsAsync(Guid tenantId, IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken);
+    Task AddSubmissionAsync(TimesheetSubmission submission, CancellationToken cancellationToken);
+
+    Task<RunningTimer?> GetTimerAsync(Guid userId, CancellationToken cancellationToken);
+    Task AddTimerAsync(RunningTimer timer, CancellationToken cancellationToken);
+    void RemoveTimer(RunningTimer timer);
+
+    /// <summary>Per person: minutes logged in the range, open assigned tasks, and the estimate still left on them.</summary>
+    Task<IReadOnlyList<(Guid UserId, int Logged, int OpenTasks, int RemainingEstimated)>> WorkloadAsync(Guid tenantId, DateOnly from, DateOnly to, CancellationToken cancellationToken);
+}
+
+public interface ITimesheetService
+{
+    Task<Result<TaskTimeDto>> GetTaskTimeAsync(Guid taskId, CancellationToken cancellationToken);
+    Task<Result<TaskTimeDto>> SetEstimateAsync(Guid taskId, SetEstimateRequest request, CancellationToken cancellationToken);
+
+    Task<Result<TimeEntryDto>> LogAsync(LogTimeRequest request, CancellationToken cancellationToken);
+    Task<Result<TimeEntryDto>> UpdateAsync(Guid id, UpdateTimeEntryRequest request, CancellationToken cancellationToken);
+    Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken);
+
+    Task<Result<TimerDto?>> GetTimerAsync(CancellationToken cancellationToken);
+    Task<Result<TimerDto>> StartTimerAsync(StartTimerRequest request, CancellationToken cancellationToken);
+    Task<Result<TimeEntryDto>> StopTimerAsync(CancellationToken cancellationToken);
+
+    Task<Result<TimesheetWeekDto>> GetWeekAsync(DateOnly anyDayOfWeek, Guid? userId, CancellationToken cancellationToken);
+    Task<Result<TimesheetWeekDto>> SubmitWeekAsync(SubmitTimesheetRequest request, CancellationToken cancellationToken);
+    Task<Result<IReadOnlyList<TimesheetReviewItemDto>>> ListInReviewAsync(IReadOnlyList<Guid> ids, CancellationToken cancellationToken);
+
+    Task<Result<WorkloadDto>> GetWorkloadAsync(DateOnly? from, DateOnly? to, int? capacityMinutes, CancellationToken cancellationToken);
+}
+
 public interface ITaskPlanningRepository
 {
     // dependencies

@@ -310,6 +310,42 @@ internal sealed class TaskTemplateConfiguration : IEntityTypeConfiguration<TaskT
     }
 }
 
+internal sealed class TimeEntryConfiguration : IEntityTypeConfiguration<TimeEntry>
+{
+    public void Configure(EntityTypeBuilder<TimeEntry> builder)
+    {
+        builder.ToTable("TimeEntries", Schema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.Property(x => x.Note).HasMaxLength(500);
+        builder.HasIndex(x => new { x.TenantId, x.UserId, x.Date });
+        builder.HasIndex(x => x.TaskId);
+        builder.HasIndex(x => x.SubmissionId);
+    }
+}
+
+internal sealed class TimesheetSubmissionConfiguration : IEntityTypeConfiguration<TimesheetSubmission>
+{
+    public void Configure(EntityTypeBuilder<TimesheetSubmission> builder)
+    {
+        builder.ToTable("TimesheetSubmissions", Schema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.Property(x => x.DecisionComment).HasMaxLength(1000);
+        builder.HasIndex(x => new { x.TenantId, x.UserId, x.WeekStart });
+    }
+}
+
+internal sealed class RunningTimerConfiguration : IEntityTypeConfiguration<RunningTimer>
+{
+    public void Configure(EntityTypeBuilder<RunningTimer> builder)
+    {
+        builder.ToTable("RunningTimers", Schema.Name);
+        builder.HasKey(x => x.UserId);
+        builder.Property(x => x.UserId).ValueGeneratedNever();
+    }
+}
+
 internal sealed class TagConfiguration : IEntityTypeConfiguration<Tag>
 {
     public void Configure(EntityTypeBuilder<Tag> builder)

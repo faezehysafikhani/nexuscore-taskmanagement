@@ -141,7 +141,8 @@ public sealed record TaskDto(
     string? ReviewComment = null,
     string? SourceType = null,
     Guid? SourceId = null,
-    string? BlockedReason = null);
+    string? BlockedReason = null,
+    int? EstimatedMinutes = null);
 
 /// <summary>
 /// Someone standing in for a vacant post of the task (جانشین): sees it and comments, nothing more.
@@ -316,6 +317,30 @@ public sealed record TaskTemplateDto(Guid Id, string Name, bool IsProject, TaskT
 public sealed record SaveTaskTemplateRequest(string Name, TaskTemplateBody Body);
 public sealed record SaveTaskAsTemplateRequest(string Name);
 public sealed record InstantiateTemplateRequest(string? Title = null, DateOnly? DueDate = null, Guid? AssignedUserId = null);
+
+public sealed record TimeEntryDto(
+    Guid Id, Guid TaskId, string? TaskTitle, Guid UserId, string? UserName, DateOnly Date, int Minutes, string? Note,
+    TimeEntrySource Source, NexusCore.Application.Approvals.ApprovalStatus Status);
+public sealed record LogTimeRequest(Guid TaskId, DateOnly Date, int Minutes, string? Note = null);
+public sealed record UpdateTimeEntryRequest(DateOnly Date, int Minutes, string? Note = null);
+public sealed record SetEstimateRequest(int? Minutes);
+
+/// <summary>Estimate against what was actually logged on the task (approved and not yet decided alike).</summary>
+public sealed record TaskTimeDto(int? EstimatedMinutes, int ActualMinutes, IReadOnlyList<TimeEntryDto> Entries);
+
+public sealed record TimerDto(Guid TaskId, string? TaskTitle, DateTimeOffset StartedAtUtc, int ElapsedMinutes);
+public sealed record StartTimerRequest(Guid TaskId);
+
+public sealed record TimesheetWeekDto(
+    DateOnly WeekStart, IReadOnlyList<TimeEntryDto> Entries, IReadOnlyDictionary<string, int> MinutesPerDay, int TotalMinutes,
+    NexusCore.Application.Approvals.ApprovalStatus Status, Guid? SubmissionId, string? DecisionComment, bool CanSubmit);
+public sealed record SubmitTimesheetRequest(DateOnly WeekStart);
+public sealed record TimesheetReviewItemDto(Guid Id, UserSummaryDto? User, DateOnly WeekStart, int TotalMinutes, DateTimeOffset SubmittedAtUtc);
+public sealed record TimesheetReviewItemsRequest(IReadOnlyList<Guid> Ids);
+
+public sealed record WorkloadRowDto(
+    UserSummaryDto User, int LoggedMinutes, int OpenTasks, int RemainingEstimatedMinutes, int CapacityMinutes, double Utilization);
+public sealed record WorkloadDto(DateOnly From, DateOnly To, int CapacityPerPersonMinutes, IReadOnlyList<WorkloadRowDto> People);
 
 public sealed record SubmitTaskReviewRequest(string? Comment = null);
 

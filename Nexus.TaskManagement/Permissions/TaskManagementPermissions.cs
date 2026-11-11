@@ -16,6 +16,8 @@ public static class TaskManagementPermissions
     public const string Comment = "Tasks.Comment";
     public const string ManageStatuses = "Tasks.ManageStatuses";
     public const string ManageTemplates = "Tasks.ManageTemplates";
+    public const string LogTime = "Timesheets.Log";
+    public const string ViewAllTime = "Timesheets.ViewAll";
     public const string SubmitRequests = "Requests.Submit";
     public const string HandleRequests = "Requests.Handle";
     public const string ManageRequests = "Requests.Manage";
@@ -41,6 +43,8 @@ public static class TaskManagementPermissions
         new(Comment, "TaskManagement", "ثبت دیدگاه روی فعالیت‌ها"),
         new(ManageStatuses, "TaskManagement", "مدیریت وضعیت‌های سفارشی فعالیت"),
         new(ManageTemplates, "TaskManagement", "مدیریت قالب‌های وظیفه و پروژه"),
+        new(LogTime, "TaskManagement", "ثبت ساعت کاری و ارسال برای تأیید"),
+        new(ViewAllTime, "TaskManagement", "مشاهده ساعت کاری و بار کاری همه"),
         new(SubmitRequests, "TaskManagement", "ثبت درخواست"),
         new(HandleRequests, "TaskManagement", "بررسی درخواست‌ها و تبدیل به فعالیت"),
         new(ManageRequests, "TaskManagement", "مدیریت دسته‌بندی و ارجاع درخواست‌ها"),

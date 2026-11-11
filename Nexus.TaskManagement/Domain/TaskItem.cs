@@ -297,6 +297,11 @@ public sealed class TaskItem : AuditableEntity<Guid>
     /// <summary>The organization-defined status the task shows, if any; <see cref="Status"/> is then its category.</summary>
     public Guid? CustomStatusId { get; private set; }
 
+    /// <summary>How long the work is expected to take, in minutes (null = not estimated).</summary>
+    public int? EstimatedMinutes { get; private set; }
+
+    public void SetEstimate(int? minutes) => EstimatedMinutes = minutes;
+
     /// <summary>A free-text blocker ("waiting for the supplier"); null when nothing blocks the task.</summary>
     public string? BlockedReason { get; private set; }
 

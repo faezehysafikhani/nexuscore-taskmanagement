@@ -372,6 +372,82 @@ public sealed class TaskStatusRepository(TaskManagementDbContext db) : ITaskStat
     }
 }
 
+public sealed class TimesheetRepository(TaskManagementDbContext db) : ITimesheetRepository
+{
+    public Task<TimeEntry?> GetEntryAsync(Guid tenantId, Guid id, CancellationToken cancellationToken) =>
+        db.TimeEntries.FirstOrDefaultAsync(e => e.TenantId == tenantId && e.Id == id, cancellationToken);
+
+    public async Task AddEntryAsync(TimeEntry entry, CancellationToken cancellationToken) => await db.TimeEntries.AddAsync(entry, cancellationToken);
+
+    public void RemoveEntry(TimeEntry entry) => db.TimeEntries.Remove(entry);
+
+    public async Task<IReadOnlyList<TimeEntry>> ListEntriesAsync(Guid tenantId, Guid userId, DateOnly from, DateOnly to, CancellationToken cancellationToken) =>
+        await db.TimeEntries.Where(e => e.TenantId == tenantId && e.UserId == userId && e.Date >= from && e.Date <= to)
+            .OrderBy(e => e.Date).ThenBy(e => e.CreatedAtUtc).ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<TimeEntry>> ListEntriesForTaskAsync(Guid tenantId, Guid taskId, CancellationToken cancellationToken) =>
+        await db.TimeEntries.Where(e => e.TenantId == tenantId && e.TaskId == taskId).OrderByDescending(e => e.Date).ThenByDescending(e => e.CreatedAtUtc).Take(500).ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<TimeEntry>> ListEntriesOfSubmissionAsync(Guid tenantId, Guid submissionId, CancellationToken cancellationToken) =>
+        await db.TimeEntries.Where(e => e.TenantId == tenantId && e.SubmissionId == submissionId).ToListAsync(cancellationToken);
+
+    public async Task<int> SumMinutesOnDayAsync(Guid tenantId, Guid userId, DateOnly date, Guid? exceptEntryId, CancellationToken cancellationToken) =>
+        await db.TimeEntries.Where(e => e.TenantId == tenantId && e.UserId == userId && e.Date == date && e.Id != exceptEntryId).SumAsync(e => (int?)e.Minutes, cancellationToken) ?? 0;
+
+    public Task<TimesheetSubmission?> GetSubmissionAsync(Guid tenantId, Guid id, CancellationToken cancellationToken) =>
+        db.TimesheetSubmissions.FirstOrDefaultAsync(s => s.TenantId == tenantId && s.Id == id, cancellationToken);
+
+    public Task<TimesheetSubmission?> FindSubmissionAsync(Guid tenantId, Guid userId, DateOnly weekStart, CancellationToken cancellationToken) =>
+        db.TimesheetSubmissions.Where(s => s.TenantId == tenantId && s.UserId == userId && s.WeekStart == weekStart)
+            .OrderByDescending(s => s.SubmittedAtUtc).FirstOrDefaultAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<TimesheetSubmission>> GetPendingSubmissionsAsync(Guid tenantId, IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken) =>
+        await db.TimesheetSubmissions.Where(s => s.TenantId == tenantId && ids.Contains(s.Id) && s.Status == NexusCore.Application.Approvals.ApprovalStatus.PendingApproval).ToListAsync(cancellationToken);
+
+    public async Task AddSubmissionAsync(TimesheetSubmission submission, CancellationToken cancellationToken) =>
+        await db.TimesheetSubmissions.AddAsync(submission, cancellationToken);
+
+    public Task<RunningTimer?> GetTimerAsync(Guid userId, CancellationToken cancellationToken) =>
+        db.RunningTimers.FirstOrDefaultAsync(t => t.UserId == userId, cancellationToken);
+
+    public async Task AddTimerAsync(RunningTimer timer, CancellationToken cancellationToken) => await db.RunningTimers.AddAsync(timer, cancellationToken);
+
+    public void RemoveTimer(RunningTimer timer) => db.RunningTimers.Remove(timer);
+
+    public async Task<IReadOnlyList<(Guid UserId, int Logged, int OpenTasks, int RemainingEstimated)>> WorkloadAsync(
+        Guid tenantId, DateOnly from, DateOnly to, CancellationToken cancellationToken)
+    {
+        var logged = await db.TimeEntries.Where(e => e.TenantId == tenantId && e.Date >= from && e.Date <= to)
+            .GroupBy(e => e.UserId).Select(g => new { UserId = g.Key, Minutes = g.Sum(e => e.Minutes) }).ToDictionaryAsync(x => x.UserId, x => x.Minutes, cancellationToken);
+
+        var open = await db.Tasks.IgnoreQueryFilters()
+            .Where(t => t.TenantId == tenantId && t.ArchivedAtUtc == null && t.Status != TaskItemStatus.Completed && t.AssignedUserId != null)
+            .Select(t => new { t.Id, User = t.AssignedUserId!.Value, t.EstimatedMinutes })
+            .Take(20000).ToListAsync(cancellationToken);
+
+        var estimatedIds = open.Where(t => t.EstimatedMinutes > 0).Select(t => t.Id).ToList();
+        var actualByTask = estimatedIds.Count == 0
+            ? new Dictionary<Guid, int>()
+            : await db.TimeEntries.Where(e => e.TenantId == tenantId && estimatedIds.Contains(e.TaskId))
+                .GroupBy(e => e.TaskId).Select(g => new { TaskId = g.Key, Minutes = g.Sum(e => e.Minutes) }).ToDictionaryAsync(x => x.TaskId, x => x.Minutes, cancellationToken);
+
+        var rows = new Dictionary<Guid, (int Logged, int Open, int Remaining)>();
+        foreach (var (user, minutes) in logged)
+        {
+            rows[user] = (minutes, 0, 0);
+        }
+
+        foreach (var t in open)
+        {
+            rows.TryGetValue(t.User, out var row);
+            var remaining = t.EstimatedMinutes is > 0 ? Math.Max(0, t.EstimatedMinutes.Value - actualByTask.GetValueOrDefault(t.Id)) : 0;
+            rows[t.User] = (row.Logged, row.Open + 1, row.Remaining + remaining);
+        }
+
+        return rows.Select(r => (r.Key, r.Value.Logged, r.Value.Open, r.Value.Remaining)).ToList();
+    }
+}
+
 public sealed class TaskPlanningRepository(TaskManagementDbContext db) : ITaskPlanningRepository
 {
     public async Task<IReadOnlyList<TaskDependency>> ListDependenciesAsync(Guid tenantId, Guid taskId, CancellationToken cancellationToken) =>

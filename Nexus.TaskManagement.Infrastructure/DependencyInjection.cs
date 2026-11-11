@@ -28,6 +28,7 @@ public static class DependencyInjection
         services.AddScoped<ITaskStatusRepository, TaskStatusRepository>();
         services.AddScoped<ITaskRequestRepository, TaskRequestRepository>();
         services.AddScoped<ITaskPlanningRepository, TaskPlanningRepository>();
+        services.AddScoped<ITimesheetRepository, TimesheetRepository>();
         services.AddScoped<ITaskFileRepository, TaskFileRepository>();
         services.AddScoped<INoteRepository, NoteRepository>();
         services.AddScoped<ITaskCommentRepository, TaskCommentRepository>();

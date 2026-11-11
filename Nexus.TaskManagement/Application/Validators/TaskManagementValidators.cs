@@ -182,6 +182,20 @@ public sealed class TaskFromMessageRequestValidator : AbstractValidator<TaskFrom
     }
 }
 
+public sealed class LogTimeRequestValidator : AbstractValidator<LogTimeRequest>
+{
+    public LogTimeRequestValidator()
+    {
+        RuleFor(x => x.TaskId).NotEmpty();
+        RuleFor(x => x.Note).MaximumLength(500);
+    }
+}
+
+public sealed class UpdateTimeEntryRequestValidator : AbstractValidator<UpdateTimeEntryRequest>
+{
+    public UpdateTimeEntryRequestValidator() => RuleFor(x => x.Note).MaximumLength(500);
+}
+
 public sealed class SaveCriterionRequestValidator : AbstractValidator<SaveCriterionRequest>
 {
     public SaveCriterionRequestValidator() => RuleFor(x => x.Text).NotEmpty().MaximumLength(300);

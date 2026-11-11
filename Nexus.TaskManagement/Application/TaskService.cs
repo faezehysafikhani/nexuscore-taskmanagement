@@ -1418,6 +1418,7 @@ public sealed class TaskService(
             task.ReviewComment,
             task.SourceType,
             task.SourceId,
-            task.BlockedReason);
+            task.BlockedReason,
+            task.EstimatedMinutes);
     }
 }
