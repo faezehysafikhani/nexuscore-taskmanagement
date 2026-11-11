@@ -41,7 +41,8 @@ public sealed class IdentityService(
     IPositionPermissionProvider? positionPermissions = null,
     IOptions<IdentitySeedOptions>? identityOptions = null,
     IUserQuota? userQuota = null,
-    NexusCore.Application.Identity.Security.IMfaService? mfa = null) : IIdentityService
+    NexusCore.Application.Identity.Security.IMfaService? mfa = null,
+    NexusCore.Application.Ldap.ILdapAuthenticator? ldap = null) : IIdentityService
 {
     private readonly ManagedPermissionOptions _managed = managedPermissionOptions.Value;
     private readonly SignInSessionOptions _session = sessionOptions?.Value ?? new SignInSessionOptions();
@@ -84,7 +85,10 @@ public sealed class IdentityService(
         // The identifier is a username or a mobile number; an email address matches nothing.
         var user = await repository.FindUserByLoginAsync(request.Identifier, request.TenantSlug, cancellationToken);
         _unknownAccountHash ??= passwordHasher.HashPassword(Convert.ToHexString(RandomNumberGenerator.GetBytes(16)));
-        var passwordChecked = passwordHasher.Verify(request.Password, user?.PasswordHash ?? _unknownAccountHash);
+        // A user that came from the directory (HR sync) is checked against it; the others against their stored password.
+        var passwordChecked = user?.LdapDn is not null && ldap is not null
+            ? await ldap.VerifyAsync(user, request.Password, cancellationToken)
+            : passwordHasher.Verify(request.Password, user?.PasswordHash ?? _unknownAccountHash);
         var passwordOk = user is not null && passwordChecked;
         if (user is null || !user.IsActive || !passwordOk)
         {

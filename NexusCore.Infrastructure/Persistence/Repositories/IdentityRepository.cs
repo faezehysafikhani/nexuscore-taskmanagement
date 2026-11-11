@@ -82,6 +82,15 @@ public sealed class IdentityRepository(
             cancellationToken);
     }
 
+    public Task<User?> FindUserByLdapDnAsync(Guid tenantId, string dn, CancellationToken cancellationToken) =>
+        dbContext.Users.FirstOrDefaultAsync(user => user.TenantId == tenantId && user.LdapDn == dn, cancellationToken);
+
+    public Task<User?> FindUserByUsernameAsync(Guid tenantId, string username, CancellationToken cancellationToken) =>
+        dbContext.Users.FirstOrDefaultAsync(user => user.TenantId == tenantId && user.Username == username, cancellationToken);
+
+    public async Task<IReadOnlyList<User>> ListLdapUsersAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        await dbContext.Users.Where(user => user.TenantId == tenantId && user.LdapDn != null).ToListAsync(cancellationToken);
+
     public Task<string?> FindPhoneNumberOwnerAsync(Guid tenantId, string phoneNumber, Guid? exceptUserId, CancellationToken cancellationToken)
     {
         var value = PhoneNumber.Normalize(phoneNumber) ?? phoneNumber.Trim();

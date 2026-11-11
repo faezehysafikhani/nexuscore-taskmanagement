@@ -49,8 +49,29 @@ public sealed record LdapConnectionSettings(
     bool TrustServerCertificate);
 
 /// <summary>The directory itself: implemented in Infrastructure over System.DirectoryServices.Protocols.</summary>
+/// <summary>The attributes of a directory entry that become a user (the names differ between directories).</summary>
+public sealed record LdapUserAttributes(
+    string Username = "sAMAccountName",
+    string DisplayName = "displayName",
+    string FirstName = "givenName",
+    string LastName = "sn",
+    string Email = "mail",
+    string Phone = "mobile");
+
+/// <summary>One person of the directory. IsDisabled is true for an Active Directory account that is switched off (userAccountControl).</summary>
+public sealed record LdapUserEntry(
+    string Dn, string? Username, string? DisplayName, string? FirstName, string? LastName, string? Email, string? Phone, bool IsDisabled);
+
+public sealed record LdapSearchResult(bool Success, string Message, IReadOnlyList<LdapUserEntry> Entries);
+
 public interface ILdapDirectoryClient
 {
+    /// <summary>Binds with the connection account and reads the people of the user base (at most <paramref name="maxEntries"/>). Never throws.</summary>
+    Task<LdapSearchResult> SearchUsersAsync(LdapConnectionSettings settings, LdapUserAttributes attributes, int maxEntries, CancellationToken cancellationToken);
+
+    /// <summary>Whether this person's password is right: a bind as <paramref name="userDn"/>. An empty password is never sent. Never throws.</summary>
+    Task<bool> AuthenticateAsync(LdapConnectionSettings settings, string userDn, string password, CancellationToken cancellationToken);
+
     /// <summary>Connects, binds and runs a small search of the user base. Never throws.</summary>
     Task<LdapTestResultDto> TestConnectionAsync(LdapConnectionSettings settings, CancellationToken cancellationToken);
 }
@@ -62,6 +83,9 @@ public interface ILdapSettingsService
 
     /// <summary>Tests the given settings (or the saved ones when null) without saving them.</summary>
     Task<Result<LdapTestResultDto>> TestAsync(LdapSettingsDto? settings, CancellationToken cancellationToken);
+
+    /// <summary>The saved connection with the password decrypted, for the sync and the sign-in - null when LDAP is not enabled for the tenant.</summary>
+    Task<LdapConnectionSettings?> GetConnectionAsync(Guid tenantId, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -189,6 +213,19 @@ public sealed class LdapSettingsService(
         await platformService.AuditAsync(result.Success ? "settings.ldap_test_succeeded" : "settings.ldap_test_failed",
             nameof(SystemSetting), null, candidate.Host, cancellationToken);
         return Result.Success(result);
+    }
+
+    public async Task<LdapConnectionSettings?> GetConnectionAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        var (s, password) = await ReadAsync(tenantId, cancellationToken);
+        if (!s.Enabled || string.IsNullOrWhiteSpace(s.Host))
+        {
+            return null;
+        }
+
+        return new LdapConnectionSettings(
+            s.Host.Trim(), s.Port, s.UseSsl, s.UseStartTls, Clean(s.Domain), Clean(s.BaseDn), Clean(s.BindUsername), password,
+            Clean(s.UserSearchBase), Clean(s.UserFilter) ?? DefaultUserFilter, s.ConnectionTimeoutSeconds, s.TrustServerCertificate);
     }
 
     private async Task<(LdapSettingsDto Settings, string? Password)> ReadAsync(Guid tenantId, CancellationToken cancellationToken)

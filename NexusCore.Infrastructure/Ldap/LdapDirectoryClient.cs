@@ -20,6 +20,137 @@ public sealed class LdapDirectoryClient(ILogger<LdapDirectoryClient> logger) : I
         // The protocol API is synchronous; keep it off the request thread.
         Task.Run(() => Test(settings), cancellationToken);
 
+    public Task<LdapSearchResult> SearchUsersAsync(LdapConnectionSettings settings, LdapUserAttributes attributes, int maxEntries, CancellationToken cancellationToken) =>
+        Task.Run(() => Search(settings, attributes, maxEntries), cancellationToken);
+
+    public Task<bool> AuthenticateAsync(LdapConnectionSettings settings, string userDn, string password, CancellationToken cancellationToken) =>
+        Task.Run(() => Authenticate(settings, userDn, password), cancellationToken);
+
+    private LdapConnection Open(LdapConnectionSettings settings, string? bindName, string? bindPassword)
+    {
+        var timeout = TimeSpan.FromSeconds(settings.ConnectionTimeoutSeconds);
+        var connection = new LdapConnection(new LdapDirectoryIdentifier(settings.Host, settings.Port, false, false)) { Timeout = timeout };
+        connection.SessionOptions.ProtocolVersion = 3;
+        connection.SessionOptions.ReferralChasing = ReferralChasingOptions.None;
+        if (settings.UseSsl)
+        {
+            connection.SessionOptions.SecureSocketLayer = true;
+        }
+
+        if (settings.TrustServerCertificate)
+        {
+            connection.SessionOptions.VerifyServerCertificate = (_, _) => true;
+        }
+
+        if (settings.UseStartTls)
+        {
+            connection.SessionOptions.StartTransportLayerSecurity(null);
+        }
+
+        if (string.IsNullOrWhiteSpace(bindName))
+        {
+            connection.AuthType = AuthType.Anonymous;
+        }
+        else
+        {
+            connection.AuthType = AuthType.Basic;
+            connection.Credential = new NetworkCredential(bindName, bindPassword ?? string.Empty);
+        }
+
+        connection.Bind();
+        return connection;
+    }
+
+    private bool Authenticate(LdapConnectionSettings settings, string userDn, string password)
+    {
+        // An empty password would be an anonymous bind, which always "succeeds": never try one.
+        if (string.IsNullOrEmpty(password) || string.IsNullOrWhiteSpace(userDn))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var connection = Open(settings, userDn, password);
+            return true;
+        }
+        catch (LdapException ex)
+        {
+            if (ex.ErrorCode != 49)
+            {
+                logger.LogWarning("LDAP sign-in check against {Host}:{Port} failed with LDAP error {Code}.", settings.Host, settings.Port, ex.ErrorCode);
+            }
+
+            return false;
+        }
+        catch (Exception ex) when (ex is DirectoryException or ArgumentException or PlatformNotSupportedException or DllNotFoundException)
+        {
+            logger.LogWarning("LDAP sign-in check against {Host}:{Port} failed: {ErrorType}.", settings.Host, settings.Port, ex.GetType().Name);
+            return false;
+        }
+    }
+
+    private LdapSearchResult Search(LdapConnectionSettings settings, LdapUserAttributes attributes, int maxEntries)
+    {
+        var timeout = TimeSpan.FromSeconds(Math.Max(settings.ConnectionTimeoutSeconds, 30));
+        try
+        {
+            using var connection = Open(settings, string.IsNullOrWhiteSpace(settings.BindUsername) ? null : BindName(settings), settings.BindPassword);
+            var searchBase = settings.UserSearchBase ?? settings.BaseDn;
+            if (searchBase is null)
+            {
+                return new LdapSearchResult(false, "Base DN یا مسیر جستجوی کاربران تعیین نشده است.", []);
+            }
+
+            string[] wanted = [attributes.Username, attributes.DisplayName, attributes.FirstName, attributes.LastName, attributes.Email, attributes.Phone, "userAccountControl", "distinguishedName"];
+            var request = new SearchRequest(searchBase, settings.UserFilter, SearchScope.Subtree, wanted) { TimeLimit = timeout };
+            // Paged: a directory refuses to return thousands of people in one answer.
+            var pager = new PageResultRequestControl(500);
+            request.Controls.Add(pager);
+
+            var entries = new List<LdapUserEntry>();
+            while (entries.Count < maxEntries)
+            {
+                var response = (SearchResponse)connection.SendRequest(request, timeout);
+                foreach (SearchResultEntry entry in response.Entries)
+                {
+                    if (entries.Count >= maxEntries)
+                    {
+                        break;
+                    }
+
+                    var flags = int.TryParse(First(entry, "userAccountControl"), out var uac) ? uac : 0;
+                    entries.Add(new LdapUserEntry(
+                        entry.DistinguishedName, First(entry, attributes.Username), First(entry, attributes.DisplayName), First(entry, attributes.FirstName),
+                        First(entry, attributes.LastName), First(entry, attributes.Email), First(entry, attributes.Phone), (flags & 0x2) != 0));
+                }
+
+                var control = response.Controls.OfType<PageResultResponseControl>().FirstOrDefault();
+                if (control is null || control.Cookie.Length == 0)
+                {
+                    break;
+                }
+
+                pager.Cookie = control.Cookie;
+            }
+
+            return new LdapSearchResult(true, $"{entries.Count} کاربر خوانده شد.", entries);
+        }
+        catch (LdapException ex)
+        {
+            logger.LogWarning("LDAP sync search against {Host}:{Port} failed with LDAP error {Code}.", settings.Host, settings.Port, ex.ErrorCode);
+            return new LdapSearchResult(false, ex.ErrorCode == 49 ? "نام کاربری یا رمز عبور اتصال (Bind) نادرست است." : $"اتصال به سرور LDAP ناموفق بود (کد {ex.ErrorCode}).", []);
+        }
+        catch (Exception ex) when (ex is DirectoryException or ArgumentException or PlatformNotSupportedException or DllNotFoundException)
+        {
+            logger.LogWarning("LDAP sync search against {Host}:{Port} failed: {ErrorType}.", settings.Host, settings.Port, ex.GetType().Name);
+            return new LdapSearchResult(false, "خواندن کاربران از LDAP ممکن نشد. تنظیمات و گزارش رویدادهای سرور را بررسی کنید.", []);
+        }
+    }
+
+    private static string? First(SearchResultEntry entry, string attribute) =>
+        entry.Attributes.Contains(attribute) && entry.Attributes[attribute].Count > 0 ? entry.Attributes[attribute][0]?.ToString() : null;
+
     private LdapTestResultDto Test(LdapConnectionSettings settings)
     {
         var watch = Stopwatch.StartNew();

@@ -14,6 +14,9 @@ GO
 IF COL_LENGTH(N'identity.Users', N'MfaEnabled') IS NULL ALTER TABLE [identity].[Users] ADD [MfaEnabled] bit NOT NULL CONSTRAINT [DF_Users_MfaEnabled] DEFAULT 0
 GO
 
+IF COL_LENGTH(N'identity.Users', N'LdapDn') IS NULL ALTER TABLE [identity].[Users] ADD [LdapDn] nvarchar(500) NULL
+GO
+
 IF OBJECT_ID(N'identity.MfaChallenges', N'U') IS NULL CREATE TABLE [identity].[MfaChallenges] ([Id] uniqueidentifier NOT NULL, [UserId] uniqueidentifier NOT NULL, [Purpose] int NOT NULL, [CodeHash] nvarchar(128) NOT NULL, [CreatedAtUtc] datetimeoffset NOT NULL, [ExpiresAtUtc] datetimeoffset NOT NULL, [Attempts] int NOT NULL, [UsedAtUtc] datetimeoffset NULL, [CreatedIp] nvarchar(64) NULL, CONSTRAINT [PK_MfaChallenges] PRIMARY KEY ([Id]))
 GO
 

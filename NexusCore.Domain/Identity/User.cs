@@ -80,6 +80,11 @@ public sealed class User : AuditableEntity<Guid>
     /// <summary>Send an SMS for every new sign-in to this account (off by default).</summary>
     public bool SmsOnEveryNewSignIn { get; private set; }
 
+    /// <summary>The distinguished name in the organization's directory when the account came from it (its password is then checked there).</summary>
+    public string? LdapDn { get; private set; }
+
+    public void SetLdapDn(string? dn) => LdapDn = string.IsNullOrWhiteSpace(dn) ? null : dn.Trim();
+
     public UserKind Kind { get; private set; }
 
     public void SetKind(UserKind kind) => Kind = kind;

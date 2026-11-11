@@ -512,6 +512,19 @@ public static class IdentityEndpoints
             .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(IdentityPermissions.LdapSettingsTest);
 
+        ldap.MapPost("/sync/preview", async (LdapSyncRequest? request, ILdapSyncService sync, CancellationToken cancellationToken) =>
+                (await sync.PreviewAsync(request ?? new LdapSyncRequest(), cancellationToken)).ToApiResult())
+            .WithSummary("HR sync: what would change if the directory's people were synced now (changes nothing)")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
+            .RequireAuthorization(IdentityPermissions.LdapSettingsUpdate);
+
+        ldap.MapPost("/sync", async (LdapSyncRequest? request, ILdapSyncService sync, CancellationToken cancellationToken) =>
+                (await sync.ApplyAsync(request ?? new LdapSyncRequest(), cancellationToken)).ToApiResult())
+            .WithSummary("HR sync: create, update and switch off users from the directory")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
+            .RequireAuthorization(IdentityPermissions.LdapSettingsUpdate)
+            .RequireAuthorization(IdentityPermissions.UsersCreate);
+
         app.MapIdentitySecurityEndpoints();
         return app;
     }

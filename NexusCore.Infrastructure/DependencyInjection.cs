@@ -123,6 +123,9 @@ public static class DependencyInjection
             .RemoveAllLoggers();
         // SMS providers: one implementation each; the panel setting picks one. Add a provider here.
         services.AddScoped<ISmsProvider, KavenegarSmsProvider>();
+        services.AddScoped<ISmsProvider, MelipayamakSmsProvider>();
+        services.AddScoped<ISmsProvider, GhasedakSmsProvider>();
+        services.AddScoped<ISmsProvider, SmsIrSmsProvider>();
         services.AddScoped<ISmsSender, GatewaySmsSender>();
         services.AddScoped<ISmsTemplateService, SmsTemplateService>();
         // The hours notification SMS wait for (the SMS panel sets them).

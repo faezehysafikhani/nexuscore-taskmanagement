@@ -399,6 +399,8 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
         public Caller AdminB { get; private set; } = null!;
         public IServiceProvider Services => _app.Services;
 
+        public ProgrammableLdap Ldap { get; } = new();
+
         /// <summary>The SMS the platform handed to its provider ("test"; off until a tenant enables it).</summary>
         public RecordingSmsProvider Sms { get; } = new();
 
@@ -458,6 +460,9 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
             builder.Services.AddNotificationApplication();
             builder.Services.AddNotificationInfrastructure(builder.Configuration);
             builder.Services.AddSignalR();
+            // The directory of the HR sync tests: programmable, never a real server.
+            builder.Services.AddSingleton(Ldap);
+            builder.Services.AddScoped<NexusCore.Application.Ldap.ILdapDirectoryClient>(p => p.GetRequiredService<ProgrammableLdap>());
             // Meetings, and the bridge that turns their action items into tasks (people: everyone of the tenant).
             builder.Services.AddCalendarMeetings(builder.Configuration);
             builder.Services.AddCalendarTasksIntegration();
@@ -725,4 +730,23 @@ public sealed class EveryoneOfTheTenantMeetingScope(NexusCoreDbContext identity,
         var people = await identity.Users.Where(u => u.TenantId == current.TenantId && u.IsActive).ToListAsync(cancellationToken);
         return new(true, true, people.Select(u => new Nexus.Calendar.Application.Meetings.MeetingPerson(u.Id, u.DisplayName, "", "peer")).ToList());
     }
+}
+
+/// <summary>A directory the tests fill in: its people, and the passwords that "bind" as them.</summary>
+public sealed class ProgrammableLdap : NexusCore.Application.Ldap.ILdapDirectoryClient
+{
+    public List<NexusCore.Application.Ldap.LdapUserEntry> Entries { get; } = [];
+    public Dictionary<string, string> Passwords { get; } = [];
+    public bool Fail { get; set; }
+
+    public Task<NexusCore.Application.Ldap.LdapTestResultDto> TestConnectionAsync(NexusCore.Application.Ldap.LdapConnectionSettings settings, CancellationToken cancellationToken) =>
+        Task.FromResult(new NexusCore.Application.Ldap.LdapTestResultDto(true, "ok", Entries.Count, 1));
+
+    public Task<NexusCore.Application.Ldap.LdapSearchResult> SearchUsersAsync(NexusCore.Application.Ldap.LdapConnectionSettings settings, NexusCore.Application.Ldap.LdapUserAttributes attributes, int maxEntries, CancellationToken cancellationToken) =>
+        Task.FromResult(Fail
+            ? new NexusCore.Application.Ldap.LdapSearchResult(false, "directory down", [])
+            : new NexusCore.Application.Ldap.LdapSearchResult(true, "ok", Entries.Take(maxEntries).ToList()));
+
+    public Task<bool> AuthenticateAsync(NexusCore.Application.Ldap.LdapConnectionSettings settings, string userDn, string password, CancellationToken cancellationToken) =>
+        Task.FromResult(!string.IsNullOrEmpty(password) && Passwords.TryGetValue(userDn, out var expected) && expected == password);
 }
