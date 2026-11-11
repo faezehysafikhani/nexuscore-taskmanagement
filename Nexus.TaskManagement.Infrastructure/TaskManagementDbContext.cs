@@ -33,6 +33,7 @@ public sealed class TaskManagementDbContext(
     public DbSet<TaskFileAsset> Files => Set<TaskFileAsset>();
     public DbSet<TaskFile> TaskFiles => Set<TaskFile>();
     public DbSet<Tag> Tags => Set<Tag>();
+    public DbSet<ReportSubscription> ReportSubscriptions => Set<ReportSubscription>();
     public DbSet<TaskRetentionSetting> TaskRetentionSettings => Set<TaskRetentionSetting>();
     public DbSet<TenantMembership> TenantMemberships => Set<TenantMembership>();
     public DbSet<WebhookSubscription> WebhookSubscriptions => Set<WebhookSubscription>();

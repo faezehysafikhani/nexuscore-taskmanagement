@@ -70,6 +70,9 @@ public interface ITaskRepository
 
     Task<bool> UserGroupExistsAsync(Guid tenantId, Guid userGroupId, CancellationToken cancellationToken);
 
+    /// <summary>Sign-in names to user ids, within the tenant (for an import that names people).</summary>
+    Task<IReadOnlyDictionary<string, Guid>> GetUserIdsByUsernameAsync(Guid tenantId, IReadOnlyCollection<string> usernames, CancellationToken cancellationToken);
+
     /// <summary>The tasks among these that are waiting for review, whoever is signed in.</summary>
     Task<IReadOnlyList<TaskItem>> GetInReviewAsync(Guid tenantId, IReadOnlyCollection<Guid> taskIds, CancellationToken cancellationToken);
 
@@ -151,6 +154,28 @@ public interface IMembershipService
 
     /// <summary>Null when adding <paramref name="addBytes"/> of files is allowed; otherwise why not.</summary>
     Task<NexusCore.SharedKernel.Results.Error?> CheckStorageAsync(Guid tenantId, long addBytes, CancellationToken cancellationToken);
+}
+
+public interface IReportSubscriptionRepository
+{
+    Task<IReadOnlyList<ReportSubscription>> ListOfUserAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken);
+    Task<ReportSubscription?> GetAsync(Guid tenantId, Guid userId, Guid id, CancellationToken cancellationToken);
+    Task AddAsync(ReportSubscription subscription, CancellationToken cancellationToken);
+    void Remove(ReportSubscription subscription);
+}
+
+/// <summary>A person's own tasks, counted, whoever is signed in (a job builds it for the person it is for).</summary>
+public interface ITaskDigestSource
+{
+    Task<TaskDigest> BuildAsync(Guid tenantId, Guid userId, DateOnly today, CancellationToken cancellationToken);
+}
+
+public interface IReportSubscriptionService
+{
+    Task<Result<IReadOnlyList<ReportSubscriptionDto>>> ListAsync(CancellationToken cancellationToken);
+    Task<Result<ReportSubscriptionDto>> CreateAsync(SaveReportSubscriptionRequest request, CancellationToken cancellationToken);
+    Task<Result<ReportSubscriptionDto>> UpdateAsync(Guid id, SaveReportSubscriptionRequest request, CancellationToken cancellationToken);
+    Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken);
 }
 
 public interface IWebhookRepository
@@ -316,6 +341,15 @@ public interface ITaskRequestService
     Task<Result<IReadOnlyList<TaskRequestDto>>> ListAsync(bool mine, TaskRequestStatus? status, CancellationToken cancellationToken);
     Task<Result<TaskDto>> ConvertAsync(Guid id, ConvertTaskRequestRequest request, CancellationToken cancellationToken);
     Task<Result<TaskRequestDto>> RejectAsync(Guid id, RejectTaskRequestRequest request, CancellationToken cancellationToken);
+}
+
+public interface ITaskImportService
+{
+    /// <summary>Reads the CSV and says, row by row, what would be created and what is wrong. Creates nothing.</summary>
+    Task<Result<ImportPreviewDto>> PreviewAsync(ImportTasksRequest request, CancellationToken cancellationToken);
+
+    /// <summary>Creates the valid rows (through the ordinary task rules). Invalid rows refuse the import unless SkipInvalid.</summary>
+    Task<Result<ImportResultDto>> ImportAsync(ImportTasksRequest request, CancellationToken cancellationToken);
 }
 
 public interface ITaskReviewService

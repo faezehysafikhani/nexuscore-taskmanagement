@@ -130,6 +130,97 @@ public sealed class TaskRetentionSetting
     }
 }
 
+public enum ReportFrequency
+{
+    Daily = 0,
+    Weekly = 1,
+    Monthly = 2
+}
+
+/// <summary>A person's standing request for a digest of their own tasks, sent by SMS and/or email at a set time (Iran time).</summary>
+public sealed class ReportSubscription : NexusCore.SharedKernel.Domain.AuditableEntity<Guid>
+{
+    public static readonly TimeSpan IranOffset = TimeSpan.FromMinutes(210);
+
+    private ReportSubscription() : base(Guid.Empty)
+    {
+    }
+
+    public ReportSubscription(Guid id, Guid tenantId, Guid userId, ReportFrequency frequency, DayOfWeek? dayOfWeek, int? dayOfMonth, int hour, bool sms, bool email, DateTimeOffset nowUtc) : base(id)
+    {
+        TenantId = tenantId;
+        UserId = userId;
+        IsActive = true;
+        Set(frequency, dayOfWeek, dayOfMonth, hour, sms, email, nowUtc);
+    }
+
+    public Guid TenantId { get; private set; }
+    public Guid UserId { get; private set; }
+    public ReportFrequency Frequency { get; private set; }
+    public DayOfWeek? DayOfWeek { get; private set; }
+    public int? DayOfMonth { get; private set; }
+
+    /// <summary>The hour of the day in Iran time (0-23).</summary>
+    public int Hour { get; private set; }
+    public bool BySms { get; private set; }
+    public bool ByEmail { get; private set; }
+    public bool IsActive { get; private set; }
+    public DateTimeOffset NextRunAtUtc { get; private set; }
+    public DateTimeOffset? LastSentAtUtc { get; private set; }
+
+    public void Set(ReportFrequency frequency, DayOfWeek? dayOfWeek, int? dayOfMonth, int hour, bool sms, bool email, DateTimeOffset nowUtc)
+    {
+        Frequency = frequency;
+        DayOfWeek = frequency == ReportFrequency.Weekly ? dayOfWeek ?? System.DayOfWeek.Saturday : null;
+        DayOfMonth = frequency == ReportFrequency.Monthly ? Math.Clamp(dayOfMonth ?? 1, 1, 28) : null;
+        Hour = Math.Clamp(hour, 0, 23);
+        BySms = sms;
+        ByEmail = email;
+        NextRunAtUtc = NextRunAfter(nowUtc);
+    }
+
+    public void SetActive(bool active, DateTimeOffset nowUtc)
+    {
+        IsActive = active;
+        if (active)
+        {
+            NextRunAtUtc = NextRunAfter(nowUtc);
+        }
+    }
+
+    /// <summary>Sent: the next run is the one after <paramref name="nowUtc"/>.</summary>
+    public void MarkSent(DateTimeOffset nowUtc)
+    {
+        LastSentAtUtc = nowUtc;
+        NextRunAtUtc = NextRunAfter(nowUtc);
+    }
+
+    /// <summary>The next moment (UTC) this subscription is due strictly after <paramref name="after"/>.</summary>
+    public DateTimeOffset NextRunAfter(DateTimeOffset after)
+    {
+        var local = after.ToOffset(IranOffset);
+        var day = DateOnly.FromDateTime(local.DateTime);
+        DateTimeOffset At(DateOnly d) => new(d.ToDateTime(new TimeOnly(Hour, 0)), IranOffset);
+
+        for (var i = 0; i < 400; i++)
+        {
+            var candidate = day.AddDays(i);
+            var fits = Frequency switch
+            {
+                ReportFrequency.Daily => true,
+                ReportFrequency.Weekly => candidate.DayOfWeek == (DayOfWeek ?? System.DayOfWeek.Saturday),
+                _ => candidate.Day == (DayOfMonth ?? 1)
+            };
+            if (fits && At(candidate) > local)
+            {
+                return At(candidate).ToUniversalTime();
+            }
+        }
+
+        return after.AddDays(1);
+    }
+}
+
 /// <summary>One event to send to one subscription; kept until delivered (or given up on) - the webhook outbox.</summary>
 public sealed class WebhookDelivery
 {

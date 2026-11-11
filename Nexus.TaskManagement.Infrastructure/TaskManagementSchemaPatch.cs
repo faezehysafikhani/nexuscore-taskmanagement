@@ -421,6 +421,33 @@ public static class TaskManagementSchema
                 CONSTRAINT [PK_TaskRetentionSettings] PRIMARY KEY ([TenantId]));
         """;
 
+    /// <summary>Scheduled digests of a person's tasks (phase 9c).</summary>
+    public const string AddReportSubscriptionsSql = """
+        IF SCHEMA_ID(N'task_management') IS NOT NULL AND OBJECT_ID(N'[task_management].[ReportSubscriptions]') IS NULL
+        BEGIN
+            CREATE TABLE [task_management].[ReportSubscriptions] (
+                [Id] uniqueidentifier NOT NULL,
+                [TenantId] uniqueidentifier NOT NULL,
+                [UserId] uniqueidentifier NOT NULL,
+                [Frequency] int NOT NULL,
+                [DayOfWeek] int NULL,
+                [DayOfMonth] int NULL,
+                [Hour] int NOT NULL,
+                [BySms] bit NOT NULL,
+                [ByEmail] bit NOT NULL,
+                [IsActive] bit NOT NULL,
+                [NextRunAtUtc] datetimeoffset NOT NULL,
+                [LastSentAtUtc] datetimeoffset NULL,
+                [CreatedAtUtc] datetimeoffset NOT NULL,
+                [CreatedByUserId] uniqueidentifier NULL,
+                [ModifiedAtUtc] datetimeoffset NULL,
+                [ModifiedByUserId] uniqueidentifier NULL,
+                CONSTRAINT [PK_ReportSubscriptions] PRIMARY KEY ([Id]));
+            CREATE INDEX [IX_ReportSubscriptions_IsActive_NextRunAtUtc] ON [task_management].[ReportSubscriptions] ([IsActive], [NextRunAtUtc]);
+            CREATE INDEX [IX_ReportSubscriptions_TenantId_UserId] ON [task_management].[ReportSubscriptions] ([TenantId], [UserId]);
+        END
+        """;
+
     /// <summary>The index on the new column, in its own batch.</summary>
     public const string AddCustomStatusIndexSql = """
         IF OBJECT_ID(N'[task_management].[Tasks]') IS NOT NULL AND COL_LENGTH(N'task_management.Tasks', N'CustomStatusId') IS NOT NULL
@@ -481,6 +508,7 @@ public sealed class TaskManagementSchemaPatcher(IServiceScopeFactory scopes, ILo
                 await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddWebhooksSql, cancellationToken);
                 await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddMembershipSql, cancellationToken);
                 await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddRetentionSql, cancellationToken);
+                await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddReportSubscriptionsSql, cancellationToken);
             }
         }
         catch (Exception ex)

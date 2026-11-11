@@ -32,6 +32,7 @@ public static class TaskManagementEndpoints
         app.MapAutomationEndpoints();
         app.MapWebhookEndpoints();
         app.MapMembershipEndpoints();
+        app.MapReportSubscriptionEndpoints();
         app.MapTaskFileEndpoints();
         app.MapNoteEndpoints();
         app.MapReminderSettingsEndpoints();
@@ -155,6 +156,14 @@ public static class TaskManagementEndpoints
             .WithSummary("Quick add: a title is enough (due today unless a date is given, given to the caller)")
             .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.Create);
+
+        group.MapPost("/import/preview", async (ImportTasksRequest r, ITaskImportService s, CancellationToken ct) => (await s.PreviewAsync(r, ct)).ToApiResult())
+            .WithSummary("Import preview: read a CSV of tasks and report each row (changes nothing)")
+            .RequireAuthorization(TaskManagementPermissions.Create);
+
+        group.MapPost("/import", async (ImportTasksRequest r, ITaskImportService s, CancellationToken ct) => (await s.ImportAsync(r, ct)).ToApiResult())
+            .WithSummary("Import the rows of a CSV as tasks")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(TaskManagementPermissions.Create);
 
         group.MapPost("/from-message", async (TaskFromMessageRequest request, ITaskBatchService service, CancellationToken cancellationToken) =>
                 (await service.FromMessageAsync(request, cancellationToken)).ToApiResult())
@@ -421,6 +430,23 @@ public static class TaskManagementEndpoints
             .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.ManageTags);
 
+        return app;
+    }
+
+    private static IEndpointRouteBuilder MapReportSubscriptionEndpoints(this IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/task-management/report-subscriptions").WithTags("Report distribution").RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi).AddEndpointFilter<RequestValidationFilter>();
+        const string View = TaskManagementPermissions.View;
+
+        group.MapGet("/", async (IReportSubscriptionService s, CancellationToken ct) => (await s.ListAsync(ct)).ToApiResult())
+            .WithSummary("My scheduled digests of my own tasks (SMS / email)").RequireAuthorization(View);
+        group.MapPost("/", async (SaveReportSubscriptionRequest r, IReportSubscriptionService s, CancellationToken ct) => (await s.CreateAsync(r, ct)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(View);
+        group.MapPut("/{id:guid}", async (Guid id, SaveReportSubscriptionRequest r, IReportSubscriptionService s, CancellationToken ct) => (await s.UpdateAsync(id, r, ct)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(View);
+        group.MapDelete("/{id:guid}", async (Guid id, IReportSubscriptionService s, CancellationToken ct) => (await s.DeleteAsync(id, ct)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(View);
         return app;
     }
 

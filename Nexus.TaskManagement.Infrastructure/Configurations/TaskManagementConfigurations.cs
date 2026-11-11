@@ -428,6 +428,18 @@ internal sealed class TaskRetentionSettingConfiguration : IEntityTypeConfigurati
     }
 }
 
+internal sealed class ReportSubscriptionConfiguration : IEntityTypeConfiguration<ReportSubscription>
+{
+    public void Configure(EntityTypeBuilder<ReportSubscription> builder)
+    {
+        builder.ToTable("ReportSubscriptions", Schema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.HasIndex(x => new { x.IsActive, x.NextRunAtUtc });
+        builder.HasIndex(x => new { x.TenantId, x.UserId });
+    }
+}
+
 internal sealed class TagConfiguration : IEntityTypeConfiguration<Tag>
 {
     public void Configure(EntityTypeBuilder<Tag> builder)

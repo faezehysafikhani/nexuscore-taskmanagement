@@ -377,6 +377,18 @@ public sealed record SetMembershipRequest(string PlanName, int? MaxUsers = null,
 
 public sealed record RetentionDto(int? AutomationLogDays, int? WebhookDeliveryDays);
 
+public sealed record ReportSubscriptionDto(
+    Guid Id, ReportFrequency Frequency, DayOfWeek? DayOfWeek, int? DayOfMonth, int Hour, bool BySms, bool ByEmail, bool IsActive, DateTimeOffset NextRunAtUtc, DateTimeOffset? LastSentAtUtc);
+public sealed record SaveReportSubscriptionRequest(ReportFrequency Frequency, DayOfWeek? DayOfWeek = null, int? DayOfMonth = null, int Hour = 8, bool BySms = true, bool ByEmail = false, bool IsActive = true);
+
+/// <summary>What the digest says about one person's tasks.</summary>
+public sealed record TaskDigest(int Overdue, int DueToday, int DueSoon, int InProgress, int CompletedLastWeek, IReadOnlyList<string> OverdueTitles);
+
+public sealed record ImportTasksRequest(string Csv, bool SkipInvalid = false);
+public sealed record ImportRowDto(int Line, string? Title, DateOnly? DueDate, TaskPriority? Priority, string? Assignee, bool Valid, IReadOnlyList<string> Errors);
+public sealed record ImportPreviewDto(int Total, int Valid, int Invalid, IReadOnlyList<ImportRowDto> Rows);
+public sealed record ImportResultDto(int Created, int Skipped, IReadOnlyList<Guid> TaskIds, IReadOnlyList<ImportRowDto> Failed);
+
 public sealed record SubmitTaskReviewRequest(string? Comment = null);
 
 /// <summary>A task waiting for the signed-in person's review - what "my reviews" shows next to the approval.</summary>

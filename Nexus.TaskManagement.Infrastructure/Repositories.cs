@@ -268,6 +268,17 @@ public sealed class TaskRepository(TaskManagementDbContext db) : ITaskRepository
     public Task<bool> UserGroupExistsAsync(Guid tenantId, Guid userGroupId, CancellationToken cancellationToken) =>
         db.UserGroups.AnyAsync(g => g.Id == userGroupId && g.TenantId == tenantId, cancellationToken);
 
+    public async Task<IReadOnlyDictionary<string, Guid>> GetUserIdsByUsernameAsync(Guid tenantId, IReadOnlyCollection<string> usernames, CancellationToken cancellationToken)
+    {
+        if (usernames.Count == 0)
+        {
+            return new Dictionary<string, Guid>();
+        }
+
+        var rows = await db.Users.Where(u => u.TenantId == tenantId && u.Username != null && usernames.Contains(u.Username)).Select(u => new { u.Username, u.Id }).ToListAsync(cancellationToken);
+        return rows.ToDictionary(r => r.Username!, r => r.Id, StringComparer.OrdinalIgnoreCase);
+    }
+
     public async Task<IReadOnlyList<TaskItem>> GetInReviewAsync(
         Guid tenantId, IReadOnlyCollection<Guid> taskIds, CancellationToken cancellationToken) =>
         await db.Tasks.IgnoreQueryFilters()
@@ -369,6 +380,39 @@ public sealed class TaskStatusRepository(TaskManagementDbContext db) : ITaskStat
         }
 
         db.TaskStatuses.Remove(status);
+    }
+}
+
+public sealed class ReportSubscriptionRepository(TaskManagementDbContext db) : IReportSubscriptionRepository
+{
+    public async Task<IReadOnlyList<ReportSubscription>> ListOfUserAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken) =>
+        await db.ReportSubscriptions.Where(s => s.TenantId == tenantId && s.UserId == userId).OrderBy(s => s.CreatedAtUtc).ToListAsync(cancellationToken);
+
+    public Task<ReportSubscription?> GetAsync(Guid tenantId, Guid userId, Guid id, CancellationToken cancellationToken) =>
+        db.ReportSubscriptions.FirstOrDefaultAsync(s => s.TenantId == tenantId && s.UserId == userId && s.Id == id, cancellationToken);
+
+    public async Task AddAsync(ReportSubscription subscription, CancellationToken cancellationToken) => await db.ReportSubscriptions.AddAsync(subscription, cancellationToken);
+
+    public void Remove(ReportSubscription subscription) => db.ReportSubscriptions.Remove(subscription);
+}
+
+public sealed class TaskDigestSource(TaskManagementDbContext db) : ITaskDigestSource
+{
+    public async Task<TaskDigest> BuildAsync(Guid tenantId, Guid userId, DateOnly today, CancellationToken cancellationToken)
+    {
+        // The person's tasks: the ones they are responsible for. No per-request access filter applies (a job builds this).
+        var mine = db.Tasks.IgnoreQueryFilters().Where(t => t.TenantId == tenantId && t.ArchivedAtUtc == null
+            && (t.AssignedUserId == userId || t.Assignees.Any(a => a.UserId == userId && a.IsResponsible)));
+        var open = mine.Where(t => t.Status != TaskItemStatus.Completed);
+        var soon = today.AddDays(7);
+        var weekAgo = DateTimeOffset.UtcNow.AddDays(-7);
+        return new TaskDigest(
+            await open.CountAsync(t => t.DueDate < today, cancellationToken),
+            await open.CountAsync(t => t.DueDate == today, cancellationToken),
+            await open.CountAsync(t => t.DueDate > today && t.DueDate <= soon, cancellationToken),
+            await open.CountAsync(t => t.Status == TaskItemStatus.InProgress, cancellationToken),
+            await mine.CountAsync(t => t.Status == TaskItemStatus.Completed && t.ActualCompletionDateUtc >= weekAgo, cancellationToken),
+            await open.Where(t => t.DueDate < today).OrderBy(t => t.DueDate).Select(t => t.Title).Take(5).ToListAsync(cancellationToken));
     }
 }
 

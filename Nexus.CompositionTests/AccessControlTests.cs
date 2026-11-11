@@ -600,7 +600,9 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
             await db.SaveChangesAsync();
 
             var taskDb = scope.ServiceProvider.GetRequiredService<TaskManagementDbContext>();
-            taskDb.Users.Add(new User(user.Id, tenantId, null, user.DisplayName, "not-used"));
+            var mirror = new User(user.Id, tenantId, null, user.DisplayName, "not-used");
+            mirror.UpdateContactDetails(user.Username, null, notifySms: false);
+            taskDb.Users.Add(mirror);
             await taskDb.SaveChangesAsync();
 
             // Signed with no permissions: every request reads the user's current ones.

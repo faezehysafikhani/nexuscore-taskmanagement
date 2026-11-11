@@ -33,6 +33,8 @@ public static class DependencyInjection
         services.AddScoped<ITimesheetService, TimesheetService>();
         services.AddScoped<ITaskAutomation, TaskAutomationEngine>();
         services.AddScoped<IWebhookService, WebhookService>();
+        services.AddScoped<ITaskImportService, TaskImportService>();
+        services.AddScoped<IReportSubscriptionService, ReportSubscriptionService>();
         services.AddScoped<IRetentionService, RetentionService>();
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<MembershipService>();
@@ -91,6 +93,8 @@ public static class DependencyInjection
         services.AddScoped<IValidator<CreateRepetitiveTaskRequest>, CreateRepetitiveTaskRequestValidator>();
         services.AddScoped<IValidator<UpdateRepetitiveTaskRequest>, UpdateRepetitiveTaskRequestValidator>();
         services.AddScoped<IValidator<SubmitTaskReviewRequest>, SubmitTaskReviewRequestValidator>();
+        services.AddScoped<IValidator<ImportTasksRequest>, ImportTasksRequestValidator>();
+        services.AddScoped<IValidator<SaveReportSubscriptionRequest>, SaveReportSubscriptionRequestValidator>();
         services.AddScoped<IValidator<SetMembershipRequest>, SetMembershipRequestValidator>();
         services.AddScoped<IValidator<SaveWebhookRequest>, SaveWebhookRequestValidator>();
         services.AddScoped<IValidator<SaveAutomationRuleRequest>, SaveAutomationRuleRequestValidator>();

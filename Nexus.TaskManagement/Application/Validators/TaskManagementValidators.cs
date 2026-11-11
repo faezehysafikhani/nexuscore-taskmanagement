@@ -182,6 +182,16 @@ public sealed class TaskFromMessageRequestValidator : AbstractValidator<TaskFrom
     }
 }
 
+public sealed class ImportTasksRequestValidator : AbstractValidator<ImportTasksRequest>
+{
+    public ImportTasksRequestValidator() => RuleFor(x => x.Csv).NotEmpty();
+}
+
+public sealed class SaveReportSubscriptionRequestValidator : AbstractValidator<SaveReportSubscriptionRequest>
+{
+    public SaveReportSubscriptionRequestValidator() => RuleFor(x => x.Frequency).IsInEnum();
+}
+
 public sealed class SetMembershipRequestValidator : AbstractValidator<SetMembershipRequest>
 {
     public SetMembershipRequestValidator()
