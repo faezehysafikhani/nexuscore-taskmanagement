@@ -182,6 +182,41 @@ public sealed class TaskFromMessageRequestValidator : AbstractValidator<TaskFrom
     }
 }
 
+public sealed class SaveCriterionRequestValidator : AbstractValidator<SaveCriterionRequest>
+{
+    public SaveCriterionRequestValidator() => RuleFor(x => x.Text).NotEmpty().MaximumLength(300);
+}
+
+public sealed class SetTaskBlockerRequestValidator : AbstractValidator<SetTaskBlockerRequest>
+{
+    public SetTaskBlockerRequestValidator() => RuleFor(x => x.Reason).MaximumLength(300);
+}
+
+public sealed class BulkSubTasksRequestValidator : AbstractValidator<BulkSubTasksRequest>
+{
+    public BulkSubTasksRequestValidator()
+    {
+        RuleFor(x => x.Titles).NotNull();
+        RuleForEach(x => x.Titles).MaximumLength(200);
+    }
+}
+
+public sealed class SaveTaskTemplateRequestValidator : AbstractValidator<SaveTaskTemplateRequest>
+{
+    public SaveTaskTemplateRequestValidator()
+    {
+        RuleFor(x => x.Name).NotEmpty().MaximumLength(100);
+        RuleFor(x => x.Body).NotNull();
+        RuleFor(x => x.Body.Title).NotEmpty().MaximumLength(200).When(x => x.Body is not null);
+        RuleFor(x => x.Body.Priority).IsInEnum().When(x => x.Body is not null);
+    }
+}
+
+public sealed class SaveTaskAsTemplateRequestValidator : AbstractValidator<SaveTaskAsTemplateRequest>
+{
+    public SaveTaskAsTemplateRequestValidator() => RuleFor(x => x.Name).NotEmpty().MaximumLength(100);
+}
+
 public sealed class SubmitTaskReviewRequestValidator : AbstractValidator<SubmitTaskReviewRequest>
 {
     public SubmitTaskReviewRequestValidator() => RuleFor(x => x.Comment).MaximumLength(1000);

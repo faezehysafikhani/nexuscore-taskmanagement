@@ -140,7 +140,8 @@ public sealed record TaskDto(
     DateTimeOffset? ReviewDecidedAtUtc = null,
     string? ReviewComment = null,
     string? SourceType = null,
-    Guid? SourceId = null);
+    Guid? SourceId = null,
+    string? BlockedReason = null);
 
 /// <summary>
 /// Someone standing in for a vacant post of the task (جانشین): sees it and comments, nothing more.
@@ -294,6 +295,27 @@ public sealed record RejectTaskRequestRequest(string? Note = null);
 
 /// <summary>A task made from a chat message: the text becomes the description, and the message is kept as the task's source.</summary>
 public sealed record TaskFromMessageRequest(Guid MessageId, string Text, string? Title = null, DateOnly? DueDate = null);
+
+public sealed record TaskBriefDto(Guid Id, string Title, TaskItemStatus Status, bool IsDone);
+public sealed record CriterionDto(Guid Id, string Text, bool IsMet, int SortOrder);
+
+/// <summary>What stands between a task and its completion: tasks it waits for, tasks waiting for it, its free-text blocker and its acceptance criteria.</summary>
+public sealed record TaskPlanningDto(string? BlockedReason, IReadOnlyList<TaskBriefDto> BlockedBy, IReadOnlyList<TaskBriefDto> Blocking, IReadOnlyList<CriterionDto> Criteria, bool CanComplete);
+
+public sealed record AddTaskDependencyRequest(Guid BlockedByTaskId);
+public sealed record SetTaskBlockerRequest(string? Reason);
+public sealed record SaveCriterionRequest(string Text);
+public sealed record SetCriterionMetRequest(bool Met);
+public sealed record BulkSubTasksRequest(IReadOnlyList<string> Titles);
+public sealed record WipSettingDto(int? LimitPerUser);
+
+public sealed record TaskTemplateBody(
+    string Title, string? Description, TaskPriority Priority, bool IsProject, int DueInDays,
+    IReadOnlyList<string> SubTasks, IReadOnlyList<string> Criteria, IReadOnlyList<string> Tags);
+public sealed record TaskTemplateDto(Guid Id, string Name, bool IsProject, TaskTemplateBody Body);
+public sealed record SaveTaskTemplateRequest(string Name, TaskTemplateBody Body);
+public sealed record SaveTaskAsTemplateRequest(string Name);
+public sealed record InstantiateTemplateRequest(string? Title = null, DateOnly? DueDate = null, Guid? AssignedUserId = null);
 
 public sealed record SubmitTaskReviewRequest(string? Comment = null);
 

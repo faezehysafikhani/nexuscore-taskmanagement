@@ -15,6 +15,7 @@ public static class TaskManagementPermissions
     public const string ManageNotes = "Notes.Manage";
     public const string Comment = "Tasks.Comment";
     public const string ManageStatuses = "Tasks.ManageStatuses";
+    public const string ManageTemplates = "Tasks.ManageTemplates";
     public const string SubmitRequests = "Requests.Submit";
     public const string HandleRequests = "Requests.Handle";
     public const string ManageRequests = "Requests.Manage";
@@ -39,6 +40,7 @@ public static class TaskManagementPermissions
         new(ManageNotes, "TaskManagement", "مدیریت یادداشت‌های شخصی"),
         new(Comment, "TaskManagement", "ثبت دیدگاه روی فعالیت‌ها"),
         new(ManageStatuses, "TaskManagement", "مدیریت وضعیت‌های سفارشی فعالیت"),
+        new(ManageTemplates, "TaskManagement", "مدیریت قالب‌های وظیفه و پروژه"),
         new(SubmitRequests, "TaskManagement", "ثبت درخواست"),
         new(HandleRequests, "TaskManagement", "بررسی درخواست‌ها و تبدیل به فعالیت"),
         new(ManageRequests, "TaskManagement", "مدیریت دسته‌بندی و ارجاع درخواست‌ها"),

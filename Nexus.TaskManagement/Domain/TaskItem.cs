@@ -297,6 +297,11 @@ public sealed class TaskItem : AuditableEntity<Guid>
     /// <summary>The organization-defined status the task shows, if any; <see cref="Status"/> is then its category.</summary>
     public Guid? CustomStatusId { get; private set; }
 
+    /// <summary>A free-text blocker ("waiting for the supplier"); null when nothing blocks the task.</summary>
+    public string? BlockedReason { get; private set; }
+
+    public void SetBlockedReason(string? reason) => BlockedReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+
     /// <summary>Where the task came from ("Request", "ChatMessage") and the id of that thing: a task made from something keeps it.</summary>
     public string? SourceType { get; private set; }
     public Guid? SourceId { get; private set; }

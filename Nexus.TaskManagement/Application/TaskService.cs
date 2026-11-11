@@ -12,6 +12,7 @@ public sealed class TaskService(
     ITaskRepository repository,
     ITagRepository tagRepository,
     ITaskStatusRepository statusRepository,
+    ITaskPlanningRepository planning,
     ITaskManagementUnitOfWork unitOfWork,
     ICurrentUserContext currentUser,
     ITaskActivityService activity,
@@ -528,6 +529,12 @@ public sealed class TaskService(
         if (task.IsInReview && newStatus == TaskItemStatus.Completed)
         {
             return Result.Failure<TaskDto>(Error.Conflict("This task is waiting for review; it is completed when the review approves it."));
+        }
+
+        var refusal = await TaskPlanningRules.CheckAsync(planning, task, newStatus, currentUser.UserId, cancellationToken);
+        if (refusal is not null)
+        {
+            return Result.Failure<TaskDto>(Error.Conflict(refusal));
         }
 
         var previous = task.Status;
@@ -1410,6 +1417,7 @@ public sealed class TaskService(
             task.ReviewDecidedAtUtc,
             task.ReviewComment,
             task.SourceType,
-            task.SourceId);
+            task.SourceId,
+            task.BlockedReason);
     }
 }

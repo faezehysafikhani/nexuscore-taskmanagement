@@ -33,6 +33,10 @@ public sealed class TaskManagementDbContext(
     public DbSet<TaskFileAsset> Files => Set<TaskFileAsset>();
     public DbSet<TaskFile> TaskFiles => Set<TaskFile>();
     public DbSet<Tag> Tags => Set<Tag>();
+    public DbSet<TaskDependency> TaskDependencies => Set<TaskDependency>();
+    public DbSet<TaskCriterion> TaskCriteria => Set<TaskCriterion>();
+    public DbSet<TaskWipSetting> TaskWipSettings => Set<TaskWipSetting>();
+    public DbSet<TaskTemplate> TaskTemplates => Set<TaskTemplate>();
     public DbSet<RequestCategory> RequestCategories => Set<RequestCategory>();
     public DbSet<TaskRequest> TaskRequests => Set<TaskRequest>();
     public DbSet<TaskStatusDefinition> TaskStatuses => Set<TaskStatusDefinition>();

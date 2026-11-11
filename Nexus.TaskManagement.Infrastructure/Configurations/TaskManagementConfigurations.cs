@@ -29,6 +29,7 @@ internal sealed class TaskItemConfiguration : IEntityTypeConfiguration<TaskItem>
         builder.Property(x => x.RowVersion).IsRowVersion();
         builder.Property(x => x.ReviewComment).HasMaxLength(1000);
         builder.Property(x => x.SourceType).HasMaxLength(30);
+        builder.Property(x => x.BlockedReason).HasMaxLength(300);
         builder.HasIndex(x => new { x.TenantId, x.CustomStatusId });
 
         // Real foreign keys into the shared identity schema. Restrict, never cascade:
@@ -258,6 +259,54 @@ internal sealed class TaskRequestConfiguration : IEntityTypeConfiguration<TaskRe
         builder.HasIndex(x => new { x.TenantId, x.Status });
         builder.HasIndex(x => new { x.TenantId, x.RequesterUserId });
         builder.HasIndex(x => new { x.TenantId, x.RoutedToUserId });
+    }
+}
+
+internal sealed class TaskDependencyConfiguration : IEntityTypeConfiguration<TaskDependency>
+{
+    public void Configure(EntityTypeBuilder<TaskDependency> builder)
+    {
+        builder.ToTable("TaskDependencies", Schema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.HasIndex(x => new { x.TaskId, x.BlockedByTaskId }).IsUnique();
+        builder.HasIndex(x => x.BlockedByTaskId);
+    }
+}
+
+internal sealed class TaskCriterionConfiguration : IEntityTypeConfiguration<TaskCriterion>
+{
+    public void Configure(EntityTypeBuilder<TaskCriterion> builder)
+    {
+        builder.ToTable("TaskCriteria", Schema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.Property(x => x.Text).HasMaxLength(300).IsRequired();
+        builder.HasIndex(x => x.TaskId);
+    }
+}
+
+internal sealed class TaskWipSettingConfiguration : IEntityTypeConfiguration<TaskWipSetting>
+{
+    public void Configure(EntityTypeBuilder<TaskWipSetting> builder)
+    {
+        builder.ToTable("TaskWipSettings", Schema.Name);
+        builder.HasKey(x => x.TenantId);
+        builder.Property(x => x.TenantId).ValueGeneratedNever();
+    }
+}
+
+internal sealed class TaskTemplateConfiguration : IEntityTypeConfiguration<TaskTemplate>
+{
+    public void Configure(EntityTypeBuilder<TaskTemplate> builder)
+    {
+        builder.ToTable("TaskTemplates", Schema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.Property(x => x.Name).HasMaxLength(100).IsRequired();
+        builder.Property(x => x.NormalizedName).HasMaxLength(100).IsRequired();
+        builder.Property(x => x.Body).IsRequired();
+        builder.HasIndex(x => new { x.TenantId, x.NormalizedName }).IsUnique();
     }
 }
 

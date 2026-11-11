@@ -372,6 +372,117 @@ public sealed class TaskStatusRepository(TaskManagementDbContext db) : ITaskStat
     }
 }
 
+public sealed class TaskPlanningRepository(TaskManagementDbContext db) : ITaskPlanningRepository
+{
+    public async Task<IReadOnlyList<TaskDependency>> ListDependenciesAsync(Guid tenantId, Guid taskId, CancellationToken cancellationToken) =>
+        await db.TaskDependencies.Where(d => d.TenantId == tenantId && d.TaskId == taskId).ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<TaskDependency>> ListDependentsAsync(Guid tenantId, Guid taskId, CancellationToken cancellationToken) =>
+        await db.TaskDependencies.Where(d => d.TenantId == tenantId && d.BlockedByTaskId == taskId).ToListAsync(cancellationToken);
+
+    public Task<TaskDependency?> GetDependencyAsync(Guid tenantId, Guid taskId, Guid blockedByTaskId, CancellationToken cancellationToken) =>
+        db.TaskDependencies.FirstOrDefaultAsync(d => d.TenantId == tenantId && d.TaskId == taskId && d.BlockedByTaskId == blockedByTaskId, cancellationToken);
+
+    public async Task AddDependencyAsync(TaskDependency dependency, CancellationToken cancellationToken) =>
+        await db.TaskDependencies.AddAsync(dependency, cancellationToken);
+
+    public void RemoveDependency(TaskDependency dependency) => db.TaskDependencies.Remove(dependency);
+
+    public async Task<IReadOnlySet<Guid>> BlockersClosureAsync(Guid tenantId, Guid taskId, CancellationToken cancellationToken)
+    {
+        // The graph of one tenant is small; walk it level by level.
+        var seen = new HashSet<Guid>();
+        var frontier = new List<Guid> { taskId };
+        while (frontier.Count > 0)
+        {
+            var next = await db.TaskDependencies
+                .Where(d => d.TenantId == tenantId && frontier.Contains(d.TaskId))
+                .Select(d => d.BlockedByTaskId)
+                .ToListAsync(cancellationToken);
+            frontier = next.Where(seen.Add).ToList();
+        }
+
+        return seen;
+    }
+
+    public async Task<IReadOnlyList<TaskBriefDto>> BriefsAsync(Guid tenantId, IReadOnlyCollection<Guid> taskIds, CancellationToken cancellationToken)
+    {
+        if (taskIds.Count == 0)
+        {
+            return [];
+        }
+
+        return await db.Tasks.IgnoreQueryFilters()
+            .Where(t => t.TenantId == tenantId && taskIds.Contains(t.Id) && t.ArchivedAtUtc == null)
+            .Select(t => new TaskBriefDto(t.Id, t.Title, t.Status, t.Status == TaskItemStatus.Completed))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<int> CountOpenBlockersAsync(Guid tenantId, Guid taskId, CancellationToken cancellationToken)
+    {
+        var ids = await db.TaskDependencies.Where(d => d.TenantId == tenantId && d.TaskId == taskId).Select(d => d.BlockedByTaskId).ToListAsync(cancellationToken);
+        if (ids.Count == 0)
+        {
+            return 0;
+        }
+
+        // Archived blockers no longer count: they are out of the way.
+        return await db.Tasks.IgnoreQueryFilters()
+            .CountAsync(t => t.TenantId == tenantId && ids.Contains(t.Id) && t.ArchivedAtUtc == null && t.Status != TaskItemStatus.Completed, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<TaskCriterion>> ListCriteriaAsync(Guid tenantId, Guid taskId, CancellationToken cancellationToken) =>
+        await db.TaskCriteria.Where(c => c.TenantId == tenantId && c.TaskId == taskId).OrderBy(c => c.SortOrder).ToListAsync(cancellationToken);
+
+    public Task<TaskCriterion?> GetCriterionAsync(Guid tenantId, Guid id, CancellationToken cancellationToken) =>
+        db.TaskCriteria.FirstOrDefaultAsync(c => c.TenantId == tenantId && c.Id == id, cancellationToken);
+
+    public async Task AddCriterionAsync(TaskCriterion criterion, CancellationToken cancellationToken) =>
+        await db.TaskCriteria.AddAsync(criterion, cancellationToken);
+
+    public void RemoveCriterion(TaskCriterion criterion) => db.TaskCriteria.Remove(criterion);
+
+    public Task<int> CountUnmetCriteriaAsync(Guid tenantId, Guid taskId, CancellationToken cancellationToken) =>
+        db.TaskCriteria.CountAsync(c => c.TenantId == tenantId && c.TaskId == taskId && !c.IsMet, cancellationToken);
+
+    public async Task<int?> GetWipLimitAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        (await db.TaskWipSettings.FirstOrDefaultAsync(w => w.TenantId == tenantId, cancellationToken))?.LimitPerUser;
+
+    public async Task SetWipLimitAsync(Guid tenantId, int? limit, CancellationToken cancellationToken)
+    {
+        var row = await db.TaskWipSettings.FirstOrDefaultAsync(w => w.TenantId == tenantId, cancellationToken);
+        if (row is null)
+        {
+            await db.TaskWipSettings.AddAsync(new TaskWipSetting(tenantId, limit), cancellationToken);
+        }
+        else
+        {
+            row.Set(limit);
+        }
+    }
+
+    public Task<int> CountInProgressAsync(Guid tenantId, Guid userId, Guid exceptTaskId, CancellationToken cancellationToken) =>
+        db.Tasks.IgnoreQueryFilters().CountAsync(t => t.TenantId == tenantId && t.ArchivedAtUtc == null && t.Id != exceptTaskId
+            && t.Status == TaskItemStatus.InProgress && t.AssignedUserId == userId, cancellationToken);
+
+    public async Task<IReadOnlyList<TaskTemplate>> ListTemplatesAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        await db.TaskTemplates.Where(t => t.TenantId == tenantId).OrderBy(t => t.Name).ToListAsync(cancellationToken);
+
+    public Task<TaskTemplate?> GetTemplateAsync(Guid tenantId, Guid id, CancellationToken cancellationToken) =>
+        db.TaskTemplates.FirstOrDefaultAsync(t => t.TenantId == tenantId && t.Id == id, cancellationToken);
+
+    public Task<TaskTemplate?> GetTemplateByNameAsync(Guid tenantId, string name, CancellationToken cancellationToken)
+    {
+        var normalized = name.Trim().ToUpperInvariant();
+        return db.TaskTemplates.FirstOrDefaultAsync(t => t.TenantId == tenantId && t.NormalizedName == normalized, cancellationToken);
+    }
+
+    public async Task AddTemplateAsync(TaskTemplate template, CancellationToken cancellationToken) =>
+        await db.TaskTemplates.AddAsync(template, cancellationToken);
+
+    public void RemoveTemplate(TaskTemplate template) => db.TaskTemplates.Remove(template);
+}
+
 public sealed class TaskRequestRepository(TaskManagementDbContext db) : ITaskRequestRepository
 {
     public Task<RequestCategory?> GetCategoryAsync(Guid tenantId, Guid id, CancellationToken cancellationToken) =>
