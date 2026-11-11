@@ -355,6 +355,72 @@ public static class TaskManagementSchema
         END
         """;
 
+    /// <summary>Webhook subscriptions and their delivery outbox (phase 9).</summary>
+    public const string AddWebhooksSql = """
+        IF SCHEMA_ID(N'task_management') IS NOT NULL AND OBJECT_ID(N'[task_management].[WebhookSubscriptions]') IS NULL
+        BEGIN
+            CREATE TABLE [task_management].[WebhookSubscriptions] (
+                [Id] uniqueidentifier NOT NULL,
+                [TenantId] uniqueidentifier NOT NULL,
+                [Name] nvarchar(100) NOT NULL,
+                [Url] nvarchar(500) NOT NULL,
+                [Secret] nvarchar(100) NOT NULL,
+                [Events] nvarchar(500) NOT NULL,
+                [IsActive] bit NOT NULL,
+                [ConsecutiveFailures] int NOT NULL,
+                [LastDeliveredAtUtc] datetimeoffset NULL,
+                [CreatedAtUtc] datetimeoffset NOT NULL,
+                [CreatedByUserId] uniqueidentifier NULL,
+                [ModifiedAtUtc] datetimeoffset NULL,
+                [ModifiedByUserId] uniqueidentifier NULL,
+                CONSTRAINT [PK_WebhookSubscriptions] PRIMARY KEY ([Id]));
+            CREATE INDEX [IX_WebhookSubscriptions_TenantId_IsActive] ON [task_management].[WebhookSubscriptions] ([TenantId], [IsActive]);
+        END
+        IF SCHEMA_ID(N'task_management') IS NOT NULL AND OBJECT_ID(N'[task_management].[WebhookDeliveries]') IS NULL
+        BEGIN
+            CREATE TABLE [task_management].[WebhookDeliveries] (
+                [Id] uniqueidentifier NOT NULL,
+                [TenantId] uniqueidentifier NOT NULL,
+                [SubscriptionId] uniqueidentifier NOT NULL,
+                [EventType] nvarchar(60) NOT NULL,
+                [Payload] nvarchar(max) NOT NULL,
+                [Attempts] int NOT NULL,
+                [NextAttemptAtUtc] datetimeoffset NOT NULL,
+                [DeliveredAtUtc] datetimeoffset NULL,
+                [GaveUpAtUtc] datetimeoffset NULL,
+                [LastStatusCode] int NULL,
+                [LastError] nvarchar(500) NULL,
+                [CreatedAtUtc] datetimeoffset NOT NULL,
+                CONSTRAINT [PK_WebhookDeliveries] PRIMARY KEY ([Id]));
+            CREATE INDEX [IX_WebhookDeliveries_DeliveredAtUtc_GaveUpAtUtc_NextAttemptAtUtc] ON [task_management].[WebhookDeliveries] ([DeliveredAtUtc], [GaveUpAtUtc], [NextAttemptAtUtc]);
+            CREATE INDEX [IX_WebhookDeliveries_SubscriptionId_CreatedAtUtc] ON [task_management].[WebhookDeliveries] ([SubscriptionId], [CreatedAtUtc]);
+        END
+        """;
+
+    /// <summary>The organization's plan: limits and validity (phase 9).</summary>
+    public const string AddMembershipSql = """
+        IF SCHEMA_ID(N'task_management') IS NOT NULL AND OBJECT_ID(N'[task_management].[TenantMemberships]') IS NULL
+            CREATE TABLE [task_management].[TenantMemberships] (
+                [TenantId] uniqueidentifier NOT NULL,
+                [PlanName] nvarchar(100) NOT NULL,
+                [MaxUsers] int NULL,
+                [MaxStorageMb] int NULL,
+                [ValidFrom] date NULL,
+                [ValidUntil] date NULL,
+                [Notes] nvarchar(1000) NULL,
+                CONSTRAINT [PK_TenantMemberships] PRIMARY KEY ([TenantId]));
+        """;
+
+    /// <summary>How long logs are kept (phase 9).</summary>
+    public const string AddRetentionSql = """
+        IF SCHEMA_ID(N'task_management') IS NOT NULL AND OBJECT_ID(N'[task_management].[TaskRetentionSettings]') IS NULL
+            CREATE TABLE [task_management].[TaskRetentionSettings] (
+                [TenantId] uniqueidentifier NOT NULL,
+                [AutomationLogDays] int NULL,
+                [WebhookDeliveryDays] int NULL,
+                CONSTRAINT [PK_TaskRetentionSettings] PRIMARY KEY ([TenantId]));
+        """;
+
     /// <summary>The index on the new column, in its own batch.</summary>
     public const string AddCustomStatusIndexSql = """
         IF OBJECT_ID(N'[task_management].[Tasks]') IS NOT NULL AND COL_LENGTH(N'task_management.Tasks', N'CustomStatusId') IS NOT NULL
@@ -412,6 +478,9 @@ public sealed class TaskManagementSchemaPatcher(IServiceScopeFactory scopes, ILo
                 await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddPlanningSql, cancellationToken);
                 await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddTimesheetsSql, cancellationToken);
                 await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddAutomationSql, cancellationToken);
+                await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddWebhooksSql, cancellationToken);
+                await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddMembershipSql, cancellationToken);
+                await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddRetentionSql, cancellationToken);
             }
         }
         catch (Exception ex)

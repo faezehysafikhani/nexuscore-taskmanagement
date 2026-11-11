@@ -30,7 +30,15 @@ public static class DependencyInjection
         services.AddScoped<ITaskPlanningRepository, TaskPlanningRepository>();
         services.AddScoped<ITimesheetRepository, TimesheetRepository>();
         services.AddScoped<IAutomationRepository, AutomationRepository>();
+        services.AddScoped<IWebhookRepository, WebhookRepository>();
+        services.AddScoped<IMembershipRepository, MembershipRepository>();
+        services.AddScoped<IRetentionRepository, RetentionRepository>();
         services.AddHostedService<TaskSlaMonitorService>();
+        services.Configure<Nexus.TaskManagement.Application.WebhookOptions>(configuration.GetSection(Nexus.TaskManagement.Application.WebhookOptions.SectionName));
+        services.AddSingleton<WebhookDeliveryService>();
+        services.AddHostedService<WebhookDeliveryBackgroundService>();
+        services.AddSingleton<TaskRetentionBackgroundService>();
+        services.AddHostedService(p => p.GetRequiredService<TaskRetentionBackgroundService>());
         services.AddScoped<ITaskFileRepository, TaskFileRepository>();
         services.AddScoped<INoteRepository, NoteRepository>();
         services.AddScoped<ITaskCommentRepository, TaskCommentRepository>();

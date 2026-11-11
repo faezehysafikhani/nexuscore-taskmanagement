@@ -128,6 +128,62 @@ public interface IAutomationService
     Task<Result<IReadOnlyList<AutomationLogDto>>> ListLogAsync(Guid? taskId, CancellationToken cancellationToken);
 }
 
+public interface IMembershipRepository
+{
+    Task<TenantMembership?> GetAsync(Guid tenantId, CancellationToken cancellationToken);
+    Task AddAsync(TenantMembership membership, CancellationToken cancellationToken);
+    void Remove(TenantMembership membership);
+    Task<long> StorageBytesAsync(Guid tenantId, CancellationToken cancellationToken);
+    Task<int> TaskCountAsync(Guid tenantId, CancellationToken cancellationToken);
+}
+
+public interface IRetentionService
+{
+    Task<Result<RetentionDto>> GetAsync(CancellationToken cancellationToken);
+    Task<Result<RetentionDto>> SetAsync(RetentionDto request, CancellationToken cancellationToken);
+}
+
+public interface IMembershipService
+{
+    Task<Result<MembershipDto>> GetAsync(CancellationToken cancellationToken);
+    Task<Result<MembershipDto>> SetAsync(SetMembershipRequest request, CancellationToken cancellationToken);
+    Task<Result> ClearAsync(CancellationToken cancellationToken);
+
+    /// <summary>Null when adding <paramref name="addBytes"/> of files is allowed; otherwise why not.</summary>
+    Task<NexusCore.SharedKernel.Results.Error?> CheckStorageAsync(Guid tenantId, long addBytes, CancellationToken cancellationToken);
+}
+
+public interface IWebhookRepository
+{
+    Task<IReadOnlyList<WebhookSubscription>> ListAsync(Guid tenantId, CancellationToken cancellationToken);
+    Task<WebhookSubscription?> GetAsync(Guid tenantId, Guid id, CancellationToken cancellationToken);
+    Task AddAsync(WebhookSubscription subscription, CancellationToken cancellationToken);
+    void Remove(WebhookSubscription subscription);
+    Task<IReadOnlyList<WebhookSubscription>> ListActiveAsync(Guid tenantId, CancellationToken cancellationToken);
+    Task AddDeliveriesAsync(IEnumerable<WebhookDelivery> deliveries, CancellationToken cancellationToken);
+    Task<IReadOnlyList<WebhookDelivery>> ListDeliveriesAsync(Guid tenantId, Guid subscriptionId, int take, CancellationToken cancellationToken);
+    Task RemoveDeliveriesOfAsync(Guid subscriptionId, CancellationToken cancellationToken);
+}
+
+/// <summary>Queues an event for every subscription that wants it. Never throws: telling the outside world must not fail the change that caused it.</summary>
+public interface IWebhookPublisher
+{
+    Task PublishAsync(Guid tenantId, string eventType, object data, CancellationToken cancellationToken);
+}
+
+public interface IWebhookService
+{
+    Task<Result<IReadOnlyList<WebhookDto>>> ListAsync(CancellationToken cancellationToken);
+    Task<Result<WebhookWithSecretDto>> CreateAsync(SaveWebhookRequest request, CancellationToken cancellationToken);
+    Task<Result<WebhookDto>> UpdateAsync(Guid id, SaveWebhookRequest request, CancellationToken cancellationToken);
+    Task<Result<WebhookWithSecretDto>> RotateSecretAsync(Guid id, CancellationToken cancellationToken);
+    Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken);
+    Task<Result<IReadOnlyList<WebhookDeliveryDto>>> ListDeliveriesAsync(Guid id, CancellationToken cancellationToken);
+
+    /// <summary>Sends a "ping" event to this one webhook only.</summary>
+    Task<Result> PingAsync(Guid id, CancellationToken cancellationToken);
+}
+
 public interface ITimesheetRepository
 {
     Task<TimeEntry?> GetEntryAsync(Guid tenantId, Guid id, CancellationToken cancellationToken);

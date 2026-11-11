@@ -14,6 +14,7 @@ public sealed class TaskService(
     ITaskStatusRepository statusRepository,
     ITaskPlanningRepository planning,
     ITaskAutomation? automation,
+    IWebhookPublisher? webhooks,
     ITaskManagementUnitOfWork unitOfWork,
     ICurrentUserContext currentUser,
     ITaskActivityService activity,
@@ -33,6 +34,16 @@ public sealed class TaskService(
     /// </summary>
     internal static Error NotTaskOwner() =>
         Error.Forbidden("Only the owner of this task, or a user who manages all tasks, can do this.");
+
+    private Task PublishAsync(string eventType, TaskItem task, CancellationToken cancellationToken, TaskItemStatus? previous = null) =>
+        webhooks is null
+            ? Task.CompletedTask
+            : webhooks.PublishAsync(task.TenantId, eventType, new
+            {
+                taskId = task.Id, title = task.Title, status = task.Status, previousStatus = previous, priority = task.Priority,
+                dueDate = task.DueDate, isProject = task.IsProject, assignedUserId = task.AssignedUserId, ownerUserId = task.OwnerUserId,
+                actorUserId = currentUser.UserId
+            }, cancellationToken);
 
     private bool CanChangeStatus(TaskItem task) =>
         access.CanManage(task)
@@ -245,6 +256,8 @@ public sealed class TaskService(
             await automation.RunAsync(AutomationTrigger.TaskCreated, task, cancellationToken);
         }
 
+        await PublishAsync(WebhookEvents.TaskCreated, task, cancellationToken);
+
         var created = await repository.GetByIdAsync(tenantId, task.Id, cancellationToken);
         return Result.Success(await ToDtoAsync(created!, cancellationToken));
     }
@@ -455,6 +468,7 @@ public sealed class TaskService(
         }
 
         await activity.RecordAsync(id, "Task archived", task.Title, cancellationToken);
+        await PublishAsync(WebhookEvents.TaskArchived, task, cancellationToken);
         return Result.Success(dto with { ArchivedAtUtc = task.ArchivedAtUtc });
     }
 
@@ -575,6 +589,15 @@ public sealed class TaskService(
         if (automation is not null && newStatus != previous)
         {
             await automation.RunAsync(AutomationTrigger.StatusChanged, task, cancellationToken);
+        }
+
+        if (newStatus != previous)
+        {
+            await PublishAsync(WebhookEvents.TaskStatusChanged, task, cancellationToken, previous);
+            if (newStatus == TaskItemStatus.Completed)
+            {
+                await PublishAsync(WebhookEvents.TaskCompleted, task, cancellationToken, previous);
+            }
         }
 
         var updated = await repository.GetByIdAsync(tenantId, id, cancellationToken);

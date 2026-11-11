@@ -115,6 +115,17 @@ public sealed class SqlServerFixture : IAsyncLifetime
         services.AddScoped<ITaskService, TaskService>();
         services.AddScoped<ITaskBatchService, TaskBatchService>();
         services.AddScoped<ITaskReviewService, TaskReviewService>();
+        services.AddScoped<NexusCore.Application.Identity.Interfaces.IUserDirectory, NexusCore.Infrastructure.Identity.UserDirectory>();
+        services.AddScoped<IRetentionService, RetentionService>();
+        services.AddScoped<IRetentionRepository, RetentionRepository>();
+        services.AddScoped<IMembershipRepository, MembershipRepository>();
+        services.AddSingleton(TimeProvider.System);
+        services.AddScoped<MembershipService>();
+        services.AddScoped<IMembershipService>(p => p.GetRequiredService<MembershipService>());
+        services.AddScoped<IWebhookService, WebhookService>();
+        services.AddScoped<IWebhookPublisher, WebhookPublisher>();
+        services.AddScoped<IWebhookRepository, WebhookRepository>();
+        services.Configure<WebhookOptions>(_ => { });
         services.AddSingleton<NexusCore.Application.Common.ISchedulingDayPolicy, NexusCore.Application.Common.AllowAllSchedulingDays>();
         services.AddScoped<ITaskAutomation, TaskAutomationEngine>();
         services.AddScoped<IAutomationService, AutomationService>();

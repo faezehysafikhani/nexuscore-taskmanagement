@@ -182,6 +182,24 @@ public sealed class TaskFromMessageRequestValidator : AbstractValidator<TaskFrom
     }
 }
 
+public sealed class SetMembershipRequestValidator : AbstractValidator<SetMembershipRequest>
+{
+    public SetMembershipRequestValidator()
+    {
+        RuleFor(x => x.PlanName).NotEmpty().MaximumLength(100);
+        RuleFor(x => x.Notes).MaximumLength(1000);
+    }
+}
+
+public sealed class SaveWebhookRequestValidator : AbstractValidator<SaveWebhookRequest>
+{
+    public SaveWebhookRequestValidator()
+    {
+        RuleFor(x => x.Name).NotEmpty().MaximumLength(100);
+        RuleFor(x => x.Url).NotEmpty().MaximumLength(500);
+    }
+}
+
 public sealed class SaveAutomationRuleRequestValidator : AbstractValidator<SaveAutomationRuleRequest>
 {
     public SaveAutomationRuleRequestValidator()

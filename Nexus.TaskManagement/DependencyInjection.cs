@@ -32,6 +32,14 @@ public static class DependencyInjection
         services.AddScoped<ITaskPlanningService, TaskPlanningService>();
         services.AddScoped<ITimesheetService, TimesheetService>();
         services.AddScoped<ITaskAutomation, TaskAutomationEngine>();
+        services.AddScoped<IWebhookService, WebhookService>();
+        services.AddScoped<IRetentionService, RetentionService>();
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddScoped<MembershipService>();
+        services.AddScoped<IMembershipService>(p => p.GetRequiredService<MembershipService>());
+        // Identity asks this before adding a user; added after the platform, so it is the one asked.
+        services.AddScoped<NexusCore.Application.Identity.Interfaces.IUserQuota>(p => p.GetRequiredService<MembershipService>());
+        services.AddScoped<IWebhookPublisher, WebhookPublisher>();
         services.AddScoped<IAutomationService, AutomationService>();
         services.AddScoped<NexusCore.SharedKernel.Domain.IDomainEventHandler<NexusCore.Application.Approvals.ApprovalGranted>, TimesheetApprovedHandler>();
         services.AddScoped<NexusCore.SharedKernel.Domain.IDomainEventHandler<NexusCore.Application.Approvals.ApprovalRejected>, TimesheetRejectedHandler>();
@@ -83,6 +91,8 @@ public static class DependencyInjection
         services.AddScoped<IValidator<CreateRepetitiveTaskRequest>, CreateRepetitiveTaskRequestValidator>();
         services.AddScoped<IValidator<UpdateRepetitiveTaskRequest>, UpdateRepetitiveTaskRequestValidator>();
         services.AddScoped<IValidator<SubmitTaskReviewRequest>, SubmitTaskReviewRequestValidator>();
+        services.AddScoped<IValidator<SetMembershipRequest>, SetMembershipRequestValidator>();
+        services.AddScoped<IValidator<SaveWebhookRequest>, SaveWebhookRequestValidator>();
         services.AddScoped<IValidator<SaveAutomationRuleRequest>, SaveAutomationRuleRequestValidator>();
         services.AddScoped<IValidator<LogTimeRequest>, LogTimeRequestValidator>();
         services.AddScoped<IValidator<UpdateTimeEntryRequest>, UpdateTimeEntryRequestValidator>();

@@ -39,7 +39,8 @@ public sealed class IdentityService(
     IUserReachScope? reachScope = null,
     IOptions<SignInSessionOptions>? sessionOptions = null,
     IPositionPermissionProvider? positionPermissions = null,
-    IOptions<IdentitySeedOptions>? identityOptions = null) : IIdentityService
+    IOptions<IdentitySeedOptions>? identityOptions = null,
+    IUserQuota? userQuota = null) : IIdentityService
 {
     private readonly ManagedPermissionOptions _managed = managedPermissionOptions.Value;
     private readonly SignInSessionOptions _session = sessionOptions?.Value ?? new SignInSessionOptions();
@@ -289,6 +290,11 @@ public sealed class IdentityService(
         if (taken is not null)
         {
             return Result.Failure<UserDto>(taken);
+        }
+
+        if (userQuota is not null && await userQuota.CheckCanAddUserAsync(request.TenantId, cancellationToken) is { } refused)
+        {
+            return Result.Failure<UserDto>(refused);
         }
 
         // Never a system account: the built-in administrator only comes from the seeder.

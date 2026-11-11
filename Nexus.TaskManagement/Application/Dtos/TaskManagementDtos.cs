@@ -352,6 +352,31 @@ public sealed record SaveAutomationRuleRequest(
     string Name, AutomationTrigger Trigger, AutomationConditions? Conditions, IReadOnlyList<AutomationAction> Actions, int SortOrder = 0, bool IsActive = true);
 public sealed record AutomationLogDto(Guid Id, Guid RuleId, string RuleName, Guid TaskId, AutomationTrigger Trigger, string Outcome, string? Detail, DateTimeOffset AtUtc);
 
+public sealed record WebhookDto(Guid Id, string Name, string Url, IReadOnlyList<string> Events, bool IsActive, int ConsecutiveFailures, DateTimeOffset? LastDeliveredAtUtc);
+
+/// <summary>Secret is returned only when the webhook is made or its secret is rotated.</summary>
+public sealed record WebhookWithSecretDto(WebhookDto Webhook, string Secret);
+public sealed record SaveWebhookRequest(string Name, string Url, IReadOnlyList<string>? Events = null, bool IsActive = true);
+public sealed record WebhookDeliveryDto(Guid Id, string EventType, int Attempts, bool Delivered, bool GaveUp, int? LastStatusCode, string? LastError, DateTimeOffset CreatedAtUtc, DateTimeOffset? DeliveredAtUtc);
+
+public enum MembershipStatus
+{
+    /// <summary>No plan is set: nothing is limited.</summary>
+    NoPlan = 0,
+    Active = 1,
+    ExpiringSoon = 2,
+    Expired = 3,
+    NotStarted = 4
+}
+
+public sealed record MembershipUsageDto(int ActiveUsers, long StorageBytes, int TaskCount);
+public sealed record MembershipDto(
+    string? PlanName, int? MaxUsers, int? MaxStorageMb, DateOnly? ValidFrom, DateOnly? ValidUntil, string? Notes,
+    MembershipStatus Status, int? DaysLeft, MembershipUsageDto Usage, IReadOnlyList<string> Warnings);
+public sealed record SetMembershipRequest(string PlanName, int? MaxUsers = null, int? MaxStorageMb = null, DateOnly? ValidFrom = null, DateOnly? ValidUntil = null, string? Notes = null);
+
+public sealed record RetentionDto(int? AutomationLogDays, int? WebhookDeliveryDays);
+
 public sealed record SubmitTaskReviewRequest(string? Comment = null);
 
 /// <summary>A task waiting for the signed-in person's review - what "my reviews" shows next to the approval.</summary>

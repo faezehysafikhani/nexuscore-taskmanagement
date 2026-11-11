@@ -132,7 +132,7 @@ public sealed class TaskReviewService(
 }
 
 /// <summary>The review was approved: the task is done.</summary>
-public sealed class TaskReviewApprovedHandler(ITaskRepository repository, ITaskManagementUnitOfWork unitOfWork, ITaskActivityService activity)
+public sealed class TaskReviewApprovedHandler(ITaskRepository repository, ITaskManagementUnitOfWork unitOfWork, ITaskActivityService activity, IWebhookPublisher? webhooks = null)
     : IDomainEventHandler<ApprovalGranted>
 {
     public async Task HandleAsync(ApprovalGranted domainEvent, CancellationToken cancellationToken)
@@ -151,11 +151,15 @@ public sealed class TaskReviewApprovedHandler(ITaskRepository repository, ITaskM
         task.ApproveReview(domainEvent.DecidedByUserId, domainEvent.Comment, DateTimeOffset.UtcNow);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await activity.RecordAsync(task.Id, "Review approved", domainEvent.Comment, cancellationToken);
+        if (webhooks is not null)
+        {
+            await webhooks.PublishAsync(task.TenantId, WebhookEvents.ReviewDecided, new { taskId = task.Id, title = task.Title, approved = true, comment = domainEvent.Comment, decidedByUserId = domainEvent.DecidedByUserId }, cancellationToken);
+        }
     }
 }
 
 /// <summary>The review was rejected: the task goes back to work and can be submitted again.</summary>
-public sealed class TaskReviewRejectedHandler(ITaskRepository repository, ITaskManagementUnitOfWork unitOfWork, ITaskActivityService activity)
+public sealed class TaskReviewRejectedHandler(ITaskRepository repository, ITaskManagementUnitOfWork unitOfWork, ITaskActivityService activity, IWebhookPublisher? webhooks = null)
     : IDomainEventHandler<ApprovalRejected>
 {
     public async Task HandleAsync(ApprovalRejected domainEvent, CancellationToken cancellationToken)
@@ -174,5 +178,9 @@ public sealed class TaskReviewRejectedHandler(ITaskRepository repository, ITaskM
         task.RejectReview(domainEvent.DecidedByUserId, domainEvent.Comment, DateTimeOffset.UtcNow);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await activity.RecordAsync(task.Id, "Review rejected - back to work", domainEvent.Comment, cancellationToken);
+        if (webhooks is not null)
+        {
+            await webhooks.PublishAsync(task.TenantId, WebhookEvents.ReviewDecided, new { taskId = task.Id, title = task.Title, approved = false, comment = domainEvent.Comment, decidedByUserId = domainEvent.DecidedByUserId }, cancellationToken);
+        }
     }
 }

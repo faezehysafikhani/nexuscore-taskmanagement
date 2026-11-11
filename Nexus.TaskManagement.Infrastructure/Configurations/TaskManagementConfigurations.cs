@@ -375,6 +375,59 @@ internal sealed class AutomationLogEntryConfiguration : IEntityTypeConfiguration
     }
 }
 
+internal sealed class WebhookSubscriptionConfiguration : IEntityTypeConfiguration<WebhookSubscription>
+{
+    public void Configure(EntityTypeBuilder<WebhookSubscription> builder)
+    {
+        builder.ToTable("WebhookSubscriptions", Schema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.Property(x => x.Name).HasMaxLength(100).IsRequired();
+        builder.Property(x => x.Url).HasMaxLength(500).IsRequired();
+        builder.Property(x => x.Secret).HasMaxLength(100).IsRequired();
+        builder.Property(x => x.Events).HasMaxLength(500).IsRequired();
+        builder.HasIndex(x => new { x.TenantId, x.IsActive });
+    }
+}
+
+internal sealed class WebhookDeliveryConfiguration : IEntityTypeConfiguration<WebhookDelivery>
+{
+    public void Configure(EntityTypeBuilder<WebhookDelivery> builder)
+    {
+        builder.ToTable("WebhookDeliveries", Schema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.Property(x => x.EventType).HasMaxLength(60).IsRequired();
+        builder.Property(x => x.Payload).IsRequired();
+        builder.Property(x => x.LastError).HasMaxLength(500);
+        builder.Ignore(x => x.IsPending);
+        builder.HasIndex(x => new { x.DeliveredAtUtc, x.GaveUpAtUtc, x.NextAttemptAtUtc });
+        builder.HasIndex(x => new { x.SubscriptionId, x.CreatedAtUtc });
+    }
+}
+
+internal sealed class TenantMembershipConfiguration : IEntityTypeConfiguration<TenantMembership>
+{
+    public void Configure(EntityTypeBuilder<TenantMembership> builder)
+    {
+        builder.ToTable("TenantMemberships", Schema.Name);
+        builder.HasKey(x => x.TenantId);
+        builder.Property(x => x.TenantId).ValueGeneratedNever();
+        builder.Property(x => x.PlanName).HasMaxLength(100).IsRequired();
+        builder.Property(x => x.Notes).HasMaxLength(1000);
+    }
+}
+
+internal sealed class TaskRetentionSettingConfiguration : IEntityTypeConfiguration<TaskRetentionSetting>
+{
+    public void Configure(EntityTypeBuilder<TaskRetentionSetting> builder)
+    {
+        builder.ToTable("TaskRetentionSettings", Schema.Name);
+        builder.HasKey(x => x.TenantId);
+        builder.Property(x => x.TenantId).ValueGeneratedNever();
+    }
+}
+
 internal sealed class TagConfiguration : IEntityTypeConfiguration<Tag>
 {
     public void Configure(EntityTypeBuilder<Tag> builder)

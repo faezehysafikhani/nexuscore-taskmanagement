@@ -30,6 +30,8 @@ public static class TaskManagementEndpoints
         app.MapTaskPlanningEndpoints();
         app.MapTimesheetEndpoints();
         app.MapAutomationEndpoints();
+        app.MapWebhookEndpoints();
+        app.MapMembershipEndpoints();
         app.MapTaskFileEndpoints();
         app.MapNoteEndpoints();
         app.MapReminderSettingsEndpoints();
@@ -419,6 +421,49 @@ public static class TaskManagementEndpoints
             .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.ManageTags);
 
+        return app;
+    }
+
+    private static IEndpointRouteBuilder MapMembershipEndpoints(this IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/task-management/membership").WithTags("Membership").RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi).AddEndpointFilter<RequestValidationFilter>();
+
+        group.MapGet("/", async (IMembershipService s, CancellationToken ct) => (await s.GetAsync(ct)).ToApiResult())
+            .WithSummary("The plan, its limits and validity, what is used now, and warnings")
+            .RequireAuthorization(TaskManagementPermissions.ViewMembership);
+        group.MapPut("/", async (SetMembershipRequest r, IMembershipService s, CancellationToken ct) => (await s.SetAsync(r, ct)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(TaskManagementPermissions.ManageMembership);
+        group.MapGet("/retention", async (IRetentionService s, CancellationToken ct) => (await s.GetAsync(ct)).ToApiResult())
+            .WithSummary("How long the module's logs are kept (days; empty = for ever)").RequireAuthorization(TaskManagementPermissions.ViewMembership);
+        group.MapPut("/retention", async (RetentionDto r, IRetentionService s, CancellationToken ct) => (await s.SetAsync(r, ct)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(TaskManagementPermissions.ManageMembership);
+        group.MapDelete("/", async (IMembershipService s, CancellationToken ct) => (await s.ClearAsync(ct)).ToApiResult())
+            .WithSummary("Remove the plan: nothing is limited").RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(TaskManagementPermissions.ManageMembership);
+        return app;
+    }
+
+    private static IEndpointRouteBuilder MapWebhookEndpoints(this IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/task-management/webhooks").WithTags("Webhooks").RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi).AddEndpointFilter<RequestValidationFilter>();
+        const string Manage = TaskManagementPermissions.ManageWebhooks;
+
+        group.MapGet("/events", () => Results.Ok(WebhookEvents.All)).WithSummary("The events a webhook can ask for").RequireAuthorization(Manage);
+        group.MapGet("/", async (IWebhookService s, CancellationToken ct) => (await s.ListAsync(ct)).ToApiResult()).RequireAuthorization(Manage);
+        group.MapPost("/", async (SaveWebhookRequest r, IWebhookService s, CancellationToken ct) => (await s.CreateAsync(r, ct)).ToApiResult())
+            .WithSummary("Add a webhook; its signing secret is in the answer, once")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(Manage);
+        group.MapPut("/{id:guid}", async (Guid id, SaveWebhookRequest r, IWebhookService s, CancellationToken ct) => (await s.UpdateAsync(id, r, ct)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(Manage);
+        group.MapPost("/{id:guid}/rotate-secret", async (Guid id, IWebhookService s, CancellationToken ct) => (await s.RotateSecretAsync(id, ct)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(Manage);
+        group.MapPost("/{id:guid}/ping", async (Guid id, IWebhookService s, CancellationToken ct) => (await s.PingAsync(id, ct)).ToApiResult())
+            .WithSummary("Send a test event to this webhook").RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(Manage);
+        group.MapGet("/{id:guid}/deliveries", async (Guid id, IWebhookService s, CancellationToken ct) => (await s.ListDeliveriesAsync(id, ct)).ToApiResult())
+            .RequireAuthorization(Manage);
+        group.MapDelete("/{id:guid}", async (Guid id, IWebhookService s, CancellationToken ct) => (await s.DeleteAsync(id, ct)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(Manage);
         return app;
     }
 

@@ -401,7 +401,8 @@ public sealed class TaskFileService(
     ICurrentUserContext currentUser,
     IFileStorage fileStorage,
     ITaskAccessScope access,
-    IUploadPolicyReader uploadPolicy) : ITaskFileService
+    IUploadPolicyReader uploadPolicy,
+    IMembershipService? membership = null) : ITaskFileService
 {
     public Task<Result<TaskFileDto>> UploadToTaskAsync(
         Guid taskId, UploadFileRequest request, CancellationToken cancellationToken) =>
@@ -459,6 +460,11 @@ public sealed class TaskFileService(
         if (authorization.IsFailure)
         {
             return Result.Failure<TaskFileDto>(authorization.Error);
+        }
+
+        if (membership is not null && await membership.CheckStorageAsync(tenantId, request.Content.Length, cancellationToken) is { } overPlan)
+        {
+            return Result.Failure<TaskFileDto>(overPlan);
         }
 
         var displayName = Path.GetFileName(request.FileName);

@@ -372,6 +372,58 @@ public sealed class TaskStatusRepository(TaskManagementDbContext db) : ITaskStat
     }
 }
 
+public sealed class RetentionRepository(TaskManagementDbContext db) : IRetentionRepository
+{
+    public Task<TaskRetentionSetting?> GetAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        db.TaskRetentionSettings.FirstOrDefaultAsync(s => s.TenantId == tenantId, cancellationToken);
+
+    public async Task AddAsync(TaskRetentionSetting setting, CancellationToken cancellationToken) => await db.TaskRetentionSettings.AddAsync(setting, cancellationToken);
+}
+
+public sealed class MembershipRepository(TaskManagementDbContext db) : IMembershipRepository
+{
+    public Task<TenantMembership?> GetAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        db.TenantMemberships.FirstOrDefaultAsync(m => m.TenantId == tenantId, cancellationToken);
+
+    public async Task AddAsync(TenantMembership membership, CancellationToken cancellationToken) => await db.TenantMemberships.AddAsync(membership, cancellationToken);
+
+    public void Remove(TenantMembership membership) => db.TenantMemberships.Remove(membership);
+
+    public async Task<long> StorageBytesAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        await db.Files.Where(f => f.TenantId == tenantId).SumAsync(f => (long?)f.FileSizeBytes, cancellationToken) ?? 0;
+
+    public Task<int> TaskCountAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        db.Tasks.IgnoreQueryFilters().CountAsync(t => t.TenantId == tenantId && t.ArchivedAtUtc == null, cancellationToken);
+}
+
+public sealed class WebhookRepository(TaskManagementDbContext db) : IWebhookRepository
+{
+    public async Task<IReadOnlyList<WebhookSubscription>> ListAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        await db.WebhookSubscriptions.Where(w => w.TenantId == tenantId).OrderBy(w => w.Name).ToListAsync(cancellationToken);
+
+    public Task<WebhookSubscription?> GetAsync(Guid tenantId, Guid id, CancellationToken cancellationToken) =>
+        db.WebhookSubscriptions.FirstOrDefaultAsync(w => w.TenantId == tenantId && w.Id == id, cancellationToken);
+
+    public async Task AddAsync(WebhookSubscription subscription, CancellationToken cancellationToken) => await db.WebhookSubscriptions.AddAsync(subscription, cancellationToken);
+
+    public void Remove(WebhookSubscription subscription) => db.WebhookSubscriptions.Remove(subscription);
+
+    public async Task<IReadOnlyList<WebhookSubscription>> ListActiveAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        await db.WebhookSubscriptions.Where(w => w.TenantId == tenantId && w.IsActive).ToListAsync(cancellationToken);
+
+    public async Task AddDeliveriesAsync(IEnumerable<WebhookDelivery> deliveries, CancellationToken cancellationToken) =>
+        await db.WebhookDeliveries.AddRangeAsync(deliveries, cancellationToken);
+
+    public async Task<IReadOnlyList<WebhookDelivery>> ListDeliveriesAsync(Guid tenantId, Guid subscriptionId, int take, CancellationToken cancellationToken) =>
+        await db.WebhookDeliveries.Where(d => d.TenantId == tenantId && d.SubscriptionId == subscriptionId).OrderByDescending(d => d.CreatedAtUtc).Take(take).ToListAsync(cancellationToken);
+
+    public async Task RemoveDeliveriesOfAsync(Guid subscriptionId, CancellationToken cancellationToken)
+    {
+        var rows = await db.WebhookDeliveries.Where(d => d.SubscriptionId == subscriptionId).ToListAsync(cancellationToken);
+        db.WebhookDeliveries.RemoveRange(rows);
+    }
+}
+
 public sealed class AutomationRepository(TaskManagementDbContext db) : IAutomationRepository
 {
     public async Task<IReadOnlyList<AutomationRule>> ListRulesAsync(Guid tenantId, AutomationTrigger? trigger, bool activeOnly, CancellationToken cancellationToken)
