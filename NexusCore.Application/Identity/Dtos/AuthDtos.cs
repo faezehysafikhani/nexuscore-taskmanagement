@@ -24,7 +24,8 @@ public sealed record RefreshTokenRequest(string? RefreshToken = null);
 /// </summary>
 public sealed record AuthResponse(string AccessToken, string RefreshToken, DateTimeOffset AccessTokenExpiresAtUtc, UserDto User, DateTimeOffset? RefreshTokenExpiresAtUtc = null,
     NexusCore.Application.Identity.Sessions.PendingSignInDto? SessionLimit = null,
-    NexusCore.Application.Identity.Sessions.SessionStatusDto? Session = null);
+    NexusCore.Application.Identity.Sessions.SessionStatusDto? Session = null,
+    MfaChallengeDto? Mfa = null);
 public sealed record CurrentUserResponse(UserDto User, IReadOnlyList<string> Permissions);
 
 /// <summary>

@@ -29,7 +29,7 @@ public sealed class MembershipService(
             : Result.Success(await BuildAsync(tenantId, cancellationToken));
 
     private async Task<int> ActiveUsersAsync(Guid tenantId, CancellationToken cancellationToken) =>
-        (await userDirectory.GetActiveUsersInTenantAsync(tenantId, cancellationToken)).Count;
+        await userDirectory.CountBillableUsersAsync(tenantId, cancellationToken);
 
     private async Task<MembershipDto> BuildAsync(Guid tenantId, CancellationToken cancellationToken)
     {

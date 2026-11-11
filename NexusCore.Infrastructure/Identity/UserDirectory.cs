@@ -46,6 +46,9 @@ public sealed class UserDirectory(NexusCoreDbContext dbContext) : IUserDirectory
                 user.IsActive))
             .ToListAsync(cancellationToken);
 
+    public Task<int> CountBillableUsersAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        dbContext.Users.CountAsync(user => user.TenantId == tenantId && user.IsActive && user.Kind == NexusCore.Domain.Identity.UserKind.Normal, cancellationToken);
+
     public async Task<IReadOnlyList<Guid>> GetGroupMemberIdsAsync(Guid groupId, CancellationToken cancellationToken) =>
         await dbContext.UserGroupMembers
             .AsNoTracking()

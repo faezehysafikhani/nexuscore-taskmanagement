@@ -23,6 +23,13 @@ public interface IUserDirectory
     /// <summary>Every active user of the tenant, for picking a chat partner - not an administrative listing.</summary>
     Task<IReadOnlyList<UserContact>> GetActiveUsersInTenantAsync(Guid tenantId, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// The active users that count against an organization's user limit: guests and service accounts do not. A directory that
+    /// does not know account kinds counts every active user.
+    /// </summary>
+    async Task<int> CountBillableUsersAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        (await GetActiveUsersInTenantAsync(tenantId, cancellationToken)).Count;
+
     Task<IReadOnlyList<Guid>> GetGroupMemberIdsAsync(Guid groupId, CancellationToken cancellationToken);
 
     /// <summary>The active groups (and work teams) the user is a member or the owner of.</summary>

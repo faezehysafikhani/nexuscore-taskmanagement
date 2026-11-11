@@ -512,6 +512,7 @@ public static class IdentityEndpoints
             .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(IdentityPermissions.LdapSettingsTest);
 
+        app.MapIdentitySecurityEndpoints();
         return app;
     }
 
@@ -523,7 +524,7 @@ public static class IdentityEndpoints
         HttpContext http, SignInSessionOptions options, NexusCore.SharedKernel.Results.Result<AuthResponse> result, bool forceCookie = false)
     {
         // No token is issued while the sign-in waits for the user to pick a session to close.
-        if (!(forceCookie || SessionCookies.WantsCookie(http, options)) || result.Value is not { } response || response.SessionLimit is not null)
+        if (!(forceCookie || SessionCookies.WantsCookie(http, options)) || result.Value is not { } response || response.SessionLimit is not null || response.Mfa is not null)
         {
             return result;
         }

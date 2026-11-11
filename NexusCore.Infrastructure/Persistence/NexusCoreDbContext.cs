@@ -26,6 +26,8 @@ public sealed class NexusCoreDbContext(
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<UserSession> UserSessions => Set<UserSession>();
     public DbSet<PendingSignIn> PendingSignIns => Set<PendingSignIn>();
+    public DbSet<MfaChallenge> MfaChallenges => Set<MfaChallenge>();
+    public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<SystemSetting> Settings => Set<SystemSetting>();
 

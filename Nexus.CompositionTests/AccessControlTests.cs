@@ -665,10 +665,15 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
             return (await Json(response)).GetProperty("items").EnumerateArray().Select(item => item.GetProperty("id").GetGuid()).ToList();
         }
 
-        public async Task<HttpResponseMessage> SendAsync(Caller caller, HttpMethod method, string path, object? body = null)
+        public async Task<HttpResponseMessage> SendAsync(Caller? caller, HttpMethod method, string path, object? body = null)
         {
             using var request = new HttpRequestMessage(method, path);
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", caller.Token);
+            // A null caller is an anonymous request (sign-in, API key exchange).
+            if (caller is not null)
+            {
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", caller.Token);
+            }
+
             request.Content = body switch
             {
                 null => null,

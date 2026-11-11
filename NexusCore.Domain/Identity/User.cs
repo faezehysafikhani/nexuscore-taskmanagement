@@ -80,6 +80,15 @@ public sealed class User : AuditableEntity<Guid>
     /// <summary>Send an SMS for every new sign-in to this account (off by default).</summary>
     public bool SmsOnEveryNewSignIn { get; private set; }
 
+    public UserKind Kind { get; private set; }
+
+    public void SetKind(UserKind kind) => Kind = kind;
+
+    /// <summary>Whether signing in needs a code sent by SMS after the password.</summary>
+    public bool MfaEnabled { get; private set; }
+
+    public void SetMfaEnabled(bool enabled) => MfaEnabled = enabled;
+
     public void SetSessionPreferences(int? maxConcurrentSessions, bool smsOnEveryNewSignIn)
     {
         MaxConcurrentSessions = maxConcurrentSessions;

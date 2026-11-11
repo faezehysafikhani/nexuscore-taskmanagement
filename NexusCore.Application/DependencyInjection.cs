@@ -40,6 +40,9 @@ public static class DependencyInjection
         // to one's own company); TryAdd so that module's registration wins whichever runs first.
         services.TryAddScoped<IUserReachScope, UnlimitedUserReachScope>();
         services.AddScoped<IAccountService, AccountService>();
+        services.AddScoped<NexusCore.Application.Identity.Security.IMfaService, NexusCore.Application.Identity.Security.MfaService>();
+        services.AddScoped<NexusCore.Application.Identity.Security.IServiceAccountService, NexusCore.Application.Identity.Security.ServiceAccountService>();
+        services.AddOptions<NexusCore.Application.Identity.Options.MfaOptions>();
         services.AddScoped<INotificationChannelSettingsReader, NotificationChannelSettingsReader>();
         services.AddScoped<INotificationChannelService, NotificationChannelService>();
         services.AddScoped<IPlatformService, PlatformService>();

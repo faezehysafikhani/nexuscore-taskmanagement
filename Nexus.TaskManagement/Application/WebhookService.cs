@@ -82,7 +82,8 @@ public sealed class WebhookService(
     IWebhookPublisher publisher,
     ITaskManagementUnitOfWork unitOfWork,
     ICurrentUserContext currentUser,
-    IOptions<WebhookOptions> options) : IWebhookService
+    IOptions<WebhookOptions> options,
+    TimeProvider clock) : IWebhookService
 {
     public const int MaxPerTenant = 20;
 
@@ -244,13 +245,13 @@ public sealed class WebhookService(
         }
 
         await repository.AddDeliveriesAsync([new WebhookDelivery(Guid.NewGuid(), tenantId, id, WebhookEvents.Ping,
-            WebhookPublisher.Envelope(tenantId, WebhookEvents.Ping, new { message = "Hello from the task manager." }), DateTimeOffset.UtcNow)], cancellationToken);
+            WebhookPublisher.Envelope(tenantId, WebhookEvents.Ping, new { message = "Hello from the task manager." }), clock.GetUtcNow())], cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }
 }
 
-public sealed class WebhookPublisher(IWebhookRepository repository, ITaskManagementUnitOfWork unitOfWork, ILogger<WebhookPublisher> logger) : IWebhookPublisher
+public sealed class WebhookPublisher(IWebhookRepository repository, ITaskManagementUnitOfWork unitOfWork, TimeProvider clock, ILogger<WebhookPublisher> logger) : IWebhookPublisher
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } };
 
@@ -267,7 +268,7 @@ public sealed class WebhookPublisher(IWebhookRepository repository, ITaskManagem
                 return;
             }
 
-            var now = DateTimeOffset.UtcNow;
+            var now = clock.GetUtcNow();
             await repository.AddDeliveriesAsync(
                 wanting.Select(w => new WebhookDelivery(Guid.NewGuid(), tenantId, w.Id, eventType, Envelope(tenantId, eventType, data), now)), cancellationToken);
             await unitOfWork.SaveChangesAsync(cancellationToken);

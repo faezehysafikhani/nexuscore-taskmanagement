@@ -61,6 +61,7 @@ public static class DependencyInjection
         // Nothing from posts unless the organization structure registers its own (it wins whichever runs first).
         services.TryAddScoped<IPositionPermissionProvider, NullPositionPermissionProvider>();
         services.AddScoped<ISessionRepository, SessionRepository>();
+        services.AddScoped<NexusCore.Application.Identity.Security.ISecurityRepository, SecurityRepository>();
         // Hub connections: every call re-checks the session, and a session that ends closes its connections.
         services.AddSingleton<InMemorySessionConnectionRegistry>();
         services.AddSingleton<SessionHubFilter>();
@@ -102,6 +103,7 @@ public static class DependencyInjection
         services.Configure<ManagedPermissionOptions>(configuration.GetSection(ManagedPermissionOptions.SectionName));
         // Password recovery sends its one-time code through ISmsSender (below); no email.
         services.Configure<PasswordRecoveryOptions>(configuration.GetSection(PasswordRecoveryOptions.SectionName));
+        services.Configure<NexusCore.Application.Identity.Options.MfaOptions>(configuration.GetSection(NexusCore.Application.Identity.Options.MfaOptions.SectionName));
         services.Configure<SmtpEmailOptions>(configuration.GetSection(SmtpEmailOptions.SectionName));
 
         // Outgoing messages. Request logging is removed from this client: the SMS API key is part

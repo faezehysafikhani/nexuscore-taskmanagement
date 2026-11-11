@@ -40,7 +40,8 @@ public sealed class IdentityService(
     IOptions<SignInSessionOptions>? sessionOptions = null,
     IPositionPermissionProvider? positionPermissions = null,
     IOptions<IdentitySeedOptions>? identityOptions = null,
-    IUserQuota? userQuota = null) : IIdentityService
+    IUserQuota? userQuota = null,
+    NexusCore.Application.Identity.Security.IMfaService? mfa = null) : IIdentityService
 {
     private readonly ManagedPermissionOptions _managed = managedPermissionOptions.Value;
     private readonly SignInSessionOptions _session = sessionOptions?.Value ?? new SignInSessionOptions();
@@ -104,7 +105,19 @@ public sealed class IdentityService(
                 : Error.Unauthorized(InvalidCredentials));
         }
 
+        // A service account has no way in but its API key.
+        if (user.Kind == UserKind.ServiceAccount)
+        {
+            return Result.Failure<AuthResponse>(Error.Unauthorized(InvalidCredentials));
+        }
+
         await loginProtection.RecordSuccessfulLoginAsync(request.Identifier, cancellationToken);
+        // The password was right; with the code turned on, the sign-in waits for it (no token until then).
+        if (mfa is not null && await mfa.ChallengeIfRequiredAsync(user, cancellationToken) is { } waiting)
+        {
+            return waiting;
+        }
+
         return Result.Success(await sessionIssuer.IssueAsync(user, cancellationToken));
     }
 
@@ -292,7 +305,13 @@ public sealed class IdentityService(
             return Result.Failure<UserDto>(taken);
         }
 
-        if (userQuota is not null && await userQuota.CheckCanAddUserAsync(request.TenantId, cancellationToken) is { } refused)
+        if (request.Kind == UserKind.ServiceAccount)
+        {
+            return Result.Failure<UserDto>(Error.Validation("حساب سرویس از بخش حساب‌های سرویس ساخته می‌شود."));
+        }
+
+        // Guests do not count against the organization's user limit.
+        if (request.Kind == UserKind.Normal && userQuota is not null && await userQuota.CheckCanAddUserAsync(request.TenantId, cancellationToken) is { } refused)
         {
             return Result.Failure<UserDto>(refused);
         }
@@ -300,6 +319,7 @@ public sealed class IdentityService(
         // Never a system account: the built-in administrator only comes from the seeder.
         var user = new User(Guid.NewGuid(), request.TenantId, request.Email, $"{request.FirstName} {request.LastName}", passwordHasher.HashPassword(request.Password), request.IsActive);
         user.SetName(request.FirstName, request.LastName);
+        user.SetKind(request.Kind);
         user.UpdateContactDetails(request.Username, request.PhoneNumber, request.NotifySms);
         user.SetPersonalDetails(request.Address, request.FatherName, request.BirthDate);
         user.SetAvatar(request.AvatarUrl);

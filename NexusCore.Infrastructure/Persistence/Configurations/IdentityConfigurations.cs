@@ -36,6 +36,8 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(x => x.FirstName).HasMaxLength(80);
         builder.Property(x => x.LastName).HasMaxLength(80);
         builder.Property(x => x.IsSystem).HasDefaultValue(false);
+        builder.Property(x => x.Kind).HasDefaultValue(UserKind.Normal);
+        builder.Property(x => x.MfaEnabled).HasDefaultValue(false);
         builder.Property(x => x.PasswordHash).HasMaxLength(256).IsRequired();
         builder.HasIndex(x => new { x.TenantId, x.Email }).IsUnique().HasFilter("[Email] IS NOT NULL");
         builder.Property(x => x.Username).HasMaxLength(64);

@@ -64,7 +64,7 @@ public sealed class AdministrationTests
     {
         var definitions = new CoreSmsTemplateCatalog().GetTemplates();
         Assert.Equal(
-            [SmsTemplateKeys.PasswordReset, SmsTemplateKeys.PhoneChange, SmsTemplateKeys.Letter, SmsTemplateKeys.Referral, SmsTemplateKeys.MeetingNotice, SmsTemplateKeys.ProposalRejected],
+            [SmsTemplateKeys.PasswordReset, SmsTemplateKeys.PhoneChange, SmsTemplateKeys.MfaCode, SmsTemplateKeys.Letter, SmsTemplateKeys.Referral, SmsTemplateKeys.MeetingNotice, SmsTemplateKeys.ProposalRejected],
             definitions.Select(d => d.Key).ToArray());
 
         foreach (var definition in definitions)
