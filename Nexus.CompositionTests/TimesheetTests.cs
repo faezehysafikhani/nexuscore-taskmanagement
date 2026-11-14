@@ -171,6 +171,22 @@ public sealed class TimesheetTests(AccessControlTests.Host host) : IClassFixture
     }
 
     [Fact]
+    public async Task AWeekInReview_TakesNoNewTime_AndATimerCannotAddToItEither()
+    {
+        var user = await host.UserAsync(host.TenantA, Permissions);
+        var task = await QuickAsync(user);
+        var entry = await LogAsync(user, task, 60);
+        await PutWeekInReviewAsync(host.TenantA, user.Id, entry);
+
+        // The total of the week was sent as it was; more time would change what is being approved.
+        Assert.Equal(HttpStatusCode.Conflict, (await host.SendAsync(user, HttpMethod.Post, $"{Sheets}/entries", new { taskId = task, date = Today, minutes = 15 })).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await host.SendAsync(user, HttpMethod.Post, $"{Sheets}/timer/start", new { taskId = task })).StatusCode);
+
+        // An empty answer: the timer never started.
+        Assert.Equal(string.Empty, await (await host.SendAsync(user, HttpMethod.Get, $"{Sheets}/timer")).Content.ReadAsStringAsync());
+    }
+
+    [Fact]
     public async Task Workload_IsForTimeManagers_AndShowsLoadAgainstCapacity()
     {
         var user = await host.UserAsync(host.TenantB, Permissions);

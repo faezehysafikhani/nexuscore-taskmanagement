@@ -99,6 +99,12 @@ public sealed class TimesheetService(
             return Result.Failure<TimeEntryDto>(Error.NotFound("Task not found."));
         }
 
+        var closed = await CheckWeekOpenAsync(tenantId, userId, request.Date, cancellationToken);
+        if (closed is not null)
+        {
+            return Result.Failure<TimeEntryDto>(closed);
+        }
+
         var invalid = await ValidateAsync(tenantId, userId, request.Date, request.Minutes, null, cancellationToken);
         if (invalid is not null)
         {
@@ -163,6 +169,15 @@ public sealed class TimesheetService(
         return Result.Success();
     }
 
+    /// <summary>A week that is with an approver takes no new time: its total was sent as it was.</summary>
+    private async Task<Error?> CheckWeekOpenAsync(Guid tenantId, Guid userId, DateOnly date, CancellationToken cancellationToken)
+    {
+        var submission = await repository.FindSubmissionAsync(tenantId, userId, WeekStartOf(date), cancellationToken);
+        return submission?.Status == ApprovalStatus.PendingApproval
+            ? Error.Conflict("This week is waiting for approval; no time can be added until it is decided.")
+            : null;
+    }
+
     private async Task<Error?> ValidateAsync(Guid tenantId, Guid userId, DateOnly date, int minutes, Guid? exceptEntryId, CancellationToken cancellationToken)
     {
         if (minutes is < 1 or > MaxMinutesPerDay)
@@ -211,6 +226,12 @@ public sealed class TimesheetService(
             return Result.Failure<TimerDto>(Error.NotFound("Task not found."));
         }
 
+        var closed = await CheckWeekOpenAsync(tenantId, userId, DateOnly.FromDateTime(DateTime.UtcNow), cancellationToken);
+        if (closed is not null)
+        {
+            return Result.Failure<TimerDto>(closed);
+        }
+
         // Starting another one stops the running one first, so no time is lost or counted twice.
         var running = await repository.GetTimerAsync(userId, cancellationToken);
         if (running is not null)
@@ -251,6 +272,14 @@ public sealed class TimesheetService(
         var now = DateTimeOffset.UtcNow;
         var minutes = Math.Clamp((int)Math.Ceiling((now - timer.StartedAtUtc).TotalMinutes), 1, MaxMinutesPerDay);
         var date = DateOnly.FromDateTime(timer.StartedAtUtc.UtcDateTime);
+
+        // A timer that was started before the week went to an approver cannot add to it either;
+        // the timer stays on, so the time is not lost.
+        var closed = await CheckWeekOpenAsync(tenantId, userId, date, cancellationToken);
+        if (closed is not null)
+        {
+            return Result.Failure<TimeEntryDto>(closed);
+        }
 
         // A timer left running overnight cannot overfill the day: it is cut to what the day has left.
         var left = MaxMinutesPerDay - await repository.SumMinutesOnDayAsync(tenantId, userId, date, null, cancellationToken);
