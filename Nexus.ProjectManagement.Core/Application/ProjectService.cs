@@ -51,9 +51,9 @@ public sealed class ProjectService(
             return Result.Failure(charterError);
         }
 
-        if (request.StartDate is { } start && request.EndDate is { } end && end < start)
+        if (DateError(request.StartDate, request.EndDate) is { } dateError)
         {
-            return Result.Failure(Error.Validation("End date must be on or after the start date."));
+            return Result.Failure(dateError);
         }
 
         if (options?.RequireUniqueName == true && await repository.NameExistsAsync(request.TenantId, request.Name, existingProjectId, cancellationToken))
@@ -81,6 +81,11 @@ public sealed class ProjectService(
         if (charterError is not null)
         {
             return Result.Failure<ProjectDto>(charterError);
+        }
+
+        if (DateError(request.StartDate, request.EndDate) is { } dateError)
+        {
+            return Result.Failure<ProjectDto>(dateError);
         }
 
         if (options?.RequireUniqueName == true && await repository.NameExistsAsync(request.TenantId, request.Name, null, cancellationToken))
@@ -126,6 +131,11 @@ public sealed class ProjectService(
         if (charterError is not null)
         {
             return Result.Failure<ProjectDto>(charterError);
+        }
+
+        if (DateError(request.StartDate, request.EndDate) is { } dateError)
+        {
+            return Result.Failure<ProjectDto>(dateError);
         }
 
         if (options?.RequireUniqueName == true && await repository.NameExistsAsync(project.TenantId, request.Name, id, cancellationToken))
@@ -250,6 +260,11 @@ public sealed class ProjectService(
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success(ToDto(project));
     }
+
+    private static Error? DateError(DateOnly? startDate, DateOnly? endDate) =>
+        startDate is { } start && endDate is { } end && end < start
+            ? Error.Validation("End date must be on or after the start date.")
+            : null;
 
     private Error? CheckCharter(
         string name, Guid? managerUserId, Guid? organizationUnitId, DateOnly? startDate, DateOnly? endDate,

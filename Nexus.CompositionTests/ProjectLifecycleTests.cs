@@ -119,6 +119,20 @@ public sealed class ProjectLifecycleTests
         Assert.Single(repo.Items);
     }
 
+    [Fact]
+    public async Task CreateAndUpdate_RefuseAnEndBeforeTheStart_LikeCheckDoes()
+    {
+        var repo = new Repo(ExistingProject("P1"));
+        var service = Service(repo);
+        var backwards = Create(code: "P2", manager: Bob, unit: Unit, start: new DateOnly(2026, 6, 1), end: new DateOnly(2026, 1, 1));
+
+        Assert.Equal("validation.error", (await service.CreateAsync(backwards, default)).Error.Code);
+        Assert.Single(repo.Items);
+
+        var update = new UpdateProjectRequest("P1", "P1", null, null, null, null, new DateOnly(2026, 6, 1), new DateOnly(2026, 1, 1), null, null, null, null, null, null, null);
+        Assert.Equal("validation.error", (await service.UpdateAsync(repo.Items[0].Id, update, default)).Error.Code);
+    }
+
     // ------------------------------------------------------------ status
 
     [Fact]
