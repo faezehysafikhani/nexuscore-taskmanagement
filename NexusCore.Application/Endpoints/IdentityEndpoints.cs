@@ -62,11 +62,14 @@ public static class IdentityEndpoints
             .WithName("RefreshToken");
 
         // Anonymous like /refresh: the refresh token itself is the proof, and signing out must
-        // work after the access token has expired.
-        auth.MapPost("/logout", async (RefreshTokenRequest? request, HttpContext http, IIdentityService identityService, IOptions<SignInSessionOptions> session, CancellationToken cancellationToken) =>
+        // work after the access token has expired. A client that keeps only the access token
+        // (no cookie, no body token) still ends its own session with that token.
+        auth.MapPost("/logout", async (RefreshTokenRequest? request, HttpContext http, IIdentityService identityService, ISessionService sessions, ICurrentUserContext currentUser, IOptions<SignInSessionOptions> session, CancellationToken cancellationToken) =>
             {
                 var token = SessionCookies.ReadRefreshToken(http, session.Value, request?.RefreshToken);
-                var result = await identityService.LogoutAsync(new RefreshTokenRequest(token), cancellationToken);
+                var result = token is null && currentUser.SessionId is { } currentSessionId
+                    ? await sessions.RevokeMineAsync(currentSessionId, cancellationToken)
+                    : await identityService.LogoutAsync(new RefreshTokenRequest(token), cancellationToken);
                 SessionCookies.Clear(http, session.Value);
                 return result.ToApiResult();
             })
