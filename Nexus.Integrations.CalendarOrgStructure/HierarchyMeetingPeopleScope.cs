@@ -38,7 +38,7 @@ public sealed class HierarchyMeetingPeopleScope(IOrgStructureRepository reposito
         var seats = await repository.ListUnitPositionsAsync(tenant, ct);
         // The repository excludes appointments that have not started or have already ended.
         var holdings = await repository.ListUserPositionsAsync(tenant, ct);
-        var activeUsers = await identity.Users.AsNoTracking().Where(u => u.TenantId == tenant && u.IsActive)
+        var activeUsers = await identity.Users.AsNoTracking().Where(u => u.TenantId == tenant && u.IsActive && u.Kind != NexusCore.Domain.Identity.UserKind.ServiceAccount)
             .Select(u => new { u.Id, u.DisplayName }).ToDictionaryAsync(u => u.Id, ct);
         var assignments = (await repository.ListAssignmentsAsync(tenant, ct))
             .Where(a => activeUsers.ContainsKey(a.UserId) && companyIds.Contains(a.CompanyId)

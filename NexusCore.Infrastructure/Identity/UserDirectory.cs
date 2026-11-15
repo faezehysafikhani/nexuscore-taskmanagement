@@ -33,7 +33,8 @@ public sealed class UserDirectory(NexusCoreDbContext dbContext) : IUserDirectory
     public async Task<IReadOnlyList<UserContact>> GetActiveUsersInTenantAsync(Guid tenantId, CancellationToken cancellationToken) =>
         await dbContext.Users
             .AsNoTracking()
-            .Where(user => user.TenantId == tenantId && user.IsActive)
+            // Service accounts are not people: they are never offered to pick (chat, meetings, unplaced users).
+            .Where(user => user.TenantId == tenantId && user.IsActive && user.Kind != NexusCore.Domain.Identity.UserKind.ServiceAccount)
             .Select(user => new UserContact(
                 user.Id,
                 user.TenantId,
