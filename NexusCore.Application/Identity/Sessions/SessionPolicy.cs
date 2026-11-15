@@ -26,8 +26,8 @@ public sealed class SessionPolicySettings
     public const int MinConcurrent = 1, MaxConcurrentCeiling = 10;
 
     /// <summary>Everyone (staff and administrators): 15 minutes idle, 10 hours in all, up to 3 sessions.</summary>
-    public int IdleMinutes { get; set; } = 15;
-    public int AbsoluteHours { get; set; } = 10;
+    public int IdleMinutes { get; set; } = 60;
+    public int AbsoluteHours { get; set; } = 12;
     public int MaxConcurrent { get; set; } = 3;
 
     /// <summary>Users who hold a sensitive permission (see <see cref="SessionPolicyProvider.SensitivePermissions"/>).</summary>
