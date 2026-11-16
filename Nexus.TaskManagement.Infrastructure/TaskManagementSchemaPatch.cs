@@ -130,6 +130,60 @@ public static class TaskManagementSchema
         END
         """;
 
+    /// <summary>Work types (CAT-251) and custom fields with their per-task values (CAT-252).</summary>
+    public const string AddTaskExtrasSql = """
+        IF OBJECT_ID(N'[task_management].[Tasks]') IS NOT NULL AND COL_LENGTH(N'task_management.Tasks', N'WorkTypeId') IS NULL
+            ALTER TABLE [task_management].[Tasks] ADD [WorkTypeId] uniqueidentifier NULL;
+        IF SCHEMA_ID(N'task_management') IS NOT NULL AND OBJECT_ID(N'[task_management].[WorkTypes]') IS NULL
+        BEGIN
+            CREATE TABLE [task_management].[WorkTypes] (
+                [Id] uniqueidentifier NOT NULL,
+                [TenantId] uniqueidentifier NOT NULL,
+                [Name] nvarchar(100) NOT NULL,
+                [NormalizedName] nvarchar(100) NOT NULL,
+                [Color] nvarchar(30) NULL,
+                [SortOrder] int NOT NULL,
+                [IsActive] bit NOT NULL,
+                [CreatedAtUtc] datetimeoffset NOT NULL,
+                [CreatedByUserId] uniqueidentifier NULL,
+                [ModifiedAtUtc] datetimeoffset NULL,
+                [ModifiedByUserId] uniqueidentifier NULL,
+                CONSTRAINT [PK_WorkTypes] PRIMARY KEY ([Id]));
+            CREATE UNIQUE INDEX [IX_WorkTypes_TenantId_NormalizedName] ON [task_management].[WorkTypes] ([TenantId], [NormalizedName]);
+        END
+        IF SCHEMA_ID(N'task_management') IS NOT NULL AND OBJECT_ID(N'[task_management].[CustomFields]') IS NULL
+        BEGIN
+            CREATE TABLE [task_management].[CustomFields] (
+                [Id] uniqueidentifier NOT NULL,
+                [TenantId] uniqueidentifier NOT NULL,
+                [Name] nvarchar(100) NOT NULL,
+                [NormalizedName] nvarchar(100) NOT NULL,
+                [Kind] int NOT NULL,
+                [OptionsJson] nvarchar(4000) NULL,
+                [IsRequired] bit NOT NULL,
+                [SortOrder] int NOT NULL,
+                [IsActive] bit NOT NULL,
+                [CreatedAtUtc] datetimeoffset NOT NULL,
+                [CreatedByUserId] uniqueidentifier NULL,
+                [ModifiedAtUtc] datetimeoffset NULL,
+                [ModifiedByUserId] uniqueidentifier NULL,
+                CONSTRAINT [PK_CustomFields] PRIMARY KEY ([Id]));
+            CREATE UNIQUE INDEX [IX_CustomFields_TenantId_NormalizedName] ON [task_management].[CustomFields] ([TenantId], [NormalizedName]);
+        END
+        IF SCHEMA_ID(N'task_management') IS NOT NULL AND OBJECT_ID(N'[task_management].[TaskFieldValues]') IS NULL
+        BEGIN
+            CREATE TABLE [task_management].[TaskFieldValues] (
+                [Id] uniqueidentifier NOT NULL,
+                [TenantId] uniqueidentifier NOT NULL,
+                [TaskId] uniqueidentifier NOT NULL,
+                [FieldId] uniqueidentifier NOT NULL,
+                [Value] nvarchar(1000) NOT NULL,
+                CONSTRAINT [PK_TaskFieldValues] PRIMARY KEY ([Id]));
+            CREATE UNIQUE INDEX [IX_TaskFieldValues_TaskId_FieldId] ON [task_management].[TaskFieldValues] ([TaskId], [FieldId]);
+            CREATE INDEX [IX_TaskFieldValues_TenantId_FieldId] ON [task_management].[TaskFieldValues] ([TenantId], [FieldId]);
+        END
+        """;
+
     /// <summary>Submit-for-review state on tasks (phase 4). ReviewStatus: 0 none, 1 pending, 2 approved, 3 rejected.</summary>
     public const string AddTaskReviewSql = """
         IF OBJECT_ID(N'[task_management].[Tasks]') IS NOT NULL
@@ -509,6 +563,7 @@ public sealed class TaskManagementSchemaPatcher(IServiceScopeFactory scopes, ILo
                 await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddMembershipSql, cancellationToken);
                 await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddRetentionSql, cancellationToken);
                 await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddReportSubscriptionsSql, cancellationToken);
+                await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddTaskExtrasSql, cancellationToken);
             }
         }
         catch (Exception ex)

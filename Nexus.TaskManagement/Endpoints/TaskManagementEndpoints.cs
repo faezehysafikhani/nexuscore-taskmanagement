@@ -28,6 +28,7 @@ public static class TaskManagementEndpoints
         app.MapTaskStatusEndpoints();
         app.MapTaskRequestEndpoints();
         app.MapTaskPlanningEndpoints();
+        app.MapTaskExtrasEndpoints();
         app.MapTimesheetEndpoints();
         app.MapAutomationEndpoints();
         app.MapWebhookEndpoints();
@@ -663,6 +664,52 @@ public static class TaskManagementEndpoints
                 (await service.RejectAsync(id, request, cancellationToken)).ToApiResult())
             .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.HandleRequests);
+
+        return app;
+    }
+
+    private static IEndpointRouteBuilder MapTaskExtrasEndpoints(this IEndpointRouteBuilder app)
+    {
+        var types = app.MapGroup("/api/task-management/work-types")
+            .WithTags("Work types")
+            .RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi)
+            .AddEndpointFilter<RequestValidationFilter>();
+        types.MapGet("/", async (ITaskExtrasService s, CancellationToken ct) => (await s.ListWorkTypesAsync(ct)).ToApiResult())
+            .WithSummary("The organization's work types (CAT-251)").RequireAuthorization(TaskManagementPermissions.View);
+        types.MapPost("/", async (SaveWorkTypeRequest r, ITaskExtrasService s, CancellationToken ct) => (await s.CreateWorkTypeAsync(r, ct)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(TaskManagementPermissions.ManageStatuses);
+        types.MapPut("/{id:guid}", async (Guid id, SaveWorkTypeRequest r, ITaskExtrasService s, CancellationToken ct) => (await s.UpdateWorkTypeAsync(id, r, ct)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(TaskManagementPermissions.ManageStatuses);
+        types.MapDelete("/{id:guid}", async (Guid id, ITaskExtrasService s, CancellationToken ct) => (await s.DeleteWorkTypeAsync(id, ct)).ToApiResult())
+            .WithSummary("Delete a work type; its tasks just lose the label")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(TaskManagementPermissions.ManageStatuses);
+
+        var fields = app.MapGroup("/api/task-management/custom-fields")
+            .WithTags("Custom fields")
+            .RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi)
+            .AddEndpointFilter<RequestValidationFilter>();
+        fields.MapGet("/", async (ITaskExtrasService s, CancellationToken ct) => (await s.ListFieldsAsync(ct)).ToApiResult())
+            .WithSummary("The organization's custom task fields (CAT-252)").RequireAuthorization(TaskManagementPermissions.View);
+        fields.MapPost("/", async (SaveCustomFieldRequest r, ITaskExtrasService s, CancellationToken ct) => (await s.CreateFieldAsync(r, ct)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(TaskManagementPermissions.ManageStatuses);
+        fields.MapPut("/{id:guid}", async (Guid id, SaveCustomFieldRequest r, ITaskExtrasService s, CancellationToken ct) => (await s.UpdateFieldAsync(id, r, ct)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(TaskManagementPermissions.ManageStatuses);
+        fields.MapDelete("/{id:guid}", async (Guid id, ITaskExtrasService s, CancellationToken ct) => (await s.DeleteFieldAsync(id, ct)).ToApiResult())
+            .WithSummary("Delete a field and the values tasks hold for it")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(TaskManagementPermissions.ManageStatuses);
+
+        var tasks = app.MapGroup("/api/task-management/tasks")
+            .WithTags("Task extras")
+            .RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi)
+            .AddEndpointFilter<RequestValidationFilter>();
+        tasks.MapGet("/{id:guid}/extras", async (Guid id, ITaskExtrasService s, CancellationToken ct) => (await s.GetForTaskAsync(id, ct)).ToApiResult())
+            .WithSummary("A task's work type and custom field values").RequireAuthorization(TaskManagementPermissions.View);
+        tasks.MapPut("/{id:guid}/extras", async (Guid id, SaveTaskExtrasRequest r, ITaskExtrasService s, CancellationToken ct) => (await s.SetForTaskAsync(id, r, ct)).ToApiResult())
+            .WithSummary("Set a task's work type and custom field values")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(TaskManagementPermissions.Edit);
 
         return app;
     }

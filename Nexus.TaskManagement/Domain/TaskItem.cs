@@ -378,6 +378,11 @@ public sealed class TaskItem : AuditableEntity<Guid>
     /// <summary>The label goes; the task keeps its built-in status.</summary>
     public void ClearCustomStatus() => CustomStatusId = null;
 
+    /// <summary>The organization-defined kind of work (<see cref="WorkTypeDefinition"/>), if any.</summary>
+    public Guid? WorkTypeId { get; private set; }
+
+    public void SetWorkType(Guid? workTypeId) => WorkTypeId = workTypeId;
+
     public void ChangeCustomStatus(TaskStatusDefinition definition, DateTimeOffset nowUtc)
     {
         ChangeStatus(definition.Category, nowUtc);

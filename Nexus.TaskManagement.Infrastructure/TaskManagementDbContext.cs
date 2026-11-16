@@ -51,6 +51,9 @@ public sealed class TaskManagementDbContext(
     public DbSet<TaskRequest> TaskRequests => Set<TaskRequest>();
     public DbSet<TaskStatusDefinition> TaskStatuses => Set<TaskStatusDefinition>();
     public DbSet<TaskTag> TaskTags => Set<TaskTag>();
+    public DbSet<WorkTypeDefinition> WorkTypes => Set<WorkTypeDefinition>();
+    public DbSet<CustomFieldDefinition> CustomFields => Set<CustomFieldDefinition>();
+    public DbSet<TaskFieldValue> TaskFieldValues => Set<TaskFieldValue>();
     public DbSet<Note> Notes => Set<Note>();
     public DbSet<TaskAssignee> TaskAssignees => Set<TaskAssignee>();
     public DbSet<SubTaskAssignee> SubTaskAssignees => Set<SubTaskAssignee>();
