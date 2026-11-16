@@ -369,7 +369,7 @@ public enum MembershipStatus
     NotStarted = 4
 }
 
-public sealed record MembershipUsageDto(int ActiveUsers, long StorageBytes, int TaskCount);
+public sealed record MembershipUsageDto(int ActiveUsers, long StorageBytes, int TaskCount, int? UsersPercent = null, int? StoragePercent = null);
 public sealed record MembershipDto(
     string? PlanName, int? MaxUsers, int? MaxStorageMb, DateOnly? ValidFrom, DateOnly? ValidUntil, string? Notes,
     MembershipStatus Status, int? DaysLeft, MembershipUsageDto Usage, IReadOnlyList<string> Warnings);

@@ -22,7 +22,12 @@ public interface IServiceAccountService
     Task<Result<AuthResponse>> ExchangeAsync(ApiKeyTokenRequest request, CancellationToken cancellationToken);
 
     Task<Result<UserDto>> SetKindAsync(Guid userId, SetUserKindRequest request, CancellationToken cancellationToken);
+
+    /// <summary>A guest's invitation (or any account's) ends at the given moment; null removes the end.</summary>
+    Task<Result<UserDto>> SetAccessExpiryAsync(Guid userId, SetAccessExpiryRequest request, CancellationToken cancellationToken);
 }
+
+public sealed record SetAccessExpiryRequest(DateTimeOffset? ExpiresAtUtc);
 
 /// <summary>
 /// Service accounts and their API keys (phase 9b). A service account is a user of kind ServiceAccount with no password, no
@@ -172,6 +177,30 @@ public sealed class ServiceAccountService(
         user.SetKind(request.Kind);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await platformService.AuditForAsync(user.TenantId, currentUser.UserId, "users.kind_changed", nameof(User), userId.ToString(), request.Kind.ToString(), cancellationToken);
+        return Result.Success(IdentityMappings.ToUserDto(user));
+    }
+
+    public async Task<Result<UserDto>> SetAccessExpiryAsync(Guid userId, SetAccessExpiryRequest request, CancellationToken cancellationToken)
+    {
+        var user = await repository.GetUserByIdAsync(userId, cancellationToken);
+        if (user is null || currentUser.TenantId != user.TenantId)
+        {
+            return Result.Failure<UserDto>(Error.NotFound("کاربر یافت نشد."));
+        }
+
+        if (user.IsSystem || user.Kind == UserKind.ServiceAccount)
+        {
+            return Result.Failure<UserDto>(Error.Validation("برای مدیر سامانه یا حساب سرویس نمی‌توان پایان اعتبار گذاشت."));
+        }
+
+        if (request.ExpiresAtUtc is { } until && until <= DateTimeOffset.UtcNow)
+        {
+            return Result.Failure<UserDto>(Error.Validation("پایان اعتبار باید در آینده باشد."));
+        }
+
+        user.SetAccessExpiry(request.ExpiresAtUtc);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        await platformService.AuditForAsync(user.TenantId, currentUser.UserId, "users.access_expiry_changed", nameof(User), userId.ToString(), request.ExpiresAtUtc?.ToString("u") ?? "none", cancellationToken);
         return Result.Success(IdentityMappings.ToUserDto(user));
     }
 }

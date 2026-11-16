@@ -47,6 +47,9 @@ public static class SecurityEndpoints
         users.MapPut("/{userId:guid}/kind", async (Guid userId, SetUserKindRequest request, IServiceAccountService accounts, CancellationToken ct) => (await accounts.SetKindAsync(userId, request, ct)).ToApiResult())
             .WithSummary("Mark a user as a guest (an outside person; not counted against the user limit) or a normal user").RequireAuthorization(IdentityPermissions.UsersUpdate);
 
+        users.MapPut("/{userId:guid}/access-expiry", async (Guid userId, SetAccessExpiryRequest request, IServiceAccountService accounts, CancellationToken ct) => (await accounts.SetAccessExpiryAsync(userId, request, ct)).ToApiResult())
+            .WithSummary("End a guest's invitation (or any account's access) at a given moment; null removes the end").RequireAuthorization(IdentityPermissions.UsersUpdate);
+
         var service = app.MapGroup("/api/identity/service-accounts").WithTags("Service accounts").RequireAuthorization();
         service.MapGet("/", async (IServiceAccountService accounts, CancellationToken ct) => (await accounts.ListAsync(ct)).ToApiResult())
             .RequireAuthorization(IdentityPermissions.UsersView);

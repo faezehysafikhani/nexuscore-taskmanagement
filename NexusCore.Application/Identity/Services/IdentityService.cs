@@ -90,7 +90,7 @@ public sealed class IdentityService(
             ? await ldap.VerifyAsync(user, request.Password, cancellationToken)
             : passwordHasher.Verify(request.Password, user?.PasswordHash ?? _unknownAccountHash);
         var passwordOk = user is not null && passwordChecked;
-        if (user is null || !user.IsActive || !passwordOk)
+        if (user is null || !user.IsActive || user.IsAccessExpired(DateTimeOffset.UtcNow) || !passwordOk)
         {
             var captchaNext = await loginProtection.RecordFailedLoginAsync(request.Identifier, cancellationToken);
             // The reason is for administrators only.
@@ -135,7 +135,7 @@ public sealed class IdentityService(
         var invalid = Result.Failure<AuthResponse>(Error.Unauthorized("نشست کاربری معتبر نیست؛ دوباره وارد شوید."));
         var refreshToken = await repository.FindRefreshTokenAsync(passwordHasher.HashToken(request.RefreshToken), cancellationToken);
         var now = DateTimeOffset.UtcNow;
-        if (refreshToken?.User is null || !refreshToken.User.IsActive || refreshToken.ExpiresAtUtc <= now)
+        if (refreshToken?.User is null || !refreshToken.User.IsActive || refreshToken.User.IsAccessExpired(now) || refreshToken.ExpiresAtUtc <= now)
         {
             return invalid;
         }
@@ -333,7 +333,8 @@ public sealed class IdentityService(
             ? await repository.GetRoleByNameAsync(request.TenantId, configuredRole, cancellationToken)
             : null;
         defaultRole ??= await repository.GetRoleByNameAsync(request.TenantId, DefaultUserRole.Name, cancellationToken);
-        if (defaultRole is not null)
+        // A guest only has what an administrator gives: no default role.
+        if (defaultRole is not null && request.Kind != UserKind.Guest)
         {
             user.AssignRole(defaultRole.Id);
         }

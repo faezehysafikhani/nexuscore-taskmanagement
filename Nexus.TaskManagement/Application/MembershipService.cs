@@ -52,6 +52,12 @@ public sealed class MembershipService(
         if (status == MembershipStatus.ExpiringSoon) warnings.Add($"The membership ends in {daysLeft} day(s).");
         if (plan.MaxUsers is { } max && usage.ActiveUsers >= max * NearLimit) warnings.Add(usage.ActiveUsers >= max ? "The user limit is reached." : "The user limit is almost reached.");
         if (plan.MaxStorageMb is { } mb && usage.StorageBytes >= mb * 1024L * 1024L * NearLimit) warnings.Add(usage.StorageBytes >= mb * 1024L * 1024L ? "The storage limit is reached." : "The storage limit is almost reached.");
+        // How much of the plan is used (CAT-199): what tells the organization it is time to upgrade.
+        usage = usage with
+        {
+            UsersPercent = plan.MaxUsers is { } mu ? (int)Math.Round(usage.ActiveUsers * 100.0 / mu) : null,
+            StoragePercent = plan.MaxStorageMb is { } ms ? (int)Math.Round(usage.StorageBytes * 100.0 / (ms * 1024.0 * 1024.0)) : null,
+        };
         return new MembershipDto(plan.PlanName, plan.MaxUsers, plan.MaxStorageMb, plan.ValidFrom, plan.ValidUntil, plan.Notes, status, daysLeft, usage, warnings);
     }
 

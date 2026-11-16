@@ -50,6 +50,7 @@ public static class DependencyInjection
         services.AddScoped<IPlatformService, PlatformService>();
         services.AddScoped<IBrandingService, BrandingService>();
         services.AddScoped<IUploadPolicyReader, UploadPolicyReader>();
+        services.AddScoped<IPasswordPolicyReader, PasswordPolicyReader>();
         // Live presence: one tracker for the process (replaceable by a shared one), fed by the hubs.
         services.TryAddSingleton<IUserPresenceTracker, InMemoryUserPresenceTracker>();
         services.AddScoped<IUserPresenceService, UserPresenceService>();

@@ -58,7 +58,7 @@ internal static class ProfileRules
 
 public sealed class CreateUserRequestValidator : AbstractValidator<CreateUserRequest>
 {
-    public CreateUserRequestValidator()
+    public CreateUserRequestValidator(IPasswordPolicyReader? policy = null)
     {
         RuleFor(x => x.Address).MaximumLength(1000);
         RuleFor(x => x.FatherName).MaximumLength(80);
@@ -71,14 +71,14 @@ public sealed class CreateUserRequestValidator : AbstractValidator<CreateUserReq
         RuleFor(x => x.FirstName).NotEmpty().MaximumLength(80);
         RuleFor(x => x.LastName).NotEmpty().MaximumLength(80);
         RuleFor(x => x.PhoneNumber).NotEmpty().ValidPhoneNumber();
-        RuleFor(x => x.Password).NotEmpty().StrongPassword();
+        RuleFor(x => x.Password).NotEmpty().StrongPassword(policy, x => x.TenantId);
         RuleFor(x => x.Email).EmailAddress().MaximumLength(256).When(x => !string.IsNullOrWhiteSpace(x.Email));
     }
 }
 
 public sealed class UpdateUserRequestValidator : AbstractValidator<UpdateUserRequest>
 {
-    public UpdateUserRequestValidator()
+    public UpdateUserRequestValidator(IPasswordPolicyReader? policy = null)
     {
         RuleFor(x => x.Address).MaximumLength(1000);
         RuleFor(x => x.FatherName).MaximumLength(80);
@@ -88,7 +88,7 @@ public sealed class UpdateUserRequestValidator : AbstractValidator<UpdateUserReq
 
         RuleFor(x => x.DisplayName).NotEmpty().MaximumLength(160);
         RuleFor(x => x.Email).EmailAddress().MaximumLength(256).When(x => !string.IsNullOrWhiteSpace(x.Email));
-        RuleFor(x => x.Password).StrongPassword().When(x => !string.IsNullOrWhiteSpace(x.Password));
+        RuleFor(x => x.Password).StrongPassword(policy).When(x => !string.IsNullOrWhiteSpace(x.Password));
         // Null keeps the current username. A changed one must be a national code - checked by
         // the service, which knows the current value (older usernames stay valid unchanged).
         RuleFor(x => x.Username).NotEmpty().When(x => x.Username is not null);
@@ -100,21 +100,21 @@ public sealed class UpdateUserRequestValidator : AbstractValidator<UpdateUserReq
 
 public sealed class ChangeMyPasswordRequestValidator : AbstractValidator<ChangeMyPasswordRequest>
 {
-    public ChangeMyPasswordRequestValidator()
+    public ChangeMyPasswordRequestValidator(IPasswordPolicyReader? policy = null)
     {
         RuleFor(x => x.CurrentPassword).NotEmpty().MaximumLength(128);
-        RuleFor(x => x.NewPassword).NotEmpty().StrongPassword()
+        RuleFor(x => x.NewPassword).NotEmpty().StrongPassword(policy)
             .NotEqual(x => x.CurrentPassword).WithMessage("رمز عبور جدید باید با رمز فعلی متفاوت باشد.");
     }
 }
 
 public sealed class ResetPasswordRequestValidator : AbstractValidator<ResetPasswordRequest>
 {
-    public ResetPasswordRequestValidator()
+    public ResetPasswordRequestValidator(IPasswordPolicyReader? policy = null)
     {
         RuleFor(x => x.Token).NotEmpty().MaximumLength(200).WithMessage("مهلت تعیین رمز عبور جدید به پایان رسیده است. لطفاً دوباره کد بازیابی دریافت کنید.");
         RuleFor(x => x.NewPassword).NotEmpty().WithMessage("رمز عبور جدید را وارد کنید.")
-            .StrongPassword();
+            .StrongPassword(policy);
     }
 }
 

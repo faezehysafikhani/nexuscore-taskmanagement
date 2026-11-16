@@ -89,6 +89,13 @@ public sealed class User : AuditableEntity<Guid>
 
     public void SetKind(UserKind kind) => Kind = kind;
 
+    /// <summary>When the account stops working (a guest's invitation ends); null: never.</summary>
+    public DateTimeOffset? AccessExpiresAtUtc { get; private set; }
+
+    public void SetAccessExpiry(DateTimeOffset? expiresAtUtc) => AccessExpiresAtUtc = expiresAtUtc;
+
+    public bool IsAccessExpired(DateTimeOffset nowUtc) => AccessExpiresAtUtc is { } until && until <= nowUtc;
+
     /// <summary>Whether signing in needs a code sent by SMS after the password.</summary>
     public bool MfaEnabled { get; private set; }
 

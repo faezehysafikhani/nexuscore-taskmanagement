@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using NexusCore.Application.Identity.Dtos;
 using NexusCore.Application.Identity.Options;
 using NexusCore.Application.Identity.Interfaces;
+using NexusCore.Application.Identity.Validators;
 using NexusCore.Application.Identity.Permissions;
 using NexusCore.Application.Identity.Security;
 using NexusCore.Application.Identity.Services;
@@ -451,6 +452,15 @@ public static class IdentityEndpoints
         // upload a file needs to read this, not just admins, so it carries no extra permission -
         // it is changed through the generic settings endpoint above (Uploads.MaxFileSizeKb /
         // System), which settings.update already gates.
+        platform.MapGet("/password-policy", async (ICurrentUserContext currentUser, IPasswordPolicyReader reader, CancellationToken cancellationToken) =>
+            {
+                var policy = await reader.GetAsync(currentUser.TenantId, cancellationToken);
+                return Results.Ok(new { policy.MinLength, policy.RequiredClasses, policy.Message });
+            })
+            .AllowAnonymous()
+            .WithName("GetPasswordPolicy")
+            .WithSummary("The password rules new passwords must follow (organization setting Security.PasswordMinLength / Security.PasswordRequiredClasses)");
+
         platform.MapGet("/upload-policy", async (ICurrentUserContext currentUser, IUploadPolicyReader policyReader, CancellationToken cancellationToken) =>
         {
             var maxKb = await policyReader.GetMaxFileSizeKbAsync(currentUser.TenantId, cancellationToken);
