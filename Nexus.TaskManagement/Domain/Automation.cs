@@ -6,7 +6,10 @@ public enum AutomationTrigger
 {
     TaskCreated = 0,
     StatusChanged = 1,
-    SlaBreached = 2
+    SlaBreached = 2,
+
+    /// <summary>The due date passed and the task is not done (checked by the monitor, once per due date).</summary>
+    Overdue = 3
 }
 
 public enum AutomationActionType
@@ -23,11 +26,17 @@ public enum AutomationActionType
     StartSla = 5,
 
     /// <summary>Tell UserId - or the task's owner when none is given.</summary>
-    Notify = 6
+    Notify = 6,
+
+    /// <summary>Hand the task to the team GroupId (conditional routing and hand-off between teams).</summary>
+    AssignGroup = 7,
+
+    /// <summary>Give the task to the manager Levels steps above whoever is responsible (1 = direct manager).</summary>
+    EscalateUp = 8
 }
 
 /// <summary>When all given conditions hold (an absent one always does), the rule's actions run.</summary>
-public sealed record AutomationConditions(TaskPriority? Priority = null, TaskItemStatus? Status = null, bool? IsProject = null, string? TitleContains = null);
+public sealed record AutomationConditions(TaskPriority? Priority = null, TaskItemStatus? Status = null, bool? IsProject = null, string? TitleContains = null, Guid? WorkTypeId = null);
 
 public sealed record AutomationAction(
     AutomationActionType Type,
@@ -37,7 +46,9 @@ public sealed record AutomationAction(
     string? Tag = null,
     int? Hours = null,
     bool BusinessDaysOnly = false,
-    string? Message = null);
+    string? Message = null,
+    Guid? GroupId = null,
+    int? Levels = null);
 
 /// <summary>Trigger + conditions + actions. Conditions and Actions are JSON (see <see cref="AutomationConditions"/>, <see cref="AutomationAction"/>).</summary>
 public sealed class AutomationRule : AuditableEntity<Guid>

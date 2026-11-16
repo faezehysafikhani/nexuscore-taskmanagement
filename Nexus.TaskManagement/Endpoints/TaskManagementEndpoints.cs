@@ -707,6 +707,9 @@ public static class TaskManagementEndpoints
             .AddEndpointFilter<RequestValidationFilter>();
         tasks.MapGet("/{id:guid}/extras", async (Guid id, ITaskExtrasService s, CancellationToken ct) => (await s.GetForTaskAsync(id, ct)).ToApiResult())
             .WithSummary("A task's work type and custom field values").RequireAuthorization(TaskManagementPermissions.View);
+        tasks.MapPost("/{id:guid}/handoff", async (Guid id, HandoffTaskRequest r, ITaskHandoffService s, CancellationToken ct) => (await s.HandoffAsync(id, r, ct)).ToApiResult())
+            .WithSummary("Hand a task to another person and/or team with a note (CAT-110)")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(TaskManagementPermissions.Edit);
         tasks.MapPut("/{id:guid}/extras", async (Guid id, SaveTaskExtrasRequest r, ITaskExtrasService s, CancellationToken ct) => (await s.SetForTaskAsync(id, r, ct)).ToApiResult())
             .WithSummary("Set a task's work type and custom field values")
             .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(TaskManagementPermissions.Edit);

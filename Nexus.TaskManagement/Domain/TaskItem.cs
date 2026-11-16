@@ -37,6 +37,7 @@ public sealed class TaskItem : AuditableEntity<Guid>
         TenantId = tenantId;
         Title = title.Trim();
         Description = description;
+        if (DueDate != dueDate) OverdueRulesRanAtUtc = null;
         DueDate = dueDate;
         Priority = priority;
         IsProject = isProject;
@@ -382,6 +383,14 @@ public sealed class TaskItem : AuditableEntity<Guid>
     public Guid? WorkTypeId { get; private set; }
 
     public void SetWorkType(Guid? workTypeId) => WorkTypeId = workTypeId;
+
+    /// <summary>Hands the task to a team (user group) without changing who is responsible.</summary>
+    public void SetAssignedGroup(Guid? groupId) => AssignedUserGroupId = groupId;
+
+    /// <summary>When the overdue rules ran for this task (once per due date; moving the date re-arms it).</summary>
+    public DateTimeOffset? OverdueRulesRanAtUtc { get; private set; }
+
+    public void MarkOverdueRulesRan(DateTimeOffset nowUtc) => OverdueRulesRanAtUtc = nowUtc;
 
     public void ChangeCustomStatus(TaskStatusDefinition definition, DateTimeOffset nowUtc)
     {

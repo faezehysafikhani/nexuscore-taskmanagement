@@ -121,6 +121,7 @@ public sealed class TaskAutomationEngine(
         (c.Priority is null || task.Priority == c.Priority)
         && (c.Status is null || task.Status == c.Status)
         && (c.IsProject is null || task.IsProject == c.IsProject)
+        && (c.WorkTypeId is null || task.WorkTypeId == c.WorkTypeId)
         && (string.IsNullOrWhiteSpace(c.TitleContains) || task.Title.Contains(c.TitleContains.Trim(), StringComparison.OrdinalIgnoreCase));
 
     private async Task<string> ApplyAsync(AutomationAction action, TaskItem task, CancellationToken cancellationToken)
@@ -156,6 +157,29 @@ public sealed class TaskAutomationEngine(
 
                 task.SetResponsibleUsers([chain[0]]);
                 return "Assigned to the manager";
+            }
+
+            case AutomationActionType.AssignGroup when action.GroupId is { } groupId:
+                task.SetAssignedGroup(groupId);
+                return "Handed to the team";
+
+            case AutomationActionType.EscalateUp:
+            {
+                var who = task.AssignedUserId ?? task.OwnerUserId;
+                if (managers is null || who is null)
+                {
+                    throw new InvalidOperationException("The organization structure is not available.");
+                }
+
+                var chain = await managers.GetChainAsync(task.TenantId, who.Value, cancellationToken);
+                if (chain.Count == 0)
+                {
+                    throw new InvalidOperationException("The person has no manager in the structure.");
+                }
+
+                var level = Math.Clamp(action.Levels ?? 1, 1, chain.Count);
+                task.SetResponsibleUsers([chain[level - 1]]);
+                return $"Escalated {level} level(s) up";
             }
 
             case AutomationActionType.AddTag when !string.IsNullOrWhiteSpace(action.Tag):
@@ -247,6 +271,8 @@ public sealed class AutomationService(
                 AutomationActionType.AssignUser => action.UserId is not null,
                 AutomationActionType.AddTag => !string.IsNullOrWhiteSpace(action.Tag) && action.Tag.Length <= 100,
                 AutomationActionType.StartSla => action.Hours is > 0 and <= 100000,
+                AutomationActionType.AssignGroup => action.GroupId is not null,
+                AutomationActionType.EscalateUp => action.Levels is null or (>= 1 and <= 10),
                 _ => Enum.IsDefined(action.Type)
             };
             if (!ok)

@@ -81,7 +81,19 @@ public sealed class TaskSlaMonitorService(
                 await automation.RunAsync(AutomationTrigger.SlaBreached, task, cancellationToken);
             }
 
-            return due.Count;
+            // Overdue by due date (not by SLA clock): the rules run once per due date.
+            var today = DateOnly.FromDateTime(now.UtcDateTime);
+            var late = await db.Tasks.IgnoreQueryFilters().Include(t => t.Assignees)
+                .Where(t => t.ArchivedAtUtc == null && t.DueDate < today && t.OverdueRulesRanAtUtc == null && t.Status != TaskItemStatus.Completed)
+                .OrderBy(t => t.DueDate).Take(100).ToListAsync(cancellationToken);
+            foreach (var task in late)
+            {
+                task.MarkOverdueRulesRan(now);
+                await db.SaveChangesAsync(cancellationToken);
+                await automation.RunAsync(AutomationTrigger.Overdue, task, cancellationToken);
+            }
+
+            return due.Count + late.Count;
         }
         finally
         {

@@ -184,6 +184,12 @@ public static class TaskManagementSchema
         END
         """;
 
+    /// <summary>When the overdue rules ran for a task (CAT-122), so the monitor runs them once per due date.</summary>
+    public const string AddOverdueRulesSql = """
+        IF OBJECT_ID(N'[task_management].[Tasks]') IS NOT NULL AND COL_LENGTH(N'task_management.Tasks', N'OverdueRulesRanAtUtc') IS NULL
+            ALTER TABLE [task_management].[Tasks] ADD [OverdueRulesRanAtUtc] datetimeoffset NULL;
+        """;
+
     /// <summary>Submit-for-review state on tasks (phase 4). ReviewStatus: 0 none, 1 pending, 2 approved, 3 rejected.</summary>
     public const string AddTaskReviewSql = """
         IF OBJECT_ID(N'[task_management].[Tasks]') IS NOT NULL
@@ -564,6 +570,7 @@ public sealed class TaskManagementSchemaPatcher(IServiceScopeFactory scopes, ILo
                 await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddRetentionSql, cancellationToken);
                 await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddReportSubscriptionsSql, cancellationToken);
                 await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddTaskExtrasSql, cancellationToken);
+                await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddOverdueRulesSql, cancellationToken);
             }
         }
         catch (Exception ex)
