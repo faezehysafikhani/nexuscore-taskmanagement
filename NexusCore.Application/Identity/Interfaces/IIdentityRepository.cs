@@ -42,6 +42,8 @@ public interface IIdentityRepository
     string? search,
     CancellationToken cancellationToken,
     IReadOnlyCollection<Guid>? excludeUserIds = null);
+    /// <summary>The user with this e-mail address (in the tenant; with no tenant, only when exactly one user has it).</summary>
+    Task<User?> FindUserByEmailAsync(Guid? tenantId, string email, CancellationToken cancellationToken);
     Task<bool> UserEmailExistsAsync(Guid tenantId, string email, Guid? exceptUserId, CancellationToken cancellationToken);
     Task AddUserAsync(User user, CancellationToken cancellationToken);
     Task RemoveUserAsync(User user, CancellationToken cancellationToken);

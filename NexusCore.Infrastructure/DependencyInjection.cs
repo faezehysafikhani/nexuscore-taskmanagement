@@ -99,6 +99,7 @@ public static class DependencyInjection
         services.AddScoped<IPhoneChangeCodes, PhoneChangeCodes>();
 
         services.Configure<SignInSessionOptions>(configuration.GetSection(SignInSessionOptions.SectionName));
+        services.Configure<NexusCore.Application.Identity.Sso.SsoOptions>(configuration.GetSection(NexusCore.Application.Identity.Sso.SsoOptions.SectionName));
         services.Configure<IdentitySeedOptions>(configuration.GetSection(IdentitySeedOptions.SectionName));
         services.Configure<ManagedPermissionOptions>(configuration.GetSection(ManagedPermissionOptions.SectionName));
         // Password recovery sends its one-time code through ISmsSender (below); no email.

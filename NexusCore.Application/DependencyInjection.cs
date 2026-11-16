@@ -51,6 +51,8 @@ public static class DependencyInjection
         services.AddScoped<IBrandingService, BrandingService>();
         services.AddScoped<IUploadPolicyReader, UploadPolicyReader>();
         services.AddScoped<IPasswordPolicyReader, PasswordPolicyReader>();
+        services.AddHttpClient();
+        services.AddScoped<NexusCore.Application.Identity.Sso.ISsoService, NexusCore.Application.Identity.Sso.SsoService>();
         // Live presence: one tracker for the process (replaceable by a shared one), fed by the hubs.
         services.TryAddSingleton<IUserPresenceTracker, InMemoryUserPresenceTracker>();
         services.AddScoped<IUserPresenceService, UserPresenceService>();

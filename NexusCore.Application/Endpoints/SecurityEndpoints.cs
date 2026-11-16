@@ -41,6 +41,67 @@ public static class SecurityEndpoints
             .AllowAnonymous().RequireRateLimiting(NexusRateLimitPolicies.Auth)
             .WithSummary("Exchange an API key of a service account for an access token");
 
+        // --- single sign-on (CAT-226): OpenID Connect and SAML 2.0 ---
+        auth.MapGet("/sso/providers", (NexusCore.Application.Identity.Sso.ISsoService sso) => Results.Ok(sso.Providers()))
+            .AllowAnonymous()
+            .WithSummary("The single sign-on buttons the sign-in page should show");
+
+        auth.MapGet("/sso/{key}/start", async (string key, string? returnUrl, HttpContext http, NexusCore.Application.Identity.Sso.ISsoService sso, CancellationToken ct) =>
+            {
+                var started = await sso.StartAsync(key, returnUrl, ct);
+                if (started.IsFailure)
+                {
+                    return Results.Redirect(sso.FailureUrl(returnUrl, started.Error.Message));
+                }
+
+                if (started.Value!.Binder is { } binder)
+                {
+                    // Lax: the browser comes back from the identity provider with a top-level GET, which Lax cookies accompany.
+                    http.Response.Cookies.Append(SsoCookie, binder, new CookieOptions
+                    {
+                        HttpOnly = true,
+                        Secure = http.Request.IsHttps,
+                        SameSite = SameSiteMode.Lax,
+                        Path = "/api/identity/auth/sso",
+                        MaxAge = TimeSpan.FromMinutes(15),
+                        IsEssential = true,
+                    });
+                }
+
+                return Results.Redirect(started.Value.RedirectUrl);
+            })
+            .AllowAnonymous()
+            .RequireRateLimiting(NexusRateLimitPolicies.Auth)
+            .WithName("SsoStart");
+
+        auth.MapGet("/sso/{key}/callback", async (string key, string? code, string? state, string? error, HttpContext http, NexusCore.Application.Identity.Sso.ISsoService sso, IOptions<SignInSessionOptions> session, CancellationToken ct) =>
+            {
+                http.Request.Cookies.TryGetValue(SsoCookie, out var binder);
+                http.Response.Cookies.Delete(SsoCookie, new CookieOptions { Path = "/api/identity/auth/sso" });
+                var done = await sso.CompleteOidcAsync(key, code, state, error, binder, ct);
+                return SsoRedirect(http, session.Value, sso, done);
+            })
+            .AllowAnonymous()
+            .RequireRateLimiting(NexusRateLimitPolicies.Auth)
+            .WithName("SsoCallback");
+
+        auth.MapPost("/sso/{key}/acs", async (string key, HttpContext http, NexusCore.Application.Identity.Sso.ISsoService sso, IOptions<SignInSessionOptions> session, CancellationToken ct) =>
+            {
+                // Read by hand: a [FromForm] parameter would demand anti-forgery middleware, and the identity provider cannot send a token.
+                var form = http.Request.HasFormContentType ? await http.Request.ReadFormAsync(ct) : null;
+                var done = await sso.CompleteSamlAsync(key, form?["SAMLResponse"].ToString(), form?["RelayState"].ToString(), ct);
+                return SsoRedirect(http, session.Value, sso, done);
+            })
+            .AllowAnonymous()
+            .DisableAntiforgery()
+            .RequireRateLimiting(NexusRateLimitPolicies.Auth)
+            .WithName("SsoSamlAcs");
+
+        auth.MapGet("/sso/{key}/metadata", (string key, NexusCore.Application.Identity.Sso.ISsoService sso) =>
+                sso.SamlMetadata(key) is { IsSuccess: true } metadata ? Results.Content(metadata.Value!, "application/samlmetadata+xml") : Results.NotFound())
+            .AllowAnonymous()
+            .WithSummary("The service provider metadata to give to the SAML identity provider");
+
         var users = app.MapGroup("/api/identity/users").WithTags("Users").RequireAuthorization();
         users.MapPost("/{userId:guid}/mfa/reset", async (Guid userId, IMfaService mfa, CancellationToken ct) => (await mfa.ResetAsync(userId, ct)).ToApiResult())
             .WithSummary("Switch the SMS code off for someone who lost their phone").RequireAuthorization(IdentityPermissions.UsersUpdate);
@@ -60,5 +121,20 @@ public static class SecurityEndpoints
         service.MapDelete("/{id:guid}/api-keys/{keyId:guid}", async (Guid id, Guid keyId, IServiceAccountService accounts, CancellationToken ct) => (await accounts.RevokeKeyAsync(id, keyId, ct)).ToApiResult())
             .RequireAuthorization(IdentityPermissions.UsersUpdate);
         return app;
+    }
+
+    private const string SsoCookie = "nexus_sso";
+
+    /// <summary>Signed in: the refresh token goes in its cookie and the browser back to the UI, which then asks /refresh for its access token. Failed: back to the UI with the reason.</summary>
+    private static IResult SsoRedirect(HttpContext http, SignInSessionOptions options, NexusCore.Application.Identity.Sso.ISsoService sso, NexusCore.SharedKernel.Results.Result<NexusCore.Application.Identity.Sso.SsoCompleted> done)
+    {
+        if (done.IsFailure)
+        {
+            return Results.Redirect(sso.FailureUrl(null, done.Error.Message));
+        }
+
+        SessionCookies.Attach(http, options, done.Value!.Session);
+        var target = done.Value.ReturnUrl;
+        return Results.Redirect(target + (target.Contains('?') ? "&" : "?") + "sso=ok");
     }
 }

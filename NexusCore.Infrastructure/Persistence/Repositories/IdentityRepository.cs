@@ -227,6 +227,15 @@ public sealed class IdentityRepository(
             total);
     }
 
+    public async Task<User?> FindUserByEmailAsync(Guid? tenantId, string email, CancellationToken cancellationToken)
+    {
+        var normalizedEmail = email.Trim().ToLowerInvariant();
+        var found = await IncludeUserGraph(dbContext.Users)
+            .Where(user => user.Email == normalizedEmail && (tenantId == null || user.TenantId == tenantId))
+            .Take(2).ToListAsync(cancellationToken);
+        return found.Count == 1 ? found[0] : null;
+    }
+
     public Task<bool> UserEmailExistsAsync(Guid tenantId, string email, Guid? exceptUserId, CancellationToken cancellationToken)
     {
         var normalizedEmail = email.Trim().ToLowerInvariant();
