@@ -307,4 +307,44 @@ public sealed class ProjectLifecycleTests
         public Task<IReadOnlyList<ActionItem>> ListAsync(Guid tenantId, Guid? projectId, CancellationToken ct) => Task.FromResult<IReadOnlyList<ActionItem>>([]);
         public Task AddAsync(ActionItem action, CancellationToken ct) => Task.CompletedTask;
     }
+
+    // -------------------------------------------------------------- organization chart: who may be chosen
+
+    private sealed class LevelLimit(params Guid[] blocked) : NexusCore.Application.Identity.Interfaces.IWorkAssignmentScope
+    {
+        public Task<NexusCore.Application.Identity.Interfaces.WorkAssignmentLimit?> GetLimitAsync(Guid tenantId, Guid assignerUserId, CancellationToken cancellationToken) =>
+            Task.FromResult<NexusCore.Application.Identity.Interfaces.WorkAssignmentLimit?>(new(blocked.ToHashSet()));
+    }
+
+    private sealed class SignedIn(Guid id) : NexusCore.SharedKernel.Interfaces.ICurrentUserContext
+    {
+        public Guid? UserId => id;
+        public Guid? TenantId => Tenant;
+        public string? Email => null;
+        public string? IpAddress => null;
+    }
+
+    [Fact]
+    public async Task TheProjectManager_MustBeAtTheCreatorsLevelOrBelow_AndAnUnchangedOneStays()
+    {
+        var boss = Guid.NewGuid();
+        var me = Guid.NewGuid();
+        var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<Nexus.ProjectManagement.Core.Infrastructure.ProjectManagementCoreDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
+        await using var db = new Nexus.ProjectManagement.Core.Infrastructure.ProjectManagementCoreDbContext(options);
+        var repo = new Nexus.ProjectManagement.Core.Infrastructure.ProjectRepository(db);
+        var open = new ProjectService(repo, db, new NoApproval());
+        var limited = new ProjectService(repo, db, new NoApproval(), null, null, null, new LevelLimit(boss), null, new SignedIn(me));
+
+        var refused = await limited.CreateAsync(Create(code: "B1", manager: boss), default);
+        Assert.True(refused.IsFailure);
+        Assert.Contains("مدیر پروژه", refused.Error.Message);
+        Assert.True((await limited.CreateAsync(Create(code: "B2", manager: me), default)).IsSuccess);
+
+        // A project that already has that manager (set by someone else) can still be edited by the limited user.
+        var existing = (await open.CreateAsync(Create(code: "B3", manager: boss), default)).Value!;
+        var edit = new UpdateProjectRequest(existing.Name, existing.Code, boss, existing.OwnerUserId, existing.OrganizationUnitId, null,
+            new DateOnly(2026, 1, 1), new DateOnly(2026, 6, 1), null, "A real goal", "Real requirements", null, null, null, null);
+        Assert.True((await limited.UpdateAsync(existing.Id, edit, default)).IsSuccess);
+    }
 }

@@ -268,6 +268,30 @@ public static class IdentityEndpoints
             })
             .RequireAuthorization();
 
+        // Whom the signed-in user may not make responsible for work (an action, a project), so the pickers offer only
+        // the others. Same rules as tasks; the server checks again on save.
+        app.MapGet("/api/identity/assignment-limit", async (HttpContext http, ICurrentUserContext currentUser, CancellationToken cancellationToken) =>
+            {
+                if (currentUser.TenantId is not { } tenantId || currentUser.UserId is not { } userId)
+                {
+                    return Results.Unauthorized();
+                }
+
+                var limit = http.RequestServices.GetService<IWorkAssignmentScope>() is { } scope
+                    ? await scope.GetLimitAsync(tenantId, userId, cancellationToken)
+                    : null;
+                var reach = http.RequestServices.GetService<IUserReachScope>() is { } reachScope
+                    ? await reachScope.GetReachAsync(tenantId, userId, cancellationToken)
+                    : null;
+                return Results.Ok(new WorkAssignmentLimitDto(
+                    limit is not null,
+                    [.. (limit?.BlockedUserIds ?? new HashSet<Guid>()).Union(reach?.PlacedElsewhere ?? new HashSet<Guid>())],
+                    reach?.UserIds.ToList()));
+            })
+            .WithTags("Identity")
+            .RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi);
+
         users.MapPost("/", async (CreateUserRequest request, IIdentityService identityService, CancellationToken cancellationToken) =>
                 (await identityService.CreateUserAsync(request, cancellationToken)).ToApiResult())
             .RequireRateLimiting(NexusRateLimitPolicies.Write)
