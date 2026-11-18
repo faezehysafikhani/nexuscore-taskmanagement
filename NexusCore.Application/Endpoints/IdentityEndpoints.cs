@@ -244,6 +244,30 @@ public static class IdentityEndpoints
             })
             .RequireAuthorization(IdentityPermissions.UsersView);
 
+        // The people of one's own organization (and, where the structure keeps everyone to their own company, of that
+        // company) for choosing someone - a responsible person, a team member, an approver - and for showing names.
+        // For every signed-in user: only names, usernames, avatar, roles and whether active - no email, mobile or
+        // personal details, and no sign-in times.
+        users.MapGet("/directory", async (int? pageNumber, int? pageSize, string? search, ICurrentUserContext currentUser, IIdentityService identityService, CancellationToken cancellationToken) =>
+            {
+                var result = await identityService.ListUsersAsync(currentUser.TenantId, pageNumber, pageSize, search, cancellationToken);
+                if (result.IsFailure)
+                {
+                    return result.ToApiResult();
+                }
+
+                var page = result.Value!;
+                return Results.Ok(page with
+                {
+                    Items = page.Items.Select(user => user with
+                    {
+                        Email = null, PhoneNumber = null, LastLoginAtUtc = null, Address = null, FatherName = null, BirthDate = null,
+                        Theme = null, ColorPalette = null, ThemeMode = null,
+                    }).ToList()
+                });
+            })
+            .RequireAuthorization();
+
         users.MapPost("/", async (CreateUserRequest request, IIdentityService identityService, CancellationToken cancellationToken) =>
                 (await identityService.CreateUserAsync(request, cancellationToken)).ToApiResult())
             .RequireRateLimiting(NexusRateLimitPolicies.Write)

@@ -55,6 +55,7 @@ public static class DependencyInjection
         // A disabled account leaves its posts.
         services.AddScoped<IUserDeactivationListener, PostReleaseOnDeactivation>();
         services.AddScoped<NexusCore.Application.Identity.Interfaces.IOrgUnitHeads, OrgUnitHeads>();
+        services.AddScoped<NexusCore.Application.Identity.Interfaces.IUnitReachScope, CompanyUnitReach>();
         // Workflow steps whose approver is the submitter's manager, a post or a position.
         services.AddScoped<NexusCore.Application.Approvals.IApprovalKeyResolver, OrgApprovalKeyResolver>();
 
