@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
@@ -15,6 +15,12 @@ namespace Nexus.TaskManagement.Application;
 public sealed class WebhookOptions
 {
     public const string SectionName = "TaskManagement:Webhooks";
+
+    /// <summary>
+    /// false: no webhook events are queued and the delivery job does not run, so a host without
+    /// webhooks never reads their tables. Subscriptions can still be managed.
+    /// </summary>
+    public bool Enabled { get; set; } = true;
 
     /// <summary>Plain http is refused unless a host (a development one) allows it.</summary>
     public bool AllowHttp { get; set; }
@@ -251,7 +257,7 @@ public sealed class WebhookService(
     }
 }
 
-public sealed class WebhookPublisher(IWebhookRepository repository, ITaskManagementUnitOfWork unitOfWork, TimeProvider clock, ILogger<WebhookPublisher> logger) : IWebhookPublisher
+public sealed class WebhookPublisher(IWebhookRepository repository, ITaskManagementUnitOfWork unitOfWork, TimeProvider clock, ILogger<WebhookPublisher> logger, IOptions<WebhookOptions>? options = null) : IWebhookPublisher
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } };
 
@@ -260,6 +266,11 @@ public sealed class WebhookPublisher(IWebhookRepository repository, ITaskManagem
 
     public async Task PublishAsync(Guid tenantId, string eventType, object data, CancellationToken cancellationToken)
     {
+        if (options?.Value.Enabled == false)
+        {
+            return;
+        }
+
         try
         {
             var wanting = (await repository.ListActiveAsync(tenantId, cancellationToken)).Where(w => w.Wants(eventType)).ToList();

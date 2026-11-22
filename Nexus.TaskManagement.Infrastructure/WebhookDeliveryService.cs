@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
@@ -152,7 +152,7 @@ public sealed class WebhookDeliveryBackgroundService(
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (!schedulerOptions.Value.Enabled)
+        if (!schedulerOptions.Value.Enabled || !webhookOptions.Value.Enabled)
         {
             return;
         }

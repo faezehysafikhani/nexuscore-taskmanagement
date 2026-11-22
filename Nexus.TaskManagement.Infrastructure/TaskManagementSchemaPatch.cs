@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -544,38 +544,49 @@ public static class TaskManagementSchema
 /// <summary>Applies <see cref="TaskManagementSchema"/> when the host starts (SQL Server only), before the module's jobs run.</summary>
 public sealed class TaskManagementSchemaPatcher(IServiceScopeFactory scopes, ILogger<TaskManagementSchemaPatcher> logger) : IHostedService
 {
+    /// <summary>Each step on its own: one that fails (logged with its name) does not keep the later ones from running.</summary>
+    private static readonly (string Name, string Sql)[] Steps =
+    [
+        (nameof(TaskManagementSchema.AddRemindersSql), TaskManagementSchema.AddRemindersSql),
+        (nameof(TaskManagementSchema.AddPostOwnershipAndActingSql), TaskManagementSchema.AddPostOwnershipAndActingSql),
+        (nameof(TaskManagementSchema.AddSubTaskAssigneesAndStatusSql), TaskManagementSchema.AddSubTaskAssigneesAndStatusSql),
+        (nameof(TaskManagementSchema.AddNotificationOutboxSql), TaskManagementSchema.AddNotificationOutboxSql),
+        (nameof(TaskManagementSchema.AddConcurrencyAndArchiveSql), TaskManagementSchema.AddConcurrencyAndArchiveSql),
+        (nameof(TaskManagementSchema.AddArchiveIndexSql), TaskManagementSchema.AddArchiveIndexSql),
+        (nameof(TaskManagementSchema.AddCustomStatusesSql), TaskManagementSchema.AddCustomStatusesSql),
+        (nameof(TaskManagementSchema.AddCustomStatusIndexSql), TaskManagementSchema.AddCustomStatusIndexSql),
+        (nameof(TaskManagementSchema.AddTaskReviewSql), TaskManagementSchema.AddTaskReviewSql),
+        (nameof(TaskManagementSchema.AddRequestsSql), TaskManagementSchema.AddRequestsSql),
+        (nameof(TaskManagementSchema.AddPlanningSql), TaskManagementSchema.AddPlanningSql),
+        (nameof(TaskManagementSchema.AddTimesheetsSql), TaskManagementSchema.AddTimesheetsSql),
+        (nameof(TaskManagementSchema.AddAutomationSql), TaskManagementSchema.AddAutomationSql),
+        (nameof(TaskManagementSchema.AddWebhooksSql), TaskManagementSchema.AddWebhooksSql),
+        (nameof(TaskManagementSchema.AddMembershipSql), TaskManagementSchema.AddMembershipSql),
+        (nameof(TaskManagementSchema.AddRetentionSql), TaskManagementSchema.AddRetentionSql),
+        (nameof(TaskManagementSchema.AddReportSubscriptionsSql), TaskManagementSchema.AddReportSubscriptionsSql),
+        (nameof(TaskManagementSchema.AddTaskExtrasSql), TaskManagementSchema.AddTaskExtrasSql),
+        (nameof(TaskManagementSchema.AddOverdueRulesSql), TaskManagementSchema.AddOverdueRulesSql),
+    ];
+
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        try
+        await using var scope = scopes.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<TaskManagementDbContext>();
+        if (!db.Database.IsSqlServer())
         {
-            await using var scope = scopes.CreateAsyncScope();
-            var db = scope.ServiceProvider.GetRequiredService<TaskManagementDbContext>();
-            if (db.Database.IsSqlServer())
-            {
-                await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddRemindersSql, cancellationToken);
-                await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddPostOwnershipAndActingSql, cancellationToken);
-                await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddSubTaskAssigneesAndStatusSql, cancellationToken);
-                await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddNotificationOutboxSql, cancellationToken);
-                await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddConcurrencyAndArchiveSql, cancellationToken);
-                await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddArchiveIndexSql, cancellationToken);
-                await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddCustomStatusesSql, cancellationToken);
-                await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddCustomStatusIndexSql, cancellationToken);
-                await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddTaskReviewSql, cancellationToken);
-                await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddRequestsSql, cancellationToken);
-                await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddPlanningSql, cancellationToken);
-                await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddTimesheetsSql, cancellationToken);
-                await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddAutomationSql, cancellationToken);
-                await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddWebhooksSql, cancellationToken);
-                await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddMembershipSql, cancellationToken);
-                await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddRetentionSql, cancellationToken);
-                await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddReportSubscriptionsSql, cancellationToken);
-                await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddTaskExtrasSql, cancellationToken);
-                await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddOverdueRulesSql, cancellationToken);
-            }
+            return;
         }
-        catch (Exception ex)
+
+        foreach (var (name, sql) in Steps)
         {
-            logger.LogError(ex, "Could not add the task reminder columns; apply the TaskManagement migrations.");
+            try
+            {
+                await db.Database.ExecuteSqlRawAsync(sql, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogError(ex, "Task management schema step {Step} failed; the steps after it still run. Fix the database for this step (or apply the TaskManagement migrations).", name);
+            }
         }
     }
 
