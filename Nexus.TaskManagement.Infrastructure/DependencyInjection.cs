@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -36,6 +36,9 @@ public static class DependencyInjection
         services.AddScoped<IRetentionRepository, RetentionRepository>();
         services.AddScoped<IReportSubscriptionRepository, ReportSubscriptionRepository>();
         services.AddScoped<ITaskDigestSource, TaskDigestSource>();
+        // First of all hosted services (the host starts them one by one, in this order): the columns
+        // and tables newer versions need, added to an existing database before any job reads them.
+        services.AddHostedService<TaskManagementSchemaPatcher>();
         services.AddHostedService<TaskSlaMonitorService>();
         services.Configure<Nexus.TaskManagement.Application.WebhookOptions>(configuration.GetSection(Nexus.TaskManagement.Application.WebhookOptions.SectionName));
         services.AddSingleton<WebhookDeliveryService>();
@@ -57,9 +60,6 @@ public static class DependencyInjection
         services.Configure<RepetitiveTaskSchedulerOptions>(
             configuration.GetSection(RepetitiveTaskSchedulerOptions.SectionName));
 
-        // First: the columns and tables newer versions need, added to an existing database
-        // before any job below reads them.
-        services.AddHostedService<TaskManagementSchemaPatcher>();
         services.AddScoped<ITaskSmsOutbox, TaskSmsOutbox>();
         // Notifications are written down first and delivered from there: a failed one is retried, never repeated.
         services.AddScoped<ITaskNotificationOutbox, TaskNotificationOutbox>();
