@@ -32,6 +32,7 @@
     <!-- Calendar and meetings: the meeting people follow the organization structure; minutes make tasks -->
     <ProjectReference Include="..\Nexus.Calendar\Nexus.Calendar.csproj" />
     <ProjectReference Include="..\Nexus.Calendar.Infrastructure\Nexus.Calendar.Infrastructure.csproj" />
+    <ProjectReference Include="..\Nexus.Calendar.IranianHolidays\Nexus.Calendar.IranianHolidays.csproj" />
     <ProjectReference Include="..\Nexus.Integrations.CalendarOrgStructure\Nexus.Integrations.CalendarOrgStructure.csproj" />
     <ProjectReference Include="..\Nexus.Integrations.CalendarTasks\Nexus.Integrations.CalendarTasks.csproj" />
 

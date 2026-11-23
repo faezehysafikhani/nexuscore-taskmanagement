@@ -32,6 +32,8 @@ using Nexus.Integrations.TaskNotifications;
 using Nexus.Integrations.TaskReporting;
 
 using Nexus.Calendar;
+using Nexus.Calendar.Endpoints;
+using Nexus.Calendar.IranianHolidays;
 using Nexus.Calendar.Infrastructure;
 using Nexus.Calendar.Infrastructure.Meetings;
 using Nexus.Integrations.CalendarTasks;
@@ -98,6 +100,8 @@ builder.Services.AddOrgStructure();
 
 // Calendar and meetings (the meeting people follow the organization structure; minutes make tasks)
 builder.Services.AddCalendarApplication();
+// Work calendars that follow the official holidays use Iran's.
+builder.Services.AddIranianOfficialHolidays();
 
 // Task reports along the organization structure
 builder.Services.AddTaskReporting();
@@ -461,6 +465,8 @@ app.MapMeetingEndpoints();
 app.MapCalendarTasksEndpoints();
 // The Approval Center: definitions, pending approvals, delegations.
 app.MapWorkflowEndpoints();
+// Work calendars: working days, hours, official holidays and date exceptions.
+app.MapCalendarEndpoints();
 
 
 // ======================================================
@@ -544,6 +550,11 @@ if (builder.Configuration.GetValue(
         cancellationToken);
     await WorkflowSchemaUpgrade.EnsureCurrentAsync(services.GetRequiredService<WorkflowDbContext>(), cancellationToken);
     await WorkflowApproverPlaceholdersSchemaUpgrade.EnsureCurrentAsync(services.GetRequiredService<WorkflowDbContext>(), cancellationToken);
+
+    // Work calendars (working days, hours, official holidays, date exceptions): the calendar module's own
+    // tables beside the meetings, and the columns later Core releases added to them
+    await ModuleSchemaInitializer.EnsureCreatedAsync(services.GetRequiredService<CalendarDbContext>(), cancellationToken);
+    await CalendarSchemaUpgrade.EnsureCurrentAsync(services.GetRequiredService<CalendarDbContext>(), cancellationToken);
 }
 
 
