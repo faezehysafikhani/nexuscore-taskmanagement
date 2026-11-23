@@ -169,9 +169,13 @@ the top of its company, every company keeps its head and the people keep their m
    sqlcmd -S <db-host> -d TMPB -I -f 65001 -i db/upgrade-15-company-profile.sql
    sqlcmd -S <db-host> -d TMPB -I -f 65001 -i db/upgrade-17-stand-in-period.sql
    sqlcmd -S <db-host> -d TMPB -I -f 65001 -i db/upgrade-18-calendar-meetings.sql
+   sqlcmd -S <db-host> -d TMPB -I -f 65001 -i db/upgrade-19-position-permissions.sql
+   sqlcmd -S <db-host> -d TMPB -I -f 65001 -i db/upgrade-20-work-calendars.sql
+   sqlcmd -S <db-host> -d TMPB -I -f 65001 -i db/upgrade-21-workflow.sql
    ```
    With `Database:InitializeOrgStructureSchema` true (the default) the API makes the same changes at
-   start-up; run the scripts when a DBA owns the schema.
+   start-up (step 20 and 21: work calendars and Workflow approvals, created by the API at start-up as well);
+   run the scripts when a DBA owns the schema.
 5. **After:** `db/check-upgrades.sql` must say all steps are applied, and `db/check-upgrade-10.sql`
    section A must be identical to the one saved before (row counts and checksums), section B all zero.
 6. **Deploy the new NexusCore packages** (section 9) and start the API. Open the chart: it must look as
@@ -181,7 +185,7 @@ the top of its company, every company keeps its head and the people keep their m
    what may sit under what), templates. Nothing nests until rules exist.
 
 **Undo**, newest first, only if needed (data made with the new features in the dropped columns and
-tables is lost): `db/upgrade-17-rollback.sql`, `db/upgrade-15-rollback.sql`, `db/upgrade-14-rollback.sql`, `db/upgrade-13-rollback.sql`, `db/upgrade-12-rollback.sql`,
+tables is lost): `db/upgrade-21-rollback.sql`, `db/upgrade-20-rollback.sql`, `db/upgrade-19-rollback.sql`, `db/upgrade-17-rollback.sql`, `db/upgrade-15-rollback.sql`, `db/upgrade-14-rollback.sql`, `db/upgrade-13-rollback.sql`, `db/upgrade-12-rollback.sql`,
 `db/upgrade-11-rollback.sql`, `db/upgrade-10-rollback.sql`. The table `organization.OrganizationUnits`
 keeps its name (the host checks it at start-up).
 

@@ -377,3 +377,4 @@ FodyWeavers.xsd
 
 # graphify knowledge graph (rebuilt per branch)
 graphify-out/
+!TMPB-API/db/*.sql
