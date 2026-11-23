@@ -275,6 +275,11 @@ repository with `eng/pack-core-modules.ps1`. To update:
 
 ---
 
+## 9.1 Backup and restore
+
+See `BACKUP.md`: what to back up (database, uploaded files, encryption keys, settings), `tools/backup.ps1` every
+night, and `tools/restore.ps1`.
+
 ## 10. Security settings
 
 Since NexusCore `0.1.0.1405072818-mahdi`. All have safe defaults; at a real install set these:
