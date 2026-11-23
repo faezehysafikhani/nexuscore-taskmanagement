@@ -395,6 +395,15 @@ public sealed record SubmitTaskReviewRequest(string? Comment = null);
 public sealed record TaskReviewItemDto(Guid Id, string Title, DateOnly DueDate, UserSummaryDto? SubmittedBy, DateTimeOffset? SubmittedAtUtc, string? Comment);
 public sealed record TaskReviewItemsRequest(IReadOnlyList<Guid> Ids);
 
+/// <summary>The board's batch load: the ids of the tasks to read in full (at most <see cref="MaxIds"/>).</summary>
+public sealed record TaskBoardDetailsRequest(IReadOnlyList<Guid>? Ids)
+{
+    public const int MaxIds = 100;
+}
+
+/// <summary>One task as the board needs it: detail, comments and history.</summary>
+public sealed record TaskBoardDetailsDto(TaskDto Task, IReadOnlyList<TaskCommentDto> Comments, IReadOnlyList<TaskActivityDto> Activity);
+
 /// <summary>Quick add: only a title is needed. Due today if no date is given; given to the person adding it.</summary>
 public sealed record QuickCreateTaskRequest(string Title, DateOnly? DueDate = null, TaskPriority Priority = TaskPriority.Medium);
 

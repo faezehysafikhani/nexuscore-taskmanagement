@@ -53,6 +53,15 @@ public sealed class TaskManagementHub(ICurrentUserContext currentUser, IUserPres
     private const string PresenceUserKey = "presence-user";
 }
 
+/// <summary>
+/// Marks a POST that only reads (a batch query): no "TasksChanged" after it. Without this mark every client
+/// would reload on each read, and the reloads would announce again.
+/// </summary>
+public sealed class ReadOnlyTaskEndpoint
+{
+    public static readonly ReadOnlyTaskEndpoint Instance = new();
+}
+
 public sealed record TasksChangedMessage(string Resource, string Method, DateTimeOffset AtUtc);
 
 /// <summary>
@@ -69,7 +78,9 @@ public sealed class TaskChangeBroadcastFilter(
         var result = await next(context);
 
         var request = context.HttpContext.Request;
-        if (HttpMethods.IsGet(request.Method) || currentUser.TenantId is not { } tenantId)
+        if (HttpMethods.IsGet(request.Method)
+            || context.HttpContext.GetEndpoint()?.Metadata.GetMetadata<ReadOnlyTaskEndpoint>() is not null
+            || currentUser.TenantId is not { } tenantId)
         {
             return result;
         }

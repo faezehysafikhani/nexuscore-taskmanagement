@@ -276,7 +276,9 @@ public sealed class OrgStructureTests
             // Optional integrations built on the module (and the tests) may reference it.
             if (name.StartsWith("Nexus.OrgStructure", StringComparison.Ordinal)
                 || name is "Nexus.CompositionTests" or "Nexus.Integrations.TaskReporting" or "Nexus.Integrations.CalendarOrgStructure"
-                || name == "Nexus.Bundles.Platform")
+                || name == "Nexus.Bundles.Platform"
+                // The TMPB host is a composition root that wires the module in.
+                || name == "TMPB-API")
             {
                 continue;
             }

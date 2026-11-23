@@ -187,6 +187,42 @@ public static class TaskManagementEndpoints
         group.MapPost("/in-review", async (TaskReviewItemsRequest request, ITaskReviewService service, CancellationToken cancellationToken) =>
                 (await service.ListInReviewAsync(request.Ids, cancellationToken)).ToApiResult())
             .WithSummary("Title, due date and submitter of the tasks (among the ids) that are waiting for review - for the approver's list")
+            .WithMetadata(ReadOnlyTaskEndpoint.Instance)
+            .RequireAuthorization(TaskManagementPermissions.View);
+
+        // The board's load in one request per batch (instead of three requests per task): each task's detail,
+        // comments and history, through the same services (and access rules) as the single-task endpoints.
+        // A task the caller cannot see is left out; comments or history it may not read come back empty.
+        group.MapPost("/board-details", async (TaskBoardDetailsRequest request, ITaskService tasks, ITaskCommentService comments,
+                ITaskActivityService activity, CancellationToken cancellationToken) =>
+            {
+                var ids = (request.Ids ?? []).Distinct().ToList();
+                if (ids.Count > TaskBoardDetailsRequest.MaxIds)
+                {
+                    return Results.BadRequest(new { error = $"At most {TaskBoardDetailsRequest.MaxIds} ids per request." });
+                }
+
+                var items = new List<TaskBoardDetailsDto>(ids.Count);
+                foreach (var id in ids)
+                {
+                    var task = await tasks.GetAsync(id, cancellationToken);
+                    if (task.IsFailure || task.Value is null)
+                    {
+                        continue;
+                    }
+
+                    var taskComments = await comments.ListAsync(id, cancellationToken);
+                    var history = await activity.GetForTaskAsync(id, cancellationToken);
+                    items.Add(new TaskBoardDetailsDto(
+                        task.Value,
+                        taskComments.IsSuccess ? taskComments.Value ?? [] : [],
+                        history.IsSuccess ? history.Value ?? [] : []));
+                }
+
+                return Results.Ok(items);
+            })
+            .WithSummary("Detail, comments and history of up to 100 tasks at once - the board's load")
+            .WithMetadata(ReadOnlyTaskEndpoint.Instance)
             .RequireAuthorization(TaskManagementPermissions.View);
 
         group.MapPut("/{id:guid}", async (Guid id, UpdateTaskRequest request, ITaskService service, CancellationToken cancellationToken) =>
