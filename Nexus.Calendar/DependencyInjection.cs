@@ -14,7 +14,8 @@ public static class DependencyInjection
         configure?.Invoke(options);
         services.AddSingleton(options);
         services.AddScoped<IWorkCalendarService, WorkCalendarService>();
-        services.AddSingleton<ISchedulingDayPolicy, IranSchedulingDayPolicy>();
+        // New tasks and meetings follow the default work calendar (CAT-85); without one, the fixed Iranian rule.
+        services.AddScoped<ISchedulingDayPolicy, WorkCalendarSchedulingDayPolicy>();
         services.AddSingleton<IPermissionCatalog, CalendarPermissionCatalog>();
 
         services.AddAuthorization(options =>
