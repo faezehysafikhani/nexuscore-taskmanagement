@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 
 using NexusCore.Application.Common;
 using NexusCore.Application;
@@ -450,6 +450,8 @@ if (builder.Configuration.IsUserGroupFeatureEnabled())
 
 app.MapTaskManagementEndpoints();
 app.MapMeetingEndpoints();
+// A meeting's action items (minutes) become tasks: one, or all at once.
+app.MapCalendarTasksEndpoints();
 
 
 // ======================================================
