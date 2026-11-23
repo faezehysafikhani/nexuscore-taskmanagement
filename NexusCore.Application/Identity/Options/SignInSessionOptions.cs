@@ -29,6 +29,16 @@ public sealed class SignInSessionOptions
     public int IdleWarningSeconds { get; set; } = 120;
 
     /// <summary>
+    /// Temporary switch: true turns the session timeouts off. Every new sign-in then lasts
+    /// <see cref="ExpiryDisabledSeconds"/> with no idle limit in practice; the concurrent-session
+    /// limit and revoking a session still work. Sessions opened before the switch keep their limits.
+    /// </summary>
+    public bool ExpiryDisabled { get; set; }
+
+    /// <summary>How long a session lasts (idle and in all) while <see cref="ExpiryDisabled"/> is on: one year.</summary>
+    public const int ExpiryDisabledSeconds = 365 * 24 * 3600;
+
+    /// <summary>
     /// For trying the timeouts by hand: replaces the idle timeout (seconds, may be below the
     /// platform's 5-minute minimum) of every new session. Honoured ONLY when the host runs in the
     /// Development environment; ignored everywhere else.
