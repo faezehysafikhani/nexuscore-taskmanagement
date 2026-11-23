@@ -34,6 +34,10 @@
     <ProjectReference Include="..\Nexus.Calendar.Infrastructure\Nexus.Calendar.Infrastructure.csproj" />
     <ProjectReference Include="..\Nexus.Integrations.CalendarOrgStructure\Nexus.Integrations.CalendarOrgStructure.csproj" />
     <ProjectReference Include="..\Nexus.Integrations.CalendarTasks\Nexus.Integrations.CalendarTasks.csproj" />
+
+    <!-- Approvals: task review, weekly timesheets, approver delegation (the Approval Center) -->
+    <ProjectReference Include="..\Nexus.Workflow\Nexus.Workflow.csproj" />
+    <ProjectReference Include="..\Nexus.Workflow.Infrastructure\Nexus.Workflow.Infrastructure.csproj" />
   </ItemGroup>
 
   <ItemGroup>

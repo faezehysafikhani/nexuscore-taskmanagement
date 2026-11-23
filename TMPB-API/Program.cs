@@ -36,6 +36,9 @@ using Nexus.Calendar.Infrastructure;
 using Nexus.Calendar.Infrastructure.Meetings;
 using Nexus.Integrations.CalendarTasks;
 using Nexus.Integrations.CalendarOrgStructure;
+using Nexus.Workflow;
+using Nexus.Workflow.Endpoints;
+using Nexus.Workflow.Infrastructure;
 using Nexus.Organization;
 using Nexus.Organization.Endpoints;
 using Nexus.Organization.Infrastructure;
@@ -101,6 +104,9 @@ builder.Services.AddTaskReporting();
 builder.Services.AddCalendarMeetings(builder.Configuration);
 builder.Services.AddCalendarOrgStructureIntegration();
 builder.Services.AddCalendarTasksIntegration();
+// Approvals (task review, weekly timesheets, approver delegation). With no definition for a kind of
+// approval nothing changes: the submitting module applies its own rule, as before.
+builder.Services.AddWorkflowApplication();
 
 
 // ======================================================
@@ -130,6 +136,7 @@ builder.Services.AddOrgStructureInfrastructure(
 
 // Calendar and meetings
 builder.Services.AddCalendarInfrastructure(builder.Configuration);
+builder.Services.AddWorkflowInfrastructure(builder.Configuration);
 
 
 // ======================================================
@@ -452,6 +459,8 @@ app.MapTaskManagementEndpoints();
 app.MapMeetingEndpoints();
 // A meeting's action items (minutes) become tasks: one, or all at once.
 app.MapCalendarTasksEndpoints();
+// The Approval Center: definitions, pending approvals, delegations.
+app.MapWorkflowEndpoints();
 
 
 // ======================================================
@@ -528,6 +537,13 @@ if (builder.Configuration.GetValue(
     await ModuleSchemaInitializer.EnsureCreatedAsync(
         services.GetRequiredService<ChatDbContext>(),
         cancellationToken);
+
+    // Workflow schema (approvals), and the columns later Core releases added to an older one
+    await ModuleSchemaInitializer.EnsureCreatedAsync(
+        services.GetRequiredService<WorkflowDbContext>(),
+        cancellationToken);
+    await WorkflowSchemaUpgrade.EnsureCurrentAsync(services.GetRequiredService<WorkflowDbContext>(), cancellationToken);
+    await WorkflowApproverPlaceholdersSchemaUpgrade.EnsureCurrentAsync(services.GetRequiredService<WorkflowDbContext>(), cancellationToken);
 }
 
 
