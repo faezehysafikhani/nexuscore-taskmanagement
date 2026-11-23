@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Nexus.TaskManagement.Application.Dtos;
 using Nexus.TaskManagement.Domain;
 using NexusCore.Application.Common;
@@ -14,7 +14,11 @@ public static class SlaCalculator
 {
     private static readonly TimeSpan IranOffset = TimeSpan.FromMinutes(210);
 
-    public static DateTimeOffset DueAt(DateTimeOffset start, int hours, bool businessDaysOnly, ISchedulingDayPolicy days)
+    public static DateTimeOffset DueAt(DateTimeOffset start, int hours, bool businessDaysOnly, ISchedulingDayPolicy days) =>
+        DueAt(start, hours, businessDaysOnly, day => days.Check(day).IsAllowed);
+
+    /// <summary>The same, with the working days given as a test (the organization's work calendar).</summary>
+    public static DateTimeOffset DueAt(DateTimeOffset start, int hours, bool businessDaysOnly, Func<DateOnly, bool> isWorkingDay)
     {
         if (!businessDaysOnly)
         {
@@ -29,7 +33,7 @@ public static class SlaCalculator
         {
             var day = DateOnly.FromDateTime(cursor.ToOffset(IranOffset).DateTime);
             var endOfDay = new DateTimeOffset(day.AddDays(1).ToDateTime(TimeOnly.MinValue), IranOffset);
-            if (!days.Check(day).IsAllowed)
+            if (!isWorkingDay(day))
             {
                 cursor = endOfDay;
                 continue;
@@ -58,7 +62,8 @@ public sealed class TaskAutomationEngine(
     ISchedulingDayPolicy days,
     ITaskNoticePublisher notices,
     ILogger<TaskAutomationEngine> logger,
-    IManagementChainProvider? managers = null) : ITaskAutomation
+    IManagementChainProvider? managers = null,
+    ISlaWorkingDays? workingDays = null) : ITaskAutomation
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } };
 
@@ -202,7 +207,19 @@ public sealed class TaskAutomationEngine(
 
             case AutomationActionType.StartSla when action.Hours is > 0:
             {
-                var due = SlaCalculator.DueAt(now, action.Hours.Value, action.BusinessDaysOnly, days);
+                // Working days from the organization's default work calendar when there is one (CAT-85); otherwise the host's rule.
+                Func<DateOnly, bool> isWorkingDay = day => days.Check(day).IsAllowed;
+                if (action.BusinessDaysOnly && workingDays is not null)
+                {
+                    var from = DateOnly.FromDateTime(now.ToOffset(TimeSpan.FromMinutes(210)).DateTime);
+                    var to = from.AddDays(Math.Min(365, action.Hours.Value / 24 * 3 + 60));
+                    if (await workingDays.GetAsync(task.TenantId, from, to, cancellationToken) is { } calendar)
+                    {
+                        isWorkingDay = day => day <= to ? calendar(day) : days.Check(day).IsAllowed;
+                    }
+                }
+
+                var due = SlaCalculator.DueAt(now, action.Hours.Value, action.BusinessDaysOnly, isWorkingDay);
                 task.StartSla(due);
                 return $"SLA due {due:u}";
             }

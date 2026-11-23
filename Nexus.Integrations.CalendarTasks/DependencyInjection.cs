@@ -1,4 +1,4 @@
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Nexus.Calendar.Application.Meetings;
 
 namespace Nexus.Integrations.CalendarTasks;
@@ -9,6 +9,8 @@ public static class DependencyInjection
     {
         services.AddScoped<IMeetingTaskDirectory, MeetingTaskDirectory>();
         services.AddScoped<MeetingActionConverter>();
+        // SLA "working days only" follows the organization's default work calendar (CAT-85).
+        services.AddScoped<Nexus.TaskManagement.Application.ISlaWorkingDays, WorkCalendarSlaDays>();
         return services;
     }
 }
