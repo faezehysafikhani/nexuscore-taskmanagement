@@ -467,7 +467,8 @@ public sealed class SessionSecurityTests
         await using var api = await Api.StartAsync();
         var login = await Json(await api.LoginAsync(UserName, Password));
         var sid = SidOf(Access(login));
-        var old = DateTimeOffset.UtcNow.AddMinutes(-5);
+        // Inside the 3-minute idle timeout, so the session is still alive.
+        var old = DateTimeOffset.UtcNow.AddMinutes(-2);
         await SetSessionAsync(api, sid, entry =>
         {
             entry.Property(nameof(UserSession.LastActivityAtUtc)).CurrentValue = old;
@@ -483,7 +484,7 @@ public sealed class SessionSecurityTests
         activity.Headers.Add("X-Nexus-Activity", "1");
         await api.RawAsync(activity);
 
-        Assert.True(await LastActivityAsync(api, sid) > old.AddMinutes(4));
+        Assert.True(await LastActivityAsync(api, sid) > old.AddMinutes(1.5));
     }
 
     [Fact]

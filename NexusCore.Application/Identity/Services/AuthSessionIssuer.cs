@@ -56,7 +56,7 @@ public sealed class AuthSessionIssuer(
 
         var status = new SessionStatusDto(session.Id, session.IdleTimeoutSeconds, session.IdleTimeoutSeconds,
             Math.Max(0, (int)(session.AbsoluteExpiresAtUtc - DateTimeOffset.UtcNow).TotalSeconds), DateTimeOffset.UtcNow,
-            Math.Max(10, sessionOptions.Value.IdleWarningSeconds));
+            SessionService.WarningFor(session.IdleTimeoutSeconds, sessionOptions.Value.IdleWarningSeconds));
         return new AuthResponse(accessToken.Token, refreshToken, accessToken.ExpiresAtUtc, IdentityMappings.ToUserDto(user), refreshTokenEntity.ExpiresAtUtc, null, status);
     }
 }

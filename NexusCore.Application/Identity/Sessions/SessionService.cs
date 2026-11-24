@@ -25,6 +25,18 @@ public sealed class SessionService(
     /// <summary>The idle clock and the "last seen" time move at most this often: one write per user per interval.</summary>
     public static readonly TimeSpan TouchInterval = TimeSpan.FromSeconds(30);
 
+    /// <summary>
+    /// How often the idle clock may move for a session with this idle timeout: 30 s at most, and a
+    /// twelfth of the timeout (15 s for 3 minutes), so a user who keeps working is never signed
+    /// out early because the last write was skipped.
+    /// </summary>
+    public static TimeSpan TouchIntervalFor(int idleTimeoutSeconds) =>
+        TimeSpan.FromSeconds(Math.Min(TouchInterval.TotalSeconds, Math.Max(1, idleTimeoutSeconds / 12.0)));
+
+    /// <summary>The warning before the idle timeout: as configured, but at most a third of the timeout (and at least 10 s).</summary>
+    public static int WarningFor(int idleTimeoutSeconds, int configuredSeconds) =>
+        Math.Clamp(configuredSeconds, 10, Math.Max(10, idleTimeoutSeconds / 3));
+
     /// <summary>How long a closed session still shows in "recent sessions", and in the table.</summary>
     public static readonly TimeSpan RecentWindow = TimeSpan.FromDays(7);
     public static readonly TimeSpan ClosedSessionRetention = TimeSpan.FromDays(90);
@@ -519,7 +531,7 @@ public sealed class SessionService(
         Math.Max(0, (int)(session.IdleExpiresAtUtc - now).TotalSeconds),
         Math.Max(0, (int)(session.AbsoluteExpiresAtUtc - now).TotalSeconds),
         now,
-        warningSeconds);
+        WarningFor(session.IdleTimeoutSeconds, warningSeconds));
 
     private static SessionDto ToDto(UserSession session, Guid? currentSid, DateTimeOffset now, string? endedByName)
     {

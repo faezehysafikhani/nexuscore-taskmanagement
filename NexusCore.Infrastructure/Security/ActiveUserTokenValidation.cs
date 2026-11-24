@@ -104,8 +104,8 @@ internal sealed class ActiveUserTokenValidation : IPostConfigureOptions<JwtBeare
         {
             var activity = http.Request.Headers.ContainsKey(ActivityHeader);
             await sessions.TouchAsync(sessionId, now, activity, http.Connection.RemoteIpAddress?.ToString(), 
-                // 30 s normally; a quarter of a very short idle timeout (development), so it stays accurate.
-                TimeSpan.FromSeconds(Math.Min(SessionService.TouchInterval.TotalSeconds, Math.Max(1, state.IdleTimeoutSeconds / 4.0))), cancellationToken);
+                // At most 30 s, and a twelfth of the idle timeout (15 s for 3 minutes), so it stays accurate.
+                SessionService.TouchIntervalFor(state.IdleTimeoutSeconds), cancellationToken);
         }
 
         return failure;

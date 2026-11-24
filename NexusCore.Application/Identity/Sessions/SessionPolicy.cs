@@ -21,22 +21,24 @@ public sealed class SessionPolicySettings
     public const string SettingScope = "Tenant";
 
     // The platform's hard range. An organization moves inside it, never outside.
-    public const int MinIdleMinutes = 5, MaxIdleMinutes = 60;
+    // Idle: no session survives more than 3 minutes without the user doing anything (a stored
+    // setting above that is clamped down when read, so the rule holds for every organization).
+    public const int MinIdleMinutes = 1, MaxIdleMinutes = 3;
     public const int MinAbsoluteHours = 1, MaxAbsoluteHours = 12;
     public const int MinConcurrent = 1, MaxConcurrentCeiling = 10;
 
-    /// <summary>Everyone (staff and administrators): 15 minutes idle, 10 hours in all, up to 3 sessions.</summary>
-    public int IdleMinutes { get; set; } = 60;
+    /// <summary>Everyone (staff and administrators): 3 minutes idle, 12 hours in all, up to 3 sessions.</summary>
+    public int IdleMinutes { get; set; } = 3;
     public int AbsoluteHours { get; set; } = 12;
     public int MaxConcurrent { get; set; } = 3;
 
     /// <summary>Users who hold a sensitive permission (see <see cref="SessionPolicyProvider.SensitivePermissions"/>).</summary>
-    public int SensitiveIdleMinutes { get; set; } = 10;
+    public int SensitiveIdleMinutes { get; set; } = 3;
     public int SensitiveAbsoluteHours { get; set; } = 8;
     public int SensitiveMaxConcurrent { get; set; } = 2;
 
     /// <summary>The built-in system administrator.</summary>
-    public int SystemIdleMinutes { get; set; } = 10;
+    public int SystemIdleMinutes { get; set; } = 3;
     public int SystemAbsoluteHours { get; set; } = 8;
     public int SystemMaxConcurrent { get; set; } = 1;
 
@@ -45,7 +47,7 @@ public sealed class SessionPolicySettings
     /// the profile below never applies. When set, a sign-in from any other address gets it.
     /// </summary>
     public List<string> InternalNetworks { get; set; } = [];
-    public int ExternalIdleMinutes { get; set; } = 10;
+    public int ExternalIdleMinutes { get; set; } = 3;
     public int ExternalAbsoluteHours { get; set; } = 4;
 
     public SessionPolicySettings Clamped()

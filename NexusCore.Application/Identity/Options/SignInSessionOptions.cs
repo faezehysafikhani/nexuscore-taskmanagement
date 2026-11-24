@@ -25,12 +25,15 @@ public sealed class SignInSessionOptions
     /// </summary>
     public int ReuseGraceSeconds { get; set; } = 10;
 
-    /// <summary>How long before the idle timeout the UI warns the user (seconds).</summary>
-    public int IdleWarningSeconds { get; set; } = 120;
+    /// <summary>
+    /// How long before the idle timeout the UI warns the user (seconds). Never more than a third
+    /// of the session's idle timeout (see <see cref="NexusCore.Application.Identity.Sessions.SessionService.WarningFor"/>).
+    /// </summary>
+    public int IdleWarningSeconds { get; set; } = 60;
 
     /// <summary>
     /// For trying the timeouts by hand: replaces the idle timeout (seconds, may be below the
-    /// platform's 5-minute minimum) of every new session. Honoured ONLY when the host runs in the
+    /// platform's 1-minute minimum) of every new session. Honoured ONLY when the host runs in the
     /// Development environment; ignored everywhere else.
     /// </summary>
     public int? DevIdleSecondsOverride { get; set; }
