@@ -242,8 +242,17 @@ async function main() {
   let company = (await call(admin, 'GET', `${OS}/companies`)).find((c) => c.name === 'شرکت فناوران پارس');
   if (!company) company = await call(admin, 'POST', `${OS}/companies`, { name: 'شرکت فناوران پارس', code: 'FP', description: 'شرکت نرم‌افزاری فعال در حوزهٔ مدیریت پروژه و فرآیند' });
   const positions = await call(admin, 'GET', `${OS}/positions`);
-  const ensurePosition = async (title, parentId) => positions.find((x) => x.title === title)
-    || await call(admin, 'POST', `${OS}/positions`, { title, parentPositionId: parentId, companyIds: [company.id] }).then((x) => { positions.push(x); return x; });
+  // Titles of this company only. A title of that name used by other companies is left alone (each company has a
+  // single top title, and names are unique in the organization): this company gets «<title> (فناوران پارس)».
+  const forCompany = (x) => (x.companyIds || []).includes(company.id);
+  const ensurePosition = async (title, parentId) => {
+    const mine = positions.find((x) => forCompany(x) && (x.title === title || x.title === `${title} (فناوران پارس)`));
+    if (mine) return mine;
+    const name = positions.some((x) => x.title === title) ? `${title} (فناوران پارس)` : title;
+    const made = await call(admin, 'POST', `${OS}/positions`, { title: name, parentPositionId: parentId, companyIds: [company.id] });
+    positions.push(made);
+    return made;
+  };
   const posManager = await ensurePosition('مدیر واحد', null);
   const posSenior = await ensurePosition('کارشناس ارشد', posManager.id);
   const posStaff = await ensurePosition('کارشناس', posManager.id);
