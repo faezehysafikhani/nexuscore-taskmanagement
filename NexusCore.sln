@@ -187,6 +187,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nexus.Bundles.Platform", "N
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nexus.Bundles.ProjectManagement", "Nexus.Bundles.ProjectManagement\Nexus.Bundles.ProjectManagement.csproj", "{036F450F-AA35-4CCB-B2DE-126E5C64DF66}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TMTejarat-API", "TMTejarat-API\TMTejarat-API.csproj", "{AEEEB306-A166-4393-98BE-E4ACF333164C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -517,6 +519,10 @@ Global
 		{036F450F-AA35-4CCB-B2DE-126E5C64DF66}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{036F450F-AA35-4CCB-B2DE-126E5C64DF66}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{036F450F-AA35-4CCB-B2DE-126E5C64DF66}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AEEEB306-A166-4393-98BE-E4ACF333164C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AEEEB306-A166-4393-98BE-E4ACF333164C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AEEEB306-A166-4393-98BE-E4ACF333164C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AEEEB306-A166-4393-98BE-E4ACF333164C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

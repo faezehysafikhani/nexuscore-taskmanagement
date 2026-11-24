@@ -57,6 +57,9 @@ public sealed class TaskManagementIsolationTests
             // The composition test project is allowed to reference everything - that is its job.
             if (name is "Nexus.CompositionTests") continue;
 
+            // The Tejarat Bank host (TMTejarat-API) is a composition root: it wires every module together.
+            if (name is "TMTejarat-API") continue;
+
             // The module itself, and its own tests.
             if (name.StartsWith("Nexus.TaskManagement", StringComparison.Ordinal)) continue;
 

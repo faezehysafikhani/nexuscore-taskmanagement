@@ -377,3 +377,6 @@ FodyWeavers.xsd
 
 # graphify knowledge graph (rebuilt per branch)
 graphify-out/
+
+# The Tejarat Bank host's database upgrade scripts are deliverables too.
+!TMTejarat-API/db/*.sql

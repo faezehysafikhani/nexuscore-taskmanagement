@@ -1,0 +1,6 @@
+@TMTejarat_API_HostAddress = http://localhost:5112
+
+GET {{TMTejarat_API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
