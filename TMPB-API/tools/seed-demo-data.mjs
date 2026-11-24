@@ -13,6 +13,9 @@ const API = process.env.API || 'http://localhost:5199';
 const TENANT = '11111111-1111-1111-1111-111111111111';
 const PASSWORD = 'Test@Pass#2026';
 const log = (...a) => console.log(...a);
+// A step that may be refused for one item (a rule of the server) goes on with the next; each kind of refusal is shown once.
+const seenFailures = new Set();
+const fail = (what) => (err) => { const key = what + String(err).slice(0, 120); if (!seenFailures.has(key)) { seenFailures.add(key); console.log(`  ${what} skipped: ${String(err.message || err).slice(0, 220)}`); } };
 let rnd = 20261124;
 const rand = () => ((rnd = (rnd * 1103515245 + 12345) % 2147483648) / 2147483648);
 const pick = (arr) => arr[Math.floor(rand() * arr.length)];
@@ -195,6 +198,16 @@ async function main() {
   const workDays = [];
   for (let i = 0; i <= 45; i++) { const d = addDays(today, i); if (isWorking(d)) workDays.push(iso(d)); }
   const dueSoon = () => workDays[Math.min(workDays.length - 1, Math.floor(rand() * rand() * 30))];
+  // The server decides which days take new work (work calendar, or Friday and the official holidays): a day it
+  // refuses is replaced by the next one.
+  const isDayOff = (err) => /تعطیل|جمعه|روز کاری|روزهای گذشته/.test(String(err));
+  const onWorkingDay = async (date, send) => {
+    let d = date;
+    for (let i = 0; i < 15; i++) {
+      try { return await send(d); } catch (err) { if (!isDayOff(err)) throw err; d = iso(addDays(new Date(d + 'T00:00:00Z'), 1)); }
+    }
+    throw new Error('no working day found after ' + date);
+  };
 
   // Roles
   const catalog = (await call(admin, 'GET', '/api/identity/permissions')).flatMap((m) => m.permissions);
@@ -301,8 +314,11 @@ async function main() {
   for (const [key, w] of Object.entries(WORK)) {
     const people = byTeam(key);
     for (const [title, description] of w.titles) {
-      const owner = chance(0.6) ? managerOf(key) : pick(people);
-      const responsible = chance(0.25) ? pickN(people, 2) : [pick(people)];
+      // Only to one's own level and below (OrgStructure:LimitTaskAssignment): a manager gives work to the unit's
+      // people, a staff member records their own.
+      const owner = chance(0.65) ? managerOf(key) : pick(people.filter((p) => !p.isManager));
+      const staff = people.filter((p) => !p.isManager);
+      const responsible = owner.isManager ? (chance(0.25) ? pickN(staff, 2) : [pick(staff)]) : [owner];
       const tk = await tokenOf(owner);
       const prior = existingByTitle.get(title);
       if (prior) {
@@ -310,13 +326,13 @@ async function main() {
         created.push({ id: prior.id, team: key, owner: users.find((u) => u.id === prior.owner?.id) || owner, responsible: pRes.length ? pRes : responsible, status: prior.status, title });
         continue;
       }
-      const t = await call(tk, 'POST', '/api/task-management/tasks', {
-        title, dueDate: dueSoon(), dueTime: chance(0.4) ? pick(['10:00:00', '12:00:00', '14:30:00', '16:00:00']) : null,
+      const t = await onWorkingDay(dueSoon(), (dueDate) => call(tk, 'POST', '/api/task-management/tasks', {
+        title, dueDate, dueTime: chance(0.4) ? pick(['10:00:00', '12:00:00', '14:30:00', '16:00:00']) : null,
         priority: pick(['High', 'Medium', 'Medium', 'Low']), description: description || null, isProject: false, parentTaskId: null,
         assignedUserId: responsible[0].id, responsibleUserIds: responsible.map((r) => r.id), responsiblePostIds: null,
         assignedUserGroupId: teamIds[key], assigneeUserIds: people.map((p) => p.id), allowAssigneeStatusUpdate: true,
         subTasks: [], tags: pickN(w.tags, 1 + Math.floor(rand() * 2)),
-      });
+      }));
       const status = pick(statuses);
       if (status !== 'Todo') await call(tk, 'PATCH', `/api/task-management/tasks/${t.id}/status`, { status });
       created.push({ id: t.id, team: key, owner, responsible, status, title, isNew: true });
@@ -326,17 +342,17 @@ async function main() {
     const m = managerOf(key); const tk = await tokenOf(m); const people = byTeam(key);
     if (existingByTitle.has(title)) { created.push({ id: existingByTitle.get(title).id, team: key, owner: m, responsible: [m], status: 'InProgress', title }); continue; }
     const start = workDays[1]; const end = workDays[Math.min(workDays.length - 1, 25 + Math.floor(rand() * 10))];
-    const t = await call(tk, 'POST', '/api/task-management/tasks', {
-      title, dueDate: end, dueTime: null, priority: 'High', description: `پروژهٔ اصلی ${TEAMS[key]} در این فصل.`, isProject: true, parentTaskId: null,
+    const t = await onWorkingDay(end, (dueDate) => call(tk, 'POST', '/api/task-management/tasks', {
+      title, dueDate, dueTime: null, priority: 'High', description: `پروژهٔ اصلی ${TEAMS[key]} در این فصل.`, isProject: true, parentTaskId: null,
       assignedUserId: m.id, responsibleUserIds: [m.id], responsiblePostIds: null, assignedUserGroupId: teamIds[key], assigneeUserIds: people.map((p) => p.id),
       allowAssigneeStatusUpdate: true, charterDescription: `هدف: ${title.replace('پروژهٔ ', '')} تا پایان فصل.`, charterProjectManager: m.name,
       charterStartDate: start, charterEndDate: end, charterStartTime: null, charterEndTime: null,
       subTasks: steps.map((s, i) => ({ title: s, importance: i === 0 ? 'High' : 'Medium', startDate: workDays[1 + i * 4] || end, endDate: workDays[4 + i * 4] || end, startTime: null, endTime: null, sortOrder: i, isGeneratedOccurrence: false, assigneeUserIds: [people[(i + 1) % people.length].id] })),
       tags: ['پروژه'],
-    });
+    }));
     const done = Math.floor(rand() * (steps.length - 1));
     const subs = [...t.subTasks].sort((a, b) => a.sortOrder - b.sortOrder);
-    for (let i = 0; i < done; i++) await call(tk, 'PATCH', `/api/task-management/subtasks/${subs[i].id}/status`, { status: 'Completed' }).catch(() => {});
+    for (let i = 0; i < done; i++) await call(tk, 'PATCH', `/api/task-management/subtasks/${subs[i].id}/status`, { status: 'Completed' }).catch(fail('subtask status'));
     created.push({ id: t.id, team: key, owner: m, responsible: [m], status: 'InProgress', title, isNew: true });
   }
   log(`tasks: ${created.length}`);
@@ -348,7 +364,7 @@ async function main() {
     const n = 1 + Math.floor(rand() * 3);
     for (let i = 0; i < n; i++) {
       const who = i % 2 === 0 ? t.responsible[0] : t.owner;
-      await call(await tokenOf(who), 'POST', `/api/task-management/tasks/${t.id}/comments`, { text: pick(COMMENTS) }).then(() => commentCount++).catch(() => {});
+      await call(await tokenOf(who), 'POST', `/api/task-management/tasks/${t.id}/comments`, { text: pick(COMMENTS) }).then(() => commentCount++).catch(fail('comment'));
     }
   }
   log(`comments: ${commentCount}`);
@@ -365,7 +381,7 @@ async function main() {
       const parts = 1 + Math.floor(rand() * 2);
       for (let k = 0; k < parts; k++) {
         await call(tk, 'POST', '/api/task-management/timesheets/entries', { taskId: pick(mine).id, date: iso(d), minutes: pick([45, 60, 90, 120, 150, 180, 240]), note: pick([null, 'جلسهٔ هماهنگی', 'پیاده‌سازی', 'بررسی و تست', 'مستندسازی', 'تماس با مشتری']) })
-          .then(() => entries++).catch(() => {});
+          .then(() => entries++).catch(fail('time entry'));
       }
     }
   }
@@ -382,11 +398,12 @@ async function main() {
   let meetings = 0;
   for (let i = 0; i < MEETINGS.length; i++) {
     const [title, key, s, e, loc] = MEETINGS[i]; const m = managerOf(key);
-    await call(await tokenOf(m), 'POST', '/api/calendar/meetings', {
-      title, type: loc === 'آنلاین' ? 'online' : 'meeting', date: workDays[1 + i] || workDays[1], startTime: s, endTime: e, location: loc, organizerUserId: m.id,
+    const mtk = await tokenOf(m);
+    await onWorkingDay(workDays[1 + i] || workDays[1], (date) => call(mtk, 'POST', '/api/calendar/meetings', {
+      title, type: loc === 'آنلاین' ? 'online' : 'meeting', date, startTime: s, endTime: e, location: loc, organizerUserId: m.id,
       description: '', participantIds: byTeam(key).map((u) => u.id), agenda: [{ title: 'مرور کارهای هفتهٔ گذشته', durationMinutes: 20, presenterUserId: m.id }, { title: 'برنامهٔ هفتهٔ آینده', durationMinutes: 25, presenterUserId: null }],
       minutes: '', actions: [], taskIds: [], sendInvitationSms: false,
-    }).then(() => meetings++).catch((err) => log('meeting skipped:', String(err).slice(0, 160)));
+    })).then(() => meetings++).catch(fail('meeting'));
   }
   log(`meetings: ${meetings}`);
 
@@ -402,7 +419,7 @@ async function main() {
   for (const u of users.filter((x) => x.isManager || chance(0.4))) {
     const tk = await tokenOf(u);
     for (const [title, content, color, isPinned] of pickN(NOTES, 2 + Math.floor(rand() * 2))) {
-      await call(tk, 'POST', '/api/task-management/notes', { title, content, color, isPinned }).then(() => notes++).catch(() => {});
+      await call(tk, 'POST', '/api/task-management/notes', { title, content, color, isPinned }).then(() => notes++).catch(fail('note'));
     }
   }
   log(`notes: ${notes}`);
@@ -415,23 +432,24 @@ async function main() {
   for (const key of Object.keys(TEAMS)) {
     for (const text of pickN(TEAM_MSGS, 5)) {
       const u = pick(byTeam(key));
-      await call(await tokenOf(u), 'POST', `/api/chat/teams/${teamIds[key]}/messages`, undefined, sendForm(text)).then(() => msgs++).catch(() => {});
+      await call(await tokenOf(u), 'POST', `/api/chat/teams/${teamIds[key]}/messages`, undefined, sendForm(text)).then(() => msgs++).catch(fail('chat message'));
     }
   }
   const DM = [['سلام، وقت داری امروز دربارهٔ گزارش صحبت کنیم؟', 'سلام، بله ساعت ۱۴ خوب است', 'عالی، می‌بینمت'],
     ['فایل طراحی را دیدی؟', 'بله، دو نکته دارم که در گفتگوی فعالیت نوشتم', 'ممنون، اصلاح می‌کنم'],
     ['مشتری دربارهٔ موعد تحویل پرسید', 'تا آخر هفته تحویل می‌دهیم', 'به او اطلاع می‌دهم']];
+  // Direct chat within the chart (OrgStructure:LimitChatToHierarchy): colleagues of a unit, or a person and the manager
   for (let i = 0; i < 8; i++) {
-    const [a, b] = pickN(users, 2); const conv = pick(DM);
+    const team = pick(Object.keys(TEAMS)); const [a, b] = pickN(byTeam(team), 2); const conv = pick(DM);
     for (let k = 0; k < conv.length; k++) {
       const from = k % 2 === 0 ? a : b; const to = k % 2 === 0 ? b : a;
-      await call(await tokenOf(from), 'POST', `/api/chat/direct/${to.id}/messages`, undefined, sendForm(conv[k])).then(() => msgs++).catch(() => {});
+      await call(await tokenOf(from), 'POST', `/api/chat/direct/${to.id}/messages`, undefined, sendForm(conv[k])).then(() => msgs++).catch(fail('chat message'));
     }
   }
   log(`chat messages: ${msgs}`);
 
   // Requests: categories, submissions, some handled
-  const cats = await call(admin, 'GET', '/api/task-management/requests/categories').catch(() => []);
+  const cats = await call(admin, 'GET', '/api/task-management/requests/categories').catch((e) => { fail('request categories')(e); return []; });
   const ensureCat = async (name, routeTo) => cats.find((c) => c.name === name) || call(admin, 'POST', '/api/task-management/requests/categories', { name, routeToUserId: routeTo.id, defaultPriority: 'Medium', isActive: true });
   const catIT = await ensureCat('پشتیبانی فناوری اطلاعات', managerOf('tech'));
   const catBuy = await ensureCat('خرید و تدارکات', managerOf('finance'));
@@ -443,10 +461,11 @@ async function main() {
   for (const [title, cat] of REQS) {
     const u = pick(users.filter((x) => !x.isManager));
     const r = await call(await tokenOf(u), 'POST', '/api/task-management/requests', { title, description: 'لطفاً در اولین فرصت رسیدگی شود.', categoryId: cat.id, priority: pick(['Medium', 'High', 'Low']), neededBy: null })
-      .then((x) => { reqs++; return x; }).catch(() => null);
+      .then((x) => { reqs++; return x; }).catch((e) => { fail('request')(e); return null; });
     if (r && chance(0.4)) {
       const handler = cat === catIT ? managerOf('tech') : managerOf('finance');
-      await call(await tokenOf(handler), 'POST', `/api/task-management/requests/${r.id}/convert`, { dueDate: dueSoon(), assignedUserId: pick(byTeam(handler.team)).id }).catch(() => {});
+      const htk = await tokenOf(handler);
+      await onWorkingDay(dueSoon(), (dueDate) => call(htk, 'POST', `/api/task-management/requests/${r.id}/convert`, { dueDate, assignedUserId: pick(byTeam(handler.team).filter((p) => !p.isManager)).id })).catch(fail('request convert'));
     }
   }
   log(`requests: ${reqs}`);
