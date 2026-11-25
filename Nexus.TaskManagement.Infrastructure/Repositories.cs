@@ -87,30 +87,42 @@ public sealed class TaskRepository(TaskManagementDbContext db) : ITaskRepository
 
     public async Task<PagedResult<TaskItem>> ListWithDetailsAsync(ListTasksRequest request, CancellationToken cancellationToken)
     {
-        // The same filters and order as ListAsync (and the same access rule: the query filter of the context),
-        // but each task comes with everything GetByIdAsync loads, read in one query per collection for the whole
-        // page - so the board needs one request per page, not three per task. Read-only: nothing here is saved.
-        var query = ApplyListFilters(
-            db.Tasks
-                .AsNoTrackingWithIdentityResolution()
-                .Include(t => t.SubTasks).ThenInclude(s => s.Tags).ThenInclude(tt => tt.Tag)
-                .Include(t => t.SubTasks).ThenInclude(s => s.Files).ThenInclude(tf => tf.File)
-                .Include(t => t.SubTasks).ThenInclude(s => s.Assignees)
-                .Include(t => t.Tags).ThenInclude(tt => tt.Tag)
-                .Include(t => t.Files).ThenInclude(tf => tf.File)
-                .Include(t => t.Assignees)
-                .Include(t => t.Recurrence)
-                .AsSplitQuery(),
-            request);
-
         var pageNumber = Math.Max(1, request.PageNumber);
         var pageSize = Math.Clamp(request.PageSize, 1, 200);
-        var total = await query.CountAsync(cancellationToken);
-        var items = await query
+        var filtered = ApplyListFilters(db.Tasks.AsNoTracking(), request);
+        var total = await filtered.CountAsync(cancellationToken);
+
+        // Step 1 - which tasks are on this page: the ONE query that applies the access rule and the order. (Reading the
+        // page with its collections in one go repeated that filtered, sorted page inside every collection's query:
+        // nine heavy queries a page, enough to stall the whole API while a board loads.)
+        var ids = await filtered
             .Skip((pageNumber - 1) * pageSize)
             .Take(pageSize)
+            .Select(t => t.Id)
+            .ToListAsync(cancellationToken);
+        if (ids.Count == 0)
+        {
+            return new PagedResult<TaskItem>([], pageNumber, pageSize, total);
+        }
+
+        // Step 2 - those tasks with everything GetByIdAsync loads, by their ids. The ids came out of the filtered query
+        // just above, so the query filters (which would join the tasks again for every collection) are not repeated.
+        var loaded = await db.Tasks
+            .IgnoreQueryFilters()
+            .AsNoTrackingWithIdentityResolution()
+            .Where(t => ids.Contains(t.Id))
+            .Include(t => t.SubTasks).ThenInclude(s => s.Tags).ThenInclude(tt => tt.Tag)
+            .Include(t => t.SubTasks).ThenInclude(s => s.Files).ThenInclude(tf => tf.File)
+            .Include(t => t.SubTasks).ThenInclude(s => s.Assignees)
+            .Include(t => t.Tags).ThenInclude(tt => tt.Tag)
+            .Include(t => t.Files).ThenInclude(tf => tf.File)
+            .Include(t => t.Assignees)
+            .Include(t => t.Recurrence)
+            .AsSplitQuery()
             .ToListAsync(cancellationToken);
 
+        var byId = loaded.ToDictionary(t => t.Id);
+        var items = ids.Where(byId.ContainsKey).Select(id => byId[id]).ToList();
         return new PagedResult<TaskItem>(items, pageNumber, pageSize, total);
     }
 
