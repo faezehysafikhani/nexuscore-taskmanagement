@@ -231,26 +231,32 @@ INSERT INTO #Supplied (Tbl, Col) VALUES
     (N'task_management.Notes', N'CreatedAtUtc'),
     (N'task_management.Notes', N'CreatedByUserId');
 
-DECLARE @Problems nvarchar(max) = N'';
-SELECT @Problems += N' - table ' + s.Tbl + N' does not exist' + NCHAR(10)
+CREATE TABLE #Prob (Id int IDENTITY(1, 1) PRIMARY KEY, Problem nvarchar(500) NOT NULL);
+INSERT INTO #Prob (Problem)
+SELECT N'table ' + s.Tbl + N' does not exist'
 FROM (SELECT DISTINCT Tbl FROM #Supplied) s
 WHERE OBJECT_ID(s.Tbl, N'U') IS NULL;
 
-SELECT @Problems += N' - column ' + s.Tbl + N'.' + s.Col + N' does not exist' + NCHAR(10)
+INSERT INTO #Prob (Problem)
+SELECT N'column ' + s.Tbl + N'.' + s.Col + N' does not exist'
 FROM #Supplied s
 WHERE OBJECT_ID(s.Tbl, N'U') IS NOT NULL AND COL_LENGTH(s.Tbl, s.Col) IS NULL;
 
-SELECT @Problems += N' - column ' + t.Tbl + N'.' + c.name + N' is required in your database and this script does not fill it' + NCHAR(10)
+INSERT INTO #Prob (Problem)
+SELECT N'column ' + t.Tbl + N'.' + c.name + N' is required in your database and this script does not fill it (' + TYPE_NAME(c.user_type_id) + N')'
 FROM (SELECT DISTINCT Tbl FROM #Supplied) t
 JOIN sys.columns c ON c.object_id = OBJECT_ID(t.Tbl, N'U')
 WHERE c.is_nullable = 0 AND c.is_identity = 0 AND c.is_computed = 0 AND c.default_object_id = 0 AND c.system_type_id <> 189
   AND NOT EXISTS (SELECT 1 FROM #Supplied x WHERE x.Tbl = t.Tbl AND x.Col = c.name);
 
-IF @Problems <> N''
+IF EXISTS (SELECT 1 FROM #Prob)
 BEGIN
+    DECLARE @Problems nvarchar(max) = N'';
+    SELECT @Problems += N' - ' + Problem + NCHAR(10) FROM #Prob ORDER BY Id;
+    SELECT Problem AS [This script does not match your database] FROM #Prob ORDER BY Id;   -- also shown in the Results tab
     PRINT N'Stopped before changing anything. This script does not match your database:';
     PRINT @Problems;
-    RAISERROR(N'The script does not match the database schema (see the list above). Nothing was changed.', 16, 1);
+    RAISERROR(N'The script does not match the database schema. Nothing was changed. Problems: %s', 16, 1, @Problems);
     RETURN;
 END;
 
