@@ -126,7 +126,19 @@ public sealed record TaskDto(
     IReadOnlyList<UserSummaryDto>? ResponsibleUsers = null,
     IReadOnlyList<TaskPostDto>? Posts = null,
     IReadOnlyList<TaskStandInDto>? StandIns = null,
-    Guid? ParentTaskId = null);
+    Guid? ParentTaskId = null,
+    // How many comments the task has - filled only for people who may read them (owner, responsible people,
+    // stand-ins), so the board can show the count without loading the conversations.
+    int CommentCount = 0);
+
+/// <summary>
+/// What the task screen needs besides the task itself, in one answer: the conversation and the history.
+/// CanSeeConversation is false for people who may not read the comments (Comments is then empty).
+/// </summary>
+public sealed record TaskDiscussionDto(
+    IReadOnlyList<TaskCommentDto> Comments,
+    IReadOnlyList<TaskActivityDto> Activity,
+    bool CanSeeConversation);
 
 /// <summary>
 /// Someone standing in for a vacant post of the task (جانشین): sees it and comments, nothing more.
