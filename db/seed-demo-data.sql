@@ -101,6 +101,7 @@ INSERT INTO #Supplied (Tbl, Col) VALUES
     (N'org_structure.Companies', N'Description'),
     (N'org_structure.Companies', N'ManagerUserId'),
     (N'org_structure.Companies', N'IsActive'),
+    (N'org_structure.Companies', N'UiLevel'),
     (N'org_structure.Companies', N'CreatedAtUtc'),
     (N'org_structure.Companies', N'CreatedByUserId'),
     (N'org_structure.Positions', N'Id'),
@@ -907,8 +908,8 @@ DECLARE @PosManager uniqueidentifier = NEWID(), @PosSenior uniqueidentifier = NE
 DECLARE @NodeTypeUnit uniqueidentifier = (SELECT TOP (1) Id FROM org_structure.NodeTypes WHERE TenantId = @Tenant AND Code = N'unit');
 IF @NodeTypeUnit IS NULL PRINT N'  note: no node type with code unit; units are made without a node type.';
 
-INSERT INTO org_structure.Companies (Id, TenantId, Name, Code, Description, ManagerUserId, IsActive, CreatedAtUtc, CreatedByUserId)
-VALUES (@Company, @Tenant, N'شرکت فناوران پارس', N'FP', N'شرکت نرم‌افزاری فعال در حوزهٔ مدیریت پروژه و فرآیند', NULL, 1, @Now, @Admin);
+INSERT INTO org_structure.Companies (Id, TenantId, Name, Code, Description, ManagerUserId, IsActive, UiLevel, CreatedAtUtc, CreatedByUserId)
+VALUES (@Company, @Tenant, N'شرکت فناوران پارس', N'FP', N'شرکت نرم‌افزاری فعال در حوزهٔ مدیریت پروژه و فرآیند', NULL, 1, 0, @Now, @Admin);
 
 INSERT INTO org_structure.Positions (Id, TenantId, Title, ParentPositionId, IsActive, CreatedAtUtc, CreatedByUserId)
 VALUES (@PosManager, @Tenant, N'مدیر واحد', NULL, 1, @Now, @Admin),
