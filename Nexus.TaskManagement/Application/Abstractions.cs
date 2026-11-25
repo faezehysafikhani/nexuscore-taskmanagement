@@ -163,8 +163,8 @@ public interface ITaskService
 {
     Task<Result<PagedResult<TaskListItemDto>>> ListAsync(ListTasksRequest request, CancellationToken cancellationToken);
 
-    /// <summary>A page of tasks as the board shows them (see TaskBoardItemDto): one request for many tasks.</summary>
-    Task<Result<PagedResult<TaskBoardItemDto>>> ListBoardAsync(ListTasksRequest request, CancellationToken cancellationToken);
+    /// <summary>A page of tasks as the board shows them (see TaskBoardPageDto): one request for many tasks.</summary>
+    Task<Result<TaskBoardPageDto>> ListBoardAsync(ListTasksRequest request, CancellationToken cancellationToken);
 
     Task<Result<TaskDto>> GetAsync(Guid id, CancellationToken cancellationToken);
     Task<Result<TaskDto>> CreateAsync(CreateTaskRequest request, CancellationToken cancellationToken);

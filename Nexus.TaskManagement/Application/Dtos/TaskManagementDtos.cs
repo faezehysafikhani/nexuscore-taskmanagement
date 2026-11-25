@@ -131,11 +131,16 @@ public sealed record TaskDto(
     // stand-ins), so the board can show the count without loading the conversations.
     int CommentCount = 0);
 
+/// <summary>A person as the lists show them: the id and the name.</summary>
+public sealed record BoardPersonDto(Guid Id, string DisplayName);
+
 /// <summary>
 /// A task as the board and the other lists show it - only what they show, nothing for the screens that open one task
-/// (the task form and the project screen read GET /tasks/{id}). Compared with TaskDto: the access list is ids only
-/// (no names), there is no charter, subtasks come without their tags and files, and the posts the task is given to are
-/// ids only (PostIds, for «نمایش بر اساس پست» - no titles, places or holders).
+/// (the task form and the project screen read GET /tasks/{id}). Compared with TaskDto: people are id and name only
+/// (Owner, ResponsibleUsers - the first responsible person is the old AssignedUser); the access list is the index of a
+/// list in the page's AccessLists (the same list - usually the team - is sent once, not once per task); tags are names;
+/// there is no charter; subtasks come without their tags and files; PostIds are the task's posts the signed-in user
+/// holds (all of them only when that is not known), HasPosts whether it has any («نمایش بر اساس پست»).
 /// </summary>
 public sealed record TaskBoardItemDto(
     Guid Id,
@@ -148,22 +153,33 @@ public sealed record TaskBoardItemDto(
     DateOnly DueDate,
     TimeOnly? DueTime,
     DateTimeOffset? ActualCompletionDateUtc,
-    UserSummaryDto? Owner,
-    UserSummaryDto? AssignedUser,
+    BoardPersonDto? Owner,
     UserGroupSummaryDto? AssignedUserGroup,
-    IReadOnlyList<UserSummaryDto> ResponsibleUsers,
-    IReadOnlyList<Guid> AssigneeIds,
+    IReadOnlyList<BoardPersonDto> ResponsibleUsers,
+    int AccessList,
     IReadOnlyList<TaskStandInDto> StandIns,
     bool AllowAssigneeStatusUpdate,
     IReadOnlyList<SubTaskDto> SubTasks,
-    IReadOnlyList<TagDto> Tags,
+    IReadOnlyList<string> Tags,
     IReadOnlyList<TaskFileDto> Files,
     RepetitiveTaskDto? Recurrence,
+    bool HasPosts,
     IReadOnlyList<Guid> PostIds,
     Guid? ParentTaskId,
     int CommentCount,
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset? ModifiedAtUtc);
+
+/// <summary>
+/// A page of the board. AccessLists: the distinct access lists of its tasks (user ids); each task names one by its index.
+/// TotalCount is -1 on pages after the first (counted once).
+/// </summary>
+public sealed record TaskBoardPageDto(
+    IReadOnlyList<TaskBoardItemDto> Items,
+    IReadOnlyList<IReadOnlyList<Guid>> AccessLists,
+    int PageNumber,
+    int PageSize,
+    int TotalCount);
 
 /// <summary>
 /// What the task screen needs besides the task itself, in one answer: the conversation and the history.
