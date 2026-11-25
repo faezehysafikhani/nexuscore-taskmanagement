@@ -132,6 +132,41 @@ public sealed record TaskDto(
     int CommentCount = 0);
 
 /// <summary>
+/// A task as the board and the other lists show it - only what they show, nothing for the screens that open one task
+/// (the task form and the project screen read GET /tasks/{id}). Compared with TaskDto: the access list is ids only
+/// (no names), there is no charter, subtasks come without their tags and files, and of the posts the task is given to
+/// only the ones the signed-in user holds (MyPostIds, for «نمایش بر اساس پست») plus whether it has any (HasPosts).
+/// </summary>
+public sealed record TaskBoardItemDto(
+    Guid Id,
+    string Title,
+    string? Description,
+    bool IsProject,
+    bool IsRecurring,
+    TaskItemStatus Status,
+    TaskPriority Priority,
+    DateOnly DueDate,
+    TimeOnly? DueTime,
+    DateTimeOffset? ActualCompletionDateUtc,
+    UserSummaryDto? Owner,
+    UserSummaryDto? AssignedUser,
+    UserGroupSummaryDto? AssignedUserGroup,
+    IReadOnlyList<UserSummaryDto> ResponsibleUsers,
+    IReadOnlyList<Guid> AssigneeIds,
+    IReadOnlyList<TaskStandInDto> StandIns,
+    bool AllowAssigneeStatusUpdate,
+    IReadOnlyList<SubTaskDto> SubTasks,
+    IReadOnlyList<TagDto> Tags,
+    IReadOnlyList<TaskFileDto> Files,
+    RepetitiveTaskDto? Recurrence,
+    bool HasPosts,
+    IReadOnlyList<Guid> MyPostIds,
+    Guid? ParentTaskId,
+    int CommentCount,
+    DateTimeOffset CreatedAtUtc,
+    DateTimeOffset? ModifiedAtUtc);
+
+/// <summary>
 /// What the task screen needs besides the task itself, in one answer: the conversation and the history.
 /// CanSeeConversation is false for people who may not read the comments (Comments is then empty).
 /// </summary>

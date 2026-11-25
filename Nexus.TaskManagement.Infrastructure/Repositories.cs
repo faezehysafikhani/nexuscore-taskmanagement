@@ -105,14 +105,13 @@ public sealed class TaskRepository(TaskManagementDbContext db) : ITaskRepository
             return new PagedResult<TaskItem>([], pageNumber, pageSize, total);
         }
 
-        // Step 2 - those tasks with everything GetByIdAsync loads, by their ids. The ids came out of the filtered query
-        // just above, so the query filters (which would join the tasks again for every collection) are not repeated.
+        // Step 2 - those tasks with what the board shows, by their ids. The ids came out of the filtered query just
+        // above, so the query filters (which would join the tasks again for every collection) are not repeated. The
+        // subtasks' tags and files are left out: no list shows them (the screens of one task read GET /tasks/{id}).
         var loaded = await db.Tasks
             .IgnoreQueryFilters()
             .AsNoTrackingWithIdentityResolution()
             .Where(t => ids.Contains(t.Id))
-            .Include(t => t.SubTasks).ThenInclude(s => s.Tags).ThenInclude(tt => tt.Tag)
-            .Include(t => t.SubTasks).ThenInclude(s => s.Files).ThenInclude(tf => tf.File)
             .Include(t => t.SubTasks).ThenInclude(s => s.Assignees)
             .Include(t => t.Tags).ThenInclude(tt => tt.Tag)
             .Include(t => t.Files).ThenInclude(tf => tf.File)

@@ -90,15 +90,15 @@ public sealed class TaskService(
     }
 
     /// <summary>
-    /// A page of full tasks (subtasks, tags, files, people, schedule, comment count) - not their comments and history,
-    /// which the task screen asks for when a task is opened. The board loads with a request per page, not three per task.
+    /// A page of tasks as the board and the other lists show them (TaskBoardItemDto) - not their comments and history,
+    /// which the task screen asks for when a task is opened, nor what only the task form and the project screen show.
     /// </summary>
-    public async Task<Result<PagedResult<TaskDto>>> ListBoardAsync(
+    public async Task<Result<PagedResult<TaskBoardItemDto>>> ListBoardAsync(
         ListTasksRequest request, CancellationToken cancellationToken)
     {
         if (currentUser.TenantId is null)
         {
-            return Result.Failure<PagedResult<TaskDto>>(Error.Unauthorized());
+            return Result.Failure<PagedResult<TaskBoardItemDto>>(Error.Unauthorized());
         }
 
         var normalized = request with
@@ -109,11 +109,105 @@ public sealed class TaskService(
         };
 
         var page = await repository.ListWithDetailsAsync(normalized, cancellationToken);
-        // Without the posts the tasks are given to: for a team of 25 they were two thirds of the answer, and only the
-        // task form reads them (it asks for the one task, GET /{id}). Nor are the org structure's posts looked up here.
-        var items = await ToDtosAsync(page.Items, includePosts: false, cancellationToken);
+        var items = await ToBoardDtosAsync(page.Items, cancellationToken);
 
-        return Result.Success(new PagedResult<TaskDto>(items, page.PageNumber, page.PageSize, page.TotalCount));
+        return Result.Success(new PagedResult<TaskBoardItemDto>(items, page.PageNumber, page.PageSize, page.TotalCount));
+    }
+
+    /// <summary>
+    /// Board DTOs: only the names the lists show (owner, responsible people, stand-ins, subtask people, team) are read,
+    /// once for the whole page; the access list goes as ids. Of the posts a task is given to, only whether it has any and
+    /// which of them the signed-in user holds («نمایش بر اساس پست» filters by those).
+    /// </summary>
+    private async Task<IReadOnlyList<TaskBoardItemDto>> ToBoardDtosAsync(IReadOnlyList<TaskItem> tasks, CancellationToken cancellationToken)
+    {
+        if (tasks.Count == 0)
+        {
+            return [];
+        }
+
+        var tenantId = tasks[0].TenantId;
+        var taskIds = tasks.Select(t => t.Id).ToList();
+
+        var postIdsByTask = new Dictionary<Guid, List<Guid>>();
+        var heldByMe = new HashSet<Guid>();
+        if (taskPosts.Enabled)
+        {
+            var postsOf = await taskPosts.GetTaskPostsAsync(tenantId, taskIds, cancellationToken);
+            foreach (var (taskId, set) in postsOf)
+            {
+                var ids = set.ResponsiblePostIds.Concat(set.AccessPostIds).ToList();
+                if (set.OwnerPostId is { } ownerPost) ids.Add(ownerPost);
+                postIdsByTask[taskId] = ids;
+            }
+
+            var allPostIds = postIdsByTask.Values.SelectMany(ids => ids).Distinct().ToList();
+            if (allPostIds.Count > 0 && currentUser.UserId is { } me)
+            {
+                var posts = await taskPosts.GetPostsAsync(tenantId, allPostIds, cancellationToken);
+                heldByMe.UnionWith(posts.Values.Where(p => p.HolderUserId == me).Select(p => p.PostId));
+            }
+        }
+
+        var userIds = new List<Guid>();
+        foreach (var task in tasks)
+        {
+            if (task.OwnerUserId is { } owner) userIds.Add(owner);
+            userIds.AddRange(task.ResponsibleUserIds);
+            userIds.AddRange(task.Assignees.Where(a => a.IsActing).Select(a => a.UserId));
+            userIds.AddRange(task.SubTasks.SelectMany(s => s.Assignees.Select(a => a.UserId)));
+        }
+
+        var users = await repository.GetUserSummariesAsync(userIds.Distinct().ToList(), cancellationToken);
+        var groupIds = tasks.Where(t => t.AssignedUserGroupId.HasValue).Select(t => t.AssignedUserGroupId!.Value).Distinct().ToList();
+        var groups = groupIds.Count > 0
+            ? await repository.GetUserGroupSummariesAsync(groupIds, cancellationToken)
+            : new Dictionary<Guid, UserGroupSummaryDto>();
+
+        var readable = tasks.Where(CanReadConversation).Select(t => t.Id).ToList();
+        var commentCounts = readable.Count > 0
+            ? await repository.CountCommentsAsync(tenantId, readable, cancellationToken)
+            : new Dictionary<Guid, int>();
+
+        return tasks.Select(task =>
+        {
+            var postIds = postIdsByTask.TryGetValue(task.Id, out var found) ? found : [];
+            return new TaskBoardItemDto(
+                task.Id,
+                task.Title,
+                task.Description,
+                task.IsProject,
+                task.Recurrence is not null,
+                task.Status,
+                task.Priority,
+                task.DueDate,
+                task.DueTime,
+                task.ActualCompletionDateUtc,
+                Lookup(users, task.OwnerUserId),
+                Lookup(users, task.AssignedUserId),
+                Lookup(groups, task.AssignedUserGroupId),
+                task.ResponsibleUserIds
+                    .Select(id => users.TryGetValue(id, out var u) ? u : null)
+                    .Where(u => u is not null)
+                    .Select(u => u!)
+                    .ToList(),
+                task.Assignees.Where(a => !a.IsActing).Select(a => a.UserId).ToList(),
+                task.Assignees
+                    .Where(a => a.IsActing && users.ContainsKey(a.UserId))
+                    .Select(a => new TaskStandInDto(a.UserId, users[a.UserId].DisplayName, a.ActingNote))
+                    .ToList(),
+                task.AllowAssigneeStatusUpdate,
+                task.SubTasks.OrderBy(s => s.SortOrder).Select(s => ToDto(s, users)).ToList(),
+                task.Tags.Where(t => t.Tag is not null).Select(t => ToDto(t.Tag!)).ToList(),
+                task.Files.Select(ToDto).ToList(),
+                task.Recurrence is null ? null : ToDto(task.Recurrence),
+                postIds.Count > 0,
+                postIds.Where(heldByMe.Contains).Distinct().ToList(),
+                task.ParentTaskId,
+                commentCounts.TryGetValue(task.Id, out var commentCount) ? commentCount : 0,
+                task.CreatedAtUtc,
+                task.ModifiedAtUtc);
+        }).ToList();
     }
 
     public async Task<Result<TaskDto>> GetAsync(Guid id, CancellationToken cancellationToken)
