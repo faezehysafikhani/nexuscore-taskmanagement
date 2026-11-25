@@ -31,6 +31,36 @@
 */
 SET NOCOUNT ON;
 SET XACT_ABORT ON;
+-- A run stopped half-way leaves its temp tables in the session; clear them so it can run again.
+DROP TABLE IF EXISTS #Client;
+DROP TABLE IF EXISTS #Comment;
+DROP TABLE IF EXISTS #Curated;
+DROP TABLE IF EXISTS #First;
+DROP TABLE IF EXISTS #Fk;
+DROP TABLE IF EXISTS #GDesc;
+DROP TABLE IF EXISTS #Job;
+DROP TABLE IF EXISTS #Last;
+DROP TABLE IF EXISTS #Note;
+DROP TABLE IF EXISTS #Num;
+DROP TABLE IF EXISTS #Obj;
+DROP TABLE IF EXISTS #People;
+DROP TABLE IF EXISTS #PermName;
+DROP TABLE IF EXISTS #Person;
+DROP TABLE IF EXISTS #Post;
+DROP TABLE IF EXISTS #Prob;
+DROP TABLE IF EXISTS #Proj;
+DROP TABLE IF EXISTS #Seed;
+DROP TABLE IF EXISTS #Staff;
+DROP TABLE IF EXISTS #Step;
+DROP TABLE IF EXISTS #Supplied;
+DROP TABLE IF EXISTS #Tag;
+DROP TABLE IF EXISTS #Task;
+DROP TABLE IF EXISTS #Team;
+DROP TABLE IF EXISTS #TeamManager;
+DROP TABLE IF EXISTS #TeamManagerRaw;
+DROP TABLE IF EXISTS #Touched;
+DROP TABLE IF EXISTS #Verb;
+DROP TABLE IF EXISTS #Wipe;
 SET QUOTED_IDENTIFIER ON;
 
 ------------------------------------------------------------------------------------------------ settings
@@ -1011,14 +1041,20 @@ SELECT TaskId, @Tenant, Title, Descr, DueDate, DueTime, 0, Priority, Status, Own
        1, CASE WHEN Status = 3 THEN DoneAt END, CreatedAtUtc, OwnerUserId, ModifiedAtUtc, OwnerUserId
 FROM #Task;
 
+-- Each team's manager, once (a lookup per task row would scan #Person for every one).
+SELECT TeamIdx, ManagerId = MIN(CAST(UserId AS char(36))) INTO #TeamManagerRaw FROM #Person WHERE IsManager = 1 GROUP BY TeamIdx;
+SELECT TeamIdx, ManagerId = CAST(ManagerId AS uniqueidentifier) INTO #TeamManager FROM #TeamManagerRaw;
+CREATE UNIQUE CLUSTERED INDEX IX_TeamManager ON #TeamManager (TeamIdx);
+
 -- Who can see a task: everyone of the team (access); the responsible person is flagged.
 -- A task the team's manager is responsible for is not shared with the staff below them:
 -- only the manager and the task's owner are on its list.
 INSERT INTO task_management.TaskAssignees (Id, TaskId, UserId, IsResponsible, IsActing)
 SELECT NEWID(), t.TaskId, p.UserId, CASE WHEN p.UserId = t.RespUserId THEN 1 ELSE 0 END, 0
-FROM #Task t JOIN #Person p ON p.TeamIdx = t.TeamIdx
-WHERE p.UserId = t.RespUserId OR p.UserId = t.OwnerUserId
-   OR NOT EXISTS (SELECT 1 FROM #Person m WHERE m.UserId = t.RespUserId AND m.IsManager = 1);
+FROM #Task t
+JOIN #TeamManager tm ON tm.TeamIdx = t.TeamIdx
+JOIN #Person p ON p.TeamIdx = t.TeamIdx
+WHERE t.RespUserId <> tm.ManagerId OR p.UserId = t.RespUserId OR p.UserId = t.OwnerUserId;
 
 -- One or two tags per task, from the team's own.
 INSERT INTO task_management.TaskTags (Id, TaskId, TagId)
