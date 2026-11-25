@@ -158,7 +158,13 @@ public sealed class IdentityRepository(
     CancellationToken cancellationToken,
     IReadOnlyCollection<Guid>? excludeUserIds = null)
     {
-        var query = IncludeUserGraph(dbContext.Users).AsQueryable();
+        // Read-only listing mapped to UserDto, which needs only the role names: no Tenant/Permissions
+        // joins and no change tracking. Identity resolution shares each Role across the page's users.
+        var query = dbContext.Users
+            .AsNoTrackingWithIdentityResolution()
+            .Include(user => user.Roles)
+            .ThenInclude(userRole => userRole.Role)
+            .AsQueryable();
 
         if (tenantId.HasValue)
         {
@@ -249,7 +255,8 @@ public sealed class IdentityRepository(
 
     public async Task<IReadOnlyList<Role>> ListRolesAsync(Guid? tenantId, CancellationToken cancellationToken)
     {
-        var query = IncludeRoleGraph(dbContext.Roles).AsQueryable();
+        // Read-only (role list, role check when assigning roles, access view): shared Permission rows are materialized once.
+        var query = IncludeRoleGraph(dbContext.Roles.AsNoTrackingWithIdentityResolution()).AsQueryable();
         if (tenantId.HasValue)
         {
             query = query.Where(role => role.TenantId == tenantId);
