@@ -26,6 +26,15 @@ public interface ITaskRepository
 
     Task<PagedResult<TaskItem>> ListAsync(ListTasksRequest request, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// A page of tasks with the whole graph GetByIdAsync loads (subtasks, tags, files, people, schedule), read-only:
+    /// what the board needs in one request instead of one per task. Same filters, order and access rule as ListAsync.
+    /// </summary>
+    Task<PagedResult<TaskItem>> ListWithDetailsAsync(ListTasksRequest request, CancellationToken cancellationToken);
+
+    /// <summary>The number of comments of each of these tasks (tasks with none are left out).</summary>
+    Task<IReadOnlyDictionary<Guid, int>> CountCommentsAsync(Guid tenantId, IReadOnlyCollection<Guid> taskIds, CancellationToken cancellationToken);
+
     Task<SubTask?> GetSubTaskAsync(Guid tenantId, Guid subTaskId, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<SubTask>> GetSubTasksAsync(Guid tenantId, Guid taskId, CancellationToken cancellationToken);
@@ -152,6 +161,10 @@ public interface ITaskCommentRepository
 public interface ITaskService
 {
     Task<Result<PagedResult<TaskListItemDto>>> ListAsync(ListTasksRequest request, CancellationToken cancellationToken);
+
+    /// <summary>A page of full tasks (without comments and history) for the board: one request for many tasks.</summary>
+    Task<Result<PagedResult<TaskDto>>> ListBoardAsync(ListTasksRequest request, CancellationToken cancellationToken);
+
     Task<Result<TaskDto>> GetAsync(Guid id, CancellationToken cancellationToken);
     Task<Result<TaskDto>> CreateAsync(CreateTaskRequest request, CancellationToken cancellationToken);
     Task<Result<TaskDto>> UpdateAsync(Guid id, UpdateTaskRequest request, CancellationToken cancellationToken);
