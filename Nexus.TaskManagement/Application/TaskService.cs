@@ -109,7 +109,9 @@ public sealed class TaskService(
         };
 
         var page = await repository.ListWithDetailsAsync(normalized, cancellationToken);
-        var items = await ToDtosAsync(page.Items, cancellationToken);
+        // Without the posts the tasks are given to: for a team of 25 they were two thirds of the answer, and only the
+        // task form reads them (it asks for the one task, GET /{id}). Nor are the org structure's posts looked up here.
+        var items = await ToDtosAsync(page.Items, includePosts: false, cancellationToken);
 
         return Result.Success(new PagedResult<TaskDto>(items, page.PageNumber, page.PageSize, page.TotalCount));
     }
@@ -1214,7 +1216,7 @@ public sealed class TaskService(
         schedule.IsActive);
 
     private async Task<TaskDto> ToDtoAsync(TaskItem task, CancellationToken cancellationToken) =>
-        (await ToDtosAsync([task], cancellationToken))[0];
+        (await ToDtosAsync([task], includePosts: true, cancellationToken))[0];
 
     /// <summary>The user may read the task's conversation: its owner, a responsible person or a stand-in.</summary>
     private bool CanReadConversation(TaskItem task) => currentUser.UserId is { } userId
@@ -1225,7 +1227,7 @@ public sealed class TaskService(
     /// The full DTOs of these tasks. The people, teams, posts and comment counts of ALL of them are read together
     /// (one query each), not once per task - what makes a whole page of tasks cost as little as one.
     /// </summary>
-    private async Task<IReadOnlyList<TaskDto>> ToDtosAsync(IReadOnlyList<TaskItem> tasks, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<TaskDto>> ToDtosAsync(IReadOnlyList<TaskItem> tasks, bool includePosts, CancellationToken cancellationToken)
     {
         if (tasks.Count == 0)
         {
@@ -1235,7 +1237,7 @@ public sealed class TaskService(
         var tenantId = tasks[0].TenantId;
         var taskIds = tasks.Select(t => t.Id).ToList();
 
-        var postsOf = taskPosts.Enabled
+        var postsOf = includePosts && taskPosts.Enabled
             ? await taskPosts.GetTaskPostsAsync(tenantId, taskIds, cancellationToken)
             : null;
         var postRolesByTask = new Dictionary<Guid, List<(Guid Id, string Role)>>();
