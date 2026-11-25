@@ -397,9 +397,9 @@ async function main() {
     return role.id;
   };
   const staffPerms = ['Tasks.View', 'Tasks.Create', 'Tasks.Edit', 'Tasks.Comment', 'Tasks.UploadFiles', 'Tasks.Assign', 'Notes.Manage',
-    'Meetings.View', 'Meetings.Create', 'Workflow.View', 'groups.view_own', 'groups.manage_own', 'work_calendars.view'];
+    'Meetings.View', 'Meetings.Create', 'Workflow.View', 'groups.view_own', 'work_calendars.view'];
   const managerPerms = [...staffPerms, 'Tasks.Delete', 'Tasks.ManageTags', 'Tasks.ManageRecurring', 'Workflow.Approve', 'Workflow.Reject',
-    'Meetings.Edit', 'Meetings.Delete', 'Meetings.InviteHigher', 'users.view'];
+    'Meetings.Edit', 'Meetings.Delete', 'Meetings.InviteHigher', 'users.view', 'groups.manage_own'];
   const staffRole = await ensureRole('کارمند', 'کار روزمره: فعالیت، یادداشت، جلسه و گفتگو', staffPerms);
   const managerRole = await ensureRole('مدیر واحد', 'به‌علاوهٔ تأیید و حذف فعالیت و ویرایش جلسه‌ها', managerPerms);
   log('roles ready');
@@ -511,7 +511,9 @@ async function main() {
   await runPool(todo, CONCURRENCY, async (s) => {
     const owner = personOf.get(s.owner);
     const responsible = s.responsible.map((p) => personOf.get(p));
-    const people = byTeam(s.team);
+    // A task the team's manager is responsible for is not shared with the staff below them.
+    const byManager = responsible.some((r) => r.id === managerOf(s.team).id);
+    const people = byManager ? [...new Map([owner, ...responsible].map((p) => [p.id, p])).values()] : byTeam(s.team);
     const tk = await tokenOf(owner);
     try {
       const t = await onWorkingDay(dueBy(s.dueH), (dueDate) => call(tk, 'POST', '/api/task-management/tasks', {
@@ -533,7 +535,9 @@ async function main() {
     try {
       const t = await onWorkingDay(end, (dueDate) => call(tk, 'POST', '/api/task-management/tasks', {
         title, dueDate, dueTime: null, priority: 'High', description: `پروژهٔ اصلی ${TEAMS[key]} در این فصل.`, isProject: true,
-        assignedUserId: m.id, responsibleUserIds: [m.id], responsiblePostIds: null, assignedUserGroupId: teamIds[key], assigneeUserIds: people.map((p) => p.id),
+        assignedUserId: m.id, responsibleUserIds: [m.id], responsiblePostIds: null, assignedUserGroupId: teamIds[key],
+        // The manager's project: of the staff only those with a step of it see it.
+        assigneeUserIds: [...new Set([m.id, ...steps.map((_, i) => people[(i + 1) % people.length].id)])],
         allowAssigneeStatusUpdate: true, charterDescription: `هدف: ${title.replace('پروژهٔ ', '')} تا پایان فصل.`, charterProjectManager: m.name,
         charterStartDate: start, charterEndDate: end,
         subTasks: steps.map((s, i) => ({ title: s, importance: i === 0 ? 'High' : 'Medium', startDate: workDays[1 + i * 4] || end, endDate: workDays[4 + i * 4] || end, startTime: null, endTime: null, sortOrder: i, isGeneratedOccurrence: false, assigneeUserIds: [people[(i + 1) % people.length].id] })),

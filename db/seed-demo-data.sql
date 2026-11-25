@@ -785,7 +785,6 @@ INSERT INTO #PermName (RoleKey, Name) VALUES
     (N'staff', N'Meetings.Create'),
     (N'staff', N'Workflow.View'),
     (N'staff', N'groups.view_own'),
-    (N'staff', N'groups.manage_own'),
     (N'staff', N'work_calendars.view'),
     (N'manager', N'Tasks.View'),
     (N'manager', N'Tasks.Create'),
@@ -798,7 +797,6 @@ INSERT INTO #PermName (RoleKey, Name) VALUES
     (N'manager', N'Meetings.Create'),
     (N'manager', N'Workflow.View'),
     (N'manager', N'groups.view_own'),
-    (N'manager', N'groups.manage_own'),
     (N'manager', N'work_calendars.view'),
     (N'manager', N'Tasks.Delete'),
     (N'manager', N'Tasks.ManageTags'),
@@ -808,7 +806,8 @@ INSERT INTO #PermName (RoleKey, Name) VALUES
     (N'manager', N'Meetings.Edit'),
     (N'manager', N'Meetings.Delete'),
     (N'manager', N'Meetings.InviteHigher'),
-    (N'manager', N'users.view');
+    (N'manager', N'users.view'),
+    (N'manager', N'groups.manage_own');
 
 DECLARE @nF int = (SELECT COUNT(*) FROM #First), @nL int = (SELECT COUNT(*) FROM #Last), @nC int = (SELECT COUNT(*) FROM #Client), @nCm int = (SELECT COUNT(*) FROM #Comment);
 
@@ -1013,9 +1012,13 @@ SELECT TaskId, @Tenant, Title, Descr, DueDate, DueTime, 0, Priority, Status, Own
 FROM #Task;
 
 -- Who can see a task: everyone of the team (access); the responsible person is flagged.
+-- A task the team's manager is responsible for is not shared with the staff below them:
+-- only the manager and the task's owner are on its list.
 INSERT INTO task_management.TaskAssignees (Id, TaskId, UserId, IsResponsible, IsActing)
 SELECT NEWID(), t.TaskId, p.UserId, CASE WHEN p.UserId = t.RespUserId THEN 1 ELSE 0 END, 0
-FROM #Task t JOIN #Person p ON p.TeamIdx = t.TeamIdx;
+FROM #Task t JOIN #Person p ON p.TeamIdx = t.TeamIdx
+WHERE p.UserId = t.RespUserId OR p.UserId = t.OwnerUserId
+   OR NOT EXISTS (SELECT 1 FROM #Person m WHERE m.UserId = t.RespUserId AND m.IsManager = 1);
 
 -- One or two tags per task, from the team's own.
 INSERT INTO task_management.TaskTags (Id, TaskId, TagId)
@@ -1058,7 +1061,11 @@ FROM #Proj pr JOIN @ProjOwner po ON po.Idx = pr.Idx JOIN #Team tm ON tm.TeamIdx 
 
 INSERT INTO task_management.TaskAssignees (Id, TaskId, UserId, IsResponsible, IsActing)
 SELECT NEWID(), pr.TaskId, p.UserId, CASE WHEN p.UserId = po.ManagerId THEN 1 ELSE 0 END, 0
-FROM #Proj pr JOIN @ProjOwner po ON po.Idx = pr.Idx JOIN #Person p ON p.TeamIdx = pr.TeamIdx;
+FROM #Proj pr JOIN @ProjOwner po ON po.Idx = pr.Idx JOIN #Person p ON p.TeamIdx = pr.TeamIdx
+-- A project is the manager's: of the staff only those with a step of it on their plate see it.
+WHERE p.UserId = po.ManagerId
+   OR EXISTS (SELECT 1 FROM #Step s JOIN #Staff sf ON sf.TeamIdx = pr.TeamIdx AND sf.K = s.Ord % sf.Cnt + 1
+              WHERE s.ProjIdx = pr.Idx AND sf.G = p.G);
 
 INSERT INTO task_management.TaskTags (Id, TaskId, TagId) SELECT NEWID(), TaskId, @ProjectTag FROM #Proj;
 
