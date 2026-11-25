@@ -134,8 +134,8 @@ public sealed record TaskDto(
 /// <summary>
 /// A task as the board and the other lists show it - only what they show, nothing for the screens that open one task
 /// (the task form and the project screen read GET /tasks/{id}). Compared with TaskDto: the access list is ids only
-/// (no names), there is no charter, subtasks come without their tags and files, and of the posts the task is given to
-/// only the ones the signed-in user holds (MyPostIds, for «نمایش بر اساس پست») plus whether it has any (HasPosts).
+/// (no names), there is no charter, subtasks come without their tags and files, and the posts the task is given to are
+/// ids only (PostIds, for «نمایش بر اساس پست» - no titles, places or holders).
 /// </summary>
 public sealed record TaskBoardItemDto(
     Guid Id,
@@ -159,8 +159,7 @@ public sealed record TaskBoardItemDto(
     IReadOnlyList<TagDto> Tags,
     IReadOnlyList<TaskFileDto> Files,
     RepetitiveTaskDto? Recurrence,
-    bool HasPosts,
-    IReadOnlyList<Guid> MyPostIds,
+    IReadOnlyList<Guid> PostIds,
     Guid? ParentTaskId,
     int CommentCount,
     DateTimeOffset CreatedAtUtc,

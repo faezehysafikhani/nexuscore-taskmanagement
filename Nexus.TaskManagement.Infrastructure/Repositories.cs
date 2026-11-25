@@ -85,12 +85,13 @@ public sealed class TaskRepository(TaskManagementDbContext db) : ITaskRepository
         return new PagedResult<TaskItem>(items, pageNumber, pageSize, total);
     }
 
-    public async Task<PagedResult<TaskItem>> ListWithDetailsAsync(ListTasksRequest request, CancellationToken cancellationToken)
+    public async Task<PagedResult<TaskItem>> ListWithDetailsAsync(ListTasksRequest request, bool includeTotal, CancellationToken cancellationToken)
     {
         var pageNumber = Math.Max(1, request.PageNumber);
         var pageSize = Math.Clamp(request.PageSize, 1, 200);
         var filtered = ApplyListFilters(db.Tasks.AsNoTracking(), request);
-        var total = await filtered.CountAsync(cancellationToken);
+        // The board needs the total once (its first page tells how many pages to read); the others skip the count.
+        var total = includeTotal ? await filtered.CountAsync(cancellationToken) : -1;
 
         // Step 1 - which tasks are on this page: the ONE query that applies the access rule and the order. (Reading the
         // page with its collections in one go repeated that filtered, sorted page inside every collection's query:

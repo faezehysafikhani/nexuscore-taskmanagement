@@ -30,7 +30,8 @@ public interface ITaskRepository
     /// A page of tasks with what the board shows (subtasks with their people, tags, files, people, schedule - not the
     /// subtasks' tags and files), read-only: one request instead of one per task. Same filters, order and access rule as ListAsync.
     /// </summary>
-    Task<PagedResult<TaskItem>> ListWithDetailsAsync(ListTasksRequest request, CancellationToken cancellationToken);
+    /// <param name="includeTotal">False: TotalCount is -1 and not counted (the board counts once, on its first page).</param>
+    Task<PagedResult<TaskItem>> ListWithDetailsAsync(ListTasksRequest request, bool includeTotal, CancellationToken cancellationToken);
 
     /// <summary>The number of comments of each of these tasks (tasks with none are left out).</summary>
     Task<IReadOnlyDictionary<Guid, int>> CountCommentsAsync(Guid tenantId, IReadOnlyCollection<Guid> taskIds, CancellationToken cancellationToken);

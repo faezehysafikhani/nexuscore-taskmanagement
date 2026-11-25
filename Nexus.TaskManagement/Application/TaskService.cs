@@ -108,7 +108,7 @@ public sealed class TaskService(
             PageSize = Math.Clamp(request.PageSize, 1, 200)
         };
 
-        var page = await repository.ListWithDetailsAsync(normalized, cancellationToken);
+        var page = await repository.ListWithDetailsAsync(normalized, includeTotal: normalized.PageNumber == 1, cancellationToken);
         var items = await ToBoardDtosAsync(page.Items, cancellationToken);
 
         return Result.Success(new PagedResult<TaskBoardItemDto>(items, page.PageNumber, page.PageSize, page.TotalCount));
@@ -116,8 +116,8 @@ public sealed class TaskService(
 
     /// <summary>
     /// Board DTOs: only the names the lists show (owner, responsible people, stand-ins, subtask people, team) are read,
-    /// once for the whole page; the access list goes as ids. Of the posts a task is given to, only whether it has any and
-    /// which of them the signed-in user holds («نمایش بر اساس پست» filters by those).
+    /// once for the whole page; the access list goes as ids, and so do the posts the task is given to («نمایش بر اساس پست»
+    /// filters by them) - without the organization structure's titles and holders, which would load the whole chart.
     /// </summary>
     private async Task<IReadOnlyList<TaskBoardItemDto>> ToBoardDtosAsync(IReadOnlyList<TaskItem> tasks, CancellationToken cancellationToken)
     {
@@ -130,22 +130,15 @@ public sealed class TaskService(
         var taskIds = tasks.Select(t => t.Id).ToList();
 
         var postIdsByTask = new Dictionary<Guid, List<Guid>>();
-        var heldByMe = new HashSet<Guid>();
         if (taskPosts.Enabled)
         {
+            // One query on the task-post rows; no GetPostsAsync (it reads every unit, position, post and holder).
             var postsOf = await taskPosts.GetTaskPostsAsync(tenantId, taskIds, cancellationToken);
             foreach (var (taskId, set) in postsOf)
             {
                 var ids = set.ResponsiblePostIds.Concat(set.AccessPostIds).ToList();
                 if (set.OwnerPostId is { } ownerPost) ids.Add(ownerPost);
-                postIdsByTask[taskId] = ids;
-            }
-
-            var allPostIds = postIdsByTask.Values.SelectMany(ids => ids).Distinct().ToList();
-            if (allPostIds.Count > 0 && currentUser.UserId is { } me)
-            {
-                var posts = await taskPosts.GetPostsAsync(tenantId, allPostIds, cancellationToken);
-                heldByMe.UnionWith(posts.Values.Where(p => p.HolderUserId == me).Select(p => p.PostId));
+                postIdsByTask[taskId] = ids.Distinct().ToList();
             }
         }
 
@@ -201,8 +194,7 @@ public sealed class TaskService(
                 task.Tags.Where(t => t.Tag is not null).Select(t => ToDto(t.Tag!)).ToList(),
                 task.Files.Select(ToDto).ToList(),
                 task.Recurrence is null ? null : ToDto(task.Recurrence),
-                postIds.Count > 0,
-                postIds.Where(heldByMe.Contains).Distinct().ToList(),
+                postIds,
                 task.ParentTaskId,
                 commentCounts.TryGetValue(task.Id, out var commentCount) ? commentCount : 0,
                 task.CreatedAtUtc,
