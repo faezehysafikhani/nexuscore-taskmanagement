@@ -142,6 +142,13 @@ public sealed class SessionPolicyProvider(
         var label = candidates.OrderBy(c => c.IdleSeconds).ThenByDescending(c => candidates.IndexOf(c)).First().Profile;
         var idle = candidates.Min(c => c.IdleSeconds);
         var absolute = candidates.Min(c => c.AbsoluteSeconds);
+        // Timeouts switched off for now (Identity:Session:ExpiryDisabled).
+        if (options.Value.ExpiryDisabled)
+        {
+            idle = NexusCore.Application.Identity.Options.SignInSessionOptions.ExpiryDisabledSeconds;
+            absolute = NexusCore.Application.Identity.Options.SignInSessionOptions.ExpiryDisabledSeconds;
+        }
+
         // Trying the timeouts by hand (Identity:Session:DevIdleSecondsOverride): Development only.
         if (environment?.IsDevelopment() == true)
         {
