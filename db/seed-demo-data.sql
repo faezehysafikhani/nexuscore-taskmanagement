@@ -210,6 +210,7 @@ INSERT INTO #Supplied (Tbl, Col) VALUES
     (N'task_management.Tasks', N'AssignedUserId'),
     (N'task_management.Tasks', N'AssignedUserGroupId'),
     (N'task_management.Tasks', N'AllowAssigneeStatusUpdate'),
+    (N'task_management.Tasks', N'ReviewStatus'),
     (N'task_management.Tasks', N'ActualCompletionDateUtc'),
     (N'task_management.Tasks', N'CreatedAtUtc'),
     (N'task_management.Tasks', N'CreatedByUserId'),
@@ -1036,9 +1037,9 @@ CROSS APPLY (SELECT raw = DATEADD(minute, (CHECKSUM(s.Seq, 8) & 2147483647) % 28
 CROSS APPLY (SELECT v = CASE WHEN mr.raw > @Now THEN @Now ELSE mr.raw END) md;
 
 INSERT INTO task_management.Tasks (Id, TenantId, Title, Description, DueDate, DueTime, IsProject, Priority, Status, OwnerUserId, OwnerHeldByPost, AssignedUserId, AssignedUserGroupId,
-                                   AllowAssigneeStatusUpdate, ActualCompletionDateUtc, CreatedAtUtc, CreatedByUserId, ModifiedAtUtc, ModifiedByUserId)
+                                   AllowAssigneeStatusUpdate, ReviewStatus, ActualCompletionDateUtc, CreatedAtUtc, CreatedByUserId, ModifiedAtUtc, ModifiedByUserId)
 SELECT TaskId, @Tenant, Title, Descr, DueDate, DueTime, 0, Priority, Status, OwnerUserId, 0, RespUserId, GroupId,
-       1, CASE WHEN Status = 3 THEN DoneAt END, CreatedAtUtc, OwnerUserId, ModifiedAtUtc, OwnerUserId
+       1, 0, CASE WHEN Status = 3 THEN DoneAt END, CreatedAtUtc, OwnerUserId, ModifiedAtUtc, OwnerUserId
 FROM #Task;
 
 -- Each team's manager, once (a lookup per task row would scan #Person for every one).
@@ -1090,9 +1091,9 @@ CROSS APPLY (SELECT d = DATEADD(day, 24 + pr.Idx * 3, @Today)) e0
 CROSS APPLY (SELECT d = CASE WHEN DATEDIFF(day, '19000107', e0.d) % 7 = 5 THEN DATEADD(day, 1, e0.d) ELSE e0.d END) e;
 
 INSERT INTO task_management.Tasks (Id, TenantId, Title, Description, DueDate, IsProject, Priority, Status, OwnerUserId, OwnerHeldByPost, AssignedUserId, AssignedUserGroupId,
-                                   AllowAssigneeStatusUpdate, CharterDescription, CharterProjectManager, CharterStartDate, CharterEndDate, CreatedAtUtc, CreatedByUserId)
+                                   AllowAssigneeStatusUpdate, ReviewStatus, CharterDescription, CharterProjectManager, CharterStartDate, CharterEndDate, CreatedAtUtc, CreatedByUserId)
 SELECT pr.TaskId, @Tenant, pr.Title, N'پروژهٔ اصلی ' + tm.TeamName + N' در این فصل.', po.EndDate, 1, 2, 1, po.ManagerId, 0, po.ManagerId, po.GroupId,
-       1, N'هدف: ' + REPLACE(pr.Title, N'پروژهٔ ', N'') + N' تا پایان فصل.', po.ManagerName, po.StartDate, po.EndDate, DATEADD(day, -7, @Now), po.ManagerId
+       1, 0, N'هدف: ' + REPLACE(pr.Title, N'پروژهٔ ', N'') + N' تا پایان فصل.', po.ManagerName, po.StartDate, po.EndDate, DATEADD(day, -7, @Now), po.ManagerId
 FROM #Proj pr JOIN @ProjOwner po ON po.Idx = pr.Idx JOIN #Team tm ON tm.TeamIdx = pr.TeamIdx;
 
 INSERT INTO task_management.TaskAssignees (Id, TaskId, UserId, IsResponsible, IsActing)
