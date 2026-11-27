@@ -30,6 +30,21 @@ public static class ApprovalParticipants
 
     public static IReadOnlyList<string> All { get; } = [Manager, Owner, Approver1, Approver2, Approver3];
 
+    /// <summary>The submitter's manager in the organization chart (answered by an <see cref="IApprovalKeyResolver"/>).</summary>
+    public const string OrgManager = "OrgManager";
+
+    /// <summary>The submitter's manager's manager in the organization chart.</summary>
+    public const string OrgManager2 = "OrgManager2";
+
+    /// <summary>Prefix of a key naming one post («پست») of the chart: <c>Post:{postId}</c> - whoever holds it then.</summary>
+    public const string PostPrefix = "Post:";
+
+    /// <summary>
+    /// Prefix of a key naming a position («سمت»): <c>Pos:{positionId}</c> - the nearest holder of that position
+    /// above the submitter in the chart, else its only holder.
+    /// </summary>
+    public const string PositionPrefix = "Pos:";
+
     /// <summary>The participant to use when the named one is not known (an unknown Owner is answered by the Manager).</summary>
     public static string? FallbackOf(string key) => key == Owner ? Manager : null;
 }
@@ -43,6 +58,16 @@ public static class ApprovalParticipants
 public interface IApprovalParticipantResolver
 {
     Task<IReadOnlyDictionary<string, Guid>> ResolveAsync(ApprovalSubject subject, CancellationToken cancellationToken);
+}
+
+/// <summary>
+/// Optional extension point for approver keys that depend on who submits rather than on the subject
+/// (the organization chart: <see cref="ApprovalParticipants.OrgManager"/>, a post, a position). Asked only for
+/// keys no participant resolver and no submitter answered. With none registered such keys stay unanswered.
+/// </summary>
+public interface IApprovalKeyResolver
+{
+    Task<Guid?> ResolveAsync(ApprovalSubject subject, Guid? submitterUserId, string key, CancellationToken cancellationToken);
 }
 
 public enum ApprovalRequestOutcome

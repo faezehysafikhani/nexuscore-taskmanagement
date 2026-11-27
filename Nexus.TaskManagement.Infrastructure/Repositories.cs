@@ -101,11 +101,101 @@ public sealed class TaskRepository(TaskManagementDbContext db) : ITaskRepository
 
     private async Task<PagedResult<TaskItem>> ListCoreAsync(ListTasksRequest request, CancellationToken cancellationToken)
     {
-        var query = db.Tasks
-            .Include(t => t.SubTasks)
+        var query = ApplyListFilters(
+            db.Tasks
+                .Include(t => t.SubTasks)
+                .Include(t => t.Tags).ThenInclude(tt => tt.Tag)
+                .Include(t => t.Recurrence),
+            request);
+
+        // A page is at most 200 rows, whatever the request asked for.
+        var pageNumber = Math.Max(1, request.PageNumber);
+        var pageSize = Math.Clamp(request.PageSize, 1, 200);
+        var total = await query.CountAsync(cancellationToken);
+        var items = await query
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+
+        return new PagedResult<TaskItem>(items, pageNumber, pageSize, total);
+    }
+
+    public async Task<PagedResult<TaskItem>> ListWithDetailsAsync(ListTasksRequest request, bool includeTotal, CancellationToken cancellationToken)
+    {
+        // The same archive rule as ListAsync: lifted for this one read when the archive is asked for.
+        db.IncludeArchived = request.Archived;
+        try
+        {
+            return await ListWithDetailsCoreAsync(request, includeTotal, cancellationToken);
+        }
+        finally
+        {
+            db.IncludeArchived = false;
+        }
+    }
+
+    private async Task<PagedResult<TaskItem>> ListWithDetailsCoreAsync(ListTasksRequest request, bool includeTotal, CancellationToken cancellationToken)
+    {
+        var pageNumber = Math.Max(1, request.PageNumber);
+        var pageSize = Math.Clamp(request.PageSize, 1, 200);
+        var filtered = ApplyListFilters(db.Tasks.AsNoTracking(), request);
+        // The board needs the total once (its first page tells how many pages to read); the others skip the count.
+        var total = includeTotal ? await filtered.CountAsync(cancellationToken) : -1;
+
+        // Step 1 - which tasks are on this page: the ONE query that applies the access rule and the order. (Reading the
+        // page with its collections in one go repeated that filtered, sorted page inside every collection's query:
+        // nine heavy queries a page, enough to stall the whole API while a board loads.)
+        var ids = await filtered
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
+            .Select(t => t.Id)
+            .ToListAsync(cancellationToken);
+        if (ids.Count == 0)
+        {
+            return new PagedResult<TaskItem>([], pageNumber, pageSize, total);
+        }
+
+        // Step 2 - those tasks with what the board shows, by their ids. The ids came out of the filtered query just
+        // above, so the query filters (which would join the tasks again for every collection) are not repeated. The
+        // subtasks' tags and files are left out: no list shows them (the screens of one task read GET /tasks/{id}).
+        var loaded = await db.Tasks
+            .IgnoreQueryFilters()
+            .AsNoTrackingWithIdentityResolution()
+            .Where(t => ids.Contains(t.Id))
+            .Include(t => t.SubTasks).ThenInclude(s => s.Assignees)
             .Include(t => t.Tags).ThenInclude(tt => tt.Tag)
+            .Include(t => t.Files).ThenInclude(tf => tf.File)
+            .Include(t => t.Assignees)
             .Include(t => t.Recurrence)
-            .Where(t => t.TenantId == request.TenantId);
+            .AsSplitQuery()
+            .ToListAsync(cancellationToken);
+
+        var byId = loaded.ToDictionary(t => t.Id);
+        var items = ids.Where(byId.ContainsKey).Select(id => byId[id]).ToList();
+        return new PagedResult<TaskItem>(items, pageNumber, pageSize, total);
+    }
+
+    public async Task<IReadOnlyDictionary<Guid, int>> CountCommentsAsync(
+        Guid tenantId, IReadOnlyCollection<Guid> taskIds, CancellationToken cancellationToken)
+    {
+        if (taskIds.Count == 0)
+        {
+            return new Dictionary<Guid, int>();
+        }
+
+        var ids = taskIds.ToList();
+        return await db.TaskComments
+            .AsNoTracking()
+            .Where(c => c.TenantId == tenantId && ids.Contains(c.TaskId))
+            .GroupBy(c => c.TaskId)
+            .Select(g => new { TaskId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.TaskId, x => x.Count, cancellationToken);
+    }
+
+    /// <summary>The filters and the order of the task lists. The id is the last key, so pages never overlap or skip.</summary>
+    private static IQueryable<TaskItem> ApplyListFilters(IQueryable<TaskItem> query, ListTasksRequest request)
+    {
+        query = query.Where(t => t.TenantId == request.TenantId);
 
         if (request.Archived)
         {
@@ -144,7 +234,7 @@ public sealed class TaskRepository(TaskManagementDbContext db) : ITaskRepository
             query = query.Where(t => t.DueDate < today && t.Status != TaskItemStatus.Completed);
         }
 
-        query = (request.SortBy, request.SortDescending) switch
+        var ordered = (request.SortBy, request.SortDescending) switch
         {
             (TaskSortBy.DueDate, true) => query.OrderByDescending(t => t.DueDate),
             (TaskSortBy.DueDate, false) => query.OrderBy(t => t.DueDate),
@@ -158,16 +248,7 @@ public sealed class TaskRepository(TaskManagementDbContext db) : ITaskRepository
             (_, false) => query.OrderBy(t => t.ModifiedAtUtc ?? t.CreatedAtUtc)
         };
 
-        // A page is at most 200 rows, whatever the request asked for.
-        var pageNumber = Math.Max(1, request.PageNumber);
-        var pageSize = Math.Clamp(request.PageSize, 1, 200);
-        var total = await query.CountAsync(cancellationToken);
-        var items = await query
-            .Skip((pageNumber - 1) * pageSize)
-            .Take(pageSize)
-            .ToListAsync(cancellationToken);
-
-        return new PagedResult<TaskItem>(items, pageNumber, pageSize, total);
+        return ordered.ThenBy(t => t.Id);
     }
 
     public Task<SubTask?> GetSubTaskAsync(Guid tenantId, Guid subTaskId, CancellationToken cancellationToken) =>

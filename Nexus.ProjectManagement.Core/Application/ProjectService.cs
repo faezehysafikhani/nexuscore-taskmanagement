@@ -1,3 +1,5 @@
+using NexusCore.SharedKernel.Interfaces;
+using NexusCore.Application.Identity.Interfaces;
 using Nexus.ProjectManagement.Core.Application.Dtos;
 using Nexus.ProjectManagement.Core.Domain;
 using NexusCore.Application.Approvals;
@@ -11,7 +13,10 @@ public sealed class ProjectService(
     IApprovalRequester approvalRequester,
     IEnumerable<IProjectDeletionParticipant>? deletionParticipants = null,
     ProjectOptions? options = null,
-    IEnumerable<IProjectSubmissionCheck>? submissionChecks = null) : IProjectService
+    IEnumerable<IProjectSubmissionCheck>? submissionChecks = null,
+    IWorkAssignmentScope? assignmentScope = null,
+    IUserReachScope? reachScope = null,
+    ICurrentUserContext? currentUser = null) : IProjectService
 {
     public async Task<Result<PagedResult<ProjectDto>>> ListAsync(ListProjectsRequest request, CancellationToken cancellationToken)
     {
@@ -102,6 +107,12 @@ public sealed class ProjectService(
             return Result.Failure<ProjectDto>(Error.Conflict("A project with this code already exists."));
         }
 
+        if (await WorkAssignmentCheck.CheckAsync(assignmentScope, reachScope, currentUser, request.TenantId, request.ManagerUserId, null,
+                "مدیر پروژه", cancellationToken) is { } managerError)
+        {
+            return Result.Failure<ProjectDto>(managerError);
+        }
+
         var project = new Project(Guid.NewGuid(), request.TenantId, request.Name, code, request.Type, request.ManagerUserId, request.OwnerUserId);
         project.UpdateDetails(
             request.Name, code, request.ManagerUserId, request.OwnerUserId,
@@ -146,6 +157,12 @@ public sealed class ProjectService(
         if (await repository.CodeExistsAsync(project.TenantId, request.Code, id, cancellationToken))
         {
             return Result.Failure<ProjectDto>(Error.Conflict("A project with this code already exists."));
+        }
+
+        if (await WorkAssignmentCheck.CheckAsync(assignmentScope, reachScope, currentUser, project.TenantId, request.ManagerUserId, project.ManagerUserId,
+                "مدیر پروژه", cancellationToken) is { } managerError)
+        {
+            return Result.Failure<ProjectDto>(managerError);
         }
 
         project.UpdateDetails(

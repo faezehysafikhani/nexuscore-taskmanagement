@@ -69,6 +69,13 @@ public sealed class TaskPostDirectory(
         return result;
     }
 
+    /// <summary>One query on the current appointments - not the whole chart (LoadAsync).</summary>
+    public async Task<IReadOnlyCollection<Guid>?> GetHeldPostIdsAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken) =>
+        (await repository.ListUserPositionsAsync(tenantId, cancellationToken))
+            .Where(holding => holding.UserId == userId)
+            .Select(holding => holding.UnitPositionId)
+            .ToHashSet();
+
     public async Task<IReadOnlyDictionary<Guid, TaskPostSet>> GetTaskPostsAsync(Guid tenantId, IReadOnlyCollection<Guid> taskIds, CancellationToken cancellationToken)
     {
         var rows = await repository.ListTaskPostsAsync(tenantId, taskIds.ToList(), null, cancellationToken);

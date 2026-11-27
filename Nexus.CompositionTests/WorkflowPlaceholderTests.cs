@@ -379,4 +379,48 @@ public sealed class WorkflowPlaceholderTests
     {
         SchemaUpgradeVerifier.AssertAdditiveOnly("2026-10-15-add-workflow-approver-placeholders.sql", typeof(WorkflowApproverPlaceholdersSchemaUpgrade));
     }
+
+    // -------------------------------------------------------------- organization chart keys
+
+    private sealed class ChartKeys(Dictionary<string, Guid> answers) : IApprovalKeyResolver
+    {
+        public Guid? Submitter { get; private set; }
+
+        public Task<Guid?> ResolveAsync(ApprovalSubject subject, Guid? submitterUserId, string key, CancellationToken cancellationToken)
+        {
+            Submitter = submitterUserId;
+            return Task.FromResult(answers.TryGetValue(key, out var userId) ? userId : (Guid?)null);
+        }
+    }
+
+    private sealed class Me(Guid id) : NexusCore.SharedKernel.Interfaces.ICurrentUserContext
+    {
+        public Guid? UserId => id;
+        public Guid? TenantId => Tenant;
+        public string? Email => null;
+        public string? IpAddress => null;
+        public bool HasPermission(string permission) => false;
+    }
+
+    [Fact]
+    public async Task KeysOnlyTheChartKnows_AreAskedOfTheKeyResolver_WithTheSubmitter()
+    {
+        var f = new Fixture();
+        var boss = Guid.NewGuid();
+        var postHolder = Guid.NewGuid();
+        var postKey = ApprovalParticipants.PostPrefix + Guid.NewGuid();
+        await f.Define("Action", ByKey("Boss", ApprovalParticipants.OrgManager), ByKey("Post", postKey),
+            ByKey("Nobody", ApprovalParticipants.OrgManager2, optional: true), ByKey("Project", ApprovalParticipants.Manager));
+        var chart = new ChartKeys(new Dictionary<string, Guid> { [ApprovalParticipants.OrgManager] = boss, [postKey] = postHolder });
+        var submitter = Guid.NewGuid();
+        var requester = new WorkflowApprovalRequester(f.Definitions, f.Instances, f.Db,
+            [new ProjectApprovalParticipantResolver(new FakeProjects(f.Project))], [chart], new Me(submitter));
+
+        var id = Guid.NewGuid();
+        await requester.RequestApprovalAsync(new ApprovalSubject("Action", id, Tenant, "Project", f.Project.Id), default);
+        var instance = await f.Db.WorkflowInstances.SingleAsync(i => i.SubjectId == id);
+
+        Assert.Equal([boss, postHolder, Manager], instance.GetSteps()!.Select(s => s.ApproverUserId).ToArray());
+        Assert.Equal(submitter, chart.Submitter);
+    }
 }

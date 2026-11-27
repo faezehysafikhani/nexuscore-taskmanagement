@@ -301,4 +301,39 @@ public sealed class ActionRecurrenceTests
             SchemaUpgradeVerifier.ReadScript("2026-10-04-add-action-recurrence.sql"), @"/\*.*?\*/", string.Empty, System.Text.RegularExpressions.RegexOptions.Singleline);
         Assert.DoesNotMatch(@"(?i)\b(DROP|DELETE|TRUNCATE|UPDATE)\b", code);
     }
+
+    // -------------------------------------------------------------- organization chart: who may be chosen
+
+    private sealed class LevelLimit(params Guid[] blocked) : NexusCore.Application.Identity.Interfaces.IWorkAssignmentScope
+    {
+        public Task<NexusCore.Application.Identity.Interfaces.WorkAssignmentLimit?> GetLimitAsync(Guid tenantId, Guid assignerUserId, CancellationToken cancellationToken) =>
+            Task.FromResult<NexusCore.Application.Identity.Interfaces.WorkAssignmentLimit?>(new(blocked.ToHashSet()));
+    }
+
+    private sealed class SignedIn(Guid id) : NexusCore.SharedKernel.Interfaces.ICurrentUserContext
+    {
+        public Guid? UserId => id;
+        public Guid? TenantId => Tenant;
+        public string? Email => null;
+        public string? IpAddress => null;
+    }
+
+    [Fact]
+    public async Task TheResponsiblePerson_MustBeAtTheCreatorsLevelOrBelow_OnlyANewlyChosenOneIsChecked()
+    {
+        var boss = Guid.NewGuid();
+        var me = Guid.NewGuid();
+        var repository = new FakeActionRepository();
+        var service = new ActionItemService(repository, new FakeUnits(), new FakeCalendars(), new CountingUnitOfWork(), new NotConfiguredApprovals(),
+            null, new LevelLimit(boss), null, new SignedIn(me));
+
+        var toBoss = await service.CreateAsync(Create(null, null, null) with { ResponsibleUserId = boss }, default);
+        Assert.True(toBoss.IsFailure);
+        Assert.Contains("هم‌سطح یا پایین‌تر", toBoss.Error.Message);
+
+        var below = await service.CreateAsync(Create(null, null, null), default);
+        Assert.True(below.IsSuccess);
+        var mine = await service.CreateAsync(Create(null, null, null) with { ResponsibleUserId = me }, default);
+        Assert.True(mine.IsSuccess);
+    }
 }

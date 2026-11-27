@@ -249,6 +249,54 @@ public static class IdentityEndpoints
             })
             .RequireAuthorization(IdentityPermissions.UsersView);
 
+        // The people of one's own organization (and, where the structure keeps everyone to their own company, of that
+        // company) for choosing someone - a responsible person, a team member, an approver - and for showing names.
+        // For every signed-in user: only names, usernames, avatar, roles and whether active - no email, mobile or
+        // personal details, and no sign-in times.
+        users.MapGet("/directory", async (int? pageNumber, int? pageSize, string? search, ICurrentUserContext currentUser, IIdentityService identityService, CancellationToken cancellationToken) =>
+            {
+                var result = await identityService.ListUsersAsync(currentUser.TenantId, pageNumber, pageSize, search, cancellationToken);
+                if (result.IsFailure)
+                {
+                    return result.ToApiResult();
+                }
+
+                var page = result.Value!;
+                return Results.Ok(page with
+                {
+                    Items = page.Items.Select(user => user with
+                    {
+                        Email = null, PhoneNumber = null, LastLoginAtUtc = null, Address = null, FatherName = null, BirthDate = null,
+                        Theme = null, ColorPalette = null, ThemeMode = null,
+                    }).ToList()
+                });
+            })
+            .RequireAuthorization();
+
+        // Whom the signed-in user may not make responsible for work (an action, a project), so the pickers offer only
+        // the others. Same rules as tasks; the server checks again on save.
+        app.MapGet("/api/identity/assignment-limit", async (HttpContext http, ICurrentUserContext currentUser, CancellationToken cancellationToken) =>
+            {
+                if (currentUser.TenantId is not { } tenantId || currentUser.UserId is not { } userId)
+                {
+                    return Results.Unauthorized();
+                }
+
+                var limit = http.RequestServices.GetService<IWorkAssignmentScope>() is { } scope
+                    ? await scope.GetLimitAsync(tenantId, userId, cancellationToken)
+                    : null;
+                var reach = http.RequestServices.GetService<IUserReachScope>() is { } reachScope
+                    ? await reachScope.GetReachAsync(tenantId, userId, cancellationToken)
+                    : null;
+                return Results.Ok(new WorkAssignmentLimitDto(
+                    limit is not null,
+                    [.. (limit?.BlockedUserIds ?? new HashSet<Guid>()).Union(reach?.PlacedElsewhere ?? new HashSet<Guid>())],
+                    reach?.UserIds.ToList()));
+            })
+            .WithTags("Identity")
+            .RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi);
+
         users.MapPost("/", async (CreateUserRequest request, IIdentityService identityService, CancellationToken cancellationToken) =>
                 (await identityService.CreateUserAsync(request, cancellationToken)).ToApiResult())
             .RequireRateLimiting(NexusRateLimitPolicies.Write)

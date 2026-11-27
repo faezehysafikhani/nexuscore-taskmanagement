@@ -1,3 +1,4 @@
+using NexusCore.Application.Identity.Interfaces;
 using Nexus.Actions.Application.Dtos;
 using Nexus.Actions.Domain;
 using Nexus.Calendar.Application;
@@ -20,7 +21,10 @@ public sealed class ActionItemService(
     IWorkCalendarRepository workCalendarRepository,
     IActionsUnitOfWork unitOfWork,
     IApprovalRequester approvalRequester,
-    ActionsOptions? options = null) : IActionItemService
+    ActionsOptions? options = null,
+    IWorkAssignmentScope? assignmentScope = null,
+    IUserReachScope? reachScope = null,
+    ICurrentUserContext? currentUser = null) : IActionItemService
 {
     public async Task<Result<IReadOnlyList<ActionItemDto>>> ListAsync(Guid tenantId, Guid? projectId, CancellationToken cancellationToken)
     {
@@ -59,6 +63,12 @@ public sealed class ActionItemService(
         if (referenceError is not null)
         {
             return Result.Failure<ActionItemDto>(referenceError);
+        }
+
+        if (await WorkAssignmentCheck.CheckAsync(assignmentScope, reachScope, currentUser, request.TenantId, request.ResponsibleUserId, null,
+                "مسئول اقدام", cancellationToken) is { } responsibleError)
+        {
+            return Result.Failure<ActionItemDto>(responsibleError);
         }
 
         var action = new ActionItem(Guid.NewGuid(), request.TenantId, request.Title, request.OrganizationUnitId, request.WorkCalendarId, request.ProjectId);
@@ -109,6 +119,12 @@ public sealed class ActionItemService(
         if (referenceError is not null)
         {
             return Result.Failure<ActionItemDto>(referenceError);
+        }
+
+        if (await WorkAssignmentCheck.CheckAsync(assignmentScope, reachScope, currentUser, action.TenantId, request.ResponsibleUserId, action.ResponsibleUserId,
+                "مسئول اقدام", cancellationToken) is { } responsibleError)
+        {
+            return Result.Failure<ActionItemDto>(responsibleError);
         }
 
         // Only changed dates are checked, so an action saved before the rule existed can still be edited.

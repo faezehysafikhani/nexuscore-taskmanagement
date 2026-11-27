@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.SignalR;
+using Nexus.TaskManagement.Application.Dtos;
 using NexusCore.Application.Identity.Services;
 using NexusCore.SharedKernel.Interfaces;
 
@@ -9,9 +10,10 @@ namespace Nexus.TaskManagement.Realtime;
 /// <summary>
 /// Live updates for task screens. A connection joins its tenant's group; after any successful
 /// change to tasks, subtasks, comments, files, tags or schedules the tenant receives
-/// "TasksChanged" and reloads. The message carries no task data - clients re-read through the
-/// normal, permission-checked endpoints, so the hub can never leak something the reader may
-/// not see.
+/// "TasksChanged" and re-reads. The message carries no task data - at most the id of the task
+/// that changed (TaskId, null when it is not known) - and clients re-read through the normal,
+/// permission-checked endpoints (a task the reader may not see answers "not found"), so the hub
+/// can never leak something the reader may not see.
 ///
 /// Each connection also counts toward its user's presence (online while at least one of their
 /// connections is open), since the app keeps this connection open for as long as it is signed in.
@@ -62,7 +64,9 @@ public sealed class ReadOnlyTaskEndpoint
     public static readonly ReadOnlyTaskEndpoint Instance = new();
 }
 
-public sealed record TasksChangedMessage(string Resource, string Method, DateTimeOffset AtUtc);
+
+/// <param name="TaskId">The task that changed, when the change names one: clients then re-read just that task.</param>
+public sealed record TasksChangedMessage(string Resource, string Method, DateTimeOffset AtUtc, Guid? TaskId = null);
 
 /// <summary>
 /// Runs after each task-management write. On a 2xx answer it tells the caller's tenant that
@@ -95,10 +99,10 @@ public sealed class TaskChangeBroadcastFilter(
         {
             await hub.Clients.Group(TaskManagementHub.TenantGroup(tenantId)).SendAsync(
                 TaskManagementHub.TasksChangedEvent,
-                // Only "something changed": the request path names the task, the comment and the
-                // file, and the whole organization receives this - including people who may not
-                // open that task. Clients reload what they are allowed to see.
-                new TasksChangedMessage(string.Empty, string.Empty, DateTimeOffset.UtcNow),
+                // "Something changed", and at most which task: its id says nothing about it, and the whole
+                // organization receives this - including people who may not open that task. Clients re-read
+                // what they are allowed to see (a task they may not see answers "not found").
+                new TasksChangedMessage(string.Empty, string.Empty, DateTimeOffset.UtcNow, TaskIdOf(context.HttpContext, result)),
                 context.HttpContext.RequestAborted);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -107,5 +111,37 @@ public sealed class TaskChangeBroadcastFilter(
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// The task a write is about: from the route (/tasks/{id}/..., /files/tasks/{taskId}) or from what the endpoint
+    /// returned (a created task, a subtask, a comment). Null when the change does not name one - clients then reload all.
+    /// </summary>
+    internal static Guid? TaskIdOf(HttpContext http, object? result)
+    {
+        var path = http.Request.Path.Value ?? string.Empty;
+        if (path.StartsWith("/api/task-management/tasks/", StringComparison.OrdinalIgnoreCase)
+            && http.Request.RouteValues.TryGetValue("id", out var id)
+            && Guid.TryParse(id?.ToString(), out var routeTaskId))
+        {
+            return routeTaskId;
+        }
+
+        if (path.StartsWith("/api/task-management/files/tasks/", StringComparison.OrdinalIgnoreCase)
+            && http.Request.RouteValues.TryGetValue("taskId", out var fileTaskId)
+            && Guid.TryParse(fileTaskId?.ToString(), out var taskIdOfFile))
+        {
+            return taskIdOfFile;
+        }
+
+        return result is IValueHttpResult { Value: { } value }
+            ? value switch
+            {
+                TaskDto task => (Guid?)task.Id,
+                SubTaskDto subTask => (Guid?)subTask.TaskId,
+                TaskCommentDto comment => (Guid?)comment.TaskId,
+                _ => (Guid?)null
+            }
+            : null;
     }
 }

@@ -20,6 +20,13 @@ public interface ITaskPosts
     /// <summary>Each of these users' main post; users with no post are left out.</summary>
     Task<IReadOnlyDictionary<Guid, Guid>> GetMainPostsAsync(Guid tenantId, IReadOnlyCollection<Guid> userIds, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// The posts this user holds now. Null when not known (an implementation that does not say): callers then keep every
+    /// post id instead of only the user's own.
+    /// </summary>
+    Task<IReadOnlyCollection<Guid>?> GetHeldPostIdsAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyCollection<Guid>?>(null);
+
     /// <summary>The posts tasks are given to.</summary>
     Task<IReadOnlyDictionary<Guid, TaskPostSet>> GetTaskPostsAsync(Guid tenantId, IReadOnlyCollection<Guid> taskIds, CancellationToken cancellationToken);
 

@@ -147,6 +147,35 @@ public static class TaskManagementEndpoints
             .WithSummary("List tasks, projects and recurring tasks (archived=true lists the archive instead)")
             .RequireAuthorization(TaskManagementPermissions.View);
 
+        // The board's one-request load: full tasks (subtasks, tags, files, people, schedule, comment count) a page at a
+        // time - at most 200 per page - without their comments and history, which the task screen reads when a task is
+        // opened (GET /{id}/discussion). Same filters and access rule as the list above.
+        group.MapGet("/board", async (
+                ICurrentUserContext currentUser,
+                int? pageNumber, int? pageSize, string? search,
+                TaskItemStatus? status, TaskPriority? priority,
+                bool? isProject, bool? isRecurring,
+                Guid? assignedUserId, Guid? assignedUserGroupId, Guid? tagId,
+                DateOnly? dueFrom, DateOnly? dueTo, bool? overdue,
+                TaskSortBy? sortBy, bool? sortDescending,
+                ITaskService service, CancellationToken cancellationToken) =>
+            {
+                if (currentUser.TenantId is null)
+                {
+                    return Results.Unauthorized();
+                }
+
+                var request = new ListTasksRequest(
+                    currentUser.TenantId.Value, pageNumber ?? 1, pageSize ?? 200, search,
+                    status, priority, isProject, isRecurring, assignedUserId, assignedUserGroupId,
+                    tagId, dueFrom, dueTo, overdue,
+                    sortBy ?? TaskSortBy.CreatedAtUtc, sortDescending ?? true);
+
+                return (await service.ListBoardAsync(request, cancellationToken)).ToApiResult();
+            })
+            .WithSummary("List full tasks for the board, a page at a time (without comments and history)")
+            .RequireAuthorization(TaskManagementPermissions.View);
+
         group.MapGet("/{id:guid}", async (Guid id, ITaskService service, CancellationToken cancellationToken) =>
                 (await service.GetAsync(id, cancellationToken)).ToApiResult())
             .WithSummary("Get one task with its subtasks, tags, files and schedule")
@@ -311,6 +340,32 @@ public static class TaskManagementEndpoints
             .WithSummary("Add a comment")
             .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.Comment);
+
+        // --- Everything the task screen adds to the task: conversation and history, in one request ---
+        group.MapGet("/{id:guid}/discussion", async (Guid id, ITaskCommentService comments, ITaskActivityService activity, CancellationToken cancellationToken) =>
+            {
+                // A task the user cannot see answers "not found" here, as everywhere else.
+                var history = await activity.GetForTaskAsync(id, cancellationToken);
+                if (history.IsFailure)
+                {
+                    return history.ToApiResult();
+                }
+
+                // The conversation is for the owner and the responsible people: for anyone else the comments answer
+                // "not found" - here that only means there is no conversation to show.
+                var conversation = await comments.ListAsync(id, cancellationToken);
+                if (conversation.IsFailure && conversation.Error.Code != "not_found")
+                {
+                    return conversation.ToApiResult();
+                }
+
+                return Results.Ok(new TaskDiscussionDto(
+                    conversation.IsSuccess ? conversation.Value! : [],
+                    history.Value!,
+                    conversation.IsSuccess));
+            })
+            .WithSummary("A task's comments and history in one request (comments are empty for people who may not read them)")
+            .RequireAuthorization(TaskManagementPermissions.View);
 
         // --- History, served from the shared AuditLog ---
         group.MapGet("/{id:guid}/activity", async (Guid id, ITaskActivityService service, CancellationToken cancellationToken) =>

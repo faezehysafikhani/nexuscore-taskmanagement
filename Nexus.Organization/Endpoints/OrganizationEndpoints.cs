@@ -1,3 +1,5 @@
+using Microsoft.Extensions.DependencyInjection;
+using NexusCore.Application.Identity.Interfaces;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Nexus.Organization.Application;
@@ -14,14 +16,23 @@ public static class OrganizationEndpoints
     {
         var group = app.MapGroup("/api/organization/units").WithTags("Organization").RequireAuthorization();
 
-        group.MapGet("/", async (bool? activeOnly, ICurrentUserContext currentUser, IOrganizationService service, CancellationToken cancellationToken) =>
+        group.MapGet("/", async (bool? activeOnly, HttpContext http, ICurrentUserContext currentUser, IOrganizationService service, CancellationToken cancellationToken) =>
             {
                 if (currentUser.TenantId is null)
                 {
                     return Results.Unauthorized();
                 }
 
-                return (await service.ListAsync(currentUser.TenantId.Value, cancellationToken, activeOnly ?? false)).ToApiResult();
+                var result = await service.ListAsync(currentUser.TenantId.Value, cancellationToken, activeOnly ?? false);
+                // Where the organization structure keeps everyone to their own company, only that company's units are listed.
+                if (result.IsFailure || currentUser.UserId is not { } me
+                    || http.RequestServices.GetService<IUnitReachScope>() is not { } reach
+                    || await reach.GetUnitsAsync(currentUser.TenantId.Value, me, cancellationToken) is not { } visible)
+                {
+                    return result.ToApiResult();
+                }
+
+                return Results.Ok(result.Value!.Where(unit => visible.Contains(unit.Id)).ToList());
             })
             .RequireAuthorization(OrganizationPermissions.View);
 

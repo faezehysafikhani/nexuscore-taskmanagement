@@ -8,7 +8,8 @@ public sealed class UserGroupRepository(NexusCoreDbContext dbContext) : IUserGro
 {
     public async Task<IReadOnlyList<UserGroup>> ListAsync(Guid? tenantId, CancellationToken cancellationToken)
     {
-        var query = IncludeGraph(dbContext.UserGroups.AsQueryable());
+        // Read-only listing: no change tracking; shared Permission rows are materialized once.
+        var query = IncludeGraph(dbContext.UserGroups.AsNoTrackingWithIdentityResolution());
         if (tenantId.HasValue)
         {
             query = query.Where(group => group.TenantId == tenantId);
@@ -38,7 +39,7 @@ public sealed class UserGroupRepository(NexusCoreDbContext dbContext) : IUserGro
             .ToListAsync(cancellationToken);
 
     public async Task<IReadOnlyList<UserGroup>> ListVisibleToUserAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken) =>
-        await IncludeGraph(dbContext.UserGroups.AsQueryable())
+        await IncludeGraph(dbContext.UserGroups.AsNoTrackingWithIdentityResolution())
             .Where(group => group.TenantId == tenantId
                 && (group.OwnerUserId == userId || group.Members.Any(member => member.UserId == userId)))
             .OrderBy(group => group.OwnerUserId == userId ? 0 : 1)

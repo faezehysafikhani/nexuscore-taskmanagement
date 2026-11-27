@@ -1,5 +1,6 @@
 using Nexus.Workflow.Domain;
 using NexusCore.Application.Approvals;
+using NexusCore.SharedKernel.Interfaces;
 
 namespace Nexus.Workflow.Application;
 
@@ -13,7 +14,9 @@ public sealed class WorkflowApprovalRequester(
     IWorkflowDefinitionRepository definitionRepository,
     IWorkflowInstanceRepository instanceRepository,
     IWorkflowUnitOfWork unitOfWork,
-    IEnumerable<IApprovalParticipantResolver>? participantResolvers = null) : IApprovalRequester
+    IEnumerable<IApprovalParticipantResolver>? participantResolvers = null,
+    IEnumerable<IApprovalKeyResolver>? keyResolvers = null,
+    ICurrentUserContext? currentUser = null) : IApprovalRequester
 {
     public async Task<ApprovalRequestOutcome> RequestApprovalAsync(ApprovalSubject subject, CancellationToken cancellationToken)
     {
@@ -30,7 +33,8 @@ public sealed class WorkflowApprovalRequester(
         var steps = new List<WorkflowInstanceStep>();
         foreach (var step in definition.Steps.OrderBy(s => s.Order))
         {
-            var approver = step.ApproverUserId ?? Resolve(participants, step.ApproverKey);
+            var approver = step.ApproverUserId ?? Resolve(participants, step.ApproverKey)
+                ?? await ResolveKeyAsync(subject, step.ApproverKey, cancellationToken);
             if (approver is null && step.ApproverKey is not null && step.IsOptional)
             {
                 continue;
@@ -68,6 +72,25 @@ public sealed class WorkflowApprovalRequester(
         }
 
         return participants;
+    }
+
+    /// <summary>A key only the organization chart can answer (the submitter's manager, a post, a position).</summary>
+    private async Task<Guid?> ResolveKeyAsync(ApprovalSubject subject, string? key, CancellationToken cancellationToken)
+    {
+        if (key is null)
+        {
+            return null;
+        }
+
+        foreach (var resolver in keyResolvers ?? [])
+        {
+            if (await resolver.ResolveAsync(subject, currentUser?.UserId, key, cancellationToken) is { } userId)
+            {
+                return userId;
+            }
+        }
+
+        return null;
     }
 
     private static Guid? Resolve(Dictionary<string, Guid> participants, string? key)

@@ -278,7 +278,9 @@ public sealed class OrgStructureTests
                 || name is "Nexus.CompositionTests" or "Nexus.Integrations.TaskReporting" or "Nexus.Integrations.CalendarOrgStructure"
                 || name == "Nexus.Bundles.Platform"
                 // The commercial host is a composition root that wires the module in.
-                || name == "TMCommercial-API")
+                || name == "TMCommercial-API"
+                // So is the Tejarat Bank host.
+                || name == "TMTejarat-API")
             {
                 continue;
             }

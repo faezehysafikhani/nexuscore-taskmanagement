@@ -3,6 +3,7 @@ using Nexus.ProjectManagement.Core.Application;
 using Nexus.ProjectManagement.Team.Application;
 using Nexus.Workflow.Application;
 using Nexus.Workflow.Domain;
+using NexusCore.Application.Identity.Interfaces;
 
 namespace Nexus.Integrations.ProjectVisibility.Application;
 
@@ -22,11 +23,12 @@ public sealed class TeamMembershipVisibilityProvider(ITeamRepository? teamReposi
 }
 
 /// <summary>
-/// The manager of an organisation unit sees the work of that unit and of every unit below it - so
+/// The manager of an organisation unit (named on the unit, or holding its manager post in the organization
+/// chart) sees the work of that unit and of every unit below it - so
 /// whoever manages a top-level unit (the root of a branch of the chart) sees the whole branch. An
 /// inactive unit still counts: its history does not disappear from its manager.
 /// </summary>
-public sealed class OrganizationUnitManagerVisibilityProvider(IOrganizationUnitRepository? organizationRepository = null, IVisibilityRules? rules = null) : IVisibilityProvider
+public sealed class OrganizationUnitManagerVisibilityProvider(IOrganizationUnitRepository? organizationRepository = null, IVisibilityRules? rules = null, IOrgUnitHeads? chartHeads = null) : IVisibilityProvider
 {
     public async Task<VisibilityGrant> GetGrantAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken)
     {
@@ -39,7 +41,10 @@ public sealed class OrganizationUnitManagerVisibilityProvider(IOrganizationUnitR
         var childrenOf = units.Where(u => u.ParentUnitId is not null).ToLookup(u => u.ParentUnitId!.Value, u => u.Id);
 
         var visible = new HashSet<Guid>();
-        var stack = new Stack<Guid>(units.Where(u => u.ManagerUserId == userId).Select(u => u.Id));
+        // Heads from the organization chart (the manager post of a unit, the head of a company), and the
+        // manager named on the unit itself.
+        var headed = chartHeads is null ? [] : await chartHeads.UnitsHeadedByAsync(tenantId, userId, cancellationToken);
+        var stack = new Stack<Guid>(units.Where(u => u.ManagerUserId == userId).Select(u => u.Id).Concat(headed).Distinct());
         while (stack.Count > 0)
         {
             var id = stack.Pop();

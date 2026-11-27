@@ -381,3 +381,6 @@ graphify-out/
 
 # Output of tools/seed-demo-data.mjs (ids of one test server)
 TMCommercial-API/tools/overdue-ids.txt
+
+# The Tejarat Bank host's database upgrade scripts are deliverables too.
+!TMTejarat-API/db/*.sql

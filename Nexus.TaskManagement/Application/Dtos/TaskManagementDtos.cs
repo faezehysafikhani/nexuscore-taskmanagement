@@ -144,7 +144,76 @@ public sealed record TaskDto(
     string? BlockedReason = null,
     int? EstimatedMinutes = null,
     DateTimeOffset? SlaDueAtUtc = null,
+    DateTimeOffset? SlaBreachedAtUtc = null,
+    // How many comments the task has - filled only for people who may read them (owner, responsible people,
+    // stand-ins), so the board can show the count without loading the conversations.
+    int CommentCount = 0);
+
+/// <summary>A person as the lists show them: the id and the name.</summary>
+public sealed record BoardPersonDto(Guid Id, string DisplayName);
+
+/// <summary>
+/// A task as the board and the other lists show it - only what they show, nothing for the screens that open one task
+/// (the task form and the project screen read GET /tasks/{id}). Compared with TaskDto: people are id and name only
+/// (Owner, ResponsibleUsers - the first responsible person is the old AssignedUser); the access list is the index of a
+/// list in the page's AccessLists (the same list - usually the team - is sent once, not once per task); tags are names;
+/// there is no charter; subtasks come without their tags and files; PostIds are the task's posts the signed-in user
+/// holds (all of them only when that is not known), HasPosts whether it has any («نمایش بر اساس پست»).
+/// </summary>
+public sealed record TaskBoardItemDto(
+    Guid Id,
+    string Title,
+    string? Description,
+    bool IsProject,
+    bool IsRecurring,
+    TaskItemStatus Status,
+    TaskPriority Priority,
+    DateOnly DueDate,
+    TimeOnly? DueTime,
+    DateTimeOffset? ActualCompletionDateUtc,
+    BoardPersonDto? Owner,
+    UserGroupSummaryDto? AssignedUserGroup,
+    IReadOnlyList<BoardPersonDto> ResponsibleUsers,
+    int AccessList,
+    IReadOnlyList<TaskStandInDto> StandIns,
+    bool AllowAssigneeStatusUpdate,
+    IReadOnlyList<SubTaskDto> SubTasks,
+    IReadOnlyList<string> Tags,
+    IReadOnlyList<TaskFileDto> Files,
+    RepetitiveTaskDto? Recurrence,
+    bool HasPosts,
+    IReadOnlyList<Guid> PostIds,
+    Guid? ParentTaskId,
+    int CommentCount,
+    DateTimeOffset CreatedAtUtc,
+    DateTimeOffset? ModifiedAtUtc,
+    // What the cards show of the commercial features (custom status, review, SLA badge, blocker, archive).
+    DateTimeOffset? ArchivedAtUtc = null,
+    Guid? CustomStatusId = null,
+    NexusCore.Application.Approvals.ApprovalStatus ReviewStatus = NexusCore.Application.Approvals.ApprovalStatus.NotSubmitted,
+    string? BlockedReason = null,
+    DateTimeOffset? SlaDueAtUtc = null,
     DateTimeOffset? SlaBreachedAtUtc = null);
+
+/// <summary>
+/// A page of the board. AccessLists: the distinct access lists of its tasks (user ids); each task names one by its index.
+/// TotalCount is -1 on pages after the first (counted once).
+/// </summary>
+public sealed record TaskBoardPageDto(
+    IReadOnlyList<TaskBoardItemDto> Items,
+    IReadOnlyList<IReadOnlyList<Guid>> AccessLists,
+    int PageNumber,
+    int PageSize,
+    int TotalCount);
+
+/// <summary>
+/// What the task screen needs besides the task itself, in one answer: the conversation and the history.
+/// CanSeeConversation is false for people who may not read the comments (Comments is then empty).
+/// </summary>
+public sealed record TaskDiscussionDto(
+    IReadOnlyList<TaskCommentDto> Comments,
+    IReadOnlyList<TaskActivityDto> Activity,
+    bool CanSeeConversation);
 
 /// <summary>
 /// Someone standing in for a vacant post of the task (جانشین): sees it and comments, nothing more.
