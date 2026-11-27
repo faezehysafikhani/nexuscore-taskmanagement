@@ -81,6 +81,19 @@ public sealed class TaskPlanningTests(AccessControlTests.Host host) : IClassFixt
     }
 
     [Fact]
+    public async Task AReviewCannotBeAskedFor_WhileACriterionIsUnmet()
+    {
+        // Approving a review completes the task, so it must not slip past the criteria.
+        var user = await host.UserAsync(host.TenantA, Permissions);
+        var id = await QuickAsync(user, "Review me");
+        await host.SendAsync(user, HttpMethod.Post, $"{Tasks}/{id}/criteria", new { text = "Tests pass" });
+
+        var refused = await host.SendAsync(user, HttpMethod.Post, $"{Tasks}/{id}/submit-review", new { comment = (string?)null });
+        Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+        Assert.Contains("acceptance criteria", await refused.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
     public async Task TheBlocker_IsFreeText_AndDoesNotStopCompletion()
     {
         var user = await host.UserAsync(host.TenantA, Permissions);

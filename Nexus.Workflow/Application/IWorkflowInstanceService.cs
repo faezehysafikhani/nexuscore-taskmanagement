@@ -21,6 +21,14 @@ public interface IWorkflowInstanceService
     Task<Result<WorkflowInstanceDto>> ApproveAsync(Guid id, Guid decidedByUserId, DecideWorkflowInstanceRequest request, bool canActForAnyone, CancellationToken cancellationToken) =>
         ApproveAsync(id, decidedByUserId, request, cancellationToken);
 
+    /// <summary><paramref name="holdsPermission"/>: the decider holds the approve/reject permission. Without it they may
+    /// still decide a step designated to them, or to someone whose approvals they hold by delegation today.</summary>
+    Task<Result<WorkflowInstanceDto>> ApproveAsync(Guid id, Guid decidedByUserId, DecideWorkflowInstanceRequest request, bool canActForAnyone, bool holdsPermission, CancellationToken cancellationToken) =>
+        ApproveAsync(id, decidedByUserId, request, canActForAnyone, cancellationToken);
+
+    Task<Result<WorkflowInstanceDto>> RejectAsync(Guid id, Guid decidedByUserId, DecideWorkflowInstanceRequest request, bool canActForAnyone, bool holdsPermission, CancellationToken cancellationToken) =>
+        RejectAsync(id, decidedByUserId, request, canActForAnyone, cancellationToken);
+
     Task<Result<WorkflowInstanceDto>> RejectAsync(Guid id, Guid decidedByUserId, DecideWorkflowInstanceRequest request, bool canActForAnyone, CancellationToken cancellationToken) =>
         RejectAsync(id, decidedByUserId, request, cancellationToken);
 }

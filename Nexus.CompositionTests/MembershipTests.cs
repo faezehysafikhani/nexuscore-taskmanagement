@@ -44,7 +44,7 @@ public sealed class MembershipTests(AccessControlTests.Host host) : IClassFixtur
 
         var full = await Json(await host.SendAsync(admin, HttpMethod.Put, Url, new { planName = "Free", maxUsers = users, validUntil = Day(200) }));
         Assert.Equal("Active", full.GetProperty("status").GetString());
-        Assert.Contains("limit is reached", full.GetProperty("warnings").ToString());
+        Assert.Contains("سقف تعداد کاربران پر شده است", full.GetProperty("warnings").ToString());
         Assert.Contains("سقف کاربران", await UserCheckAsync(host.TenantA));
 
         await host.SendAsync(admin, HttpMethod.Put, Url, new { planName = "Pro", maxUsers = users + 5, validUntil = Day(200) });

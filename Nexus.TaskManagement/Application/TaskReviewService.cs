@@ -20,7 +20,8 @@ public sealed class TaskReviewService(
     IApprovalRequester approvalRequester,
     ITaskActivityService activity,
     ITaskService tasks,
-    NexusCore.Application.Identity.Interfaces.IManagementChainProvider? managers = null) : ITaskReviewService
+    NexusCore.Application.Identity.Interfaces.IManagementChainProvider? managers = null,
+    ITaskPlanningRepository? planning = null) : ITaskReviewService
 {
     public const string SubjectType = "TaskReview";
 
@@ -51,6 +52,14 @@ public sealed class TaskReviewService(
         if (task.IsInReview)
         {
             return Result.Failure<TaskDto>(Error.Conflict("This task is already waiting for review."));
+        }
+
+        // An approval completes the task, so what stands between it and done (open dependencies, unmet acceptance
+        // criteria) is checked now, the same as a manual completion.
+        if (planning is not null
+            && await TaskPlanningRules.CheckAsync(planning, task, TaskItemStatus.Completed, actor, cancellationToken) is { } refusal)
+        {
+            return Result.Failure<TaskDto>(Error.Conflict(refusal));
         }
 
         var comment = string.IsNullOrWhiteSpace(request.Comment) ? null : request.Comment.Trim();
@@ -132,7 +141,7 @@ public sealed class TaskReviewService(
 }
 
 /// <summary>The review was approved: the task is done.</summary>
-public sealed class TaskReviewApprovedHandler(ITaskRepository repository, ITaskManagementUnitOfWork unitOfWork, ITaskActivityService activity, IWebhookPublisher? webhooks = null)
+public sealed class TaskReviewApprovedHandler(ITaskRepository repository, ITaskManagementUnitOfWork unitOfWork, ITaskActivityService activity, IWebhookPublisher? webhooks = null, ITaskPlanningRepository? planning = null)
     : IDomainEventHandler<ApprovalGranted>
 {
     public async Task HandleAsync(ApprovalGranted domainEvent, CancellationToken cancellationToken)
@@ -148,9 +157,14 @@ public sealed class TaskReviewApprovedHandler(ITaskRepository repository, ITaskM
             return;
         }
 
-        task.ApproveReview(domainEvent.DecidedByUserId, domainEvent.Comment, DateTimeOffset.UtcNow);
+        // Checked again: a criterion may have been unticked, or a dependency reopened, while it waited.
+        var refusal = planning is null
+            ? null
+            : await TaskPlanningRules.CheckAsync(planning, task, TaskItemStatus.Completed, domainEvent.DecidedByUserId, cancellationToken);
+        task.ApproveReview(domainEvent.DecidedByUserId, domainEvent.Comment, DateTimeOffset.UtcNow, complete: refusal is null);
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        await activity.RecordAsync(task.Id, "Review approved", domainEvent.Comment, cancellationToken);
+        await activity.RecordAsync(task.Id, refusal is null ? "Review approved" : "Review approved - not completed",
+            refusal is null ? domainEvent.Comment : string.Join(" — ", new[] { refusal, domainEvent.Comment }.Where(s => !string.IsNullOrWhiteSpace(s))), cancellationToken);
         if (webhooks is not null)
         {
             await webhooks.PublishAsync(task.TenantId, WebhookEvents.ReviewDecided, new { taskId = task.Id, title = task.Title, approved = true, comment = domainEvent.Comment, decidedByUserId = domainEvent.DecidedByUserId }, cancellationToken);
@@ -159,7 +173,7 @@ public sealed class TaskReviewApprovedHandler(ITaskRepository repository, ITaskM
 }
 
 /// <summary>The review was rejected: the task goes back to work and can be submitted again.</summary>
-public sealed class TaskReviewRejectedHandler(ITaskRepository repository, ITaskManagementUnitOfWork unitOfWork, ITaskActivityService activity, IWebhookPublisher? webhooks = null)
+public sealed class TaskReviewRejectedHandler(ITaskRepository repository, ITaskManagementUnitOfWork unitOfWork, ITaskActivityService activity, IWebhookPublisher? webhooks = null, ITaskPlanningRepository? planning = null)
     : IDomainEventHandler<ApprovalRejected>
 {
     public async Task HandleAsync(ApprovalRejected domainEvent, CancellationToken cancellationToken)
@@ -175,7 +189,12 @@ public sealed class TaskReviewRejectedHandler(ITaskRepository repository, ITaskM
             return;
         }
 
-        task.RejectReview(domainEvent.DecidedByUserId, domainEvent.Comment, DateTimeOffset.UtcNow);
+        // Back to work - unless the person's in-progress limit is full: then not started, so the limit holds.
+        var backTo = planning is not null
+            && await TaskPlanningRules.CheckAsync(planning, task, TaskItemStatus.InProgress, domainEvent.DecidedByUserId, cancellationToken) is not null
+            ? TaskItemStatus.Todo
+            : TaskItemStatus.InProgress;
+        task.RejectReview(domainEvent.DecidedByUserId, domainEvent.Comment, DateTimeOffset.UtcNow, backTo);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await activity.RecordAsync(task.Id, "Review rejected - back to work", domainEvent.Comment, cancellationToken);
         if (webhooks is not null)

@@ -79,7 +79,13 @@ public sealed class WorkflowInstanceService(
     public Task<Result<WorkflowInstanceDto>> RejectAsync(Guid id, Guid decidedByUserId, DecideWorkflowInstanceRequest request, bool canActForAnyone, CancellationToken cancellationToken) =>
         DecideAsync(id, decidedByUserId, approved: false, request, canActForAnyone, cancellationToken);
 
-    private async Task<Result<WorkflowInstanceDto>> DecideAsync(Guid id, Guid decidedByUserId, bool approved, DecideWorkflowInstanceRequest request, bool canActForAnyone, CancellationToken cancellationToken)
+    public Task<Result<WorkflowInstanceDto>> ApproveAsync(Guid id, Guid decidedByUserId, DecideWorkflowInstanceRequest request, bool canActForAnyone, bool holdsPermission, CancellationToken cancellationToken) =>
+        DecideAsync(id, decidedByUserId, approved: true, request, canActForAnyone, cancellationToken, holdsPermission);
+
+    public Task<Result<WorkflowInstanceDto>> RejectAsync(Guid id, Guid decidedByUserId, DecideWorkflowInstanceRequest request, bool canActForAnyone, bool holdsPermission, CancellationToken cancellationToken) =>
+        DecideAsync(id, decidedByUserId, approved: false, request, canActForAnyone, cancellationToken, holdsPermission);
+
+    private async Task<Result<WorkflowInstanceDto>> DecideAsync(Guid id, Guid decidedByUserId, bool approved, DecideWorkflowInstanceRequest request, bool canActForAnyone, CancellationToken cancellationToken, bool holdsPermission = true)
     {
         var instance = await repository.GetByIdAsync(id, cancellationToken);
         if (instance is null)
@@ -104,6 +110,12 @@ public sealed class WorkflowInstanceService(
             {
                 onBehalfOf = approver;
             }
+        }
+
+        // Without the approve/reject permission: only the step's designated approver, or their substitute today.
+        if (!holdsPermission && !canActForAnyone && onBehalfOf is null && (designated is null || designated != decidedByUserId))
+        {
+            return Result.Failure<WorkflowInstanceDto>(Error.Forbidden("You cannot decide this approval."));
         }
 
         // Opt-in strictness: a step with a designated approver is decided by that person, their substitute, or an administrator.

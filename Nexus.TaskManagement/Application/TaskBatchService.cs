@@ -9,7 +9,7 @@ namespace Nexus.TaskManagement.Application;
 /// Quick add and bulk actions, built on <see cref="ITaskService"/> so every rule (who may change what,
 /// archived tasks, row versions, notifications) is the one-at-a-time rule - nothing is re-implemented here.
 /// </summary>
-public sealed class TaskBatchService(ITaskService tasks, ITaskRepository taskRepository, ITaskManagementUnitOfWork unitOfWork, ICurrentUserContext currentUser) : ITaskBatchService
+public sealed class TaskBatchService(ITaskService tasks, ITaskRepository taskRepository, ITaskManagementUnitOfWork unitOfWork, ICurrentUserContext currentUser, NexusCore.Application.Common.ISchedulingDayPolicy? days = null) : ITaskBatchService
 {
     public const int MaxBulk = 100;
 
@@ -23,7 +23,7 @@ public sealed class TaskBatchService(ITaskService tasks, ITaskRepository taskRep
         return tasks.CreateAsync(
             new CreateTaskRequest(
                 request.Title.Trim(),
-                request.DueDate ?? DateOnly.FromDateTime(DateTime.UtcNow),
+                request.DueDate ?? DefaultDueDates.FirstWorkingDay(DefaultDueDates.TodayInIran(), days),
                 request.Priority,
                 AssignedUserId: userId),
             cancellationToken);
@@ -39,7 +39,7 @@ public sealed class TaskBatchService(ITaskService tasks, ITaskRepository taskRep
         var text = request.Text.Trim();
         var title = string.IsNullOrWhiteSpace(request.Title) ? FirstLine(text) : request.Title.Trim();
         var created = await tasks.CreateAsync(
-            new CreateTaskRequest(title, request.DueDate ?? DateOnly.FromDateTime(DateTime.UtcNow), TaskPriority.Medium, text, AssignedUserId: userId),
+            new CreateTaskRequest(title, request.DueDate ?? DefaultDueDates.FirstWorkingDay(DefaultDueDates.TodayInIran(), days), TaskPriority.Medium, text, AssignedUserId: userId),
             cancellationToken);
         if (created.IsFailure)
         {

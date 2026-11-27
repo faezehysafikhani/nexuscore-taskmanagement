@@ -50,8 +50,8 @@ public sealed class MembershipService(
             : MembershipStatus.Active;
         if (status == MembershipStatus.Expired) warnings.Add("The membership has expired: new users and files are refused.");
         if (status == MembershipStatus.ExpiringSoon) warnings.Add($"The membership ends in {daysLeft} day(s).");
-        if (plan.MaxUsers is { } max && usage.ActiveUsers >= max * NearLimit) warnings.Add(usage.ActiveUsers >= max ? "The user limit is reached." : "The user limit is almost reached.");
-        if (plan.MaxStorageMb is { } mb && usage.StorageBytes >= mb * 1024L * 1024L * NearLimit) warnings.Add(usage.StorageBytes >= mb * 1024L * 1024L ? "The storage limit is reached." : "The storage limit is almost reached.");
+        if (plan.MaxUsers is { } max && usage.ActiveUsers >= max * NearLimit) warnings.Add(usage.ActiveUsers >= max ? "سقف تعداد کاربران پر شده است." : "تعداد کاربران به سقف مجاز نزدیک است.");
+        if (plan.MaxStorageMb is { } mb && usage.StorageBytes >= mb * 1024L * 1024L * NearLimit) warnings.Add(usage.StorageBytes >= mb * 1024L * 1024L ? "سقف فضای ذخیره‌سازی پر شده است." : "فضای ذخیره‌سازی به سقف مجاز نزدیک است.");
         // How much of the plan is used (CAT-199): what tells the organization it is time to upgrade.
         usage = usage with
         {
