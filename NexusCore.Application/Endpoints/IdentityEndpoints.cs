@@ -5,6 +5,7 @@ using NexusCore.Application.Identity.Dtos;
 using NexusCore.Application.Identity.Options;
 using NexusCore.Application.Identity.Interfaces;
 using NexusCore.Application.Identity.Validators;
+using NexusCore.Application.Editions;
 using NexusCore.Application.Identity.Permissions;
 using NexusCore.Application.Identity.Security;
 using NexusCore.Application.Identity.Services;
@@ -525,18 +526,22 @@ public static class IdentityEndpoints
             .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(IdentityPermissions.LdapSettingsTest);
 
-        ldap.MapPost("/sync/preview", async (LdapSyncRequest? request, ILdapSyncService sync, CancellationToken cancellationToken) =>
-                (await sync.PreviewAsync(request ?? new LdapSyncRequest(), cancellationToken)).ToApiResult())
-            .WithSummary("HR sync: what would change if the directory's people were synced now (changes nothing)")
-            .RequireRateLimiting(NexusRateLimitPolicies.Write)
-            .RequireAuthorization(IdentityPermissions.LdapSettingsUpdate);
+        // HR sync from the directory: commercial edition (Edition:Features:LdapSync).
+        if ((app.ServiceProvider.GetService(typeof(NexusCore.Application.Editions.IEditionFeatures)) as NexusCore.Application.Editions.IEditionFeatures).Allows(NexusCore.Application.Editions.CommercialFeature.LdapSync))
+        {
+            ldap.MapPost("/sync/preview", async (LdapSyncRequest? request, ILdapSyncService sync, CancellationToken cancellationToken) =>
+                    (await sync.PreviewAsync(request ?? new LdapSyncRequest(), cancellationToken)).ToApiResult())
+                .WithSummary("HR sync: what would change if the directory's people were synced now (changes nothing)")
+                .RequireRateLimiting(NexusRateLimitPolicies.Write)
+                .RequireAuthorization(IdentityPermissions.LdapSettingsUpdate);
 
-        ldap.MapPost("/sync", async (LdapSyncRequest? request, ILdapSyncService sync, CancellationToken cancellationToken) =>
-                (await sync.ApplyAsync(request ?? new LdapSyncRequest(), cancellationToken)).ToApiResult())
-            .WithSummary("HR sync: create, update and switch off users from the directory")
-            .RequireRateLimiting(NexusRateLimitPolicies.Write)
-            .RequireAuthorization(IdentityPermissions.LdapSettingsUpdate)
-            .RequireAuthorization(IdentityPermissions.UsersCreate);
+            ldap.MapPost("/sync", async (LdapSyncRequest? request, ILdapSyncService sync, CancellationToken cancellationToken) =>
+                    (await sync.ApplyAsync(request ?? new LdapSyncRequest(), cancellationToken)).ToApiResult())
+                .WithSummary("HR sync: create, update and switch off users from the directory")
+                .RequireRateLimiting(NexusRateLimitPolicies.Write)
+                .RequireAuthorization(IdentityPermissions.LdapSettingsUpdate)
+                .RequireAuthorization(IdentityPermissions.UsersCreate);
+        }
 
         app.MapIdentitySecurityEndpoints();
         return app;

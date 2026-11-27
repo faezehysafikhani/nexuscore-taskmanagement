@@ -19,6 +19,9 @@ public static class DependencyInjection
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
         Common.PersianValidationMessages.Use();
+        // Which commercial features this host runs (Edition:Commercial, Edition:Features:<Name>).
+        services.TryAddSingleton<Editions.IEditionFeatures>(provider => new Editions.EditionFeatures(
+            provider.GetService<Microsoft.Extensions.Configuration.IConfiguration>() ?? new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build()));
 
         services.AddScoped<IValidator<LoginRequest>, LoginRequestValidator>();
         services.AddScoped<IValidator<CreateUserRequest>, CreateUserRequestValidator>();

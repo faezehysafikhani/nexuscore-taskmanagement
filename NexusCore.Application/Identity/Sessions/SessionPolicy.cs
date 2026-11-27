@@ -1,4 +1,5 @@
 using System.Net;
+using NexusCore.Application.Editions;
 using System.Text.Json;
 using NexusCore.Application.Identity.Permissions;
 using NexusCore.Application.Platform.Interfaces;
@@ -25,9 +26,9 @@ public sealed class SessionPolicySettings
     public const int MinAbsoluteHours = 1, MaxAbsoluteHours = 12;
     public const int MinConcurrent = 1, MaxConcurrentCeiling = 10;
 
-    /// <summary>Everyone (staff and administrators): 15 minutes idle, 10 hours in all, up to 3 sessions.</summary>
-    public int IdleMinutes { get; set; } = 60;
-    public int AbsoluteHours { get; set; } = 12;
+    /// <summary>Everyone (staff and administrators): 15 minutes idle, 10 hours in all, up to 3 sessions (the commercial edition: 60 minutes, 12 hours).</summary>
+    public int IdleMinutes { get; set; } = 15;
+    public int AbsoluteHours { get; set; } = 10;
     public int MaxConcurrent { get; set; } = 3;
 
     /// <summary>Users who hold a sensitive permission (see <see cref="SessionPolicyProvider.SensitivePermissions"/>).</summary>
@@ -95,7 +96,8 @@ public sealed class SessionPolicyProvider(
     IPlatformRepository settingsRepository,
     IUnitOfWork unitOfWork,
     Microsoft.Extensions.Options.IOptions<NexusCore.Application.Identity.Options.SignInSessionOptions> options,
-    Microsoft.Extensions.Hosting.IHostEnvironment? environment = null) : ISessionPolicyProvider
+    Microsoft.Extensions.Hosting.IHostEnvironment? environment = null,
+    NexusCore.Application.Editions.IEditionFeatures? features = null) : ISessionPolicyProvider
 {
     /// <summary>
     /// Whoever holds one of these can change who may sign in, what the system sends or what the
@@ -152,22 +154,27 @@ public sealed class SessionPolicyProvider(
         return new SessionPolicy(label, idle, absolute, candidates.Min(c => c.MaxConcurrent), outside);
     }
 
+    /// <summary>Settings nobody has saved: the commercial edition keeps people signed in longer (60 minutes idle, 12 hours in all).</summary>
+    private SessionPolicySettings Defaults() => features.Allows(NexusCore.Application.Editions.CommercialFeature.LongerSessions)
+        ? new SessionPolicySettings { IdleMinutes = 60, AbsoluteHours = 12 }
+        : new SessionPolicySettings();
+
     public async Task<SessionPolicySettings> GetSettingsAsync(Guid tenantId, CancellationToken cancellationToken)
     {
         var stored = await settingsRepository.FindSettingAsync(tenantId, SessionPolicySettings.SettingKey, SessionPolicySettings.SettingScope, cancellationToken);
         if (stored is null)
         {
-            return new SessionPolicySettings().Clamped();
+            return Defaults().Clamped();
         }
 
         try
         {
-            return (JsonSerializer.Deserialize<SessionPolicySettings>(stored.Value, Json) ?? new SessionPolicySettings()).Clamped();
+            return (JsonSerializer.Deserialize<SessionPolicySettings>(stored.Value, Json) ?? Defaults()).Clamped();
         }
         catch (JsonException)
         {
             // An unreadable value must not lock everybody out: the defaults apply.
-            return new SessionPolicySettings().Clamped();
+            return Defaults().Clamped();
         }
     }
 

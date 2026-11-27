@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using NexusCore.Application.Editions;
 using FluentValidation;
 using Microsoft.Extensions.Options;
 using NexusCore.Application.Common;
@@ -42,7 +43,8 @@ public sealed class IdentityService(
     IOptions<IdentitySeedOptions>? identityOptions = null,
     IUserQuota? userQuota = null,
     NexusCore.Application.Identity.Security.IMfaService? mfa = null,
-    NexusCore.Application.Ldap.ILdapAuthenticator? ldap = null) : IIdentityService
+    NexusCore.Application.Ldap.ILdapAuthenticator? ldap = null,
+    NexusCore.Application.Editions.IEditionFeatures? features = null) : IIdentityService
 {
     private readonly ManagedPermissionOptions _managed = managedPermissionOptions.Value;
     private readonly SignInSessionOptions _session = sessionOptions?.Value ?? new SignInSessionOptions();
@@ -86,7 +88,7 @@ public sealed class IdentityService(
         var user = await repository.FindUserByLoginAsync(request.Identifier, request.TenantSlug, cancellationToken);
         _unknownAccountHash ??= passwordHasher.HashPassword(Convert.ToHexString(RandomNumberGenerator.GetBytes(16)));
         // A user that came from the directory (HR sync) is checked against it; the others against their stored password.
-        var passwordChecked = user?.LdapDn is not null && ldap is not null
+        var passwordChecked = user?.LdapDn is not null && ldap is not null && features.Allows(NexusCore.Application.Editions.CommercialFeature.LdapSync)
             ? await ldap.VerifyAsync(user, request.Password, cancellationToken)
             : passwordHasher.Verify(request.Password, user?.PasswordHash ?? _unknownAccountHash);
         var passwordOk = user is not null && passwordChecked;
@@ -117,7 +119,7 @@ public sealed class IdentityService(
 
         await loginProtection.RecordSuccessfulLoginAsync(request.Identifier, cancellationToken);
         // The password was right; with the code turned on, the sign-in waits for it (no token until then).
-        if (mfa is not null && await mfa.ChallengeIfRequiredAsync(user, cancellationToken) is { } waiting)
+        if (mfa is not null && features.Allows(NexusCore.Application.Editions.CommercialFeature.Mfa) && await mfa.ChallengeIfRequiredAsync(user, cancellationToken) is { } waiting)
         {
             return waiting;
         }
@@ -309,13 +311,19 @@ public sealed class IdentityService(
             return Result.Failure<UserDto>(taken);
         }
 
+        // Guests are a commercial feature; without it every new account is a normal one.
+        if (request.Kind == UserKind.Guest && !features.Allows(NexusCore.Application.Editions.CommercialFeature.GuestAccounts))
+        {
+            return Result.Failure<UserDto>(Error.Validation("حساب مهمان در این نسخه فعال نیست."));
+        }
+
         if (request.Kind == UserKind.ServiceAccount)
         {
             return Result.Failure<UserDto>(Error.Validation("حساب سرویس از بخش حساب‌های سرویس ساخته می‌شود."));
         }
 
         // Guests do not count against the organization's user limit.
-        if (request.Kind == UserKind.Normal && userQuota is not null && await userQuota.CheckCanAddUserAsync(request.TenantId, cancellationToken) is { } refused)
+        if (request.Kind == UserKind.Normal && userQuota is not null && features.Allows(NexusCore.Application.Editions.CommercialFeature.Membership) && await userQuota.CheckCanAddUserAsync(request.TenantId, cancellationToken) is { } refused)
         {
             return Result.Failure<UserDto>(refused);
         }

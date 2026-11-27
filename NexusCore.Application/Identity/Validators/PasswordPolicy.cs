@@ -1,4 +1,5 @@
 using FluentValidation;
+using NexusCore.Application.Editions;
 using NexusCore.Application.Platform.Interfaces;
 using NexusCore.SharedKernel.Interfaces;
 
@@ -27,10 +28,16 @@ public interface IPasswordPolicyReader
     Task<PasswordPolicy> GetAsync(Guid? tenantId, CancellationToken cancellationToken);
 }
 
-public sealed class PasswordPolicyReader(IPlatformRepository repository, ICurrentUserContext currentUser) : IPasswordPolicyReader
+public sealed class PasswordPolicyReader(IPlatformRepository repository, ICurrentUserContext currentUser, NexusCore.Application.Editions.IEditionFeatures? features = null) : IPasswordPolicyReader
 {
     public async Task<PasswordPolicy> GetAsync(Guid? tenantId, CancellationToken cancellationToken)
     {
+        // The organization's own rules are a commercial feature; without it the built-in rules apply.
+        if (!features.Allows(NexusCore.Application.Editions.CommercialFeature.PasswordPolicy))
+        {
+            return PasswordPolicy.Default;
+        }
+
         tenantId ??= currentUser.TenantId;
         var min = await ReadAsync(tenantId, PasswordPolicySettings.MinLengthKey, cancellationToken);
         var classes = await ReadAsync(tenantId, PasswordPolicySettings.RequiredClassesKey, cancellationToken);

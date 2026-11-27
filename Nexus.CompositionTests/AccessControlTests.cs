@@ -424,6 +424,8 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
             builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["Features:UserGroups:Enabled"] = "true",
+                // The full product: every commercial feature on (a host without this has none of them).
+                ["Edition:Commercial"] = "true",
                 // Like Rozet: this product manages identity, platform and task permissions only;
                 // Ticketing's still exist and are enforced for whoever holds them.
                 ["Identity:ManagedPermissionModules:0"] = "Identity",
