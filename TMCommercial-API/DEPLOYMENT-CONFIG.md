@@ -1,4 +1,4 @@
-# Deployment Configuration — TMPB API
+# Deployment Configuration — TMCommercial API
 
 What to set when installing this API at a new site (e.g. a bank environment). None of these
 steps touch source code, and none require a rebuild.
@@ -269,7 +269,7 @@ The NexusCore modules come as packages from `./packages` (see `nuget.config`), b
 repository with `eng/pack-core-modules.ps1`. To update:
 
 1. Copy the new `.nupkg` files of the packages this API uses into `./packages`.
-2. Set `<NexusCoreVersion>` in `TMPB-API.csproj` to the new version.
+2. Set `<NexusCoreVersion>` in `TMCommercial-API.csproj` to the new version.
 3. Build and deploy. The schema changes of Task Management, Notifications and Chat are applied by
    the modules at start-up; those of the organization modules as described in section 6.
 

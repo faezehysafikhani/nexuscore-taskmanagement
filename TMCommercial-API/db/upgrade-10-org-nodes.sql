@@ -1,4 +1,4 @@
-﻿-- Structure nodes for TMPB-API (dynamic org structure, phase 1.2): units get an optional parent, node type
+﻿-- Structure nodes for TMCommercial-API (dynamic org structure, phase 1.2): units get an optional parent, node type
 -- and validity period (organization.OrganizationUnits), companies a group/template/screen level
 -- (org_structure.Companies), posts the head's mark and the manager-post mark (org_structure.UnitPositions),
 -- and the new tables NodeTypes, NodeTypeRules, NodeTypePostTemplates, LinkTypes, AutoLinkRules, OrgLinks,

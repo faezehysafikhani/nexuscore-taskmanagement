@@ -277,8 +277,8 @@ public sealed class OrgStructureTests
             if (name.StartsWith("Nexus.OrgStructure", StringComparison.Ordinal)
                 || name is "Nexus.CompositionTests" or "Nexus.Integrations.TaskReporting" or "Nexus.Integrations.CalendarOrgStructure"
                 || name == "Nexus.Bundles.Platform"
-                // The TMPB host is a composition root that wires the module in.
-                || name == "TMPB-API")
+                // The commercial host is a composition root that wires the module in.
+                || name == "TMCommercial-API")
             {
                 continue;
             }

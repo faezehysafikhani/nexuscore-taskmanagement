@@ -1,4 +1,4 @@
-# TMPB API (Post Bank)
+# TMCommercial API (commercial edition; formerly TMPB-API)
 
 The Post Bank (TMPB) task-management API, built on the **NexusCore** platform packages — the same way
 `TejaratBank-API` is built for Tejarat Bank. It contains no Core source: every module comes as a NuGet

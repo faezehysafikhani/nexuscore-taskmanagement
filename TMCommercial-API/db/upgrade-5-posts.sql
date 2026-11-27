@@ -1,4 +1,4 @@
--- Posts for TMPB-API: each post has a code (unique in its company) and one person; posts
+-- Posts for TMCommercial-API: each post has a code (unique in its company) and one person; posts
 -- can also sit directly in a company (the head's, board members'). Generated from the EF Core
 -- migration AddPosts in the NexusCore Nexus.OrgStructure.Infrastructure package
 -- (0.1.0.1405072804-mahdi).

@@ -1,4 +1,4 @@
--- OrgStructure (companies, positions, assignments, titles) schema for TMPB-API, generated from the EF Core migrations in the
+-- OrgStructure (companies, positions, assignments, titles) schema for TMCommercial-API, generated from the EF Core migrations in the
 -- NexusCore Nexus.OrgStructure.Infrastructure package (0.1.0.1405072501).
 -- Idempotent: safe to run again; only migrations not yet applied run. For a database that already has these tables (created by an earlier version). Run 1 before 2.
 --   sqlcmd -S <server> -d TMPB -I -i db/upgrade-2-org-structure.sql

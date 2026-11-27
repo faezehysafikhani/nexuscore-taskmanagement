@@ -374,7 +374,7 @@ Regression: the Composition tests are as at the baseline (only the old failures)
 ## Trying it: the Tejarat Bank host
 
 The product that composes NexusCore + Organization + this module is built outside this
-repository, on the NexusCore packages: **TejaratBank_API** (a separate repository, like TMPB_API
+repository, on the NexusCore packages: **TejaratBank_API** (a separate repository, like TMCommercial_API
 for Post Bank). Set `DefaultConnection` in its `appsettings`, create the Organization and
 OrgStructure schemas (see its `DEPLOYMENT-CONFIG.md`), run it, open `/swagger`, sign in with
 `POST /api/identity/auth/login` (`{ "identifier": "admin", "password": "Admin@12345" }` — the

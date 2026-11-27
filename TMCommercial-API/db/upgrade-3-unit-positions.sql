@@ -1,4 +1,4 @@
--- Unit (deputy) positions for TMPB-API: each deputy's own positions, in its order, and
+-- Unit (deputy) positions for TMCommercial-API: each deputy's own positions, in its order, and
 -- who holds them (several per person). Generated from the EF Core migration AddUnitPositions in the
 -- NexusCore Nexus.OrgStructure.Infrastructure package (0.1.0.1405072802-mahdi).
 -- Also turns today's placements into deputy positions (each deputy gets the positions its people

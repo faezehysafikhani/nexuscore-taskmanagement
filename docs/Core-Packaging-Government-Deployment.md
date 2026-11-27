@@ -1,6 +1,6 @@
 # NexusCore packaging for the products and restricted environments
 
-Products (TMPB_API for Post Bank, TejaratBank_API for Tejarat Bank) consume NexusCore as internal
+Products (TMCommercial_API for Post Bank, TejaratBank_API for Tejarat Bank) consume NexusCore as internal
 NuGet packages, not by referencing the Core source tree; none of them is part of this solution.
 This keeps bank/government deployments reproducible and lets security teams approve a fixed set
 of package artifacts before installation.

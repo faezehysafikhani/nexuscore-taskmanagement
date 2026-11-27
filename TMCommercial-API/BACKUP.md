@@ -20,7 +20,7 @@ The UI and API program files are not backed up: they come from the release packa
 writes `manifest.csv` (size and SHA-256 of every file):
 
 ```
-.\backup.ps1 -SqlServer . -Destination D:\Backups\TMPB -ApiFolder C:\inetpub\TMPB-API -UiFolder C:\inetpub\TMPB-UI -KeepDays 14
+.\backup.ps1 -SqlServer . -Destination D:\Backups\TMPB -ApiFolder C:\inetpub\TMCommercial-API -UiFolder C:\inetpub\TMPB-UI -KeepDays 14
 ```
 
 - The API keeps running; nothing is stopped.
@@ -47,7 +47,7 @@ read it.
 Task Scheduler, as a user with the rights above:
 
 ```
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\inetpub\TMPB-API\tools\backup.ps1 -Destination D:\Backups\TMPB -ApiFolder C:\inetpub\TMPB-API -UiFolder C:\inetpub\TMPB-UI
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\inetpub\TMCommercial-API\tools\backup.ps1 -Destination D:\Backups\TMPB -ApiFolder C:\inetpub\TMCommercial-API -UiFolder C:\inetpub\TMPB-UI
 ```
 
 Check the result: the task's last run result must be 0, and a new dated folder must exist.
@@ -64,7 +64,7 @@ Restoring production:
 
 1. Stop the API's app pool (and tell users).
 2. ```
-   .\restore.ps1 -BackupFolder D:\Backups\TMPB\2026-11-23_0200 -SqlServer . -ApiFolder C:\inetpub\TMPB-API
+   .\restore.ps1 -BackupFolder D:\Backups\TMPB\2026-11-23_0200 -SqlServer . -ApiFolder C:\inetpub\TMCommercial-API
    ```
    The script:
    - checks every file against `manifest.csv` and stops if one changed;

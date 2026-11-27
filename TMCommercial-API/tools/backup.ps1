@@ -11,9 +11,9 @@
   See BACKUP.md for the schedule, keeping copies off the server and restoring.
 
 .EXAMPLE
-  .\backup.ps1 -SqlServer . -Destination D:\Backups\TMPB -ApiFolder C:\inetpub\TMPB-API
+  .\backup.ps1 -SqlServer . -Destination D:\Backups\TMPB -ApiFolder C:\inetpub\TMCommercial-API
 .EXAMPLE
-  .\backup.ps1 -SqlServer db-host -Destination \\backup-host\tmpb -ApiFolder C:\inetpub\TMPB-API -UiFolder C:\inetpub\TMPB-UI -KeepDays 30
+  .\backup.ps1 -SqlServer db-host -Destination \\backup-host\tmpb -ApiFolder C:\inetpub\TMCommercial-API -UiFolder C:\inetpub\TMPB-UI -KeepDays 30
 #>
 param(
   # SQL Server instance (as in the connection string); '.' = this server.

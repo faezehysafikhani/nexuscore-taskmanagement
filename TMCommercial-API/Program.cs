@@ -57,7 +57,7 @@ using Microsoft.OpenApi.Models;
 
 using Serilog;
 
-using TMPB_API;
+using TMCommercial_API;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -210,7 +210,7 @@ var dataProtectionKeysPath = builder.Configuration["DataProtection:KeysPath"];
 if (!string.IsNullOrWhiteSpace(dataProtectionKeysPath))
 {
     builder.Services.AddDataProtection()
-        .SetApplicationName("TMPB-API")
+        .SetApplicationName("TMCommercial-API")
         .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath));
 }
 
@@ -218,9 +218,9 @@ builder.Services.AddSwaggerGen(options =>
 {
     options.SwaggerDoc("v1", new OpenApiInfo
     {
-        Title = "TMPB API",
+        Title = "TMCommercial API",
         Version = "v1",
-        Description = "TMPB - Built on NexusCore modular platform."
+        Description = "TMCommercial - Built on NexusCore modular platform."
     });
 
     options.AddSecurityDefinition(

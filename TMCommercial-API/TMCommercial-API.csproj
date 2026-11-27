@@ -1,13 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
-  <!-- Post Bank (TMPB) task management host: part of NexusCore.sln and built straight from the
+  <!-- Commercial edition (TMCommercial, formerly TMPB) task management host: part of NexusCore.sln and built straight from the
        Core projects through project references (no NuGet packages needed). -->
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <RootNamespace>TMPB_API</RootNamespace>
+    <RootNamespace>TMCommercial_API</RootNamespace>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 

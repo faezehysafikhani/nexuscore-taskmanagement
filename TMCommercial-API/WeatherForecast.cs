@@ -1,4 +1,4 @@
-namespace TMPB_API
+namespace TMCommercial_API
 {
     public class WeatherForecast
     {

@@ -189,7 +189,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nexus.Bundles.ProjectManage
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Hosts", "Hosts", "{BA7C762D-446D-4F51-8465-0A67DDCB2970}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TMPB-API", "TMPB-API\TMPB-API.csproj", "{D4E40E9B-DCFA-4450-8B22-7D412059930B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TMCommercial-API", "TMCommercial-API\TMCommercial-API.csproj", "{D4E40E9B-DCFA-4450-8B22-7D412059930B}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nexus.Integrations.CalendarOrgStructure", "Nexus.Integrations.CalendarOrgStructure\Nexus.Integrations.CalendarOrgStructure.csproj", "{2AF078D7-A63B-4B2C-9343-14D9EB370FEB}"
 EndProject

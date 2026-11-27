@@ -377,7 +377,7 @@ FodyWeavers.xsd
 
 # graphify knowledge graph (rebuilt per branch)
 graphify-out/
-!TMPB-API/db/*.sql
+!TMCommercial-API/db/*.sql
 
 # Output of tools/seed-demo-data.mjs (ids of one test server)
-TMPB-API/tools/overdue-ids.txt
+TMCommercial-API/tools/overdue-ids.txt

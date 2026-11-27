@@ -1,4 +1,4 @@
--- Tasks given to posts for TMPB-API (OrgStructure:AssignTasksToPosts): which posts each
+-- Tasks given to posts for TMCommercial-API (OrgStructure:AssignTasksToPosts): which posts each
 -- task is given to (its creator's, the responsible ones, those with access). Generated from the
 -- EF Core migration AddTaskPosts in the NexusCore Nexus.OrgStructure.Infrastructure package
 -- (0.1.0.1405072805-mahdi). The API itself gives existing tasks to their people's posts when it

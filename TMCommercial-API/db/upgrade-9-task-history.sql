@@ -1,4 +1,4 @@
--- Task history for TMPB-API: who was on each task when, through its posts, with their position
+-- Task history for TMCommercial-API: who was on each task when, through its posts, with their position
 -- then (org_structure.TaskPostPeriods), for «گزارش فعالیت‌ها». Generated from the EF Core migration
 -- AddTaskPostPeriods (Nexus.OrgStructure.Infrastructure) in the NexusCore 0.1.0.1405072817-mahdi packages.
 -- A new table only. Idempotent: safe to run again. For a database already upgraded with 1 to 8 (run those first).

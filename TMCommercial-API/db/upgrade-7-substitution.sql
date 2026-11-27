@@ -1,4 +1,4 @@
--- Substitution inbox for TMPB-API (tasks given to posts): which post stands in for a vacant
+-- Substitution inbox for TMCommercial-API (tasks given to posts): which post stands in for a vacant
 -- one (org_structure.PostActings), and in task_management: stand-ins on tasks, their comments, and
 -- tasks owned through a post. Generated from the EF Core migrations AddPostActings
 -- (Nexus.OrgStructure.Infrastructure) and AddPostOwnershipAndActing (Nexus.TaskManagement.Infrastructure)

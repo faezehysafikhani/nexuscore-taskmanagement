@@ -9,7 +9,7 @@
   Rehearse on a test server before doing it on production.
 
 .EXAMPLE
-  .\restore.ps1 -BackupFolder D:\Backups\TMPB\2026-11-23_0200 -SqlServer . -ApiFolder C:\inetpub\TMPB-API
+  .\restore.ps1 -BackupFolder D:\Backups\TMPB\2026-11-23_0200 -SqlServer . -ApiFolder C:\inetpub\TMCommercial-API
 .EXAMPLE
   # A copy beside production, to check a backup or recover single records:
   .\restore.ps1 -BackupFolder D:\Backups\TMPB\2026-11-23_0200 -Database TMPB_RestoreTest -SkipFiles

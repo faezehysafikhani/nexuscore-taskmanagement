@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 using NexusCore.Infrastructure.Persistence;
 
-namespace TMPB_API;
+namespace TMCommercial_API;
 
 /// <summary>
 /// The Organization and OrgStructure modules keep their schema with EF Core migrations, but their

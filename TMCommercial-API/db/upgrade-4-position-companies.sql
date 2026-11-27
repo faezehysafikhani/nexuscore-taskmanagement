@@ -1,4 +1,4 @@
--- Positions per company for TMPB-API: each position is for one or more companies, and a
+-- Positions per company for TMCommercial-API: each position is for one or more companies, and a
 -- company's head is whoever holds its position with no superior. Generated from the EF Core
 -- migration AddPositionCompanies in the NexusCore Nexus.OrgStructure.Infrastructure package
 -- (0.1.0.1405072803-mahdi).

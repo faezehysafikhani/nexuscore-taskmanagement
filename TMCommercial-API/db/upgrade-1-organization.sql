@@ -1,4 +1,4 @@
--- Organization (deputies / units) schema for TMPB-API, generated from the EF Core migrations in the
+-- Organization (deputies / units) schema for TMCommercial-API, generated from the EF Core migrations in the
 -- NexusCore Nexus.Organization.Infrastructure package (0.1.0.1405072501).
 -- Idempotent: safe to run again; only migrations not yet applied run. For a database that already has these tables (created by an earlier version). Run 1 before 2.
 --   sqlcmd -S <server> -d TMPB -I -i db/upgrade-1-organization.sql
