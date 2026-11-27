@@ -276,7 +276,9 @@ managers and everything else stay as they were, and a company with no parent is 
 Changes take effect at once. A node's dates only say when it exists: `PUT /nodes/{id}/validity
 { validFrom, validTo, rowVersion }` (each null: no limit). `GET /chart?asOf=<date>` shows only the
 nodes that exist on that day (a node under one that does not is left out too). Without `asOf` the
-chart is as always. It shows which nodes existed, not where they sat then.
+chart is as always. It shows which nodes existed, not where they sat then. `OrgNodeDto` (and so
+`GET /nodes`, `GET /nodes/{id}` and the answer of every change) carries the saved `validFrom` /
+`validTo`, so a screen can show and edit them without reading the log.
 
 `POST /nodes/{id}/merge { targetNodeId, effectiveDate?, rowVersion? }` (permission `node.move`)
 puts a node into another node of the same company: its child nodes (if the rules allow them there),
@@ -321,6 +323,25 @@ the task's history.
 | `org_structure.manage_companies` | the screen level; making a company (with or without a template) |
 | `org_structure.manage_templates` | saving and removing templates |
 
+## Leaving and role transfer (phase 10)
+
+A person leaving is the same appointment changes made for all their posts at once, in one save:
+every post they hold is freed from now, or those chosen go straight to a successor (`postIds`; null:
+all, empty: none), and appointments that had not started are dropped (removed, as a cancelled one;
+whoever was to end when they started stays on). The successor needs a place in each post's company,
+as when appointing one post. If the person was a company's head, the head's post goes to the
+successor who took it, or the company is left with no head (`headlessCompanyIds`).
+
+| | |
+|---|---|
+| `POST /users/{userId}/offboard` | `{ successorUserId?, postIds? }` (permission `manage_assignments`): `ended`, `transferred`, `cancelled`, `headlessCompanyIds` |
+| `POST /users/{userId}/transfer` | `{ toUserId, effectiveDate?, postIds? }` (permission `manage_assignments`): the person's posts move to someone else now or from a later day; `transferred` |
+
+Both end the old appointment and start the new one in one save inside the organization's turn, sync
+the posts' open tasks to their holders, and put both people's places in step with what they hold.
+Nothing about the person's account changes: disabling it stays in the identity module (a disabled
+account leaves its posts through `IUserDeactivationListener`).
+
 ## What stays, and what was cleaned up (phase 8)
 
 - The temporary `OrgStructure:AllowNesting` switch is gone. Nodes nest as soon as the organization has
@@ -353,7 +374,7 @@ Regression: the Composition tests are as at the baseline (only the old failures)
 ## Trying it: the Tejarat Bank host
 
 The product that composes NexusCore + Organization + this module is built outside this
-repository, on the NexusCore packages: **TejaratBank_API** (a separate repository, like TMPB_API
+repository, on the NexusCore packages: **TejaratBank_API** (a separate repository, like TMCommercial_API
 for Post Bank). Set `DefaultConnection` in its `appsettings`, create the Organization and
 OrgStructure schemas (see its `DEPLOYMENT-CONFIG.md`), run it, open `/swagger`, sign in with
 `POST /api/identity/auth/login` (`{ "identifier": "admin", "password": "Admin@12345" }` — the

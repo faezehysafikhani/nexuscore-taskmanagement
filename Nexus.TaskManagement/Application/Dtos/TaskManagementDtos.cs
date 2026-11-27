@@ -16,6 +16,11 @@ public sealed record UserGroupSummaryDto(Guid Id, string Name);
 
 public sealed record TagDto(Guid Id, string Name, string? Color);
 
+/// <summary>Category is the built-in status (0 Todo, 1 InProgress, 2 Paused, 3 Completed) the status counts as.</summary>
+public sealed record TaskStatusDto(Guid Id, string Name, TaskItemStatus Category, string? Color, int SortOrder, bool IsActive);
+public sealed record CreateTaskStatusRequest(string Name, TaskItemStatus Category, string? Color = null, int SortOrder = 0);
+public sealed record UpdateTaskStatusRequest(string Name, TaskItemStatus Category, string? Color = null, int SortOrder = 0, bool IsActive = true);
+
 public sealed record TaskFileDto(
     Guid LinkId,
     Guid FileId,
@@ -127,6 +132,19 @@ public sealed record TaskDto(
     IReadOnlyList<TaskPostDto>? Posts = null,
     IReadOnlyList<TaskStandInDto>? StandIns = null,
     Guid? ParentTaskId = null,
+    string? RowVersion = null,
+    DateTimeOffset? ArchivedAtUtc = null,
+    Guid? CustomStatusId = null,
+    NexusCore.Application.Approvals.ApprovalStatus ReviewStatus = NexusCore.Application.Approvals.ApprovalStatus.NotSubmitted,
+    DateTimeOffset? ReviewSubmittedAtUtc = null,
+    DateTimeOffset? ReviewDecidedAtUtc = null,
+    string? ReviewComment = null,
+    string? SourceType = null,
+    Guid? SourceId = null,
+    string? BlockedReason = null,
+    int? EstimatedMinutes = null,
+    DateTimeOffset? SlaDueAtUtc = null,
+    DateTimeOffset? SlaBreachedAtUtc = null,
     // How many comments the task has - filled only for people who may read them (owner, responsible people,
     // stand-ins), so the board can show the count without loading the conversations.
     int CommentCount = 0);
@@ -168,7 +186,14 @@ public sealed record TaskBoardItemDto(
     Guid? ParentTaskId,
     int CommentCount,
     DateTimeOffset CreatedAtUtc,
-    DateTimeOffset? ModifiedAtUtc);
+    DateTimeOffset? ModifiedAtUtc,
+    // What the cards show of the commercial features (custom status, review, SLA badge, blocker, archive).
+    DateTimeOffset? ArchivedAtUtc = null,
+    Guid? CustomStatusId = null,
+    NexusCore.Application.Approvals.ApprovalStatus ReviewStatus = NexusCore.Application.Approvals.ApprovalStatus.NotSubmitted,
+    string? BlockedReason = null,
+    DateTimeOffset? SlaDueAtUtc = null,
+    DateTimeOffset? SlaBreachedAtUtc = null);
 
 /// <summary>
 /// A page of the board. AccessLists: the distinct access lists of its tasks (user ids); each task names one by its index.
@@ -224,7 +249,12 @@ public sealed record TaskListItemDto(
     IReadOnlyList<TagDto> Tags,
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset? ModifiedAtUtc,
-    TimeOnly? DueTime = null);
+    TimeOnly? DueTime = null,
+    DateTimeOffset? ArchivedAtUtc = null,
+    Guid? CustomStatusId = null,
+    NexusCore.Application.Approvals.ApprovalStatus ReviewStatus = NexusCore.Application.Approvals.ApprovalStatus.NotSubmitted,
+    DateTimeOffset? SlaDueAtUtc = null,
+    DateTimeOffset? SlaBreachedAtUtc = null);
 
 public sealed record NoteDto(
     Guid Id,
@@ -315,11 +345,152 @@ public sealed record UpdateTaskRequest(
     TimeOnly? CharterEndTime = null,
     IReadOnlyList<Guid>? ResponsibleUserIds = null,
     IReadOnlyList<Guid>? ResponsiblePostIds = null,
-    IReadOnlyList<Guid>? AccessPostIds = null);
+    IReadOnlyList<Guid>? AccessPostIds = null,
+    string? RowVersion = null);
 
-public sealed record ChangeTaskStatusRequest(TaskItemStatus Status);
+/// <summary>Either a built-in Status or a CustomStatusId (not both, not neither).</summary>
+public sealed record ChangeTaskStatusRequest(TaskItemStatus? Status = null, Guid? CustomStatusId = null);
 
 public sealed record ChangeTaskPriorityRequest(TaskPriority Priority);
+
+public sealed record RequestCategoryDto(Guid Id, string Name, Guid? RouteToUserId, Guid? UrgentRouteToUserId, TaskPriority DefaultPriority, bool IsActive);
+public sealed record SaveRequestCategoryRequest(string Name, Guid? RouteToUserId = null, Guid? UrgentRouteToUserId = null, TaskPriority DefaultPriority = TaskPriority.Medium, bool IsActive = true);
+
+public sealed record TaskRequestDto(
+    Guid Id, Guid? CategoryId, string? CategoryName, string Title, string? Description, TaskPriority Priority, DateOnly? NeededBy,
+    UserSummaryDto? Requester, UserSummaryDto? RoutedTo, TaskRequestStatus Status, string? DecisionNote, Guid? ConvertedTaskId,
+    DateTimeOffset CreatedAtUtc, DateTimeOffset? DecidedAtUtc);
+
+public sealed record SubmitTaskRequestRequest(string Title, string? Description = null, Guid? CategoryId = null, TaskPriority? Priority = null, DateOnly? NeededBy = null);
+
+/// <summary>Turning a request into a task. Without a DueDate the request's NeededBy is used, and without that a week from today.</summary>
+public sealed record ConvertTaskRequestRequest(DateOnly? DueDate = null, Guid? AssignedUserId = null);
+public sealed record RejectTaskRequestRequest(string? Note = null);
+
+/// <summary>A task made from a chat message: the text becomes the description, and the message is kept as the task's source.</summary>
+public sealed record TaskFromMessageRequest(Guid MessageId, string Text, string? Title = null, DateOnly? DueDate = null);
+
+public sealed record TaskBriefDto(Guid Id, string Title, TaskItemStatus Status, bool IsDone);
+public sealed record CriterionDto(Guid Id, string Text, bool IsMet, int SortOrder);
+
+/// <summary>What stands between a task and its completion: tasks it waits for, tasks waiting for it, its free-text blocker and its acceptance criteria.</summary>
+public sealed record TaskPlanningDto(string? BlockedReason, IReadOnlyList<TaskBriefDto> BlockedBy, IReadOnlyList<TaskBriefDto> Blocking, IReadOnlyList<CriterionDto> Criteria, bool CanComplete);
+
+public sealed record AddTaskDependencyRequest(Guid BlockedByTaskId);
+public sealed record SetTaskBlockerRequest(string? Reason);
+public sealed record SaveCriterionRequest(string Text);
+public sealed record SetCriterionMetRequest(bool Met);
+public sealed record BulkSubTasksRequest(IReadOnlyList<string> Titles);
+public sealed record WipSettingDto(int? LimitPerUser);
+
+public sealed record TaskTemplateBody(
+    string Title, string? Description, TaskPriority Priority, bool IsProject, int DueInDays,
+    IReadOnlyList<string> SubTasks, IReadOnlyList<string> Criteria, IReadOnlyList<string> Tags);
+public sealed record TaskTemplateDto(Guid Id, string Name, bool IsProject, TaskTemplateBody Body);
+public sealed record SaveTaskTemplateRequest(string Name, TaskTemplateBody Body);
+public sealed record SaveTaskAsTemplateRequest(string Name);
+public sealed record InstantiateTemplateRequest(string? Title = null, DateOnly? DueDate = null, Guid? AssignedUserId = null);
+
+public sealed record TimeEntryDto(
+    Guid Id, Guid TaskId, string? TaskTitle, Guid UserId, string? UserName, DateOnly Date, int Minutes, string? Note,
+    TimeEntrySource Source, NexusCore.Application.Approvals.ApprovalStatus Status);
+public sealed record LogTimeRequest(Guid TaskId, DateOnly Date, int Minutes, string? Note = null);
+public sealed record UpdateTimeEntryRequest(DateOnly Date, int Minutes, string? Note = null);
+public sealed record SetEstimateRequest(int? Minutes);
+
+/// <summary>Estimate against what was actually logged on the task (approved and not yet decided alike).</summary>
+public sealed record TaskTimeDto(int? EstimatedMinutes, int ActualMinutes, IReadOnlyList<TimeEntryDto> Entries);
+
+public sealed record TimerDto(Guid TaskId, string? TaskTitle, DateTimeOffset StartedAtUtc, int ElapsedMinutes);
+public sealed record StartTimerRequest(Guid TaskId);
+
+public sealed record TimesheetWeekDto(
+    DateOnly WeekStart, IReadOnlyList<TimeEntryDto> Entries, IReadOnlyDictionary<string, int> MinutesPerDay, int TotalMinutes,
+    NexusCore.Application.Approvals.ApprovalStatus Status, Guid? SubmissionId, string? DecisionComment, bool CanSubmit);
+public sealed record SubmitTimesheetRequest(DateOnly WeekStart);
+public sealed record TimesheetReviewItemDto(Guid Id, UserSummaryDto? User, DateOnly WeekStart, int TotalMinutes, DateTimeOffset SubmittedAtUtc);
+public sealed record TimesheetReviewItemsRequest(IReadOnlyList<Guid> Ids);
+
+public sealed record WorkloadRowDto(
+    UserSummaryDto User, int LoggedMinutes, int OpenTasks, int RemainingEstimatedMinutes, int CapacityMinutes, double Utilization);
+public sealed record WorkloadDto(DateOnly From, DateOnly To, int CapacityPerPersonMinutes, IReadOnlyList<WorkloadRowDto> People);
+
+public sealed record AutomationRuleDto(
+    Guid Id, string Name, AutomationTrigger Trigger, AutomationConditions Conditions, IReadOnlyList<AutomationAction> Actions, int SortOrder, bool IsActive);
+public sealed record SaveAutomationRuleRequest(
+    string Name, AutomationTrigger Trigger, AutomationConditions? Conditions, IReadOnlyList<AutomationAction> Actions, int SortOrder = 0, bool IsActive = true);
+public sealed record AutomationLogDto(Guid Id, Guid RuleId, string RuleName, Guid TaskId, AutomationTrigger Trigger, string Outcome, string? Detail, DateTimeOffset AtUtc);
+
+public sealed record WebhookDto(Guid Id, string Name, string Url, IReadOnlyList<string> Events, bool IsActive, int ConsecutiveFailures, DateTimeOffset? LastDeliveredAtUtc);
+
+/// <summary>Secret is returned only when the webhook is made or its secret is rotated.</summary>
+public sealed record WebhookWithSecretDto(WebhookDto Webhook, string Secret);
+public sealed record SaveWebhookRequest(string Name, string Url, IReadOnlyList<string>? Events = null, bool IsActive = true);
+public sealed record WebhookDeliveryDto(Guid Id, string EventType, int Attempts, bool Delivered, bool GaveUp, int? LastStatusCode, string? LastError, DateTimeOffset CreatedAtUtc, DateTimeOffset? DeliveredAtUtc);
+
+public enum MembershipStatus
+{
+    /// <summary>No plan is set: nothing is limited.</summary>
+    NoPlan = 0,
+    Active = 1,
+    ExpiringSoon = 2,
+    Expired = 3,
+    NotStarted = 4
+}
+
+public sealed record MembershipUsageDto(int ActiveUsers, long StorageBytes, int TaskCount, int? UsersPercent = null, int? StoragePercent = null);
+public sealed record MembershipDto(
+    string? PlanName, int? MaxUsers, int? MaxStorageMb, DateOnly? ValidFrom, DateOnly? ValidUntil, string? Notes,
+    MembershipStatus Status, int? DaysLeft, MembershipUsageDto Usage, IReadOnlyList<string> Warnings);
+public sealed record SetMembershipRequest(string PlanName, int? MaxUsers = null, int? MaxStorageMb = null, DateOnly? ValidFrom = null, DateOnly? ValidUntil = null, string? Notes = null);
+
+public sealed record RetentionDto(int? AutomationLogDays, int? WebhookDeliveryDays);
+
+public sealed record ReportSubscriptionDto(
+    Guid Id, ReportFrequency Frequency, DayOfWeek? DayOfWeek, int? DayOfMonth, int Hour, bool BySms, bool ByEmail, bool IsActive, DateTimeOffset NextRunAtUtc, DateTimeOffset? LastSentAtUtc);
+public sealed record SaveReportSubscriptionRequest(ReportFrequency Frequency, DayOfWeek? DayOfWeek = null, int? DayOfMonth = null, int Hour = 8, bool BySms = true, bool ByEmail = false, bool IsActive = true);
+
+/// <summary>What the digest says about one person's tasks.</summary>
+public sealed record TaskDigest(int Overdue, int DueToday, int DueSoon, int InProgress, int CompletedLastWeek, IReadOnlyList<string> OverdueTitles);
+
+public sealed record ImportTasksRequest(string Csv, bool SkipInvalid = false);
+public sealed record ImportRowDto(int Line, string? Title, DateOnly? DueDate, TaskPriority? Priority, string? Assignee, bool Valid, IReadOnlyList<string> Errors);
+public sealed record ImportPreviewDto(int Total, int Valid, int Invalid, IReadOnlyList<ImportRowDto> Rows);
+public sealed record ImportResultDto(int Created, int Skipped, IReadOnlyList<Guid> TaskIds, IReadOnlyList<ImportRowDto> Failed);
+
+public sealed record SubmitTaskReviewRequest(string? Comment = null);
+
+/// <summary>A task waiting for the signed-in person's review - what "my reviews" shows next to the approval.</summary>
+public sealed record TaskReviewItemDto(Guid Id, string Title, DateOnly DueDate, UserSummaryDto? SubmittedBy, DateTimeOffset? SubmittedAtUtc, string? Comment);
+public sealed record TaskReviewItemsRequest(IReadOnlyList<Guid> Ids);
+
+/// <summary>The board's batch load: the ids of the tasks to read in full (at most <see cref="MaxIds"/>).</summary>
+public sealed record TaskBoardDetailsRequest(IReadOnlyList<Guid>? Ids)
+{
+    public const int MaxIds = 100;
+}
+
+/// <summary>One task as the board needs it: detail, comments and history.</summary>
+public sealed record TaskBoardDetailsDto(TaskDto Task, IReadOnlyList<TaskCommentDto> Comments, IReadOnlyList<TaskActivityDto> Activity);
+
+/// <summary>Quick add: only a title is needed. Due today if no date is given; given to the person adding it.</summary>
+public sealed record QuickCreateTaskRequest(string Title, DateOnly? DueDate = null, TaskPriority Priority = TaskPriority.Medium);
+
+public enum BulkTaskAction { Status, CustomStatus, Priority, Archive, Restore }
+
+/// <summary>
+/// One action over many tasks. Status needs Status, CustomStatus needs CustomStatusId, Priority needs Priority;
+/// Archive and Restore need nothing more. Each task is done on its own, with the same rules as one at a time.
+/// </summary>
+public sealed record BulkTaskRequest(
+    IReadOnlyList<Guid> Ids,
+    BulkTaskAction Action,
+    TaskItemStatus? Status = null,
+    Guid? CustomStatusId = null,
+    TaskPriority? Priority = null);
+
+public sealed record BulkTaskFailure(Guid Id, string Code, string Message);
+public sealed record BulkTaskResult(IReadOnlyList<Guid> Succeeded, IReadOnlyList<BulkTaskFailure> Failed);
 
 /// <summary>
 /// ResponsibleUserIds (one or more) replaces who is responsible; without it AssignedUserId is
@@ -361,7 +532,9 @@ public sealed record ListTasksRequest(
     DateOnly? DueTo = null,
     bool? Overdue = null,
     TaskSortBy SortBy = TaskSortBy.ModifiedAtUtc,
-    bool SortDescending = true);
+    bool SortDescending = true,
+    bool Archived = false,
+    Guid? CustomStatusId = null);
 
 public sealed record CreateSubTaskRequest(
     string Title,

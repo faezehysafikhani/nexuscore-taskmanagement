@@ -17,7 +17,8 @@ public sealed record UserDto(
     string? ThemeMode = null,
     string? FirstName = null,
     string? LastName = null,
-    bool IsSystem = false, string? Address = null, string? FatherName = null, DateOnly? BirthDate = null);
+    bool IsSystem = false, string? Address = null, string? FatherName = null, DateOnly? BirthDate = null,
+    NexusCore.Domain.Identity.UserKind Kind = NexusCore.Domain.Identity.UserKind.Normal, bool MfaEnabled = false);
 
 /// <summary>
 /// A new account, created by an administrator (there is no self-registration). Username is the
@@ -33,7 +34,8 @@ public sealed record CreateUserRequest(
     string Password,
     bool IsActive = true,
     string? Email = null,
-    bool NotifySms = true, string? Address = null, string? FatherName = null, DateOnly? BirthDate = null, string? AvatarUrl = null);
+    bool NotifySms = true, string? Address = null, string? FatherName = null, DateOnly? BirthDate = null, string? AvatarUrl = null,
+    NexusCore.Domain.Identity.UserKind Kind = NexusCore.Domain.Identity.UserKind.Normal);
 
 /// <summary>
 /// DisplayName and IsActive keep their original meaning. Every other field is optional:

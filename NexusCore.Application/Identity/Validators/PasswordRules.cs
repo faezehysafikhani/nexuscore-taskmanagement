@@ -27,9 +27,11 @@ public static class PasswordRules
         "test1234", "test12345", "default", "secret", "secret123", "trustno1", "freedom", "master", "sunshine",
     };
 
-    public static bool IsStrong(string? password)
+    public static bool IsStrong(string? password) => IsStrong(password, PasswordPolicy.Default);
+
+    public static bool IsStrong(string? password, PasswordPolicy policy)
     {
-        if (string.IsNullOrEmpty(password) || password.Length < MinLength || password.Length > MaxLength)
+        if (string.IsNullOrEmpty(password) || password.Length < policy.MinLength || password.Length > MaxLength)
         {
             return false;
         }
@@ -39,7 +41,7 @@ public static class PasswordRules
         if (password.Any(char.IsUpper)) classes++;
         if (password.Any(char.IsDigit)) classes++;
         if (password.Any(ch => !char.IsLetterOrDigit(ch))) classes++;
-        if (classes < 3)
+        if (classes < policy.RequiredClasses)
         {
             return false;
         }
@@ -56,4 +58,21 @@ public static class PasswordRules
 
     public static IRuleBuilderOptions<T, string?> StrongPassword<T>(this IRuleBuilder<T, string?> rule) =>
         rule.Must(IsStrong).WithMessage(Message);
+
+    /// <summary>The same check against the organization's own policy; without a reader the defaults apply.</summary>
+    public static IRuleBuilderOptions<T, string?> StrongPassword<T>(this IRuleBuilder<T, string?> rule, IPasswordPolicyReader? reader, Func<T, Guid?>? tenant = null)
+    {
+        if (reader is null)
+        {
+            return rule.StrongPassword();
+        }
+
+        return rule.MustAsync(async (instance, password, context, ct) =>
+        {
+            var policy = await reader.GetAsync(tenant?.Invoke(instance), ct);
+            if (IsStrong(password, policy)) return true;
+            context.MessageFormatter.AppendArgument("PolicyMessage", policy.Message);
+            return false;
+        }).WithMessage("{PolicyMessage}");
+    }
 }

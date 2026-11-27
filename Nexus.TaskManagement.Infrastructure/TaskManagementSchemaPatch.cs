@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -86,27 +86,507 @@ public static class TaskManagementSchema
             CREATE INDEX [IX_SubTaskAssignees_UserId] ON [task_management].[SubTaskAssignees] ([UserId]);
         END
         """;
+
+    /// <summary>Row version for edit conflicts (CAT-209) and the archive (CAT-210).</summary>
+    public const string AddConcurrencyAndArchiveSql = """
+        IF OBJECT_ID(N'[task_management].[Tasks]') IS NOT NULL
+        BEGIN
+            IF COL_LENGTH(N'task_management.Tasks', N'RowVersion') IS NULL ALTER TABLE [task_management].[Tasks] ADD [RowVersion] rowversion;
+            IF COL_LENGTH(N'task_management.Tasks', N'ArchivedAtUtc') IS NULL ALTER TABLE [task_management].[Tasks] ADD [ArchivedAtUtc] datetimeoffset NULL;
+            IF COL_LENGTH(N'task_management.Tasks', N'ArchivedByUserId') IS NULL ALTER TABLE [task_management].[Tasks] ADD [ArchivedByUserId] uniqueidentifier NULL;
+        END
+        """;
+
+    /// <summary>The archive's index, created after the column exists (a separate batch: SQL Server checks names per batch).</summary>
+    public const string AddArchiveIndexSql = """
+        IF OBJECT_ID(N'[task_management].[Tasks]') IS NOT NULL AND COL_LENGTH(N'task_management.Tasks', N'ArchivedAtUtc') IS NOT NULL
+            AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Tasks_TenantId_ArchivedAtUtc' AND object_id = OBJECT_ID(N'[task_management].[Tasks]'))
+            CREATE INDEX [IX_Tasks_TenantId_ArchivedAtUtc] ON [task_management].[Tasks] ([TenantId], [ArchivedAtUtc]);
+        """;
+
+    /// <summary>Organization-defined task statuses (CAT-252..254 design: a label on top of the four built-in statuses).</summary>
+    public const string AddCustomStatusesSql = """
+        IF OBJECT_ID(N'[task_management].[Tasks]') IS NOT NULL
+        BEGIN
+            IF COL_LENGTH(N'task_management.Tasks', N'CustomStatusId') IS NULL ALTER TABLE [task_management].[Tasks] ADD [CustomStatusId] uniqueidentifier NULL;
+        END
+        IF SCHEMA_ID(N'task_management') IS NOT NULL AND OBJECT_ID(N'[task_management].[TaskStatuses]') IS NULL
+        BEGIN
+            CREATE TABLE [task_management].[TaskStatuses] (
+                [Id] uniqueidentifier NOT NULL,
+                [TenantId] uniqueidentifier NOT NULL,
+                [Name] nvarchar(100) NOT NULL,
+                [NormalizedName] nvarchar(100) NOT NULL,
+                [Category] int NOT NULL,
+                [Color] nvarchar(30) NULL,
+                [SortOrder] int NOT NULL,
+                [IsActive] bit NOT NULL,
+                [CreatedAtUtc] datetimeoffset NOT NULL,
+                [CreatedByUserId] uniqueidentifier NULL,
+                [ModifiedAtUtc] datetimeoffset NULL,
+                [ModifiedByUserId] uniqueidentifier NULL,
+                CONSTRAINT [PK_TaskStatuses] PRIMARY KEY ([Id]));
+            CREATE UNIQUE INDEX [IX_TaskStatuses_TenantId_NormalizedName] ON [task_management].[TaskStatuses] ([TenantId], [NormalizedName]);
+        END
+        """;
+
+    /// <summary>Work types (CAT-251) and custom fields with their per-task values (CAT-252).</summary>
+    public const string AddTaskExtrasSql = """
+        IF OBJECT_ID(N'[task_management].[Tasks]') IS NOT NULL AND COL_LENGTH(N'task_management.Tasks', N'WorkTypeId') IS NULL
+            ALTER TABLE [task_management].[Tasks] ADD [WorkTypeId] uniqueidentifier NULL;
+        IF SCHEMA_ID(N'task_management') IS NOT NULL AND OBJECT_ID(N'[task_management].[WorkTypes]') IS NULL
+        BEGIN
+            CREATE TABLE [task_management].[WorkTypes] (
+                [Id] uniqueidentifier NOT NULL,
+                [TenantId] uniqueidentifier NOT NULL,
+                [Name] nvarchar(100) NOT NULL,
+                [NormalizedName] nvarchar(100) NOT NULL,
+                [Color] nvarchar(30) NULL,
+                [SortOrder] int NOT NULL,
+                [IsActive] bit NOT NULL,
+                [CreatedAtUtc] datetimeoffset NOT NULL,
+                [CreatedByUserId] uniqueidentifier NULL,
+                [ModifiedAtUtc] datetimeoffset NULL,
+                [ModifiedByUserId] uniqueidentifier NULL,
+                CONSTRAINT [PK_WorkTypes] PRIMARY KEY ([Id]));
+            CREATE UNIQUE INDEX [IX_WorkTypes_TenantId_NormalizedName] ON [task_management].[WorkTypes] ([TenantId], [NormalizedName]);
+        END
+        IF SCHEMA_ID(N'task_management') IS NOT NULL AND OBJECT_ID(N'[task_management].[CustomFields]') IS NULL
+        BEGIN
+            CREATE TABLE [task_management].[CustomFields] (
+                [Id] uniqueidentifier NOT NULL,
+                [TenantId] uniqueidentifier NOT NULL,
+                [Name] nvarchar(100) NOT NULL,
+                [NormalizedName] nvarchar(100) NOT NULL,
+                [Kind] int NOT NULL,
+                [OptionsJson] nvarchar(4000) NULL,
+                [IsRequired] bit NOT NULL,
+                [SortOrder] int NOT NULL,
+                [IsActive] bit NOT NULL,
+                [CreatedAtUtc] datetimeoffset NOT NULL,
+                [CreatedByUserId] uniqueidentifier NULL,
+                [ModifiedAtUtc] datetimeoffset NULL,
+                [ModifiedByUserId] uniqueidentifier NULL,
+                CONSTRAINT [PK_CustomFields] PRIMARY KEY ([Id]));
+            CREATE UNIQUE INDEX [IX_CustomFields_TenantId_NormalizedName] ON [task_management].[CustomFields] ([TenantId], [NormalizedName]);
+        END
+        IF SCHEMA_ID(N'task_management') IS NOT NULL AND OBJECT_ID(N'[task_management].[TaskFieldValues]') IS NULL
+        BEGIN
+            CREATE TABLE [task_management].[TaskFieldValues] (
+                [Id] uniqueidentifier NOT NULL,
+                [TenantId] uniqueidentifier NOT NULL,
+                [TaskId] uniqueidentifier NOT NULL,
+                [FieldId] uniqueidentifier NOT NULL,
+                [Value] nvarchar(1000) NOT NULL,
+                CONSTRAINT [PK_TaskFieldValues] PRIMARY KEY ([Id]));
+            CREATE UNIQUE INDEX [IX_TaskFieldValues_TaskId_FieldId] ON [task_management].[TaskFieldValues] ([TaskId], [FieldId]);
+            CREATE INDEX [IX_TaskFieldValues_TenantId_FieldId] ON [task_management].[TaskFieldValues] ([TenantId], [FieldId]);
+        END
+        """;
+
+    /// <summary>When the overdue rules ran for a task (CAT-122), so the monitor runs them once per due date.</summary>
+    public const string AddOverdueRulesSql = """
+        IF OBJECT_ID(N'[task_management].[Tasks]') IS NOT NULL AND COL_LENGTH(N'task_management.Tasks', N'OverdueRulesRanAtUtc') IS NULL
+            ALTER TABLE [task_management].[Tasks] ADD [OverdueRulesRanAtUtc] datetimeoffset NULL;
+        """;
+
+    /// <summary>Submit-for-review state on tasks (phase 4). ReviewStatus: 0 none, 1 pending, 2 approved, 3 rejected.</summary>
+    public const string AddTaskReviewSql = """
+        IF OBJECT_ID(N'[task_management].[Tasks]') IS NOT NULL
+        BEGIN
+            IF COL_LENGTH(N'task_management.Tasks', N'ReviewStatus') IS NULL ALTER TABLE [task_management].[Tasks] ADD [ReviewStatus] int NOT NULL CONSTRAINT [DF_Tasks_ReviewStatus] DEFAULT 0;
+            IF COL_LENGTH(N'task_management.Tasks', N'ReviewSubmittedAtUtc') IS NULL ALTER TABLE [task_management].[Tasks] ADD [ReviewSubmittedAtUtc] datetimeoffset NULL;
+            IF COL_LENGTH(N'task_management.Tasks', N'ReviewSubmittedByUserId') IS NULL ALTER TABLE [task_management].[Tasks] ADD [ReviewSubmittedByUserId] uniqueidentifier NULL;
+            IF COL_LENGTH(N'task_management.Tasks', N'ReviewDecidedAtUtc') IS NULL ALTER TABLE [task_management].[Tasks] ADD [ReviewDecidedAtUtc] datetimeoffset NULL;
+            IF COL_LENGTH(N'task_management.Tasks', N'ReviewDecidedByUserId') IS NULL ALTER TABLE [task_management].[Tasks] ADD [ReviewDecidedByUserId] uniqueidentifier NULL;
+            IF COL_LENGTH(N'task_management.Tasks', N'ReviewComment') IS NULL ALTER TABLE [task_management].[Tasks] ADD [ReviewComment] nvarchar(1000) NULL;
+        END
+        """;
+
+    /// <summary>Requests with their categories, and the source a task keeps (phase 5).</summary>
+    public const string AddRequestsSql = """
+        IF OBJECT_ID(N'[task_management].[Tasks]') IS NOT NULL
+        BEGIN
+            IF COL_LENGTH(N'task_management.Tasks', N'SourceType') IS NULL ALTER TABLE [task_management].[Tasks] ADD [SourceType] nvarchar(30) NULL;
+            IF COL_LENGTH(N'task_management.Tasks', N'SourceId') IS NULL ALTER TABLE [task_management].[Tasks] ADD [SourceId] uniqueidentifier NULL;
+        END
+        IF SCHEMA_ID(N'task_management') IS NOT NULL AND OBJECT_ID(N'[task_management].[RequestCategories]') IS NULL
+        BEGIN
+            CREATE TABLE [task_management].[RequestCategories] (
+                [Id] uniqueidentifier NOT NULL,
+                [TenantId] uniqueidentifier NOT NULL,
+                [Name] nvarchar(100) NOT NULL,
+                [NormalizedName] nvarchar(100) NOT NULL,
+                [RouteToUserId] uniqueidentifier NULL,
+                [UrgentRouteToUserId] uniqueidentifier NULL,
+                [DefaultPriority] int NOT NULL,
+                [IsActive] bit NOT NULL,
+                [CreatedAtUtc] datetimeoffset NOT NULL,
+                [CreatedByUserId] uniqueidentifier NULL,
+                [ModifiedAtUtc] datetimeoffset NULL,
+                [ModifiedByUserId] uniqueidentifier NULL,
+                CONSTRAINT [PK_RequestCategories] PRIMARY KEY ([Id]));
+            CREATE UNIQUE INDEX [IX_RequestCategories_TenantId_NormalizedName] ON [task_management].[RequestCategories] ([TenantId], [NormalizedName]);
+        END
+        IF SCHEMA_ID(N'task_management') IS NOT NULL AND OBJECT_ID(N'[task_management].[TaskRequests]') IS NULL
+        BEGIN
+            CREATE TABLE [task_management].[TaskRequests] (
+                [Id] uniqueidentifier NOT NULL,
+                [TenantId] uniqueidentifier NOT NULL,
+                [CategoryId] uniqueidentifier NULL,
+                [Title] nvarchar(200) NOT NULL,
+                [Description] nvarchar(4000) NULL,
+                [Priority] int NOT NULL,
+                [NeededBy] date NULL,
+                [RequesterUserId] uniqueidentifier NOT NULL,
+                [RoutedToUserId] uniqueidentifier NULL,
+                [Status] int NOT NULL,
+                [DecisionNote] nvarchar(1000) NULL,
+                [DecidedByUserId] uniqueidentifier NULL,
+                [DecidedAtUtc] datetimeoffset NULL,
+                [ConvertedTaskId] uniqueidentifier NULL,
+                [CreatedAtUtc] datetimeoffset NOT NULL,
+                [CreatedByUserId] uniqueidentifier NULL,
+                [ModifiedAtUtc] datetimeoffset NULL,
+                [ModifiedByUserId] uniqueidentifier NULL,
+                CONSTRAINT [PK_TaskRequests] PRIMARY KEY ([Id]));
+            CREATE INDEX [IX_TaskRequests_TenantId_Status] ON [task_management].[TaskRequests] ([TenantId], [Status]);
+            CREATE INDEX [IX_TaskRequests_TenantId_RequesterUserId] ON [task_management].[TaskRequests] ([TenantId], [RequesterUserId]);
+            CREATE INDEX [IX_TaskRequests_TenantId_RoutedToUserId] ON [task_management].[TaskRequests] ([TenantId], [RoutedToUserId]);
+        END
+        """;
+
+    /// <summary>Dependencies, blocker, acceptance criteria, WIP limit and templates (phase 3c).</summary>
+    public const string AddPlanningSql = """
+        IF OBJECT_ID(N'[task_management].[Tasks]') IS NOT NULL AND COL_LENGTH(N'task_management.Tasks', N'BlockedReason') IS NULL
+            ALTER TABLE [task_management].[Tasks] ADD [BlockedReason] nvarchar(300) NULL;
+        IF SCHEMA_ID(N'task_management') IS NOT NULL AND OBJECT_ID(N'[task_management].[TaskDependencies]') IS NULL
+        BEGIN
+            CREATE TABLE [task_management].[TaskDependencies] (
+                [Id] uniqueidentifier NOT NULL,
+                [TenantId] uniqueidentifier NOT NULL,
+                [TaskId] uniqueidentifier NOT NULL,
+                [BlockedByTaskId] uniqueidentifier NOT NULL,
+                [CreatedAtUtc] datetimeoffset NOT NULL,
+                [CreatedByUserId] uniqueidentifier NULL,
+                [ModifiedAtUtc] datetimeoffset NULL,
+                [ModifiedByUserId] uniqueidentifier NULL,
+                CONSTRAINT [PK_TaskDependencies] PRIMARY KEY ([Id]));
+            CREATE UNIQUE INDEX [IX_TaskDependencies_TaskId_BlockedByTaskId] ON [task_management].[TaskDependencies] ([TaskId], [BlockedByTaskId]);
+            CREATE INDEX [IX_TaskDependencies_BlockedByTaskId] ON [task_management].[TaskDependencies] ([BlockedByTaskId]);
+        END
+        IF SCHEMA_ID(N'task_management') IS NOT NULL AND OBJECT_ID(N'[task_management].[TaskCriteria]') IS NULL
+        BEGIN
+            CREATE TABLE [task_management].[TaskCriteria] (
+                [Id] uniqueidentifier NOT NULL,
+                [TenantId] uniqueidentifier NOT NULL,
+                [TaskId] uniqueidentifier NOT NULL,
+                [Text] nvarchar(300) NOT NULL,
+                [IsMet] bit NOT NULL,
+                [MetByUserId] uniqueidentifier NULL,
+                [MetAtUtc] datetimeoffset NULL,
+                [SortOrder] int NOT NULL,
+                [CreatedAtUtc] datetimeoffset NOT NULL,
+                [CreatedByUserId] uniqueidentifier NULL,
+                [ModifiedAtUtc] datetimeoffset NULL,
+                [ModifiedByUserId] uniqueidentifier NULL,
+                CONSTRAINT [PK_TaskCriteria] PRIMARY KEY ([Id]));
+            CREATE INDEX [IX_TaskCriteria_TaskId] ON [task_management].[TaskCriteria] ([TaskId]);
+        END
+        IF SCHEMA_ID(N'task_management') IS NOT NULL AND OBJECT_ID(N'[task_management].[TaskWipSettings]') IS NULL
+            CREATE TABLE [task_management].[TaskWipSettings] (
+                [TenantId] uniqueidentifier NOT NULL,
+                [LimitPerUser] int NULL,
+                CONSTRAINT [PK_TaskWipSettings] PRIMARY KEY ([TenantId]));
+        IF SCHEMA_ID(N'task_management') IS NOT NULL AND OBJECT_ID(N'[task_management].[TaskTemplates]') IS NULL
+        BEGIN
+            CREATE TABLE [task_management].[TaskTemplates] (
+                [Id] uniqueidentifier NOT NULL,
+                [TenantId] uniqueidentifier NOT NULL,
+                [Name] nvarchar(100) NOT NULL,
+                [NormalizedName] nvarchar(100) NOT NULL,
+                [IsProject] bit NOT NULL,
+                [Body] nvarchar(max) NOT NULL,
+                [CreatedAtUtc] datetimeoffset NOT NULL,
+                [CreatedByUserId] uniqueidentifier NULL,
+                [ModifiedAtUtc] datetimeoffset NULL,
+                [ModifiedByUserId] uniqueidentifier NULL,
+                CONSTRAINT [PK_TaskTemplates] PRIMARY KEY ([Id]));
+            CREATE UNIQUE INDEX [IX_TaskTemplates_TenantId_NormalizedName] ON [task_management].[TaskTemplates] ([TenantId], [NormalizedName]);
+        END
+        """;
+
+    /// <summary>Estimates, time entries, timer and weekly timesheet submissions (phase 6).</summary>
+    public const string AddTimesheetsSql = """
+        IF OBJECT_ID(N'[task_management].[Tasks]') IS NOT NULL AND COL_LENGTH(N'task_management.Tasks', N'EstimatedMinutes') IS NULL
+            ALTER TABLE [task_management].[Tasks] ADD [EstimatedMinutes] int NULL;
+        IF SCHEMA_ID(N'task_management') IS NOT NULL AND OBJECT_ID(N'[task_management].[TimeEntries]') IS NULL
+        BEGIN
+            CREATE TABLE [task_management].[TimeEntries] (
+                [Id] uniqueidentifier NOT NULL,
+                [TenantId] uniqueidentifier NOT NULL,
+                [TaskId] uniqueidentifier NOT NULL,
+                [UserId] uniqueidentifier NOT NULL,
+                [Date] date NOT NULL,
+                [Minutes] int NOT NULL,
+                [Note] nvarchar(500) NULL,
+                [Source] int NOT NULL,
+                [Status] int NOT NULL,
+                [SubmissionId] uniqueidentifier NULL,
+                [CreatedAtUtc] datetimeoffset NOT NULL,
+                [CreatedByUserId] uniqueidentifier NULL,
+                [ModifiedAtUtc] datetimeoffset NULL,
+                [ModifiedByUserId] uniqueidentifier NULL,
+                CONSTRAINT [PK_TimeEntries] PRIMARY KEY ([Id]));
+            CREATE INDEX [IX_TimeEntries_TenantId_UserId_Date] ON [task_management].[TimeEntries] ([TenantId], [UserId], [Date]);
+            CREATE INDEX [IX_TimeEntries_TaskId] ON [task_management].[TimeEntries] ([TaskId]);
+            CREATE INDEX [IX_TimeEntries_SubmissionId] ON [task_management].[TimeEntries] ([SubmissionId]);
+        END
+        IF SCHEMA_ID(N'task_management') IS NOT NULL AND OBJECT_ID(N'[task_management].[TimesheetSubmissions]') IS NULL
+        BEGIN
+            CREATE TABLE [task_management].[TimesheetSubmissions] (
+                [Id] uniqueidentifier NOT NULL,
+                [TenantId] uniqueidentifier NOT NULL,
+                [UserId] uniqueidentifier NOT NULL,
+                [WeekStart] date NOT NULL,
+                [TotalMinutes] int NOT NULL,
+                [SubmittedAtUtc] datetimeoffset NOT NULL,
+                [Status] int NOT NULL,
+                [DecidedByUserId] uniqueidentifier NULL,
+                [DecidedAtUtc] datetimeoffset NULL,
+                [DecisionComment] nvarchar(1000) NULL,
+                [CreatedAtUtc] datetimeoffset NOT NULL,
+                [CreatedByUserId] uniqueidentifier NULL,
+                [ModifiedAtUtc] datetimeoffset NULL,
+                [ModifiedByUserId] uniqueidentifier NULL,
+                CONSTRAINT [PK_TimesheetSubmissions] PRIMARY KEY ([Id]));
+            CREATE INDEX [IX_TimesheetSubmissions_TenantId_UserId_WeekStart] ON [task_management].[TimesheetSubmissions] ([TenantId], [UserId], [WeekStart]);
+        END
+        IF SCHEMA_ID(N'task_management') IS NOT NULL AND OBJECT_ID(N'[task_management].[RunningTimers]') IS NULL
+            CREATE TABLE [task_management].[RunningTimers] (
+                [UserId] uniqueidentifier NOT NULL,
+                [TenantId] uniqueidentifier NOT NULL,
+                [TaskId] uniqueidentifier NOT NULL,
+                [StartedAtUtc] datetimeoffset NOT NULL,
+                CONSTRAINT [PK_RunningTimers] PRIMARY KEY ([UserId]));
+        """;
+
+    /// <summary>Automation rules, their log and the SLA columns (phase 7).</summary>
+    public const string AddAutomationSql = """
+        IF OBJECT_ID(N'[task_management].[Tasks]') IS NOT NULL
+        BEGIN
+            IF COL_LENGTH(N'task_management.Tasks', N'SlaDueAtUtc') IS NULL ALTER TABLE [task_management].[Tasks] ADD [SlaDueAtUtc] datetimeoffset NULL;
+            IF COL_LENGTH(N'task_management.Tasks', N'SlaPausedAtUtc') IS NULL ALTER TABLE [task_management].[Tasks] ADD [SlaPausedAtUtc] datetimeoffset NULL;
+            IF COL_LENGTH(N'task_management.Tasks', N'SlaBreachedAtUtc') IS NULL ALTER TABLE [task_management].[Tasks] ADD [SlaBreachedAtUtc] datetimeoffset NULL;
+        END
+        IF SCHEMA_ID(N'task_management') IS NOT NULL AND OBJECT_ID(N'[task_management].[AutomationRules]') IS NULL
+        BEGIN
+            CREATE TABLE [task_management].[AutomationRules] (
+                [Id] uniqueidentifier NOT NULL,
+                [TenantId] uniqueidentifier NOT NULL,
+                [Name] nvarchar(100) NOT NULL,
+                [Trigger] int NOT NULL,
+                [Conditions] nvarchar(max) NOT NULL,
+                [Actions] nvarchar(max) NOT NULL,
+                [SortOrder] int NOT NULL,
+                [IsActive] bit NOT NULL,
+                [CreatedAtUtc] datetimeoffset NOT NULL,
+                [CreatedByUserId] uniqueidentifier NULL,
+                [ModifiedAtUtc] datetimeoffset NULL,
+                [ModifiedByUserId] uniqueidentifier NULL,
+                CONSTRAINT [PK_AutomationRules] PRIMARY KEY ([Id]));
+            CREATE INDEX [IX_AutomationRules_TenantId_Trigger_IsActive] ON [task_management].[AutomationRules] ([TenantId], [Trigger], [IsActive]);
+        END
+        IF SCHEMA_ID(N'task_management') IS NOT NULL AND OBJECT_ID(N'[task_management].[AutomationLog]') IS NULL
+        BEGIN
+            CREATE TABLE [task_management].[AutomationLog] (
+                [Id] uniqueidentifier NOT NULL,
+                [TenantId] uniqueidentifier NOT NULL,
+                [RuleId] uniqueidentifier NOT NULL,
+                [RuleName] nvarchar(100) NOT NULL,
+                [TaskId] uniqueidentifier NOT NULL,
+                [Trigger] int NOT NULL,
+                [Outcome] nvarchar(20) NOT NULL,
+                [Detail] nvarchar(500) NULL,
+                [AtUtc] datetimeoffset NOT NULL,
+                CONSTRAINT [PK_AutomationLog] PRIMARY KEY ([Id]));
+            CREATE INDEX [IX_AutomationLog_TenantId_AtUtc] ON [task_management].[AutomationLog] ([TenantId], [AtUtc]);
+            CREATE INDEX [IX_AutomationLog_TaskId] ON [task_management].[AutomationLog] ([TaskId]);
+        END
+        """;
+
+    /// <summary>Webhook subscriptions and their delivery outbox (phase 9).</summary>
+    public const string AddWebhooksSql = """
+        IF SCHEMA_ID(N'task_management') IS NOT NULL AND OBJECT_ID(N'[task_management].[WebhookSubscriptions]') IS NULL
+        BEGIN
+            CREATE TABLE [task_management].[WebhookSubscriptions] (
+                [Id] uniqueidentifier NOT NULL,
+                [TenantId] uniqueidentifier NOT NULL,
+                [Name] nvarchar(100) NOT NULL,
+                [Url] nvarchar(500) NOT NULL,
+                [Secret] nvarchar(100) NOT NULL,
+                [Events] nvarchar(500) NOT NULL,
+                [IsActive] bit NOT NULL,
+                [ConsecutiveFailures] int NOT NULL,
+                [LastDeliveredAtUtc] datetimeoffset NULL,
+                [CreatedAtUtc] datetimeoffset NOT NULL,
+                [CreatedByUserId] uniqueidentifier NULL,
+                [ModifiedAtUtc] datetimeoffset NULL,
+                [ModifiedByUserId] uniqueidentifier NULL,
+                CONSTRAINT [PK_WebhookSubscriptions] PRIMARY KEY ([Id]));
+            CREATE INDEX [IX_WebhookSubscriptions_TenantId_IsActive] ON [task_management].[WebhookSubscriptions] ([TenantId], [IsActive]);
+        END
+        IF SCHEMA_ID(N'task_management') IS NOT NULL AND OBJECT_ID(N'[task_management].[WebhookDeliveries]') IS NULL
+        BEGIN
+            CREATE TABLE [task_management].[WebhookDeliveries] (
+                [Id] uniqueidentifier NOT NULL,
+                [TenantId] uniqueidentifier NOT NULL,
+                [SubscriptionId] uniqueidentifier NOT NULL,
+                [EventType] nvarchar(60) NOT NULL,
+                [Payload] nvarchar(max) NOT NULL,
+                [Attempts] int NOT NULL,
+                [NextAttemptAtUtc] datetimeoffset NOT NULL,
+                [DeliveredAtUtc] datetimeoffset NULL,
+                [GaveUpAtUtc] datetimeoffset NULL,
+                [LastStatusCode] int NULL,
+                [LastError] nvarchar(500) NULL,
+                [CreatedAtUtc] datetimeoffset NOT NULL,
+                CONSTRAINT [PK_WebhookDeliveries] PRIMARY KEY ([Id]));
+            CREATE INDEX [IX_WebhookDeliveries_DeliveredAtUtc_GaveUpAtUtc_NextAttemptAtUtc] ON [task_management].[WebhookDeliveries] ([DeliveredAtUtc], [GaveUpAtUtc], [NextAttemptAtUtc]);
+            CREATE INDEX [IX_WebhookDeliveries_SubscriptionId_CreatedAtUtc] ON [task_management].[WebhookDeliveries] ([SubscriptionId], [CreatedAtUtc]);
+        END
+        """;
+
+    /// <summary>The organization's plan: limits and validity (phase 9).</summary>
+    public const string AddMembershipSql = """
+        IF SCHEMA_ID(N'task_management') IS NOT NULL AND OBJECT_ID(N'[task_management].[TenantMemberships]') IS NULL
+            CREATE TABLE [task_management].[TenantMemberships] (
+                [TenantId] uniqueidentifier NOT NULL,
+                [PlanName] nvarchar(100) NOT NULL,
+                [MaxUsers] int NULL,
+                [MaxStorageMb] int NULL,
+                [ValidFrom] date NULL,
+                [ValidUntil] date NULL,
+                [Notes] nvarchar(1000) NULL,
+                CONSTRAINT [PK_TenantMemberships] PRIMARY KEY ([TenantId]));
+        """;
+
+    /// <summary>How long logs are kept (phase 9).</summary>
+    public const string AddRetentionSql = """
+        IF SCHEMA_ID(N'task_management') IS NOT NULL AND OBJECT_ID(N'[task_management].[TaskRetentionSettings]') IS NULL
+            CREATE TABLE [task_management].[TaskRetentionSettings] (
+                [TenantId] uniqueidentifier NOT NULL,
+                [AutomationLogDays] int NULL,
+                [WebhookDeliveryDays] int NULL,
+                CONSTRAINT [PK_TaskRetentionSettings] PRIMARY KEY ([TenantId]));
+        """;
+
+    /// <summary>Scheduled digests of a person's tasks (phase 9c).</summary>
+    public const string AddReportSubscriptionsSql = """
+        IF SCHEMA_ID(N'task_management') IS NOT NULL AND OBJECT_ID(N'[task_management].[ReportSubscriptions]') IS NULL
+        BEGIN
+            CREATE TABLE [task_management].[ReportSubscriptions] (
+                [Id] uniqueidentifier NOT NULL,
+                [TenantId] uniqueidentifier NOT NULL,
+                [UserId] uniqueidentifier NOT NULL,
+                [Frequency] int NOT NULL,
+                [DayOfWeek] int NULL,
+                [DayOfMonth] int NULL,
+                [Hour] int NOT NULL,
+                [BySms] bit NOT NULL,
+                [ByEmail] bit NOT NULL,
+                [IsActive] bit NOT NULL,
+                [NextRunAtUtc] datetimeoffset NOT NULL,
+                [LastSentAtUtc] datetimeoffset NULL,
+                [CreatedAtUtc] datetimeoffset NOT NULL,
+                [CreatedByUserId] uniqueidentifier NULL,
+                [ModifiedAtUtc] datetimeoffset NULL,
+                [ModifiedByUserId] uniqueidentifier NULL,
+                CONSTRAINT [PK_ReportSubscriptions] PRIMARY KEY ([Id]));
+            CREATE INDEX [IX_ReportSubscriptions_IsActive_NextRunAtUtc] ON [task_management].[ReportSubscriptions] ([IsActive], [NextRunAtUtc]);
+            CREATE INDEX [IX_ReportSubscriptions_TenantId_UserId] ON [task_management].[ReportSubscriptions] ([TenantId], [UserId]);
+        END
+        """;
+
+    /// <summary>The index on the new column, in its own batch.</summary>
+    public const string AddCustomStatusIndexSql = """
+        IF OBJECT_ID(N'[task_management].[Tasks]') IS NOT NULL AND COL_LENGTH(N'task_management.Tasks', N'CustomStatusId') IS NOT NULL
+            AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Tasks_TenantId_CustomStatusId' AND object_id = OBJECT_ID(N'[task_management].[Tasks]'))
+            CREATE INDEX [IX_Tasks_TenantId_CustomStatusId] ON [task_management].[Tasks] ([TenantId], [CustomStatusId]);
+        """;
+
+    /// <summary>The notification outbox (RC-07 / OPEN-04).</summary>
+    public const string AddNotificationOutboxSql = """
+        IF SCHEMA_ID(N'task_management') IS NOT NULL AND OBJECT_ID(N'[task_management].[NotificationOutbox]') IS NULL
+        BEGIN
+            CREATE TABLE [task_management].[NotificationOutbox] (
+                [Id] uniqueidentifier NOT NULL,
+                [TenantId] uniqueidentifier NOT NULL,
+                [TaskId] uniqueidentifier NOT NULL,
+                [Title] nvarchar(200) NOT NULL,
+                [Description] nvarchar(4000) NULL,
+                [DueDate] date NOT NULL,
+                [DueAtText] nvarchar(100) NULL,
+                [RecipientUserId] uniqueidentifier NOT NULL,
+                [DedupeKey] nvarchar(120) NOT NULL,
+                [Attempts] int NOT NULL,
+                [NextAttemptAtUtc] datetimeoffset NOT NULL,
+                [DeliveredAtUtc] datetimeoffset NULL,
+                [LastError] nvarchar(500) NULL,
+                [CreatedAtUtc] datetimeoffset NOT NULL,
+                CONSTRAINT [PK_NotificationOutbox] PRIMARY KEY ([Id]));
+            CREATE UNIQUE INDEX [IX_NotificationOutbox_DedupeKey] ON [task_management].[NotificationOutbox] ([DedupeKey]);
+            CREATE INDEX [IX_NotificationOutbox_DeliveredAtUtc_NextAttemptAtUtc] ON [task_management].[NotificationOutbox] ([DeliveredAtUtc], [NextAttemptAtUtc]);
+        END
+        """;
 }
 
 /// <summary>Applies <see cref="TaskManagementSchema"/> when the host starts (SQL Server only), before the module's jobs run.</summary>
 public sealed class TaskManagementSchemaPatcher(IServiceScopeFactory scopes, ILogger<TaskManagementSchemaPatcher> logger) : IHostedService
 {
+    /// <summary>Each step on its own: one that fails (logged with its name) does not keep the later ones from running.</summary>
+    private static readonly (string Name, string Sql)[] Steps =
+    [
+        (nameof(TaskManagementSchema.AddRemindersSql), TaskManagementSchema.AddRemindersSql),
+        (nameof(TaskManagementSchema.AddPostOwnershipAndActingSql), TaskManagementSchema.AddPostOwnershipAndActingSql),
+        (nameof(TaskManagementSchema.AddSubTaskAssigneesAndStatusSql), TaskManagementSchema.AddSubTaskAssigneesAndStatusSql),
+        (nameof(TaskManagementSchema.AddNotificationOutboxSql), TaskManagementSchema.AddNotificationOutboxSql),
+        (nameof(TaskManagementSchema.AddConcurrencyAndArchiveSql), TaskManagementSchema.AddConcurrencyAndArchiveSql),
+        (nameof(TaskManagementSchema.AddArchiveIndexSql), TaskManagementSchema.AddArchiveIndexSql),
+        (nameof(TaskManagementSchema.AddCustomStatusesSql), TaskManagementSchema.AddCustomStatusesSql),
+        (nameof(TaskManagementSchema.AddCustomStatusIndexSql), TaskManagementSchema.AddCustomStatusIndexSql),
+        (nameof(TaskManagementSchema.AddTaskReviewSql), TaskManagementSchema.AddTaskReviewSql),
+        (nameof(TaskManagementSchema.AddRequestsSql), TaskManagementSchema.AddRequestsSql),
+        (nameof(TaskManagementSchema.AddPlanningSql), TaskManagementSchema.AddPlanningSql),
+        (nameof(TaskManagementSchema.AddTimesheetsSql), TaskManagementSchema.AddTimesheetsSql),
+        (nameof(TaskManagementSchema.AddAutomationSql), TaskManagementSchema.AddAutomationSql),
+        (nameof(TaskManagementSchema.AddWebhooksSql), TaskManagementSchema.AddWebhooksSql),
+        (nameof(TaskManagementSchema.AddMembershipSql), TaskManagementSchema.AddMembershipSql),
+        (nameof(TaskManagementSchema.AddRetentionSql), TaskManagementSchema.AddRetentionSql),
+        (nameof(TaskManagementSchema.AddReportSubscriptionsSql), TaskManagementSchema.AddReportSubscriptionsSql),
+        (nameof(TaskManagementSchema.AddTaskExtrasSql), TaskManagementSchema.AddTaskExtrasSql),
+        (nameof(TaskManagementSchema.AddOverdueRulesSql), TaskManagementSchema.AddOverdueRulesSql),
+    ];
+
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        try
+        await using var scope = scopes.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<TaskManagementDbContext>();
+        if (!db.Database.IsSqlServer())
         {
-            await using var scope = scopes.CreateAsyncScope();
-            var db = scope.ServiceProvider.GetRequiredService<TaskManagementDbContext>();
-            if (db.Database.IsSqlServer())
-            {
-                await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddRemindersSql, cancellationToken);
-                await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddPostOwnershipAndActingSql, cancellationToken);
-                await db.Database.ExecuteSqlRawAsync(TaskManagementSchema.AddSubTaskAssigneesAndStatusSql, cancellationToken);
-            }
+            return;
         }
-        catch (Exception ex)
+
+        foreach (var (name, sql) in Steps)
         {
-            logger.LogError(ex, "Could not add the task reminder columns; apply the TaskManagement migrations.");
+            try
+            {
+                await db.Database.ExecuteSqlRawAsync(sql, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogError(ex, "Task management schema step {Step} failed; the steps after it still run. Fix the database for this step (or apply the TaskManagement migrations).", name);
+            }
         }
     }
 

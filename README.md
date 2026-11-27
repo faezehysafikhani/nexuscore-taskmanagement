@@ -24,7 +24,7 @@ separate repository that references the packages built here (`eng/pack-core-modu
 
 | Product | Repository | Composes |
 |---|---|---|
-| Post Bank task management | `TMPB_API` | Core, Chat, Notifications, Task Management, `Nexus.Integrations.TaskNotifications` |
+| Post Bank task management | `TMCommercial_API` | Core, Chat, Notifications, Task Management, `Nexus.Integrations.TaskNotifications` |
 | Tejarat Bank task management | `TejaratBank_API` | the same, plus `Nexus.Organization`, `Nexus.OrgStructure` and `Nexus.Integrations.TaskReporting` |
 
 Both use the same front end (TMPBUI), which shows each optional feature only when the host

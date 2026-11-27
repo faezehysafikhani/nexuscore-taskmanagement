@@ -281,3 +281,29 @@ public sealed record EndAppointmentRequest(DateTimeOffset? EndDate = null);
 public sealed record AppointmentDto(
     Guid Id, Guid UnitPositionId, string? PostTitle, string? PostCode, string? Place, PersonRef Person,
     DateTimeOffset? StartDate, DateTimeOffset? EndDate, bool IsActive);
+
+// ---------------------------------------------------------------- leaving and role transfer (phase 10)
+
+/// <summary>
+/// A person leaves: every post they hold is free from now. PostIds (null: all; empty: none) say which
+/// of them go to SuccessorUserId at once instead; appointments that had not started go, as they never will.
+/// </summary>
+public sealed record OffboardUserRequest(Guid? SuccessorUserId = null, IReadOnlyList<Guid>? PostIds = null);
+
+/// <summary>
+/// What leaving did, each list newest first: posts freed with nobody taking them, posts handed to the
+/// successor now, appointments dropped before they started, and companies whose head post was freed.
+/// </summary>
+public sealed record OffboardResultDto(
+    Guid UserId,
+    IReadOnlyList<AppointmentDto> Ended,
+    IReadOnlyList<AppointmentDto> Transferred,
+    IReadOnlyList<AppointmentDto> Cancelled,
+    IReadOnlyList<Guid> HeadlessCompanyIds);
+
+/// <summary>The person's posts (all, or PostIds) move to ToUserId from EffectiveDate (null: now; never in the past).</summary>
+public sealed record TransferPostsRequest(Guid ToUserId, DateTimeOffset? EffectiveDate = null, IReadOnlyList<Guid>? PostIds = null);
+
+/// <summary>The posts that moved, each with its new appointment (the old one ended on the same day).</summary>
+public sealed record TransferPostsResultDto(
+    Guid FromUserId, Guid ToUserId, DateTimeOffset EffectiveDate, IReadOnlyList<AppointmentDto> Transferred);

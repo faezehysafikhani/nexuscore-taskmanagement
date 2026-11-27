@@ -100,9 +100,11 @@ public sealed class TaskManagementCompletionTests(SqlServerFixture fixture)
         var delete = await fixture.ScopedAsync(sp => sp.GetRequiredService<ITaskCommentService>()
             .DeleteAsync(comment.Value!.Id, default), fixture.OtherUserId);
 
-        // 403, not 401: a 401 would make the client throw away a perfectly valid session.
-        Assert.Equal("forbidden", edit.Error.Code);
-        Assert.Equal("forbidden", delete.Error.Code);
+        // The other user cannot see the task at all (visibility follows the organization), so the comment does not
+        // exist for them: 404, which does not reveal that the task exists. Never 401: a 401 would make the client
+        // throw away a perfectly valid session.
+        Assert.Equal("not_found", edit.Error.Code);
+        Assert.Equal("not_found", delete.Error.Code);
     }
 
     [Fact]

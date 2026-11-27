@@ -10,8 +10,17 @@ namespace Nexus.TaskManagement.Application;
 // around DbSet.
 // ---------------------------------------------------------------------------
 
+/// <summary>A save lost the race against another save of the same task (see TaskItem.RowVersion).</summary>
+public sealed class TaskConcurrencyException(string message, Exception? inner = null) : Exception(message, inner);
+
 public interface ITaskRepository
 {
+    /// <summary>
+    /// An archived task with its full graph, or null when it is not archived or not reachable. The ordinary reads never
+    /// see archived tasks.
+    /// </summary>
+    Task<TaskItem?> GetArchivedAsync(Guid tenantId, Guid id, CancellationToken cancellationToken);
+
     /// <summary>Full graph: subtasks, tags, files, assignees and recurrence.</summary>
     Task<TaskItem?> GetByIdAsync(Guid tenantId, Guid id, CancellationToken cancellationToken);
 
@@ -71,6 +80,12 @@ public interface ITaskRepository
 
     Task<bool> UserGroupExistsAsync(Guid tenantId, Guid userGroupId, CancellationToken cancellationToken);
 
+    /// <summary>Sign-in names to user ids, within the tenant (for an import that names people).</summary>
+    Task<IReadOnlyDictionary<string, Guid>> GetUserIdsByUsernameAsync(Guid tenantId, IReadOnlyCollection<string> usernames, CancellationToken cancellationToken);
+
+    /// <summary>The tasks among these that are waiting for review, whoever is signed in.</summary>
+    Task<IReadOnlyList<TaskItem>> GetInReviewAsync(Guid tenantId, IReadOnlyCollection<Guid> taskIds, CancellationToken cancellationToken);
+
     Task<IReadOnlyDictionary<Guid, UserSummaryDto>> GetUserSummariesAsync(
         IReadOnlyCollection<Guid> userIds, CancellationToken cancellationToken);
 
@@ -89,6 +104,288 @@ public interface IRepetitiveTaskRepository
     Task AddAsync(RepetitiveTask recurrence, CancellationToken cancellationToken);
 
     void Remove(RepetitiveTask recurrence);
+}
+
+public interface ITaskStatusRepository
+{
+    Task<TaskStatusDefinition?> GetByIdAsync(Guid tenantId, Guid id, CancellationToken cancellationToken);
+    Task<TaskStatusDefinition?> GetByNameAsync(Guid tenantId, string name, CancellationToken cancellationToken);
+    Task<IReadOnlyList<TaskStatusDefinition>> ListAsync(Guid tenantId, CancellationToken cancellationToken);
+    Task AddAsync(TaskStatusDefinition status, CancellationToken cancellationToken);
+    /// <summary>Removes the status and sets CustomStatusId to null on the tasks that had it (they keep their category).</summary>
+    Task RemoveAsync(TaskStatusDefinition status, CancellationToken cancellationToken);
+}
+
+public interface IAutomationRepository
+{
+    Task<IReadOnlyList<AutomationRule>> ListRulesAsync(Guid tenantId, AutomationTrigger? trigger, bool activeOnly, CancellationToken cancellationToken);
+    Task<AutomationRule?> GetRuleAsync(Guid tenantId, Guid id, CancellationToken cancellationToken);
+    Task AddRuleAsync(AutomationRule rule, CancellationToken cancellationToken);
+    void RemoveRule(AutomationRule rule);
+    Task AddLogAsync(AutomationLogEntry entry, CancellationToken cancellationToken);
+    Task<IReadOnlyList<AutomationLogEntry>> ListLogAsync(Guid tenantId, Guid? taskId, int take, CancellationToken cancellationToken);
+}
+
+/// <summary>Runs the organization's rules when something happens to a task. Never throws: a rule that fails is logged, the task's own change stands.</summary>
+public interface ITaskAutomation
+{
+    Task RunAsync(AutomationTrigger trigger, TaskItem task, CancellationToken cancellationToken);
+}
+
+public interface IAutomationService
+{
+    Task<Result<IReadOnlyList<AutomationRuleDto>>> ListAsync(CancellationToken cancellationToken);
+    Task<Result<AutomationRuleDto>> CreateAsync(SaveAutomationRuleRequest request, CancellationToken cancellationToken);
+    Task<Result<AutomationRuleDto>> UpdateAsync(Guid id, SaveAutomationRuleRequest request, CancellationToken cancellationToken);
+    Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken);
+    Task<Result<IReadOnlyList<AutomationLogDto>>> ListLogAsync(Guid? taskId, CancellationToken cancellationToken);
+}
+
+public interface IMembershipRepository
+{
+    Task<TenantMembership?> GetAsync(Guid tenantId, CancellationToken cancellationToken);
+    Task AddAsync(TenantMembership membership, CancellationToken cancellationToken);
+    void Remove(TenantMembership membership);
+    Task<long> StorageBytesAsync(Guid tenantId, CancellationToken cancellationToken);
+    Task<int> TaskCountAsync(Guid tenantId, CancellationToken cancellationToken);
+}
+
+public interface IRetentionService
+{
+    Task<Result<RetentionDto>> GetAsync(CancellationToken cancellationToken);
+    Task<Result<RetentionDto>> SetAsync(RetentionDto request, CancellationToken cancellationToken);
+}
+
+public interface IMembershipService
+{
+    Task<Result<MembershipDto>> GetAsync(CancellationToken cancellationToken);
+    Task<Result<MembershipDto>> SetAsync(SetMembershipRequest request, CancellationToken cancellationToken);
+    Task<Result> ClearAsync(CancellationToken cancellationToken);
+
+    /// <summary>Null when adding <paramref name="addBytes"/> of files is allowed; otherwise why not.</summary>
+    Task<NexusCore.SharedKernel.Results.Error?> CheckStorageAsync(Guid tenantId, long addBytes, CancellationToken cancellationToken);
+}
+
+public interface IReportSubscriptionRepository
+{
+    Task<IReadOnlyList<ReportSubscription>> ListOfUserAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken);
+    Task<ReportSubscription?> GetAsync(Guid tenantId, Guid userId, Guid id, CancellationToken cancellationToken);
+    Task AddAsync(ReportSubscription subscription, CancellationToken cancellationToken);
+    void Remove(ReportSubscription subscription);
+}
+
+/// <summary>A person's own tasks, counted, whoever is signed in (a job builds it for the person it is for).</summary>
+public interface ITaskDigestSource
+{
+    Task<TaskDigest> BuildAsync(Guid tenantId, Guid userId, DateOnly today, CancellationToken cancellationToken);
+}
+
+public interface IReportSubscriptionService
+{
+    Task<Result<IReadOnlyList<ReportSubscriptionDto>>> ListAsync(CancellationToken cancellationToken);
+    Task<Result<ReportSubscriptionDto>> CreateAsync(SaveReportSubscriptionRequest request, CancellationToken cancellationToken);
+    Task<Result<ReportSubscriptionDto>> UpdateAsync(Guid id, SaveReportSubscriptionRequest request, CancellationToken cancellationToken);
+    Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken);
+}
+
+public interface IWebhookRepository
+{
+    Task<IReadOnlyList<WebhookSubscription>> ListAsync(Guid tenantId, CancellationToken cancellationToken);
+    Task<WebhookSubscription?> GetAsync(Guid tenantId, Guid id, CancellationToken cancellationToken);
+    Task AddAsync(WebhookSubscription subscription, CancellationToken cancellationToken);
+    void Remove(WebhookSubscription subscription);
+    Task<IReadOnlyList<WebhookSubscription>> ListActiveAsync(Guid tenantId, CancellationToken cancellationToken);
+    Task AddDeliveriesAsync(IEnumerable<WebhookDelivery> deliveries, CancellationToken cancellationToken);
+    Task<IReadOnlyList<WebhookDelivery>> ListDeliveriesAsync(Guid tenantId, Guid subscriptionId, int take, CancellationToken cancellationToken);
+    Task RemoveDeliveriesOfAsync(Guid subscriptionId, CancellationToken cancellationToken);
+}
+
+/// <summary>Queues an event for every subscription that wants it. Never throws: telling the outside world must not fail the change that caused it.</summary>
+public interface IWebhookPublisher
+{
+    Task PublishAsync(Guid tenantId, string eventType, object data, CancellationToken cancellationToken);
+}
+
+public interface IWebhookService
+{
+    Task<Result<IReadOnlyList<WebhookDto>>> ListAsync(CancellationToken cancellationToken);
+    Task<Result<WebhookWithSecretDto>> CreateAsync(SaveWebhookRequest request, CancellationToken cancellationToken);
+    Task<Result<WebhookDto>> UpdateAsync(Guid id, SaveWebhookRequest request, CancellationToken cancellationToken);
+    Task<Result<WebhookWithSecretDto>> RotateSecretAsync(Guid id, CancellationToken cancellationToken);
+    Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken);
+    Task<Result<IReadOnlyList<WebhookDeliveryDto>>> ListDeliveriesAsync(Guid id, CancellationToken cancellationToken);
+
+    /// <summary>Sends a "ping" event to this one webhook only.</summary>
+    Task<Result> PingAsync(Guid id, CancellationToken cancellationToken);
+}
+
+public interface ITimesheetRepository
+{
+    Task<TimeEntry?> GetEntryAsync(Guid tenantId, Guid id, CancellationToken cancellationToken);
+    Task AddEntryAsync(TimeEntry entry, CancellationToken cancellationToken);
+    void RemoveEntry(TimeEntry entry);
+
+    /// <summary>One person's entries in a date range (inclusive).</summary>
+    Task<IReadOnlyList<TimeEntry>> ListEntriesAsync(Guid tenantId, Guid userId, DateOnly from, DateOnly to, CancellationToken cancellationToken);
+    Task<IReadOnlyList<TimeEntry>> ListEntriesForTaskAsync(Guid tenantId, Guid taskId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<TimeEntry>> ListEntriesOfSubmissionAsync(Guid tenantId, Guid submissionId, CancellationToken cancellationToken);
+    Task<int> SumMinutesOnDayAsync(Guid tenantId, Guid userId, DateOnly date, Guid? exceptEntryId, CancellationToken cancellationToken);
+
+    Task<TimesheetSubmission?> GetSubmissionAsync(Guid tenantId, Guid id, CancellationToken cancellationToken);
+    Task<TimesheetSubmission?> FindSubmissionAsync(Guid tenantId, Guid userId, DateOnly weekStart, CancellationToken cancellationToken);
+    Task<IReadOnlyList<TimesheetSubmission>> GetPendingSubmissionsAsync(Guid tenantId, IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken);
+    Task AddSubmissionAsync(TimesheetSubmission submission, CancellationToken cancellationToken);
+
+    Task<RunningTimer?> GetTimerAsync(Guid userId, CancellationToken cancellationToken);
+    Task AddTimerAsync(RunningTimer timer, CancellationToken cancellationToken);
+    void RemoveTimer(RunningTimer timer);
+
+    /// <summary>Per person: minutes logged in the range, open assigned tasks, and the estimate still left on them.</summary>
+    Task<IReadOnlyList<(Guid UserId, int Logged, int OpenTasks, int RemainingEstimated)>> WorkloadAsync(Guid tenantId, DateOnly from, DateOnly to, CancellationToken cancellationToken);
+}
+
+public interface ITimesheetService
+{
+    Task<Result<TaskTimeDto>> GetTaskTimeAsync(Guid taskId, CancellationToken cancellationToken);
+    Task<Result<TaskTimeDto>> SetEstimateAsync(Guid taskId, SetEstimateRequest request, CancellationToken cancellationToken);
+
+    Task<Result<TimeEntryDto>> LogAsync(LogTimeRequest request, CancellationToken cancellationToken);
+    Task<Result<TimeEntryDto>> UpdateAsync(Guid id, UpdateTimeEntryRequest request, CancellationToken cancellationToken);
+    Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken);
+
+    Task<Result<TimerDto?>> GetTimerAsync(CancellationToken cancellationToken);
+    Task<Result<TimerDto>> StartTimerAsync(StartTimerRequest request, CancellationToken cancellationToken);
+    Task<Result<TimeEntryDto>> StopTimerAsync(CancellationToken cancellationToken);
+
+    Task<Result<TimesheetWeekDto>> GetWeekAsync(DateOnly anyDayOfWeek, Guid? userId, CancellationToken cancellationToken);
+    Task<Result<TimesheetWeekDto>> SubmitWeekAsync(SubmitTimesheetRequest request, CancellationToken cancellationToken);
+    Task<Result<IReadOnlyList<TimesheetReviewItemDto>>> ListInReviewAsync(IReadOnlyList<Guid> ids, CancellationToken cancellationToken);
+
+    Task<Result<WorkloadDto>> GetWorkloadAsync(DateOnly? from, DateOnly? to, int? capacityMinutes, CancellationToken cancellationToken);
+}
+
+public interface ITaskPlanningRepository
+{
+    // dependencies
+    Task<IReadOnlyList<TaskDependency>> ListDependenciesAsync(Guid tenantId, Guid taskId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<TaskDependency>> ListDependentsAsync(Guid tenantId, Guid taskId, CancellationToken cancellationToken);
+    Task<TaskDependency?> GetDependencyAsync(Guid tenantId, Guid taskId, Guid blockedByTaskId, CancellationToken cancellationToken);
+    Task AddDependencyAsync(TaskDependency dependency, CancellationToken cancellationToken);
+    void RemoveDependency(TaskDependency dependency);
+
+    /// <summary>Every task id that (directly or not) must be done before this one - to refuse a cycle.</summary>
+    Task<IReadOnlySet<Guid>> BlockersClosureAsync(Guid tenantId, Guid taskId, CancellationToken cancellationToken);
+
+    /// <summary>Title and state of tasks, whoever is signed in (a dependency may point at a task the caller cannot open).</summary>
+    Task<IReadOnlyList<TaskBriefDto>> BriefsAsync(Guid tenantId, IReadOnlyCollection<Guid> taskIds, CancellationToken cancellationToken);
+    Task<int> CountOpenBlockersAsync(Guid tenantId, Guid taskId, CancellationToken cancellationToken);
+
+    // criteria
+    Task<IReadOnlyList<TaskCriterion>> ListCriteriaAsync(Guid tenantId, Guid taskId, CancellationToken cancellationToken);
+    Task<TaskCriterion?> GetCriterionAsync(Guid tenantId, Guid id, CancellationToken cancellationToken);
+    Task AddCriterionAsync(TaskCriterion criterion, CancellationToken cancellationToken);
+    void RemoveCriterion(TaskCriterion criterion);
+    Task<int> CountUnmetCriteriaAsync(Guid tenantId, Guid taskId, CancellationToken cancellationToken);
+
+    // work in progress
+    Task<int?> GetWipLimitAsync(Guid tenantId, CancellationToken cancellationToken);
+    Task SetWipLimitAsync(Guid tenantId, int? limit, CancellationToken cancellationToken);
+    Task<int> CountInProgressAsync(Guid tenantId, Guid userId, Guid exceptTaskId, CancellationToken cancellationToken);
+
+    // templates
+    Task<IReadOnlyList<TaskTemplate>> ListTemplatesAsync(Guid tenantId, CancellationToken cancellationToken);
+    Task<TaskTemplate?> GetTemplateAsync(Guid tenantId, Guid id, CancellationToken cancellationToken);
+    Task<TaskTemplate?> GetTemplateByNameAsync(Guid tenantId, string name, CancellationToken cancellationToken);
+    Task AddTemplateAsync(TaskTemplate template, CancellationToken cancellationToken);
+    void RemoveTemplate(TaskTemplate template);
+}
+
+public interface ITaskPlanningService
+{
+    Task<Result<TaskPlanningDto>> GetAsync(Guid taskId, CancellationToken cancellationToken);
+    Task<Result<TaskPlanningDto>> AddDependencyAsync(Guid taskId, AddTaskDependencyRequest request, CancellationToken cancellationToken);
+    Task<Result<TaskPlanningDto>> RemoveDependencyAsync(Guid taskId, Guid blockedByTaskId, CancellationToken cancellationToken);
+    Task<Result<TaskPlanningDto>> SetBlockerAsync(Guid taskId, SetTaskBlockerRequest request, CancellationToken cancellationToken);
+    Task<Result<TaskPlanningDto>> AddCriterionAsync(Guid taskId, SaveCriterionRequest request, CancellationToken cancellationToken);
+    Task<Result<TaskPlanningDto>> UpdateCriterionAsync(Guid taskId, Guid criterionId, SaveCriterionRequest request, CancellationToken cancellationToken);
+    Task<Result<TaskPlanningDto>> SetCriterionMetAsync(Guid taskId, Guid criterionId, SetCriterionMetRequest request, CancellationToken cancellationToken);
+    Task<Result<TaskPlanningDto>> DeleteCriterionAsync(Guid taskId, Guid criterionId, CancellationToken cancellationToken);
+    Task<Result<IReadOnlyList<SubTaskDto>>> AddSubTasksAsync(Guid taskId, BulkSubTasksRequest request, CancellationToken cancellationToken);
+    Task<Result<WipSettingDto>> GetWipAsync(CancellationToken cancellationToken);
+    Task<Result<WipSettingDto>> SetWipAsync(WipSettingDto request, CancellationToken cancellationToken);
+}
+
+public interface ITaskTemplateService
+{
+    Task<Result<IReadOnlyList<TaskTemplateDto>>> ListAsync(CancellationToken cancellationToken);
+    Task<Result<TaskTemplateDto>> CreateAsync(SaveTaskTemplateRequest request, CancellationToken cancellationToken);
+    Task<Result<TaskTemplateDto>> UpdateAsync(Guid id, SaveTaskTemplateRequest request, CancellationToken cancellationToken);
+    Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken);
+    Task<Result<TaskTemplateDto>> SaveFromTaskAsync(Guid taskId, SaveTaskAsTemplateRequest request, CancellationToken cancellationToken);
+    Task<Result<TaskDto>> InstantiateAsync(Guid id, InstantiateTemplateRequest request, CancellationToken cancellationToken);
+}
+
+public interface ITaskRequestRepository
+{
+    Task<RequestCategory?> GetCategoryAsync(Guid tenantId, Guid id, CancellationToken cancellationToken);
+    Task<RequestCategory?> GetCategoryByNameAsync(Guid tenantId, string name, CancellationToken cancellationToken);
+    Task<IReadOnlyList<RequestCategory>> ListCategoriesAsync(Guid tenantId, CancellationToken cancellationToken);
+    Task AddCategoryAsync(RequestCategory category, CancellationToken cancellationToken);
+
+    Task<TaskRequest?> GetAsync(Guid tenantId, Guid id, CancellationToken cancellationToken);
+
+    /// <summary>mine: only the caller's own. Otherwise everything of the tenant (the caller is a handler).</summary>
+    Task<IReadOnlyList<TaskRequest>> ListAsync(Guid tenantId, Guid? requesterUserId, TaskRequestStatus? status, CancellationToken cancellationToken);
+    Task AddAsync(TaskRequest request, CancellationToken cancellationToken);
+}
+
+public interface ITaskRequestService
+{
+    Task<Result<IReadOnlyList<RequestCategoryDto>>> ListCategoriesAsync(CancellationToken cancellationToken);
+    Task<Result<RequestCategoryDto>> CreateCategoryAsync(SaveRequestCategoryRequest request, CancellationToken cancellationToken);
+    Task<Result<RequestCategoryDto>> UpdateCategoryAsync(Guid id, SaveRequestCategoryRequest request, CancellationToken cancellationToken);
+
+    Task<Result<TaskRequestDto>> SubmitAsync(SubmitTaskRequestRequest request, CancellationToken cancellationToken);
+
+    /// <summary>mine = true: the caller's own requests. Otherwise the handler's inbox (needs Requests.Handle).</summary>
+    Task<Result<IReadOnlyList<TaskRequestDto>>> ListAsync(bool mine, TaskRequestStatus? status, CancellationToken cancellationToken);
+    Task<Result<TaskDto>> ConvertAsync(Guid id, ConvertTaskRequestRequest request, CancellationToken cancellationToken);
+    Task<Result<TaskRequestDto>> RejectAsync(Guid id, RejectTaskRequestRequest request, CancellationToken cancellationToken);
+}
+
+public interface ITaskImportService
+{
+    /// <summary>Reads the CSV and says, row by row, what would be created and what is wrong. Creates nothing.</summary>
+    Task<Result<ImportPreviewDto>> PreviewAsync(ImportTasksRequest request, CancellationToken cancellationToken);
+
+    /// <summary>Creates the valid rows (through the ordinary task rules). Invalid rows refuse the import unless SkipInvalid.</summary>
+    Task<Result<ImportResultDto>> ImportAsync(ImportTasksRequest request, CancellationToken cancellationToken);
+}
+
+public interface ITaskReviewService
+{
+    /// <summary>Asks for the task to be reviewed. With an approval backend it waits for the decision; with none it is completed at once.</summary>
+    Task<Result<TaskDto>> SubmitAsync(Guid id, SubmitTaskReviewRequest request, CancellationToken cancellationToken);
+
+    /// <summary>Of these tasks, the ones waiting for review (no access check on the list: the approval backend decides who may decide).</summary>
+    Task<Result<IReadOnlyList<TaskReviewItemDto>>> ListInReviewAsync(IReadOnlyList<Guid> ids, CancellationToken cancellationToken);
+}
+
+public interface ITaskBatchService
+{
+    Task<Result<TaskDto>> QuickCreateAsync(QuickCreateTaskRequest request, CancellationToken cancellationToken);
+
+    /// <summary>"Message to task": the message text becomes the task, and the message is kept as its source.</summary>
+    Task<Result<TaskDto>> FromMessageAsync(TaskFromMessageRequest request, CancellationToken cancellationToken);
+    Task<Result<BulkTaskResult>> BulkAsync(BulkTaskRequest request, CancellationToken cancellationToken);
+}
+
+public interface ITaskStatusService
+{
+    Task<Result<IReadOnlyList<TaskStatusDto>>> ListAsync(CancellationToken cancellationToken);
+    Task<Result<TaskStatusDto>> CreateAsync(CreateTaskStatusRequest request, CancellationToken cancellationToken);
+    Task<Result<TaskStatusDto>> UpdateAsync(Guid id, UpdateTaskStatusRequest request, CancellationToken cancellationToken);
+    Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken);
 }
 
 public interface ITagRepository
@@ -170,6 +467,13 @@ public interface ITaskService
     Task<Result<TaskDto>> CreateAsync(CreateTaskRequest request, CancellationToken cancellationToken);
     Task<Result<TaskDto>> UpdateAsync(Guid id, UpdateTaskRequest request, CancellationToken cancellationToken);
     Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken);
+
+    /// <summary>Puts a task (or project) in the archive: hidden everywhere, nothing deleted.</summary>
+    Task<Result<TaskDto>> ArchiveAsync(Guid id, CancellationToken cancellationToken);
+
+    /// <summary>Takes a task out of the archive, as it was.</summary>
+    Task<Result<TaskDto>> RestoreAsync(Guid id, CancellationToken cancellationToken);
+
     Task<Result<TaskDto>> ChangeStatusAsync(Guid id, ChangeTaskStatusRequest request, CancellationToken cancellationToken);
     Task<Result> AddActivityEntryAsync(Guid taskId, CreateTaskActivityRequest request, CancellationToken cancellationToken);
     Task<Result<TaskDto>> ChangePriorityAsync(Guid id, ChangeTaskPriorityRequest request, CancellationToken cancellationToken);

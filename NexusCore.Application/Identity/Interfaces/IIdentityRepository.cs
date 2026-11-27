@@ -7,6 +7,12 @@ public interface IIdentityRepository
 {
     Task<User?> GetUserByIdAsync(Guid userId, CancellationToken cancellationToken);
 
+    Task<User?> FindUserByLdapDnAsync(Guid tenantId, string dn, CancellationToken cancellationToken);
+    Task<User?> FindUserByUsernameAsync(Guid tenantId, string username, CancellationToken cancellationToken);
+
+    /// <summary>The users that came from the directory (they have a distinguished name).</summary>
+    Task<IReadOnlyList<User>> ListLdapUsersAsync(Guid tenantId, CancellationToken cancellationToken);
+
     /// <summary>
     /// Finds the account for a sign-in identifier: a username or a mobile number (in any common
     /// spelling). Email addresses are not sign-in names and never match. Returns null when
@@ -36,6 +42,8 @@ public interface IIdentityRepository
     string? search,
     CancellationToken cancellationToken,
     IReadOnlyCollection<Guid>? excludeUserIds = null);
+    /// <summary>The user with this e-mail address (in the tenant; with no tenant, only when exactly one user has it).</summary>
+    Task<User?> FindUserByEmailAsync(Guid? tenantId, string email, CancellationToken cancellationToken);
     Task<bool> UserEmailExistsAsync(Guid tenantId, string email, Guid? exceptUserId, CancellationToken cancellationToken);
     Task AddUserAsync(User user, CancellationToken cancellationToken);
     Task RemoveUserAsync(User user, CancellationToken cancellationToken);

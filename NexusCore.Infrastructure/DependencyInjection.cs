@@ -61,6 +61,7 @@ public static class DependencyInjection
         // Nothing from posts unless the organization structure registers its own (it wins whichever runs first).
         services.TryAddScoped<IPositionPermissionProvider, NullPositionPermissionProvider>();
         services.AddScoped<ISessionRepository, SessionRepository>();
+        services.AddScoped<NexusCore.Application.Identity.Security.ISecurityRepository, SecurityRepository>();
         // Hub connections: every call re-checks the session, and a session that ends closes its connections.
         services.AddSingleton<InMemorySessionConnectionRegistry>();
         services.AddSingleton<SessionHubFilter>();
@@ -98,10 +99,12 @@ public static class DependencyInjection
         services.AddScoped<IPhoneChangeCodes, PhoneChangeCodes>();
 
         services.Configure<SignInSessionOptions>(configuration.GetSection(SignInSessionOptions.SectionName));
+        services.Configure<NexusCore.Application.Identity.Sso.SsoOptions>(configuration.GetSection(NexusCore.Application.Identity.Sso.SsoOptions.SectionName));
         services.Configure<IdentitySeedOptions>(configuration.GetSection(IdentitySeedOptions.SectionName));
         services.Configure<ManagedPermissionOptions>(configuration.GetSection(ManagedPermissionOptions.SectionName));
         // Password recovery sends its one-time code through ISmsSender (below); no email.
         services.Configure<PasswordRecoveryOptions>(configuration.GetSection(PasswordRecoveryOptions.SectionName));
+        services.Configure<NexusCore.Application.Identity.Options.MfaOptions>(configuration.GetSection(NexusCore.Application.Identity.Options.MfaOptions.SectionName));
         services.Configure<SmtpEmailOptions>(configuration.GetSection(SmtpEmailOptions.SectionName));
 
         // Outgoing messages. Request logging is removed from this client: the SMS API key is part
@@ -121,6 +124,13 @@ public static class DependencyInjection
             .RemoveAllLoggers();
         // SMS providers: one implementation each; the panel setting picks one. Add a provider here.
         services.AddScoped<ISmsProvider, KavenegarSmsProvider>();
+        // More gateways: commercial edition (Edition:Features:MoreSmsProviders).
+        if (NexusCore.Application.Editions.EditionFeatures.IsEnabled(configuration, NexusCore.Application.Editions.CommercialFeature.MoreSmsProviders))
+        {
+            services.AddScoped<ISmsProvider, MelipayamakSmsProvider>();
+            services.AddScoped<ISmsProvider, GhasedakSmsProvider>();
+            services.AddScoped<ISmsProvider, SmsIrSmsProvider>();
+        }
         services.AddScoped<ISmsSender, GatewaySmsSender>();
         services.AddScoped<ISmsTemplateService, SmsTemplateService>();
         // The hours notification SMS wait for (the SMS panel sets them).

@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -110,6 +110,7 @@
     <ProjectReference Include="..\Nexus.Calendar\Nexus.Calendar.csproj" />
     <ProjectReference Include="..\Nexus.Calendar.Infrastructure\Nexus.Calendar.Infrastructure.csproj" />
     <ProjectReference Include="..\Nexus.Integrations.ProjectCalendar\Nexus.Integrations.ProjectCalendar.csproj" />
+    <ProjectReference Include="..\Nexus.Integrations.CalendarTasks\Nexus.Integrations.CalendarTasks.csproj" />
   </ItemGroup>
 
   <!-- Notifications.Api ships an appsettings.json that is not valid JSON; keep it out of this

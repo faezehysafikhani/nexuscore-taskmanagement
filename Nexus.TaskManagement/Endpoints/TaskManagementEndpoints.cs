@@ -1,3 +1,4 @@
+using NexusCore.Application.Editions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -25,6 +26,17 @@ public static class TaskManagementEndpoints
         app.MapSubTaskEndpoints();
         app.MapRepetitiveTaskEndpoints();
         app.MapTaskTagEndpoints();
+        // Commercial features: mapped only where the host turns them on (Edition:Commercial or
+        // Edition:Features:<Name>); a host without them answers 404 for these routes.
+        if (On(app, CommercialFeature.CustomStatuses)) app.MapTaskStatusEndpoints();
+        if (On(app, CommercialFeature.TaskRequests)) app.MapTaskRequestEndpoints();
+        app.MapTaskPlanningEndpoints();
+        app.MapTaskExtrasEndpoints();
+        if (On(app, CommercialFeature.Timesheets)) app.MapTimesheetEndpoints();
+        if (On(app, CommercialFeature.Automation)) app.MapAutomationEndpoints();
+        if (On(app, CommercialFeature.Webhooks)) app.MapWebhookEndpoints();
+        if (On(app, CommercialFeature.Membership)) app.MapMembershipEndpoints();
+        if (On(app, CommercialFeature.ReportSubscriptions)) app.MapReportSubscriptionEndpoints();
         app.MapTaskFileEndpoints();
         app.MapNoteEndpoints();
         app.MapReminderSettingsEndpoints();
@@ -33,6 +45,9 @@ public static class TaskManagementEndpoints
             .RequireRateLimiting(NexusRateLimitPolicies.Realtime);
         return app;
     }
+
+    private static bool On(IEndpointRouteBuilder app, string feature) =>
+        (app.ServiceProvider.GetService(typeof(IEditionFeatures)) as IEditionFeatures).Allows(feature);
 
     /// <summary>
     /// When tasks are reminded of (SMS panel). Anyone signed in may read it - the task screen also
@@ -111,9 +126,9 @@ public static class TaskManagementEndpoints
                 int? pageNumber, int? pageSize, string? search,
                 TaskItemStatus? status, TaskPriority? priority,
                 bool? isProject, bool? isRecurring,
-                Guid? assignedUserId, Guid? assignedUserGroupId, Guid? tagId,
+                Guid? assignedUserId, Guid? assignedUserGroupId, Guid? tagId, Guid? customStatusId,
                 DateOnly? dueFrom, DateOnly? dueTo, bool? overdue,
-                TaskSortBy? sortBy, bool? sortDescending,
+                TaskSortBy? sortBy, bool? sortDescending, bool? archived,
                 ITaskService service, CancellationToken cancellationToken) =>
             {
                 if (currentUser.TenantId is null)
@@ -125,11 +140,11 @@ public static class TaskManagementEndpoints
                     currentUser.TenantId.Value, pageNumber ?? 1, pageSize ?? 20, search,
                     status, priority, isProject, isRecurring, assignedUserId, assignedUserGroupId,
                     tagId, dueFrom, dueTo, overdue,
-                    sortBy ?? TaskSortBy.ModifiedAtUtc, sortDescending ?? true);
+                    sortBy ?? TaskSortBy.ModifiedAtUtc, sortDescending ?? true, archived ?? false, customStatusId);
 
                 return (await service.ListAsync(request, cancellationToken)).ToApiResult();
             })
-            .WithSummary("List tasks, projects and recurring tasks")
+            .WithSummary("List tasks, projects and recurring tasks (archived=true lists the archive instead)")
             .RequireAuthorization(TaskManagementPermissions.View);
 
         // The board's one-request load: full tasks (subtasks, tags, files, people, schedule, comment count) a page at a
@@ -172,9 +187,103 @@ public static class TaskManagementEndpoints
             .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.Create);
 
+        if (On(app, CommercialFeature.TaskImport))
+        {
+            group.MapPost("/import/preview", async (ImportTasksRequest r, ITaskImportService s, CancellationToken ct) => (await s.PreviewAsync(r, ct)).ToApiResult())
+                .WithSummary("Import preview: read a CSV of tasks and report each row (changes nothing)")
+                .RequireAuthorization(TaskManagementPermissions.Create);
+
+            group.MapPost("/import", async (ImportTasksRequest r, ITaskImportService s, CancellationToken ct) => (await s.ImportAsync(r, ct)).ToApiResult())
+                .WithSummary("Import the rows of a CSV as tasks")
+                .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(TaskManagementPermissions.Create);
+        }
+
+        if (On(app, CommercialFeature.BulkActions))
+        {
+            group.MapPost("/quick", async (QuickCreateTaskRequest request, ITaskBatchService service, CancellationToken cancellationToken) =>
+                    (await service.QuickCreateAsync(request, cancellationToken)).ToApiResult())
+                .WithSummary("Quick add: a title is enough (due today unless a date is given, given to the caller)")
+                .RequireRateLimiting(NexusRateLimitPolicies.Write)
+                .RequireAuthorization(TaskManagementPermissions.Create);
+
+            group.MapPost("/from-message", async (TaskFromMessageRequest request, ITaskBatchService service, CancellationToken cancellationToken) =>
+                    (await service.FromMessageAsync(request, cancellationToken)).ToApiResult())
+                .WithSummary("Message to task: a chat message becomes a task (the message is kept as its source)")
+                .RequireRateLimiting(NexusRateLimitPolicies.Write)
+                .RequireAuthorization(TaskManagementPermissions.Create);
+
+            group.MapPost("/bulk", async (BulkTaskRequest request, ITaskBatchService service, CancellationToken cancellationToken) =>
+                    (await service.BulkAsync(request, cancellationToken)).ToApiResult())
+                .WithSummary("One action (status, custom status, priority, archive, restore) over up to 100 tasks; each task answers for itself")
+                .RequireRateLimiting(NexusRateLimitPolicies.Write)
+                .RequireAuthorization(TaskManagementPermissions.Edit);
+        }
+
+        if (On(app, CommercialFeature.TaskReview))
+        {
+            group.MapPost("/{id:guid}/submit-review", async (Guid id, SubmitTaskReviewRequest request, ITaskReviewService service, CancellationToken cancellationToken) =>
+                    (await service.SubmitAsync(id, request, cancellationToken)).ToApiResult())
+                .WithSummary("Submit the task for review; the approval chain decides (none set up: it is completed at once)")
+                .RequireRateLimiting(NexusRateLimitPolicies.Write)
+                .RequireAuthorization(TaskManagementPermissions.Edit);
+
+            group.MapPost("/in-review", async (TaskReviewItemsRequest request, ITaskReviewService service, CancellationToken cancellationToken) =>
+                    (await service.ListInReviewAsync(request.Ids, cancellationToken)).ToApiResult())
+                .WithSummary("Title, due date and submitter of the tasks (among the ids) that are waiting for review - for the approver's list")
+                .WithMetadata(ReadOnlyTaskEndpoint.Instance)
+                .RequireAuthorization(TaskManagementPermissions.View);
+        }
+
+        // The board's load in one request per batch (instead of three requests per task): each task's detail,
+        // comments and history, through the same services (and access rules) as the single-task endpoints.
+        // A task the caller cannot see is left out; comments or history it may not read come back empty.
+        group.MapPost("/board-details", async (TaskBoardDetailsRequest request, ITaskService tasks, ITaskCommentService comments,
+                ITaskActivityService activity, CancellationToken cancellationToken) =>
+            {
+                var ids = (request.Ids ?? []).Distinct().ToList();
+                if (ids.Count > TaskBoardDetailsRequest.MaxIds)
+                {
+                    return Results.BadRequest(new { error = $"At most {TaskBoardDetailsRequest.MaxIds} ids per request." });
+                }
+
+                var items = new List<TaskBoardDetailsDto>(ids.Count);
+                foreach (var id in ids)
+                {
+                    var task = await tasks.GetAsync(id, cancellationToken);
+                    if (task.IsFailure || task.Value is null)
+                    {
+                        continue;
+                    }
+
+                    var taskComments = await comments.ListAsync(id, cancellationToken);
+                    var history = await activity.GetForTaskAsync(id, cancellationToken);
+                    items.Add(new TaskBoardDetailsDto(
+                        task.Value,
+                        taskComments.IsSuccess ? taskComments.Value ?? [] : [],
+                        history.IsSuccess ? history.Value ?? [] : []));
+                }
+
+                return Results.Ok(items);
+            })
+            .WithSummary("Detail, comments and history of up to 100 tasks at once - the board's load")
+            .WithMetadata(ReadOnlyTaskEndpoint.Instance)
+            .RequireAuthorization(TaskManagementPermissions.View);
+
         group.MapPut("/{id:guid}", async (Guid id, UpdateTaskRequest request, ITaskService service, CancellationToken cancellationToken) =>
                 (await service.UpdateAsync(id, request, cancellationToken)).ToApiResult())
             .WithSummary("Update a task")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
+            .RequireAuthorization(TaskManagementPermissions.Edit);
+
+        group.MapPost("/{id:guid}/archive", async (Guid id, ITaskService service, CancellationToken cancellationToken) =>
+                (await service.ArchiveAsync(id, cancellationToken)).ToApiResult())
+            .WithSummary("Put a task or project in the archive: hidden everywhere, nothing is deleted")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
+            .RequireAuthorization(TaskManagementPermissions.Edit);
+
+        group.MapPost("/{id:guid}/restore", async (Guid id, ITaskService service, CancellationToken cancellationToken) =>
+                (await service.RestoreAsync(id, cancellationToken)).ToApiResult())
+            .WithSummary("Bring a task or project back from the archive")
             .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.Edit);
 
@@ -427,6 +536,346 @@ public static class TaskManagementEndpoints
                 (await service.DeleteAsync(id, cancellationToken)).ToApiResult())
             .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.ManageTags);
+
+        return app;
+    }
+
+    private static IEndpointRouteBuilder MapReportSubscriptionEndpoints(this IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/task-management/report-subscriptions").WithTags("Report distribution").RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi).AddEndpointFilter<RequestValidationFilter>();
+        const string View = TaskManagementPermissions.View;
+
+        group.MapGet("/", async (IReportSubscriptionService s, CancellationToken ct) => (await s.ListAsync(ct)).ToApiResult())
+            .WithSummary("My scheduled digests of my own tasks (SMS / email)").RequireAuthorization(View);
+        group.MapPost("/", async (SaveReportSubscriptionRequest r, IReportSubscriptionService s, CancellationToken ct) => (await s.CreateAsync(r, ct)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(View);
+        group.MapPut("/{id:guid}", async (Guid id, SaveReportSubscriptionRequest r, IReportSubscriptionService s, CancellationToken ct) => (await s.UpdateAsync(id, r, ct)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(View);
+        group.MapDelete("/{id:guid}", async (Guid id, IReportSubscriptionService s, CancellationToken ct) => (await s.DeleteAsync(id, ct)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(View);
+        return app;
+    }
+
+    private static IEndpointRouteBuilder MapMembershipEndpoints(this IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/task-management/membership").WithTags("Membership").RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi).AddEndpointFilter<RequestValidationFilter>();
+
+        group.MapGet("/", async (IMembershipService s, CancellationToken ct) => (await s.GetAsync(ct)).ToApiResult())
+            .WithSummary("The plan, its limits and validity, what is used now, and warnings")
+            .RequireAuthorization(TaskManagementPermissions.ViewMembership);
+        group.MapPut("/", async (SetMembershipRequest r, IMembershipService s, CancellationToken ct) => (await s.SetAsync(r, ct)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(TaskManagementPermissions.ManageMembership);
+        group.MapGet("/retention", async (IRetentionService s, CancellationToken ct) => (await s.GetAsync(ct)).ToApiResult())
+            .WithSummary("How long the module's logs are kept (days; empty = for ever)").RequireAuthorization(TaskManagementPermissions.ViewMembership);
+        group.MapPut("/retention", async (RetentionDto r, IRetentionService s, CancellationToken ct) => (await s.SetAsync(r, ct)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(TaskManagementPermissions.ManageMembership);
+        group.MapDelete("/", async (IMembershipService s, CancellationToken ct) => (await s.ClearAsync(ct)).ToApiResult())
+            .WithSummary("Remove the plan: nothing is limited").RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(TaskManagementPermissions.ManageMembership);
+        return app;
+    }
+
+    private static IEndpointRouteBuilder MapWebhookEndpoints(this IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/task-management/webhooks").WithTags("Webhooks").RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi).AddEndpointFilter<RequestValidationFilter>();
+        const string Manage = TaskManagementPermissions.ManageWebhooks;
+
+        group.MapGet("/events", () => Results.Ok(WebhookEvents.All)).WithSummary("The events a webhook can ask for").RequireAuthorization(Manage);
+        group.MapGet("/", async (IWebhookService s, CancellationToken ct) => (await s.ListAsync(ct)).ToApiResult()).RequireAuthorization(Manage);
+        group.MapPost("/", async (SaveWebhookRequest r, IWebhookService s, CancellationToken ct) => (await s.CreateAsync(r, ct)).ToApiResult())
+            .WithSummary("Add a webhook; its signing secret is in the answer, once")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(Manage);
+        group.MapPut("/{id:guid}", async (Guid id, SaveWebhookRequest r, IWebhookService s, CancellationToken ct) => (await s.UpdateAsync(id, r, ct)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(Manage);
+        group.MapPost("/{id:guid}/rotate-secret", async (Guid id, IWebhookService s, CancellationToken ct) => (await s.RotateSecretAsync(id, ct)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(Manage);
+        group.MapPost("/{id:guid}/ping", async (Guid id, IWebhookService s, CancellationToken ct) => (await s.PingAsync(id, ct)).ToApiResult())
+            .WithSummary("Send a test event to this webhook").RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(Manage);
+        group.MapGet("/{id:guid}/deliveries", async (Guid id, IWebhookService s, CancellationToken ct) => (await s.ListDeliveriesAsync(id, ct)).ToApiResult())
+            .RequireAuthorization(Manage);
+        group.MapDelete("/{id:guid}", async (Guid id, IWebhookService s, CancellationToken ct) => (await s.DeleteAsync(id, ct)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(Manage);
+        return app;
+    }
+
+    private static IEndpointRouteBuilder MapAutomationEndpoints(this IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/task-management/automation").WithTags("Automation").RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi).AddEndpointFilter<RequestValidationFilter>();
+        const string Manage = TaskManagementPermissions.ManageAutomation;
+
+        group.MapGet("/rules", async (IAutomationService s, CancellationToken ct) => (await s.ListAsync(ct)).ToApiResult())
+            .WithSummary("The organization's automation rules (trigger, conditions, actions)").RequireAuthorization(Manage);
+        group.MapPost("/rules", async (SaveAutomationRuleRequest r, IAutomationService s, CancellationToken ct) => (await s.CreateAsync(r, ct)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(Manage);
+        group.MapPut("/rules/{id:guid}", async (Guid id, SaveAutomationRuleRequest r, IAutomationService s, CancellationToken ct) => (await s.UpdateAsync(id, r, ct)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(Manage);
+        group.MapDelete("/rules/{id:guid}", async (Guid id, IAutomationService s, CancellationToken ct) => (await s.DeleteAsync(id, ct)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(Manage);
+        group.MapGet("/log", async (Guid? taskId, IAutomationService s, CancellationToken ct) => (await s.ListLogAsync(taskId, ct)).ToApiResult())
+            .WithSummary("What the rules did (or why they failed), newest first").RequireAuthorization(Manage);
+        return app;
+    }
+
+    private static IEndpointRouteBuilder MapTimesheetEndpoints(this IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/task-management/timesheets").WithTags("Timesheets").RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi).AddEndpointFilter<RequestValidationFilter>();
+        const string Log = TaskManagementPermissions.LogTime;
+
+        group.MapGet("/week", async (DateOnly? day, Guid? userId, ITimesheetService s, CancellationToken ct) =>
+                (await s.GetWeekAsync(day ?? DateOnly.FromDateTime(DateTime.UtcNow), userId, ct)).ToApiResult())
+            .WithSummary("A week (it opens on Saturday) of time entries with its approval state; userId needs Timesheets.ViewAll")
+            .RequireAuthorization(Log);
+        group.MapPost("/entries", async (LogTimeRequest r, ITimesheetService s, CancellationToken ct) => (await s.LogAsync(r, ct)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(Log);
+        group.MapPut("/entries/{id:guid}", async (Guid id, UpdateTimeEntryRequest r, ITimesheetService s, CancellationToken ct) => (await s.UpdateAsync(id, r, ct)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(Log);
+        group.MapDelete("/entries/{id:guid}", async (Guid id, ITimesheetService s, CancellationToken ct) => (await s.DeleteAsync(id, ct)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(Log);
+
+        group.MapGet("/timer", async (ITimesheetService s, CancellationToken ct) => (await s.GetTimerAsync(ct)).ToApiResult())
+            .WithSummary("The running timer, if any").RequireAuthorization(Log);
+        group.MapPost("/timer/start", async (StartTimerRequest r, ITimesheetService s, CancellationToken ct) => (await s.StartTimerAsync(r, ct)).ToApiResult())
+            .WithSummary("Start the timer on a task (a running one is stopped and logged first)")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(Log);
+        group.MapPost("/timer/stop", async (ITimesheetService s, CancellationToken ct) => (await s.StopTimerAsync(ct)).ToApiResult())
+            .WithSummary("Stop the timer: the elapsed time becomes a time entry")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(Log);
+
+        group.MapPost("/submit", async (SubmitTimesheetRequest r, ITimesheetService s, CancellationToken ct) => (await s.SubmitWeekAsync(r, ct)).ToApiResult())
+            .WithSummary("Send the week for approval (none set up: it is approved at once)")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(Log);
+        group.MapPost("/in-review", async (TimesheetReviewItemsRequest r, ITimesheetService s, CancellationToken ct) => (await s.ListInReviewAsync(r.Ids, ct)).ToApiResult())
+            .WithSummary("Who and which week, for the approver's list").RequireAuthorization(TaskManagementPermissions.View);
+
+        group.MapGet("/workload", async (DateOnly? from, DateOnly? to, int? capacityMinutes, ITimesheetService s, CancellationToken ct) =>
+                (await s.GetWorkloadAsync(from, to, capacityMinutes, ct)).ToApiResult())
+            .WithSummary("Per person: logged time, open tasks, estimate left and utilization of the capacity")
+            .RequireAuthorization(TaskManagementPermissions.ViewAllTime);
+
+        var tasks = app.MapGroup("/api/task-management/tasks").WithTags("Timesheets").RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi).AddEndpointFilter<TaskAccessScopeFilter>().AddEndpointFilter<RequestValidationFilter>();
+        tasks.MapGet("/{id:guid}/time", async (Guid id, ITimesheetService s, CancellationToken ct) => (await s.GetTaskTimeAsync(id, ct)).ToApiResult())
+            .WithSummary("Estimate against actual time on the task").RequireAuthorization(TaskManagementPermissions.View);
+        tasks.MapPut("/{id:guid}/estimate", async (Guid id, SetEstimateRequest r, ITimesheetService s, CancellationToken ct) => (await s.SetEstimateAsync(id, r, ct)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(TaskManagementPermissions.Edit);
+
+        return app;
+    }
+
+    private static IEndpointRouteBuilder MapTaskPlanningEndpoints(this IEndpointRouteBuilder app)
+    {
+        var tasks = app.MapGroup("/api/task-management/tasks")
+            .WithTags("Tasks - planning")
+            .RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi)
+            .AddEndpointFilter<TaskAccessScopeFilter>()
+            .AddEndpointFilter<RequestValidationFilter>()
+            .AddEndpointFilter<TaskChangeBroadcastFilter>();
+
+        if (On(app, CommercialFeature.TaskPlanning))
+        {
+            tasks.MapGet("/{id:guid}/planning", async (Guid id, ITaskPlanningService s, CancellationToken ct) => (await s.GetAsync(id, ct)).ToApiResult())
+                .WithSummary("What stands between the task and done: dependencies, blocker, acceptance criteria")
+                .RequireAuthorization(TaskManagementPermissions.View);
+            tasks.MapPost("/{id:guid}/dependencies", async (Guid id, AddTaskDependencyRequest r, ITaskPlanningService s, CancellationToken ct) => (await s.AddDependencyAsync(id, r, ct)).ToApiResult())
+                .WithSummary("The task cannot be completed before the given task is")
+                .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(TaskManagementPermissions.Edit);
+            tasks.MapDelete("/{id:guid}/dependencies/{blockedByTaskId:guid}", async (Guid id, Guid blockedByTaskId, ITaskPlanningService s, CancellationToken ct) => (await s.RemoveDependencyAsync(id, blockedByTaskId, ct)).ToApiResult())
+                .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(TaskManagementPermissions.Edit);
+            tasks.MapPut("/{id:guid}/blocker", async (Guid id, SetTaskBlockerRequest r, ITaskPlanningService s, CancellationToken ct) => (await s.SetBlockerAsync(id, r, ct)).ToApiResult())
+                .WithSummary("Say what blocks the task (an empty reason clears it)")
+                .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(TaskManagementPermissions.Edit);
+            tasks.MapPost("/{id:guid}/criteria", async (Guid id, SaveCriterionRequest r, ITaskPlanningService s, CancellationToken ct) => (await s.AddCriterionAsync(id, r, ct)).ToApiResult())
+                .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(TaskManagementPermissions.Edit);
+            tasks.MapPut("/{id:guid}/criteria/{criterionId:guid}", async (Guid id, Guid criterionId, SaveCriterionRequest r, ITaskPlanningService s, CancellationToken ct) => (await s.UpdateCriterionAsync(id, criterionId, r, ct)).ToApiResult())
+                .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(TaskManagementPermissions.Edit);
+            tasks.MapPut("/{id:guid}/criteria/{criterionId:guid}/met", async (Guid id, Guid criterionId, SetCriterionMetRequest r, ITaskPlanningService s, CancellationToken ct) => (await s.SetCriterionMetAsync(id, criterionId, r, ct)).ToApiResult())
+                .WithSummary("Tick or untick an acceptance criterion; the task cannot be completed while one is not met")
+                .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(TaskManagementPermissions.Edit);
+            tasks.MapDelete("/{id:guid}/criteria/{criterionId:guid}", async (Guid id, Guid criterionId, ITaskPlanningService s, CancellationToken ct) => (await s.DeleteCriterionAsync(id, criterionId, ct)).ToApiResult())
+                .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(TaskManagementPermissions.Edit);
+            tasks.MapPost("/{id:guid}/subtasks/bulk", async (Guid id, BulkSubTasksRequest r, ITaskPlanningService s, CancellationToken ct) => (await s.AddSubTasksAsync(id, r, ct)).ToApiResult())
+                .WithSummary("Add many subtasks at once (one title per line in the UI)")
+                .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(TaskManagementPermissions.Edit);
+        }
+
+        if (On(app, CommercialFeature.TaskTemplates))
+        {
+            tasks.MapPost("/{id:guid}/save-as-template", async (Guid id, SaveTaskAsTemplateRequest r, ITaskTemplateService s, CancellationToken ct) => (await s.SaveFromTaskAsync(id, r, ct)).ToApiResult())
+                .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(TaskManagementPermissions.ManageTemplates);
+        }
+
+        if (On(app, CommercialFeature.TaskPlanning))
+        {
+            var wip = app.MapGroup("/api/task-management/wip").WithTags("Tasks - planning").RequireAuthorization()
+                .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi).AddEndpointFilter<RequestValidationFilter>();
+            wip.MapGet("/", async (ITaskPlanningService s, CancellationToken ct) => (await s.GetWipAsync(ct)).ToApiResult())
+                .WithSummary("The limit of tasks in progress per person (empty: no limit)")
+                .RequireAuthorization(TaskManagementPermissions.View);
+            wip.MapPut("/", async (WipSettingDto r, ITaskPlanningService s, CancellationToken ct) => (await s.SetWipAsync(r, ct)).ToApiResult())
+                .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(TaskManagementPermissions.ManageStatuses);
+        }
+
+        if (On(app, CommercialFeature.TaskTemplates))
+        {
+            var templates = app.MapGroup("/api/task-management/templates").WithTags("Task templates").RequireAuthorization()
+                .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi).AddEndpointFilter<RequestValidationFilter>();
+            templates.MapGet("/", async (ITaskTemplateService s, CancellationToken ct) => (await s.ListAsync(ct)).ToApiResult())
+                .RequireAuthorization(TaskManagementPermissions.View);
+            templates.MapPost("/", async (SaveTaskTemplateRequest r, ITaskTemplateService s, CancellationToken ct) => (await s.CreateAsync(r, ct)).ToApiResult())
+                .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(TaskManagementPermissions.ManageTemplates);
+            templates.MapPut("/{id:guid}", async (Guid id, SaveTaskTemplateRequest r, ITaskTemplateService s, CancellationToken ct) => (await s.UpdateAsync(id, r, ct)).ToApiResult())
+                .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(TaskManagementPermissions.ManageTemplates);
+            templates.MapDelete("/{id:guid}", async (Guid id, ITaskTemplateService s, CancellationToken ct) => (await s.DeleteAsync(id, ct)).ToApiResult())
+                .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(TaskManagementPermissions.ManageTemplates);
+            templates.MapPost("/{id:guid}/instantiate", async (Guid id, InstantiateTemplateRequest r, ITaskTemplateService s, CancellationToken ct) => (await s.InstantiateAsync(id, r, ct)).ToApiResult())
+                .WithSummary("Make a task or project from the template")
+                .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(TaskManagementPermissions.Create);
+        }
+
+        return app;
+    }
+
+    private static IEndpointRouteBuilder MapTaskRequestEndpoints(this IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/task-management/requests")
+            .WithTags("Task requests")
+            .RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi)
+            .AddEndpointFilter<RequestValidationFilter>();
+
+        group.MapGet("/categories", async (ITaskRequestService service, CancellationToken cancellationToken) =>
+                (await service.ListCategoriesAsync(cancellationToken)).ToApiResult())
+            .RequireAuthorization(TaskManagementPermissions.SubmitRequests);
+
+        group.MapPost("/categories", async (SaveRequestCategoryRequest request, ITaskRequestService service, CancellationToken cancellationToken) =>
+                (await service.CreateCategoryAsync(request, cancellationToken)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
+            .RequireAuthorization(TaskManagementPermissions.ManageRequests);
+
+        group.MapPut("/categories/{id:guid}", async (Guid id, SaveRequestCategoryRequest request, ITaskRequestService service, CancellationToken cancellationToken) =>
+                (await service.UpdateCategoryAsync(id, request, cancellationToken)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
+            .RequireAuthorization(TaskManagementPermissions.ManageRequests);
+
+        group.MapGet("/", async (bool? mine, TaskRequestStatus? status, ITaskRequestService service, CancellationToken cancellationToken) =>
+                (await service.ListAsync(mine ?? true, status, cancellationToken)).ToApiResult())
+            .WithSummary("mine=true (default): my requests. mine=false: every request (request handlers)")
+            .RequireAuthorization(TaskManagementPermissions.SubmitRequests);
+
+        group.MapPost("/", async (SubmitTaskRequestRequest request, ITaskRequestService service, CancellationToken cancellationToken) =>
+                (await service.SubmitAsync(request, cancellationToken)).ToApiResult())
+            .WithSummary("Submit a request; it is routed by its category and urgency")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
+            .RequireAuthorization(TaskManagementPermissions.SubmitRequests);
+
+        group.MapPost("/{id:guid}/convert", async (Guid id, ConvertTaskRequestRequest request, ITaskRequestService service, CancellationToken cancellationToken) =>
+                (await service.ConvertAsync(id, request, cancellationToken)).ToApiResult())
+            .WithSummary("Turn the request into a task (the task keeps the request as its source)")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
+            .RequireAuthorization(TaskManagementPermissions.HandleRequests);
+
+        group.MapPost("/{id:guid}/reject", async (Guid id, RejectTaskRequestRequest request, ITaskRequestService service, CancellationToken cancellationToken) =>
+                (await service.RejectAsync(id, request, cancellationToken)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
+            .RequireAuthorization(TaskManagementPermissions.HandleRequests);
+
+        return app;
+    }
+
+    private static IEndpointRouteBuilder MapTaskExtrasEndpoints(this IEndpointRouteBuilder app)
+    {
+        if (On(app, CommercialFeature.WorkTypes))
+        {
+            var types = app.MapGroup("/api/task-management/work-types")
+                .WithTags("Work types")
+                .RequireAuthorization()
+                .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi)
+                .AddEndpointFilter<RequestValidationFilter>();
+            types.MapGet("/", async (ITaskExtrasService s, CancellationToken ct) => (await s.ListWorkTypesAsync(ct)).ToApiResult())
+                .WithSummary("The organization's work types (CAT-251)").RequireAuthorization(TaskManagementPermissions.View);
+            types.MapPost("/", async (SaveWorkTypeRequest r, ITaskExtrasService s, CancellationToken ct) => (await s.CreateWorkTypeAsync(r, ct)).ToApiResult())
+                .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(TaskManagementPermissions.ManageStatuses);
+            types.MapPut("/{id:guid}", async (Guid id, SaveWorkTypeRequest r, ITaskExtrasService s, CancellationToken ct) => (await s.UpdateWorkTypeAsync(id, r, ct)).ToApiResult())
+                .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(TaskManagementPermissions.ManageStatuses);
+            types.MapDelete("/{id:guid}", async (Guid id, ITaskExtrasService s, CancellationToken ct) => (await s.DeleteWorkTypeAsync(id, ct)).ToApiResult())
+                .WithSummary("Delete a work type; its tasks just lose the label")
+                .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(TaskManagementPermissions.ManageStatuses);
+
+            var fields = app.MapGroup("/api/task-management/custom-fields")
+                .WithTags("Custom fields")
+                .RequireAuthorization()
+                .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi)
+                .AddEndpointFilter<RequestValidationFilter>();
+            fields.MapGet("/", async (ITaskExtrasService s, CancellationToken ct) => (await s.ListFieldsAsync(ct)).ToApiResult())
+                .WithSummary("The organization's custom task fields (CAT-252)").RequireAuthorization(TaskManagementPermissions.View);
+            fields.MapPost("/", async (SaveCustomFieldRequest r, ITaskExtrasService s, CancellationToken ct) => (await s.CreateFieldAsync(r, ct)).ToApiResult())
+                .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(TaskManagementPermissions.ManageStatuses);
+            fields.MapPut("/{id:guid}", async (Guid id, SaveCustomFieldRequest r, ITaskExtrasService s, CancellationToken ct) => (await s.UpdateFieldAsync(id, r, ct)).ToApiResult())
+                .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(TaskManagementPermissions.ManageStatuses);
+            fields.MapDelete("/{id:guid}", async (Guid id, ITaskExtrasService s, CancellationToken ct) => (await s.DeleteFieldAsync(id, ct)).ToApiResult())
+                .WithSummary("Delete a field and the values tasks hold for it")
+                .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(TaskManagementPermissions.ManageStatuses);
+
+            var tasks = app.MapGroup("/api/task-management/tasks")
+                .WithTags("Task extras")
+                .RequireAuthorization()
+                .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi)
+                .AddEndpointFilter<RequestValidationFilter>();
+            tasks.MapGet("/{id:guid}/extras", async (Guid id, ITaskExtrasService s, CancellationToken ct) => (await s.GetForTaskAsync(id, ct)).ToApiResult())
+                .WithSummary("A task's work type and custom field values").RequireAuthorization(TaskManagementPermissions.View);
+            tasks.MapPut("/{id:guid}/extras", async (Guid id, SaveTaskExtrasRequest r, ITaskExtrasService s, CancellationToken ct) => (await s.SetForTaskAsync(id, r, ct)).ToApiResult())
+                .WithSummary("Set a task's work type and custom field values")
+                .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(TaskManagementPermissions.Edit);
+        }
+
+        if (On(app, CommercialFeature.Handoff))
+        {
+            var handoff = app.MapGroup("/api/task-management/tasks")
+                .WithTags("Task extras")
+                .RequireAuthorization()
+                .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi)
+                .AddEndpointFilter<RequestValidationFilter>();
+            handoff.MapPost("/{id:guid}/handoff", async (Guid id, HandoffTaskRequest r, ITaskHandoffService s, CancellationToken ct) => (await s.HandoffAsync(id, r, ct)).ToApiResult())
+                .WithSummary("Hand a task to another person and/or team with a note (CAT-110)")
+                .RequireRateLimiting(NexusRateLimitPolicies.Write).RequireAuthorization(TaskManagementPermissions.Edit);
+        }
+
+        return app;
+    }
+
+    private static IEndpointRouteBuilder MapTaskStatusEndpoints(this IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/task-management/statuses")
+            .WithTags("Task statuses")
+            .RequireAuthorization()
+            .RequireRateLimiting(NexusRateLimitPolicies.AuthenticatedApi)
+            .AddEndpointFilter<RequestValidationFilter>();
+
+        group.MapGet("/", async (ITaskStatusService service, CancellationToken cancellationToken) =>
+                (await service.ListAsync(cancellationToken)).ToApiResult())
+            .WithSummary("The organization's custom task statuses (each counts as one of the four built-in statuses)")
+            .RequireAuthorization(TaskManagementPermissions.View);
+
+        group.MapPost("/", async (CreateTaskStatusRequest request, ITaskStatusService service, CancellationToken cancellationToken) =>
+                (await service.CreateAsync(request, cancellationToken)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
+            .RequireAuthorization(TaskManagementPermissions.ManageStatuses);
+
+        group.MapPut("/{id:guid}", async (Guid id, UpdateTaskStatusRequest request, ITaskStatusService service, CancellationToken cancellationToken) =>
+                (await service.UpdateAsync(id, request, cancellationToken)).ToApiResult())
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
+            .RequireAuthorization(TaskManagementPermissions.ManageStatuses);
+
+        group.MapDelete("/{id:guid}", async (Guid id, ITaskStatusService service, CancellationToken cancellationToken) =>
+                (await service.DeleteAsync(id, cancellationToken)).ToApiResult())
+            .WithSummary("Delete a status; its tasks keep their built-in status")
+            .RequireRateLimiting(NexusRateLimitPolicies.Write)
+            .RequireAuthorization(TaskManagementPermissions.ManageStatuses);
 
         return app;
     }

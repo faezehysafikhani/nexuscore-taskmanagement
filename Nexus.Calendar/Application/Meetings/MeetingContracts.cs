@@ -4,7 +4,8 @@ namespace Nexus.Calendar.Application.Meetings;
 
 public sealed record MeetingAgenda(string Title, int DurationMinutes, Guid? PresenterUserId);
 
-public sealed record MeetingAction(string Title, Guid? AssigneeUserId, DateOnly? DueDate, string Status = "todo");
+/// <summary>An action item of the minutes. TaskId is the task it was turned into (the bridge to task management sets it).</summary>
+public sealed record MeetingAction(string Title, Guid? AssigneeUserId, DateOnly? DueDate, string Status = "todo", Guid? TaskId = null);
 
 public sealed record MeetingInput(
     string Title,

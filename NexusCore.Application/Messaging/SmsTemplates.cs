@@ -25,6 +25,9 @@ public static class SmsTemplateKeys
 
     /// <summary>The one-time code that confirms a new mobile number (Identity).</summary>
     public const string PhoneChange = "phone_change";
+
+    /// <summary>The one-time code of the second sign-in step (Identity).</summary>
+    public const string MfaCode = "mfa_code";
 }
 
 /// <summary>
@@ -77,6 +80,10 @@ public sealed class CoreSmsTemplateCatalog : ISmsTemplateCatalog
             "کد تأیید شماره موبایل جدید شما: {Code}\nاین کد تا {ExpireMinutes} دقیقه معتبر است.",
             "هنگام تغییر شماره موبایل حساب، به شماره‌ی جدید ارسال می‌شود.",
             ["Code"]),
+        new(SmsTemplateKeys.MfaCode, "کد ورود دومرحله‌ای", ["Code", "ExpireMinutes"],
+            "کد ورود شما: {Code}\nاین کد تا {ExpireMinutes} دقیقه معتبر است. آن را به کسی ندهید.",
+            "هنگام ورود (برای حساب‌هایی که رمز دوم دارند) به شماره موبایل حساب ارسال می‌شود.",
+            ["Code"]),
         new(SmsTemplateKeys.Letter, "متن پیامک نامه", ["recipient", "title", "sender", "date"],
             "{recipient} گرامی، نامه «{title}» از طرف {sender} برای شما ارسال شد."),
         new(SmsTemplateKeys.Referral, "متن پیامک ارجاع", ["recipient", "title", "sender", "date"],
@@ -126,7 +133,7 @@ public sealed partial class SmsTemplateService(
     private const string EnabledSuffix = ".Enabled";
 
     /// <summary>Templates that can never be turned off: without them nobody could, say, recover a password.</summary>
-    public static readonly IReadOnlySet<string> AlwaysOn = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { SmsTemplateKeys.PasswordReset, SmsTemplateKeys.PhoneChange };
+    public static readonly IReadOnlySet<string> AlwaysOn = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { SmsTemplateKeys.PasswordReset, SmsTemplateKeys.PhoneChange, SmsTemplateKeys.MfaCode };
     private const string SettingScope = "Integrations";
     public const int MaxTextLength = 1000;
 

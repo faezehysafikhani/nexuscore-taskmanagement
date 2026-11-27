@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -25,6 +25,45 @@ public static class DependencyInjection
         services.AddScoped<ITaskRepository, TaskRepository>();
         services.AddScoped<IRepetitiveTaskRepository, RepetitiveTaskRepository>();
         services.AddScoped<ITagRepository, TagRepository>();
+        services.AddScoped<ITaskStatusRepository, TaskStatusRepository>();
+        services.AddScoped<ITaskExtrasRepository, TaskExtrasRepository>();
+        services.AddScoped<ITaskRequestRepository, TaskRequestRepository>();
+        services.AddScoped<ITaskPlanningRepository, TaskPlanningRepository>();
+        services.AddScoped<ITimesheetRepository, TimesheetRepository>();
+        services.AddScoped<IAutomationRepository, AutomationRepository>();
+        services.AddScoped<IWebhookRepository, WebhookRepository>();
+        services.AddScoped<IMembershipRepository, MembershipRepository>();
+        services.AddScoped<IRetentionRepository, RetentionRepository>();
+        services.AddScoped<IReportSubscriptionRepository, ReportSubscriptionRepository>();
+        services.AddScoped<ITaskDigestSource, TaskDigestSource>();
+        // First of all hosted services (the host starts them one by one, in this order): the columns
+        // and tables newer versions need, added to an existing database before any job reads them.
+        services.AddHostedService<TaskManagementSchemaPatcher>();
+        // Background jobs of commercial features run only where the host turns the feature on.
+        bool On(string feature) => NexusCore.Application.Editions.EditionFeatures.IsEnabled(configuration, feature);
+        if (On(NexusCore.Application.Editions.CommercialFeature.Automation) || On(NexusCore.Application.Editions.CommercialFeature.Sla))
+        {
+            services.AddHostedService<TaskSlaMonitorService>();
+        }
+
+        services.Configure<Nexus.TaskManagement.Application.WebhookOptions>(configuration.GetSection(Nexus.TaskManagement.Application.WebhookOptions.SectionName));
+        services.AddSingleton<WebhookDeliveryService>();
+        if (On(NexusCore.Application.Editions.CommercialFeature.Webhooks))
+        {
+            services.AddHostedService<WebhookDeliveryBackgroundService>();
+        }
+
+        services.AddSingleton<ReportDistributionService>();
+        if (On(NexusCore.Application.Editions.CommercialFeature.ReportSubscriptions))
+        {
+            services.AddHostedService(p => p.GetRequiredService<ReportDistributionService>());
+        }
+
+        services.AddSingleton<TaskRetentionBackgroundService>();
+        if (On(NexusCore.Application.Editions.CommercialFeature.Retention))
+        {
+            services.AddHostedService(p => p.GetRequiredService<TaskRetentionBackgroundService>());
+        }
         services.AddScoped<ITaskFileRepository, TaskFileRepository>();
         services.AddScoped<INoteRepository, NoteRepository>();
         services.AddScoped<ITaskCommentRepository, TaskCommentRepository>();
@@ -38,10 +77,10 @@ public static class DependencyInjection
         services.Configure<RepetitiveTaskSchedulerOptions>(
             configuration.GetSection(RepetitiveTaskSchedulerOptions.SectionName));
 
-        // First: the columns and tables newer versions need, added to an existing database
-        // before any job below reads them.
-        services.AddHostedService<TaskManagementSchemaPatcher>();
         services.AddScoped<ITaskSmsOutbox, TaskSmsOutbox>();
+        // Notifications are written down first and delivered from there: a failed one is retried, never repeated.
+        services.AddScoped<ITaskNotificationOutbox, TaskNotificationOutbox>();
+        services.AddHostedService<TaskNotificationOutboxService>();
         services.TryAddSingleton(TimeProvider.System);
 
         // Registered unconditionally; it checks its own Enabled flag and exits immediately

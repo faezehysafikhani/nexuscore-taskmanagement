@@ -82,6 +82,15 @@ public sealed class IdentityRepository(
             cancellationToken);
     }
 
+    public Task<User?> FindUserByLdapDnAsync(Guid tenantId, string dn, CancellationToken cancellationToken) =>
+        dbContext.Users.FirstOrDefaultAsync(user => user.TenantId == tenantId && user.LdapDn == dn, cancellationToken);
+
+    public Task<User?> FindUserByUsernameAsync(Guid tenantId, string username, CancellationToken cancellationToken) =>
+        dbContext.Users.FirstOrDefaultAsync(user => user.TenantId == tenantId && user.Username == username, cancellationToken);
+
+    public async Task<IReadOnlyList<User>> ListLdapUsersAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        await dbContext.Users.Where(user => user.TenantId == tenantId && user.LdapDn != null).ToListAsync(cancellationToken);
+
     public Task<string?> FindPhoneNumberOwnerAsync(Guid tenantId, string phoneNumber, Guid? exceptUserId, CancellationToken cancellationToken)
     {
         var value = PhoneNumber.Normalize(phoneNumber) ?? phoneNumber.Trim();
@@ -224,6 +233,15 @@ public sealed class IdentityRepository(
             total);
     }
 
+    public async Task<User?> FindUserByEmailAsync(Guid? tenantId, string email, CancellationToken cancellationToken)
+    {
+        var normalizedEmail = email.Trim().ToLowerInvariant();
+        var found = await IncludeUserGraph(dbContext.Users)
+            .Where(user => user.Email == normalizedEmail && (tenantId == null || user.TenantId == tenantId))
+            .Take(2).ToListAsync(cancellationToken);
+        return found.Count == 1 ? found[0] : null;
+    }
+
     public Task<bool> UserEmailExistsAsync(Guid tenantId, string email, Guid? exceptUserId, CancellationToken cancellationToken)
     {
         var normalizedEmail = email.Trim().ToLowerInvariant();
@@ -322,7 +340,7 @@ public sealed class IdentityRepository(
         await dbContext.Permissions.Where(permission => permissionIds.Contains(permission.Id)).ToListAsync(cancellationToken);
 
     public Task<bool> IsUserActiveAsync(Guid userId, CancellationToken cancellationToken) =>
-        dbContext.Users.AsNoTracking().AnyAsync(user => user.Id == userId && user.IsActive, cancellationToken);
+        dbContext.Users.AsNoTracking().AnyAsync(user => user.Id == userId && user.IsActive && (user.AccessExpiresAtUtc == null || user.AccessExpiresAtUtc > DateTimeOffset.UtcNow), cancellationToken);
 
     public Task<RefreshToken?> FindActiveRefreshTokenAsync(string tokenHash, CancellationToken cancellationToken) =>
         dbContext.RefreshTokens

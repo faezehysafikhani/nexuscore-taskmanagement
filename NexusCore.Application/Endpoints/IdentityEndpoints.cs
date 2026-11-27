@@ -4,6 +4,8 @@ using Microsoft.Extensions.Options;
 using NexusCore.Application.Identity.Dtos;
 using NexusCore.Application.Identity.Options;
 using NexusCore.Application.Identity.Interfaces;
+using NexusCore.Application.Identity.Validators;
+using NexusCore.Application.Editions;
 using NexusCore.Application.Identity.Permissions;
 using NexusCore.Application.Identity.Security;
 using NexusCore.Application.Identity.Services;
@@ -62,11 +64,14 @@ public static class IdentityEndpoints
             .WithName("RefreshToken");
 
         // Anonymous like /refresh: the refresh token itself is the proof, and signing out must
-        // work after the access token has expired.
-        auth.MapPost("/logout", async (RefreshTokenRequest? request, HttpContext http, IIdentityService identityService, IOptions<SignInSessionOptions> session, CancellationToken cancellationToken) =>
+        // work after the access token has expired. A client that keeps only the access token
+        // (no cookie, no body token) still ends its own session with that token.
+        auth.MapPost("/logout", async (RefreshTokenRequest? request, HttpContext http, IIdentityService identityService, ISessionService sessions, ICurrentUserContext currentUser, IOptions<SignInSessionOptions> session, CancellationToken cancellationToken) =>
             {
                 var token = SessionCookies.ReadRefreshToken(http, session.Value, request?.RefreshToken);
-                var result = await identityService.LogoutAsync(new RefreshTokenRequest(token), cancellationToken);
+                var result = token is null && currentUser.SessionId is { } currentSessionId
+                    ? await sessions.RevokeMineAsync(currentSessionId, cancellationToken)
+                    : await identityService.LogoutAsync(new RefreshTokenRequest(token), cancellationToken);
                 SessionCookies.Clear(http, session.Value);
                 return result.ToApiResult();
             })
@@ -496,6 +501,15 @@ public static class IdentityEndpoints
         // upload a file needs to read this, not just admins, so it carries no extra permission -
         // it is changed through the generic settings endpoint above (Uploads.MaxFileSizeKb /
         // System), which settings.update already gates.
+        platform.MapGet("/password-policy", async (ICurrentUserContext currentUser, IPasswordPolicyReader reader, CancellationToken cancellationToken) =>
+            {
+                var policy = await reader.GetAsync(currentUser.TenantId, cancellationToken);
+                return Results.Ok(new { policy.MinLength, policy.RequiredClasses, policy.Message });
+            })
+            .AllowAnonymous()
+            .WithName("GetPasswordPolicy")
+            .WithSummary("The password rules new passwords must follow (organization setting Security.PasswordMinLength / Security.PasswordRequiredClasses)");
+
         platform.MapGet("/upload-policy", async (ICurrentUserContext currentUser, IUploadPolicyReader policyReader, CancellationToken cancellationToken) =>
         {
             var maxKb = await policyReader.GetMaxFileSizeKbAsync(currentUser.TenantId, cancellationToken);
@@ -560,6 +574,24 @@ public static class IdentityEndpoints
             .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(IdentityPermissions.LdapSettingsTest);
 
+        // HR sync from the directory: commercial edition (Edition:Features:LdapSync).
+        if ((app.ServiceProvider.GetService(typeof(NexusCore.Application.Editions.IEditionFeatures)) as NexusCore.Application.Editions.IEditionFeatures).Allows(NexusCore.Application.Editions.CommercialFeature.LdapSync))
+        {
+            ldap.MapPost("/sync/preview", async (LdapSyncRequest? request, ILdapSyncService sync, CancellationToken cancellationToken) =>
+                    (await sync.PreviewAsync(request ?? new LdapSyncRequest(), cancellationToken)).ToApiResult())
+                .WithSummary("HR sync: what would change if the directory's people were synced now (changes nothing)")
+                .RequireRateLimiting(NexusRateLimitPolicies.Write)
+                .RequireAuthorization(IdentityPermissions.LdapSettingsUpdate);
+
+            ldap.MapPost("/sync", async (LdapSyncRequest? request, ILdapSyncService sync, CancellationToken cancellationToken) =>
+                    (await sync.ApplyAsync(request ?? new LdapSyncRequest(), cancellationToken)).ToApiResult())
+                .WithSummary("HR sync: create, update and switch off users from the directory")
+                .RequireRateLimiting(NexusRateLimitPolicies.Write)
+                .RequireAuthorization(IdentityPermissions.LdapSettingsUpdate)
+                .RequireAuthorization(IdentityPermissions.UsersCreate);
+        }
+
+        app.MapIdentitySecurityEndpoints();
         return app;
     }
 
@@ -571,7 +603,7 @@ public static class IdentityEndpoints
         HttpContext http, SignInSessionOptions options, NexusCore.SharedKernel.Results.Result<AuthResponse> result, bool forceCookie = false)
     {
         // No token is issued while the sign-in waits for the user to pick a session to close.
-        if (!(forceCookie || SessionCookies.WantsCookie(http, options)) || result.Value is not { } response || response.SessionLimit is not null)
+        if (!(forceCookie || SessionCookies.WantsCookie(http, options)) || result.Value is not { } response || response.SessionLimit is not null || response.Mfa is not null)
         {
             return result;
         }

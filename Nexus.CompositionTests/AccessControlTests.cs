@@ -20,6 +20,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
+using Nexus.Calendar.Infrastructure.Meetings;
+using Nexus.Integrations.CalendarTasks;
 using Nexus.Integrations.TaskNotifications;
 using Notifications.Api.Endpoints;
 using Notifications.Application;
@@ -397,6 +399,8 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
         public Caller AdminB { get; private set; } = null!;
         public IServiceProvider Services => _app.Services;
 
+        public ProgrammableLdap Ldap { get; } = new();
+
         /// <summary>The SMS the platform handed to its provider ("test"; off until a tenant enables it).</summary>
         public RecordingSmsProvider Sms { get; } = new();
 
@@ -420,6 +424,8 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
             builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["Features:UserGroups:Enabled"] = "true",
+                // The full product: every commercial feature on (a host without this has none of them).
+                ["Edition:Commercial"] = "true",
                 // Like Rozet: this product manages identity, platform and task permissions only;
                 // Ticketing's still exist and are enforced for whoever holds them.
                 ["Identity:ManagedPermissionModules:0"] = "Identity",
@@ -456,6 +462,14 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
             builder.Services.AddNotificationApplication();
             builder.Services.AddNotificationInfrastructure(builder.Configuration);
             builder.Services.AddSignalR();
+            // The directory of the HR sync tests: programmable, never a real server.
+            builder.Services.AddSingleton(Ldap);
+            builder.Services.AddScoped<NexusCore.Application.Ldap.ILdapDirectoryClient>(p => p.GetRequiredService<ProgrammableLdap>());
+            // Meetings, and the bridge that turns their action items into tasks (people: everyone of the tenant).
+            builder.Services.AddCalendarMeetings(builder.Configuration);
+            builder.Services.AddCalendarTasksIntegration();
+            builder.Services.AddScoped<Nexus.Calendar.Application.Meetings.IMeetingPeopleScope, EveryoneOfTheTenantMeetingScope>();
+            builder.Services.AddSingleton<NexusCore.Application.Common.ISchedulingDayPolicy, NexusCore.Application.Common.AllowAllSchedulingDays>();
 
             // One in-memory store per context: each maps the shared identity tables with its own
             // model, which in-memory cannot share. Users and teams are mirrored into TaskManagement's
@@ -464,6 +478,7 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
             UseInMemory<TaskManagementDbContext>(builder.Services, Guid.NewGuid().ToString(), withInterceptors: true);
             UseInMemory<TicketingDbContext>(builder.Services, Guid.NewGuid().ToString(), withInterceptors: false);
             UseInMemory<NotificationDbContext>(builder.Services, Guid.NewGuid().ToString(), withInterceptors: false);
+            UseInMemory<Nexus.Calendar.Infrastructure.Meetings.MeetingDbContext>(builder.Services, Guid.NewGuid().ToString(), withInterceptors: false);
             // Chat's own database, on SQLite (a real relational engine): its unique indexes
             // (one conversation per pair, one per team) are actually enforced, unlike InMemory.
             builder.Services.RemoveAll<DbContextOptions<ChatDbContext>>();
@@ -504,6 +519,8 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
             _app.MapTicketEndpoints();
             _app.MapChatEndpoints();
             _app.MapNotificationEndpoints();
+            _app.MapMeetingEndpoints();
+            _app.MapCalendarTasksEndpoints();
             _app.MapHub<ChatHub>("/hubs/chat");
 
             using (var scope = _app.Services.CreateScope())
@@ -585,7 +602,9 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
             await db.SaveChangesAsync();
 
             var taskDb = scope.ServiceProvider.GetRequiredService<TaskManagementDbContext>();
-            taskDb.Users.Add(new User(user.Id, tenantId, null, user.DisplayName, "not-used"));
+            var mirror = new User(user.Id, tenantId, null, user.DisplayName, "not-used");
+            mirror.UpdateContactDetails(user.Username, null, notifySms: false);
+            taskDb.Users.Add(mirror);
             await taskDb.SaveChangesAsync();
 
             // Signed with no permissions: every request reads the user's current ones.
@@ -655,10 +674,15 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
             return (await Json(response)).GetProperty("items").EnumerateArray().Select(item => item.GetProperty("id").GetGuid()).ToList();
         }
 
-        public async Task<HttpResponseMessage> SendAsync(Caller caller, HttpMethod method, string path, object? body = null)
+        public async Task<HttpResponseMessage> SendAsync(Caller? caller, HttpMethod method, string path, object? body = null)
         {
             using var request = new HttpRequestMessage(method, path);
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", caller.Token);
+            // A null caller is an anonymous request (sign-in, API key exchange).
+            if (caller is not null)
+            {
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", caller.Token);
+            }
+
             request.Content = body switch
             {
                 null => null,
@@ -699,4 +723,34 @@ public sealed class AccessControlTests(AccessControlTests.Host host) : IClassFix
             }
         }
     }
+}
+
+/// <summary>The meeting people of a test: every active user of the caller's tenant.</summary>
+public sealed class EveryoneOfTheTenantMeetingScope(NexusCoreDbContext identity, NexusCore.SharedKernel.Interfaces.ICurrentUserContext current)
+    : Nexus.Calendar.Application.Meetings.IMeetingPeopleScope
+{
+    public async Task<Nexus.Calendar.Application.Meetings.MeetingPeopleOptions> GetAsync(CancellationToken cancellationToken)
+    {
+        var people = await identity.Users.Where(u => u.TenantId == current.TenantId && u.IsActive).ToListAsync(cancellationToken);
+        return new(true, true, people.Select(u => new Nexus.Calendar.Application.Meetings.MeetingPerson(u.Id, u.DisplayName, "", "peer")).ToList());
+    }
+}
+
+/// <summary>A directory the tests fill in: its people, and the passwords that "bind" as them.</summary>
+public sealed class ProgrammableLdap : NexusCore.Application.Ldap.ILdapDirectoryClient
+{
+    public List<NexusCore.Application.Ldap.LdapUserEntry> Entries { get; } = [];
+    public Dictionary<string, string> Passwords { get; } = [];
+    public bool Fail { get; set; }
+
+    public Task<NexusCore.Application.Ldap.LdapTestResultDto> TestConnectionAsync(NexusCore.Application.Ldap.LdapConnectionSettings settings, CancellationToken cancellationToken) =>
+        Task.FromResult(new NexusCore.Application.Ldap.LdapTestResultDto(true, "ok", Entries.Count, 1));
+
+    public Task<NexusCore.Application.Ldap.LdapSearchResult> SearchUsersAsync(NexusCore.Application.Ldap.LdapConnectionSettings settings, NexusCore.Application.Ldap.LdapUserAttributes attributes, int maxEntries, CancellationToken cancellationToken) =>
+        Task.FromResult(Fail
+            ? new NexusCore.Application.Ldap.LdapSearchResult(false, "directory down", [])
+            : new NexusCore.Application.Ldap.LdapSearchResult(true, "ok", Entries.Take(maxEntries).ToList()));
+
+    public Task<bool> AuthenticateAsync(NexusCore.Application.Ldap.LdapConnectionSettings settings, string userDn, string password, CancellationToken cancellationToken) =>
+        Task.FromResult(!string.IsNullOrEmpty(password) && Passwords.TryGetValue(userDn, out var expected) && expected == password);
 }

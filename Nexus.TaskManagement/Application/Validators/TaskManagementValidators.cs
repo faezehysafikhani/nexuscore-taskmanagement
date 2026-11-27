@@ -140,7 +140,176 @@ public sealed class UpdateTaskRequestValidator : AbstractValidator<UpdateTaskReq
 
 public sealed class ChangeTaskStatusRequestValidator : AbstractValidator<ChangeTaskStatusRequest>
 {
-    public ChangeTaskStatusRequestValidator() => RuleFor(x => x.Status).IsInEnum();
+    public ChangeTaskStatusRequestValidator()
+    {
+        RuleFor(x => x.Status).IsInEnum().When(x => x.Status is not null);
+        RuleFor(x => x).Must(x => (x.Status is null) != (x.CustomStatusId is null))
+            .WithMessage("Send either Status or CustomStatusId.");
+    }
+}
+
+public sealed class SaveRequestCategoryRequestValidator : AbstractValidator<SaveRequestCategoryRequest>
+{
+    public SaveRequestCategoryRequestValidator()
+    {
+        RuleFor(x => x.Name).NotEmpty().MaximumLength(100);
+        RuleFor(x => x.DefaultPriority).IsInEnum();
+    }
+}
+
+public sealed class SubmitTaskRequestRequestValidator : AbstractValidator<SubmitTaskRequestRequest>
+{
+    public SubmitTaskRequestRequestValidator()
+    {
+        RuleFor(x => x.Title).NotEmpty().MaximumLength(200);
+        RuleFor(x => x.Description).MaximumLength(4000);
+        RuleFor(x => x.Priority).IsInEnum().When(x => x.Priority is not null);
+    }
+}
+
+public sealed class RejectTaskRequestRequestValidator : AbstractValidator<RejectTaskRequestRequest>
+{
+    public RejectTaskRequestRequestValidator() => RuleFor(x => x.Note).MaximumLength(1000);
+}
+
+public sealed class TaskFromMessageRequestValidator : AbstractValidator<TaskFromMessageRequest>
+{
+    public TaskFromMessageRequestValidator()
+    {
+        RuleFor(x => x.MessageId).NotEmpty();
+        RuleFor(x => x.Text).NotEmpty().MaximumLength(4000);
+        RuleFor(x => x.Title).MaximumLength(200);
+    }
+}
+
+public sealed class ImportTasksRequestValidator : AbstractValidator<ImportTasksRequest>
+{
+    public ImportTasksRequestValidator() => RuleFor(x => x.Csv).NotEmpty();
+}
+
+public sealed class SaveReportSubscriptionRequestValidator : AbstractValidator<SaveReportSubscriptionRequest>
+{
+    public SaveReportSubscriptionRequestValidator() => RuleFor(x => x.Frequency).IsInEnum();
+}
+
+public sealed class SetMembershipRequestValidator : AbstractValidator<SetMembershipRequest>
+{
+    public SetMembershipRequestValidator()
+    {
+        RuleFor(x => x.PlanName).NotEmpty().MaximumLength(100);
+        RuleFor(x => x.Notes).MaximumLength(1000);
+    }
+}
+
+public sealed class SaveWebhookRequestValidator : AbstractValidator<SaveWebhookRequest>
+{
+    public SaveWebhookRequestValidator()
+    {
+        RuleFor(x => x.Name).NotEmpty().MaximumLength(100);
+        RuleFor(x => x.Url).NotEmpty().MaximumLength(500);
+    }
+}
+
+public sealed class SaveAutomationRuleRequestValidator : AbstractValidator<SaveAutomationRuleRequest>
+{
+    public SaveAutomationRuleRequestValidator()
+    {
+        RuleFor(x => x.Name).NotEmpty().MaximumLength(100);
+        RuleFor(x => x.Trigger).IsInEnum();
+        RuleFor(x => x.Actions).NotNull();
+    }
+}
+
+public sealed class LogTimeRequestValidator : AbstractValidator<LogTimeRequest>
+{
+    public LogTimeRequestValidator()
+    {
+        RuleFor(x => x.TaskId).NotEmpty();
+        RuleFor(x => x.Note).MaximumLength(500);
+    }
+}
+
+public sealed class UpdateTimeEntryRequestValidator : AbstractValidator<UpdateTimeEntryRequest>
+{
+    public UpdateTimeEntryRequestValidator() => RuleFor(x => x.Note).MaximumLength(500);
+}
+
+public sealed class SaveCriterionRequestValidator : AbstractValidator<SaveCriterionRequest>
+{
+    public SaveCriterionRequestValidator() => RuleFor(x => x.Text).NotEmpty().MaximumLength(300);
+}
+
+public sealed class SetTaskBlockerRequestValidator : AbstractValidator<SetTaskBlockerRequest>
+{
+    public SetTaskBlockerRequestValidator() => RuleFor(x => x.Reason).MaximumLength(300);
+}
+
+public sealed class BulkSubTasksRequestValidator : AbstractValidator<BulkSubTasksRequest>
+{
+    public BulkSubTasksRequestValidator()
+    {
+        RuleFor(x => x.Titles).NotNull();
+        RuleForEach(x => x.Titles).MaximumLength(200);
+    }
+}
+
+public sealed class SaveTaskTemplateRequestValidator : AbstractValidator<SaveTaskTemplateRequest>
+{
+    public SaveTaskTemplateRequestValidator()
+    {
+        RuleFor(x => x.Name).NotEmpty().MaximumLength(100);
+        RuleFor(x => x.Body).NotNull();
+        RuleFor(x => x.Body.Title).NotEmpty().MaximumLength(200).When(x => x.Body is not null);
+        RuleFor(x => x.Body.Priority).IsInEnum().When(x => x.Body is not null);
+    }
+}
+
+public sealed class SaveTaskAsTemplateRequestValidator : AbstractValidator<SaveTaskAsTemplateRequest>
+{
+    public SaveTaskAsTemplateRequestValidator() => RuleFor(x => x.Name).NotEmpty().MaximumLength(100);
+}
+
+public sealed class SubmitTaskReviewRequestValidator : AbstractValidator<SubmitTaskReviewRequest>
+{
+    public SubmitTaskReviewRequestValidator() => RuleFor(x => x.Comment).MaximumLength(1000);
+}
+
+public sealed class QuickCreateTaskRequestValidator : AbstractValidator<QuickCreateTaskRequest>
+{
+    public QuickCreateTaskRequestValidator()
+    {
+        RuleFor(x => x.Title).NotEmpty().MaximumLength(200);
+        RuleFor(x => x.Priority).IsInEnum();
+    }
+}
+
+public sealed class BulkTaskRequestValidator : AbstractValidator<BulkTaskRequest>
+{
+    public BulkTaskRequestValidator()
+    {
+        RuleFor(x => x.Ids).NotNull();
+        RuleFor(x => x.Action).IsInEnum();
+    }
+}
+
+public sealed class CreateTaskStatusRequestValidator : AbstractValidator<CreateTaskStatusRequest>
+{
+    public CreateTaskStatusRequestValidator()
+    {
+        RuleFor(x => x.Name).NotEmpty().MaximumLength(100);
+        RuleFor(x => x.Category).IsInEnum();
+        RuleFor(x => x.Color).MaximumLength(30);
+    }
+}
+
+public sealed class UpdateTaskStatusRequestValidator : AbstractValidator<UpdateTaskStatusRequest>
+{
+    public UpdateTaskStatusRequestValidator()
+    {
+        RuleFor(x => x.Name).NotEmpty().MaximumLength(100);
+        RuleFor(x => x.Category).IsInEnum();
+        RuleFor(x => x.Color).MaximumLength(30);
+    }
 }
 
 public sealed class ChangeTaskPriorityRequestValidator : AbstractValidator<ChangeTaskPriorityRequest>

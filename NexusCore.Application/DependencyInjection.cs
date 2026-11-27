@@ -19,6 +19,9 @@ public static class DependencyInjection
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
         Common.PersianValidationMessages.Use();
+        // Which commercial features this host runs (Edition:Commercial, Edition:Features:<Name>).
+        services.TryAddSingleton<Editions.IEditionFeatures>(provider => new Editions.EditionFeatures(
+            provider.GetService<Microsoft.Extensions.Configuration.IConfiguration>() ?? new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build()));
 
         services.AddScoped<IValidator<LoginRequest>, LoginRequestValidator>();
         services.AddScoped<IValidator<CreateUserRequest>, CreateUserRequestValidator>();
@@ -40,11 +43,19 @@ public static class DependencyInjection
         // to one's own company); TryAdd so that module's registration wins whichever runs first.
         services.TryAddScoped<IUserReachScope, UnlimitedUserReachScope>();
         services.AddScoped<IAccountService, AccountService>();
+        services.AddScoped<NexusCore.Application.Ldap.ILdapAuthenticator, NexusCore.Application.Ldap.LdapAuthenticator>();
+        services.AddScoped<NexusCore.Application.Ldap.ILdapSyncService, NexusCore.Application.Ldap.LdapSyncService>();
+        services.AddScoped<NexusCore.Application.Identity.Security.IMfaService, NexusCore.Application.Identity.Security.MfaService>();
+        services.AddScoped<NexusCore.Application.Identity.Security.IServiceAccountService, NexusCore.Application.Identity.Security.ServiceAccountService>();
+        services.AddOptions<NexusCore.Application.Identity.Options.MfaOptions>();
         services.AddScoped<INotificationChannelSettingsReader, NotificationChannelSettingsReader>();
         services.AddScoped<INotificationChannelService, NotificationChannelService>();
         services.AddScoped<IPlatformService, PlatformService>();
         services.AddScoped<IBrandingService, BrandingService>();
         services.AddScoped<IUploadPolicyReader, UploadPolicyReader>();
+        services.AddScoped<IPasswordPolicyReader, PasswordPolicyReader>();
+        services.AddHttpClient();
+        services.AddScoped<NexusCore.Application.Identity.Sso.ISsoService, NexusCore.Application.Identity.Sso.SsoService>();
         // Live presence: one tracker for the process (replaceable by a shared one), fed by the hubs.
         services.TryAddSingleton<IUserPresenceTracker, InMemoryUserPresenceTracker>();
         services.AddScoped<IUserPresenceService, UserPresenceService>();

@@ -11,6 +11,10 @@ namespace Nexus.TaskManagement.Application;
 public sealed class TaskService(
     ITaskRepository repository,
     ITagRepository tagRepository,
+    ITaskStatusRepository statusRepository,
+    ITaskPlanningRepository planning,
+    ITaskAutomation? automation,
+    IWebhookPublisher? webhooks,
     ITaskManagementUnitOfWork unitOfWork,
     ICurrentUserContext currentUser,
     ITaskActivityService activity,
@@ -30,6 +34,16 @@ public sealed class TaskService(
     /// </summary>
     internal static Error NotTaskOwner() =>
         Error.Forbidden("Only the owner of this task, or a user who manages all tasks, can do this.");
+
+    private Task PublishAsync(string eventType, TaskItem task, CancellationToken cancellationToken, TaskItemStatus? previous = null) =>
+        webhooks is null
+            ? Task.CompletedTask
+            : webhooks.PublishAsync(task.TenantId, eventType, new
+            {
+                taskId = task.Id, title = task.Title, status = task.Status, previousStatus = previous, priority = task.Priority,
+                dueDate = task.DueDate, isProject = task.IsProject, assignedUserId = task.AssignedUserId, ownerUserId = task.OwnerUserId,
+                actorUserId = currentUser.UserId
+            }, cancellationToken);
 
     private bool CanChangeStatus(TaskItem task) =>
         access.CanManage(task)
@@ -83,7 +97,12 @@ public sealed class TaskService(
             task.Tags.Where(t => t.Tag is not null).Select(t => ToDto(t.Tag!)).ToList(),
             task.CreatedAtUtc,
             task.ModifiedAtUtc,
-            task.DueTime)).ToList();
+            task.DueTime,
+            task.ArchivedAtUtc,
+            task.CustomStatusId,
+            task.ReviewStatus,
+            task.SlaDueAtUtc,
+            task.SlaBreachedAtUtc)).ToList();
 
         return Result.Success(new PagedResult<TaskListItemDto>(
             items, page.PageNumber, page.PageSize, page.TotalCount));
@@ -222,7 +241,13 @@ public sealed class TaskService(
                 task.ParentTaskId,
                 commentCounts.TryGetValue(task.Id, out var commentCount) ? commentCount : 0,
                 task.CreatedAtUtc,
-                task.ModifiedAtUtc);
+                task.ModifiedAtUtc,
+                task.ArchivedAtUtc,
+                task.CustomStatusId,
+                task.ReviewStatus,
+                task.BlockedReason,
+                task.SlaDueAtUtc,
+                task.SlaBreachedAtUtc);
         }).ToList();
 
         return (items, accessLists);
@@ -371,6 +396,12 @@ public sealed class TaskService(
         }
 
         await activity.RecordAsync(task.Id, "Task created", task.Title, cancellationToken);
+        if (automation is not null)
+        {
+            await automation.RunAsync(AutomationTrigger.TaskCreated, task, cancellationToken);
+        }
+
+        await PublishAsync(WebhookEvents.TaskCreated, task, cancellationToken);
 
         var created = await repository.GetByIdAsync(tenantId, task.Id, cancellationToken);
         return Result.Success(await ToDtoAsync(created!, cancellationToken));
@@ -393,6 +424,12 @@ public sealed class TaskService(
         if (!access.CanManage(task))
         {
             return Result.Failure<TaskDto>(NotTaskOwner());
+        }
+
+        // The client read the task at some version; if someone saved since, this edit would overwrite their work.
+        if (IsStale(request.RowVersion, task))
+        {
+            return Result.Failure<TaskDto>(ChangedByOthers());
         }
 
         if (request.DueDate != task.DueDate)
@@ -468,7 +505,15 @@ public sealed class TaskService(
             task.AssignUsers(request.AssigneeUserIds);
         }
 
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (TaskConcurrencyException)
+        {
+            return Result.Failure<TaskDto>(ChangedByOthers());
+        }
+
         if (plan.Value is { } updatedPlan)
         {
             await taskPosts.SetTaskPostsAsync(tenantId, id, null, updatedPlan.Responsible, updatedPlan.Access, cancellationToken);
@@ -489,6 +534,20 @@ public sealed class TaskService(
         }
 
         var task = await repository.GetByIdAsync(currentUser.TenantId.Value, id, cancellationToken);
+        if (task is null && await repository.GetArchivedAsync(currentUser.TenantId.Value, id, cancellationToken) is { } archived)
+        {
+            // An archived task can be deleted for good: it is brought back first (so everything under it is reachable
+            // to be removed with it) and then goes through the same steps as any other.
+            if (!access.CanManage(archived))
+            {
+                return Result.Failure(NotTaskOwner());
+            }
+
+            archived.Restore();
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+            task = await repository.GetByIdAsync(currentUser.TenantId.Value, id, cancellationToken);
+        }
+
         if (task is null)
         {
             return Result.Failure(Error.NotFound("Task not found."));
@@ -514,6 +573,82 @@ public sealed class TaskService(
         }
 
         return Result.Success();
+    }
+
+    private static bool IsStale(string? clientVersion, TaskItem task) =>
+        !string.IsNullOrEmpty(clientVersion)
+        && !string.Equals(clientVersion, task.RowVersion is { Length: > 0 } v ? Convert.ToBase64String(v) : null, StringComparison.Ordinal);
+
+    private static Error ChangedByOthers() =>
+        Error.Conflict("The task was changed by someone else while you were editing it. Reload it and apply your change again.");
+
+    public async Task<Result<TaskDto>> ArchiveAsync(Guid id, CancellationToken cancellationToken)
+    {
+        if (currentUser.TenantId is null)
+        {
+            return Result.Failure<TaskDto>(Error.Unauthorized());
+        }
+
+        var tenantId = currentUser.TenantId.Value;
+        var task = await repository.GetByIdAsync(tenantId, id, cancellationToken);
+        if (task is null)
+        {
+            return Result.Failure<TaskDto>(Error.NotFound("Task not found."));
+        }
+
+        if (!access.CanManage(task))
+        {
+            return Result.Failure<TaskDto>(NotTaskOwner());
+        }
+
+        var dto = await ToDtoAsync(task, cancellationToken);
+        task.Archive(currentUser.UserId, DateTimeOffset.UtcNow);
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (TaskConcurrencyException)
+        {
+            return Result.Failure<TaskDto>(ChangedByOthers());
+        }
+
+        await activity.RecordAsync(id, "Task archived", task.Title, cancellationToken);
+        await PublishAsync(WebhookEvents.TaskArchived, task, cancellationToken);
+        return Result.Success(dto with { ArchivedAtUtc = task.ArchivedAtUtc });
+    }
+
+    public async Task<Result<TaskDto>> RestoreAsync(Guid id, CancellationToken cancellationToken)
+    {
+        if (currentUser.TenantId is null)
+        {
+            return Result.Failure<TaskDto>(Error.Unauthorized());
+        }
+
+        var tenantId = currentUser.TenantId.Value;
+        var task = await repository.GetArchivedAsync(tenantId, id, cancellationToken);
+        if (task is null)
+        {
+            return Result.Failure<TaskDto>(Error.NotFound("Archived task not found."));
+        }
+
+        if (!access.CanManage(task))
+        {
+            return Result.Failure<TaskDto>(NotTaskOwner());
+        }
+
+        task.Restore();
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (TaskConcurrencyException)
+        {
+            return Result.Failure<TaskDto>(ChangedByOthers());
+        }
+
+        await activity.RecordAsync(id, "Task restored", task.Title, cancellationToken);
+        var restored = await repository.GetByIdAsync(tenantId, id, cancellationToken);
+        return Result.Success(await ToDtoAsync(restored ?? task, cancellationToken));
     }
 
     /// <summary>The moment a task is due: its time on its date, or the end of that day when it has no time.</summary>
@@ -542,14 +677,48 @@ public sealed class TaskService(
                 Error.Forbidden("Only the task owner, a task manager, or the assigned user when status updates are allowed can change the status."));
         }
 
+        TaskStatusDefinition? custom = null;
+        if (request.CustomStatusId is { } customId)
+        {
+            custom = await statusRepository.GetByIdAsync(tenantId, customId, cancellationToken);
+            if (custom is null || !custom.IsActive)
+            {
+                return Result.Failure<TaskDto>(Error.Validation("Unknown or inactive status."));
+            }
+        }
+        else if (request.Status is null)
+        {
+            return Result.Failure<TaskDto>(Error.Validation("Send either Status or CustomStatusId."));
+        }
+
+        var newStatus = custom?.Category ?? request.Status!.Value;
+        if (task.IsInReview && newStatus == TaskItemStatus.Completed)
+        {
+            return Result.Failure<TaskDto>(Error.Conflict("This task is waiting for review; it is completed when the review approves it."));
+        }
+
+        var refusal = await TaskPlanningRules.CheckAsync(planning, task, newStatus, currentUser.UserId, cancellationToken);
+        if (refusal is not null)
+        {
+            return Result.Failure<TaskDto>(Error.Conflict(refusal));
+        }
+
         var previous = task.Status;
         // Past due and not done (finished and paused tasks are not "overdue"): whoever cares about
         // it is told when its status changes.
         var wasOverdue = task.Recurrence is null
             && previous is TaskItemStatus.Todo or TaskItemStatus.InProgress
             && DateTimeOffset.UtcNow >= DueMoment(task);
-        task.ChangeStatus(request.Status, DateTimeOffset.UtcNow);
-        if (wasOverdue && request.Status != previous)
+        if (custom is not null)
+        {
+            task.ChangeCustomStatus(custom, DateTimeOffset.UtcNow);
+        }
+        else
+        {
+            task.ChangeStatus(newStatus, DateTimeOffset.UtcNow);
+        }
+
+        if (wasOverdue && newStatus != previous)
         {
             task.RaiseOverdueStatusChanged(previous, currentUser.UserId);
         }
@@ -558,10 +727,23 @@ public sealed class TaskService(
         // A past-due task's change is told in full by its own notification (TaskItemOverdueStatusChanged)
         // to its creator and those responsible; the short "Status changed" one would only repeat it
         // for them. Everybody else of the task still gets it.
-        var toldInFull = wasOverdue && request.Status != previous
+        var toldInFull = wasOverdue && newStatus != previous
             ? TaskPeople.OverdueChangeRecipients(task, currentUser.UserId)
             : null;
-        await activity.RecordAsync(id, "Status changed", $"{previous} -> {request.Status}", cancellationToken, toldInFull);
+        await activity.RecordAsync(id, "Status changed", custom is null ? $"{previous} -> {newStatus}" : $"{previous} -> {newStatus} ({custom.Name})", cancellationToken, toldInFull);
+        if (automation is not null && newStatus != previous)
+        {
+            await automation.RunAsync(AutomationTrigger.StatusChanged, task, cancellationToken);
+        }
+
+        if (newStatus != previous)
+        {
+            await PublishAsync(WebhookEvents.TaskStatusChanged, task, cancellationToken, previous);
+            if (newStatus == TaskItemStatus.Completed)
+            {
+                await PublishAsync(WebhookEvents.TaskCompleted, task, cancellationToken, previous);
+            }
+        }
 
         var updated = await repository.GetByIdAsync(tenantId, id, cancellationToken);
         return Result.Success(await ToDtoAsync(updated!, cancellationToken));
@@ -1447,6 +1629,19 @@ public sealed class TaskService(
                     .Select(a => new TaskStandInDto(a.UserId, users[a.UserId].DisplayName, a.ActingNote))
                     .ToList(),
                 task.ParentTaskId,
+                task.RowVersion is { Length: > 0 } version ? Convert.ToBase64String(version) : null,
+                task.ArchivedAtUtc,
+                task.CustomStatusId,
+                task.ReviewStatus,
+                task.ReviewSubmittedAtUtc,
+                task.ReviewDecidedAtUtc,
+                task.ReviewComment,
+                task.SourceType,
+                task.SourceId,
+                task.BlockedReason,
+                task.EstimatedMinutes,
+                task.SlaDueAtUtc,
+                task.SlaBreachedAtUtc,
                 commentCounts.TryGetValue(task.Id, out var commentCount) ? commentCount : 0);
         }
 

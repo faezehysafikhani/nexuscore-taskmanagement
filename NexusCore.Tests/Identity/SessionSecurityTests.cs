@@ -395,6 +395,22 @@ public sealed class SessionSecurityTests
     }
 
     [Fact]
+    public async Task LogoutWithOnlyTheAccessToken_EndsThatSession()
+    {
+        await using var api = await Api.StartAsync();
+        var login = await Json(await api.LoginAsync(UserName, Password));
+        var access = Access(login);
+
+        // No refresh token in the body and no cookie (a script that keeps only the access token).
+        var logout = await api.SendAsync(HttpMethod.Post, "/api/identity/auth/logout", access, null);
+        Assert.Equal(HttpStatusCode.NoContent, logout.StatusCode);
+
+        var after = await api.SendAsync(HttpMethod.Get, "/api/identity/auth/me", access, null);
+        Assert.Equal(HttpStatusCode.Unauthorized, after.StatusCode);
+        Assert.Equal("session.logged_out", ReasonOf(after));
+    }
+
+    [Fact]
     public async Task ATokenWithoutASession_IsRefused()
     {
         await using var api = await Api.StartAsync();

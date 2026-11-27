@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using NexusCore.Application.Editions;
 using FluentValidation;
 using Microsoft.Extensions.Options;
 using NexusCore.Application.Common;
@@ -39,7 +40,11 @@ public sealed class IdentityService(
     IUserReachScope? reachScope = null,
     IOptions<SignInSessionOptions>? sessionOptions = null,
     IPositionPermissionProvider? positionPermissions = null,
-    IOptions<IdentitySeedOptions>? identityOptions = null) : IIdentityService
+    IOptions<IdentitySeedOptions>? identityOptions = null,
+    IUserQuota? userQuota = null,
+    NexusCore.Application.Identity.Security.IMfaService? mfa = null,
+    NexusCore.Application.Ldap.ILdapAuthenticator? ldap = null,
+    NexusCore.Application.Editions.IEditionFeatures? features = null) : IIdentityService
 {
     private readonly ManagedPermissionOptions _managed = managedPermissionOptions.Value;
     private readonly SignInSessionOptions _session = sessionOptions?.Value ?? new SignInSessionOptions();
@@ -82,9 +87,12 @@ public sealed class IdentityService(
         // The identifier is a username or a mobile number; an email address matches nothing.
         var user = await repository.FindUserByLoginAsync(request.Identifier, request.TenantSlug, cancellationToken);
         _unknownAccountHash ??= passwordHasher.HashPassword(Convert.ToHexString(RandomNumberGenerator.GetBytes(16)));
-        var passwordChecked = passwordHasher.Verify(request.Password, user?.PasswordHash ?? _unknownAccountHash);
+        // A user that came from the directory (HR sync) is checked against it; the others against their stored password.
+        var passwordChecked = user?.LdapDn is not null && ldap is not null && features.Allows(NexusCore.Application.Editions.CommercialFeature.LdapSync)
+            ? await ldap.VerifyAsync(user, request.Password, cancellationToken)
+            : passwordHasher.Verify(request.Password, user?.PasswordHash ?? _unknownAccountHash);
         var passwordOk = user is not null && passwordChecked;
-        if (user is null || !user.IsActive || !passwordOk)
+        if (user is null || !user.IsActive || user.IsAccessExpired(DateTimeOffset.UtcNow) || !passwordOk)
         {
             var captchaNext = await loginProtection.RecordFailedLoginAsync(request.Identifier, cancellationToken);
             // The reason is for administrators only.
@@ -103,7 +111,19 @@ public sealed class IdentityService(
                 : Error.Unauthorized(InvalidCredentials));
         }
 
+        // A service account has no way in but its API key.
+        if (user.Kind == UserKind.ServiceAccount)
+        {
+            return Result.Failure<AuthResponse>(Error.Unauthorized(InvalidCredentials));
+        }
+
         await loginProtection.RecordSuccessfulLoginAsync(request.Identifier, cancellationToken);
+        // The password was right; with the code turned on, the sign-in waits for it (no token until then).
+        if (mfa is not null && features.Allows(NexusCore.Application.Editions.CommercialFeature.Mfa) && await mfa.ChallengeIfRequiredAsync(user, cancellationToken) is { } waiting)
+        {
+            return waiting;
+        }
+
         return Result.Success(await sessionIssuer.IssueAsync(user, cancellationToken));
     }
 
@@ -117,7 +137,7 @@ public sealed class IdentityService(
         var invalid = Result.Failure<AuthResponse>(Error.Unauthorized("نشست کاربری معتبر نیست؛ دوباره وارد شوید."));
         var refreshToken = await repository.FindRefreshTokenAsync(passwordHasher.HashToken(request.RefreshToken), cancellationToken);
         var now = DateTimeOffset.UtcNow;
-        if (refreshToken?.User is null || !refreshToken.User.IsActive || refreshToken.ExpiresAtUtc <= now)
+        if (refreshToken?.User is null || !refreshToken.User.IsActive || refreshToken.User.IsAccessExpired(now) || refreshToken.ExpiresAtUtc <= now)
         {
             return invalid;
         }
@@ -291,9 +311,27 @@ public sealed class IdentityService(
             return Result.Failure<UserDto>(taken);
         }
 
+        // Guests are a commercial feature; without it every new account is a normal one.
+        if (request.Kind == UserKind.Guest && !features.Allows(NexusCore.Application.Editions.CommercialFeature.GuestAccounts))
+        {
+            return Result.Failure<UserDto>(Error.Validation("حساب مهمان در این نسخه فعال نیست."));
+        }
+
+        if (request.Kind == UserKind.ServiceAccount)
+        {
+            return Result.Failure<UserDto>(Error.Validation("حساب سرویس از بخش حساب‌های سرویس ساخته می‌شود."));
+        }
+
+        // Guests do not count against the organization's user limit.
+        if (request.Kind == UserKind.Normal && userQuota is not null && features.Allows(NexusCore.Application.Editions.CommercialFeature.Membership) && await userQuota.CheckCanAddUserAsync(request.TenantId, cancellationToken) is { } refused)
+        {
+            return Result.Failure<UserDto>(refused);
+        }
+
         // Never a system account: the built-in administrator only comes from the seeder.
         var user = new User(Guid.NewGuid(), request.TenantId, request.Email, $"{request.FirstName} {request.LastName}", passwordHasher.HashPassword(request.Password), request.IsActive);
         user.SetName(request.FirstName, request.LastName);
+        user.SetKind(request.Kind);
         user.UpdateContactDetails(request.Username, request.PhoneNumber, request.NotifySms);
         user.SetPersonalDetails(request.Address, request.FatherName, request.BirthDate);
         user.SetAvatar(request.AvatarUrl);
@@ -303,7 +341,8 @@ public sealed class IdentityService(
             ? await repository.GetRoleByNameAsync(request.TenantId, configuredRole, cancellationToken)
             : null;
         defaultRole ??= await repository.GetRoleByNameAsync(request.TenantId, DefaultUserRole.Name, cancellationToken);
-        if (defaultRole is not null)
+        // A guest only has what an administrator gives: no default role.
+        if (defaultRole is not null && request.Kind != UserKind.Guest)
         {
             user.AssignRole(defaultRole.Id);
         }

@@ -46,3 +46,8 @@ public enum CalendarDaySource
 public sealed record CalendarDayDto(DateOnly Date, bool IsWorkingDay, CalendarDaySource Source, string? Reason);
 
 public sealed record OfficialHolidayDto(DateOnly Date, string Reason);
+
+/// <summary>The scheduling days for date pickers: off days of the default work calendar; UsesWorkCalendar false = none set.</summary>
+public sealed record SchedulingDaysDto(bool UsesWorkCalendar, IReadOnlyList<SchedulingOffDayDto> OffDays);
+
+public sealed record SchedulingOffDayDto(DateOnly Date, CalendarDaySource Source, string? Reason);

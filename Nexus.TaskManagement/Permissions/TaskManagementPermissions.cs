@@ -14,6 +14,17 @@ public static class TaskManagementPermissions
     public const string UploadFiles = "Tasks.UploadFiles";
     public const string ManageNotes = "Notes.Manage";
     public const string Comment = "Tasks.Comment";
+    public const string ManageStatuses = "Tasks.ManageStatuses";
+    public const string ManageTemplates = "Tasks.ManageTemplates";
+    public const string LogTime = "Timesheets.Log";
+    public const string ViewAllTime = "Timesheets.ViewAll";
+    public const string ManageAutomation = "Automation.Manage";
+    public const string ManageWebhooks = "Webhooks.Manage";
+    public const string ManageMembership = "Membership.Manage";
+    public const string ViewMembership = "Membership.View";
+    public const string SubmitRequests = "Requests.Submit";
+    public const string HandleRequests = "Requests.Handle";
+    public const string ManageRequests = "Requests.Manage";
 
     /// <summary>
     /// See and manage every task of the organization. Without it a user sees only the tasks they
@@ -34,6 +45,17 @@ public static class TaskManagementPermissions
         new(UploadFiles, "TaskManagement", "افزودن و حذف پیوست فعالیت‌ها"),
         new(ManageNotes, "TaskManagement", "مدیریت یادداشت‌های شخصی"),
         new(Comment, "TaskManagement", "ثبت دیدگاه روی فعالیت‌ها"),
+        new(ManageStatuses, "TaskManagement", "مدیریت وضعیت‌های سفارشی فعالیت"),
+        new(ManageTemplates, "TaskManagement", "مدیریت قالب‌های وظیفه و پروژه"),
+        new(LogTime, "TaskManagement", "ثبت ساعت کاری و ارسال برای تأیید"),
+        new(ViewAllTime, "TaskManagement", "مشاهده ساعت کاری و بار کاری همه"),
+        new(ManageAutomation, "TaskManagement", "مدیریت قاعده‌های خودکار و SLA"),
+        new(ManageWebhooks, "TaskManagement", "مدیریت وب‌هوک‌ها"),
+        new(ManageMembership, "TaskManagement", "تعیین پلن، سقف کاربر و فضا و تاریخ اعتبار"),
+        new(ViewMembership, "TaskManagement", "مشاهده پلن و گزارش مصرف"),
+        new(SubmitRequests, "TaskManagement", "ثبت درخواست"),
+        new(HandleRequests, "TaskManagement", "بررسی درخواست‌ها و تبدیل به فعالیت"),
+        new(ManageRequests, "TaskManagement", "مدیریت دسته‌بندی و ارجاع درخواست‌ها"),
         new(ManageAll, "TaskManagement", "مشاهده و مدیریت همه فعالیت‌های سازمان")
     ];
 }

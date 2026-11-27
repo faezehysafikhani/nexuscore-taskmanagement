@@ -26,6 +26,16 @@ public interface IOrgAppointmentService
     Task<Result<IReadOnlyList<AppointmentDto>>> GetPostHistoryAsync(Guid tenantId, Guid unitPositionId, CancellationToken cancellationToken);
 
     Task<Result<IReadOnlyList<AppointmentDto>>> GetUserHistoryAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The person leaves now: every post they hold is free, or goes to a successor; appointments that had
+    /// not started are dropped. Open tasks of the posts follow the change, and they leave their main
+    /// position as their remaining posts allow (RehomeAsync).
+    /// </summary>
+    Task<Result<OffboardResultDto>> OffboardUserAsync(Guid tenantId, Guid userId, OffboardUserRequest request, CancellationToken cancellationToken);
+
+    /// <summary>The person's posts move to someone else from a day (all of them, or those asked for), in one save.</summary>
+    Task<Result<TransferPostsResultDto>> TransferPostsAsync(Guid tenantId, Guid userId, TransferPostsRequest request, CancellationToken cancellationToken);
 }
 
 public sealed partial class OrgStructureService : IOrgAppointmentService

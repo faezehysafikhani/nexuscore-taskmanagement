@@ -377,6 +377,10 @@ FodyWeavers.xsd
 
 # graphify knowledge graph (rebuilt per branch)
 graphify-out/
+!TM-Commercial-Api/db/*.sql
+
+# Output of tools/seed-demo-data.mjs (ids of one test server)
+TM-Commercial-Api/tools/overdue-ids.txt
 
 # The Tejarat Bank host's database upgrade scripts are deliverables too.
 !TM-Tejarat-Api/db/*.sql

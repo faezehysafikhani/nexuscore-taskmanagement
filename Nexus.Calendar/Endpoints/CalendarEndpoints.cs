@@ -14,6 +14,44 @@ public static class CalendarEndpoints
     {
         var group = app.MapGroup("/api/calendar/work-calendars").WithTags("Calendar").RequireAuthorization();
 
+        // Which days take new tasks and meetings, for any signed-in user (the date pickers and forms check before
+        // sending): the default work calendar's non-working days, or usesWorkCalendar=false when there is none (the
+        // client then applies the fixed Iranian rule, as the server does). Same source as ISchedulingDayPolicy.
+        app.MapGet("/api/calendar/scheduling-days", async (DateOnly from, DateOnly to, ICurrentUserContext currentUser,
+                IWorkCalendarService service, CancellationToken cancellationToken) =>
+            {
+                if (currentUser.TenantId is null)
+                {
+                    return Results.Unauthorized();
+                }
+
+                if (to < from || to.DayNumber - from.DayNumber > 1000)
+                {
+                    return Results.BadRequest(new { error = "The range must be at most 1,000 days." });
+                }
+
+                var list = await service.ListAsync(currentUser.TenantId.Value, cancellationToken);
+                var calendar = list.IsSuccess ? list.Value!.FirstOrDefault(c => c.IsDefault) : null;
+                if (calendar is null)
+                {
+                    return Results.Ok(new SchedulingDaysDto(false, []));
+                }
+
+                var days = await service.GetDaysAsync(calendar.Id, from, to, cancellationToken);
+                if (days.IsFailure)
+                {
+                    return Results.Ok(new SchedulingDaysDto(false, []));
+                }
+
+                return Results.Ok(new SchedulingDaysDto(true, days.Value!
+                    .Where(d => !d.IsWorkingDay)
+                    .Select(d => new SchedulingOffDayDto(d.Date, d.Source, d.Reason))
+                    .ToList()));
+            })
+            .WithTags("Calendar")
+            .WithSummary("Days that take no new tasks or meetings (the default work calendar's days off) - for any signed-in user")
+            .RequireAuthorization();
+
         group.MapGet("/", async (ICurrentUserContext currentUser, IWorkCalendarService service, CancellationToken cancellationToken) =>
             {
                 if (currentUser.TenantId is null)

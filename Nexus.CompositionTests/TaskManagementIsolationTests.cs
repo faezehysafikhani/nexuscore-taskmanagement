@@ -57,8 +57,8 @@ public sealed class TaskManagementIsolationTests
             // The composition test project is allowed to reference everything - that is its job.
             if (name is "Nexus.CompositionTests") continue;
 
-            // The organization hosts (TM-Tejarat-Api, TM-PostBank-Api, PM-PostBank-Api) are composition roots: they wire every module together.
-            if (name is "TM-Tejarat-Api" or "TM-PostBank-Api" or "PM-PostBank-Api") continue;
+            // The hosts (TM-Tejarat-Api, TM-PostBank-Api, PM-PostBank-Api, TM-Commercial-Api) are composition roots: they wire every module together.
+            if (name is "TM-Tejarat-Api" or "TM-PostBank-Api" or "PM-PostBank-Api" or "TM-Commercial-Api") continue;
 
             // The module itself, and its own tests.
             if (name.StartsWith("Nexus.TaskManagement", StringComparison.Ordinal)) continue;

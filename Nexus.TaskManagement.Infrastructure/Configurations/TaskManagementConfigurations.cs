@@ -25,6 +25,12 @@ internal sealed class TaskItemConfiguration : IEntityTypeConfiguration<TaskItem>
         builder.Property(x => x.CharterProjectManager).HasMaxLength(200);
 
         builder.Ignore(x => x.IsRecurring);
+        builder.Ignore(x => x.IsArchived);
+        builder.Property(x => x.RowVersion).IsRowVersion();
+        builder.Property(x => x.ReviewComment).HasMaxLength(1000);
+        builder.Property(x => x.SourceType).HasMaxLength(30);
+        builder.Property(x => x.BlockedReason).HasMaxLength(300);
+        builder.HasIndex(x => new { x.TenantId, x.CustomStatusId });
 
         // Real foreign keys into the shared identity schema. Restrict, never cascade:
         // removing a person must not silently delete the work assigned to them.
@@ -62,6 +68,7 @@ internal sealed class TaskItemConfiguration : IEntityTypeConfiguration<TaskItem>
         builder.HasIndex(x => new { x.TenantId, x.Status });
         builder.HasIndex(x => new { x.TenantId, x.DueDate });
         builder.HasIndex(x => new { x.TenantId, x.IsProject });
+        builder.HasIndex(x => new { x.TenantId, x.ArchivedAtUtc });
         builder.HasIndex(x => new { x.TenantId, x.AssignedUserId });
         builder.HasIndex(x => new { x.TenantId, x.AssignedUserGroupId });
     }
@@ -212,6 +219,227 @@ internal sealed class TaskFileConfiguration : IEntityTypeConfiguration<TaskFile>
     }
 }
 
+internal sealed class TaskStatusDefinitionConfiguration : IEntityTypeConfiguration<TaskStatusDefinition>
+{
+    public void Configure(EntityTypeBuilder<TaskStatusDefinition> builder)
+    {
+        builder.ToTable("TaskStatuses", Schema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.Property(x => x.Name).HasMaxLength(100).IsRequired();
+        builder.Property(x => x.NormalizedName).HasMaxLength(100).IsRequired();
+        builder.Property(x => x.Color).HasMaxLength(30);
+        builder.HasIndex(x => new { x.TenantId, x.NormalizedName }).IsUnique();
+    }
+}
+
+internal sealed class RequestCategoryConfiguration : IEntityTypeConfiguration<RequestCategory>
+{
+    public void Configure(EntityTypeBuilder<RequestCategory> builder)
+    {
+        builder.ToTable("RequestCategories", Schema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.Property(x => x.Name).HasMaxLength(100).IsRequired();
+        builder.Property(x => x.NormalizedName).HasMaxLength(100).IsRequired();
+        builder.HasIndex(x => new { x.TenantId, x.NormalizedName }).IsUnique();
+    }
+}
+
+internal sealed class TaskRequestConfiguration : IEntityTypeConfiguration<TaskRequest>
+{
+    public void Configure(EntityTypeBuilder<TaskRequest> builder)
+    {
+        builder.ToTable("TaskRequests", Schema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.Property(x => x.Title).HasMaxLength(200).IsRequired();
+        builder.Property(x => x.Description).HasMaxLength(4000);
+        builder.Property(x => x.DecisionNote).HasMaxLength(1000);
+        builder.HasIndex(x => new { x.TenantId, x.Status });
+        builder.HasIndex(x => new { x.TenantId, x.RequesterUserId });
+        builder.HasIndex(x => new { x.TenantId, x.RoutedToUserId });
+    }
+}
+
+internal sealed class TaskDependencyConfiguration : IEntityTypeConfiguration<TaskDependency>
+{
+    public void Configure(EntityTypeBuilder<TaskDependency> builder)
+    {
+        builder.ToTable("TaskDependencies", Schema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.HasIndex(x => new { x.TaskId, x.BlockedByTaskId }).IsUnique();
+        builder.HasIndex(x => x.BlockedByTaskId);
+    }
+}
+
+internal sealed class TaskCriterionConfiguration : IEntityTypeConfiguration<TaskCriterion>
+{
+    public void Configure(EntityTypeBuilder<TaskCriterion> builder)
+    {
+        builder.ToTable("TaskCriteria", Schema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.Property(x => x.Text).HasMaxLength(300).IsRequired();
+        builder.HasIndex(x => x.TaskId);
+    }
+}
+
+internal sealed class TaskWipSettingConfiguration : IEntityTypeConfiguration<TaskWipSetting>
+{
+    public void Configure(EntityTypeBuilder<TaskWipSetting> builder)
+    {
+        builder.ToTable("TaskWipSettings", Schema.Name);
+        builder.HasKey(x => x.TenantId);
+        builder.Property(x => x.TenantId).ValueGeneratedNever();
+    }
+}
+
+internal sealed class TaskTemplateConfiguration : IEntityTypeConfiguration<TaskTemplate>
+{
+    public void Configure(EntityTypeBuilder<TaskTemplate> builder)
+    {
+        builder.ToTable("TaskTemplates", Schema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.Property(x => x.Name).HasMaxLength(100).IsRequired();
+        builder.Property(x => x.NormalizedName).HasMaxLength(100).IsRequired();
+        builder.Property(x => x.Body).IsRequired();
+        builder.HasIndex(x => new { x.TenantId, x.NormalizedName }).IsUnique();
+    }
+}
+
+internal sealed class TimeEntryConfiguration : IEntityTypeConfiguration<TimeEntry>
+{
+    public void Configure(EntityTypeBuilder<TimeEntry> builder)
+    {
+        builder.ToTable("TimeEntries", Schema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.Property(x => x.Note).HasMaxLength(500);
+        builder.HasIndex(x => new { x.TenantId, x.UserId, x.Date });
+        builder.HasIndex(x => x.TaskId);
+        builder.HasIndex(x => x.SubmissionId);
+    }
+}
+
+internal sealed class TimesheetSubmissionConfiguration : IEntityTypeConfiguration<TimesheetSubmission>
+{
+    public void Configure(EntityTypeBuilder<TimesheetSubmission> builder)
+    {
+        builder.ToTable("TimesheetSubmissions", Schema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.Property(x => x.DecisionComment).HasMaxLength(1000);
+        builder.HasIndex(x => new { x.TenantId, x.UserId, x.WeekStart });
+    }
+}
+
+internal sealed class RunningTimerConfiguration : IEntityTypeConfiguration<RunningTimer>
+{
+    public void Configure(EntityTypeBuilder<RunningTimer> builder)
+    {
+        builder.ToTable("RunningTimers", Schema.Name);
+        builder.HasKey(x => x.UserId);
+        builder.Property(x => x.UserId).ValueGeneratedNever();
+    }
+}
+
+internal sealed class AutomationRuleConfiguration : IEntityTypeConfiguration<AutomationRule>
+{
+    public void Configure(EntityTypeBuilder<AutomationRule> builder)
+    {
+        builder.ToTable("AutomationRules", Schema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.Property(x => x.Name).HasMaxLength(100).IsRequired();
+        builder.Property(x => x.Conditions).IsRequired();
+        builder.Property(x => x.Actions).IsRequired();
+        builder.HasIndex(x => new { x.TenantId, x.Trigger, x.IsActive });
+    }
+}
+
+internal sealed class AutomationLogEntryConfiguration : IEntityTypeConfiguration<AutomationLogEntry>
+{
+    public void Configure(EntityTypeBuilder<AutomationLogEntry> builder)
+    {
+        builder.ToTable("AutomationLog", Schema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.Property(x => x.RuleName).HasMaxLength(100).IsRequired();
+        builder.Property(x => x.Outcome).HasMaxLength(20).IsRequired();
+        builder.Property(x => x.Detail).HasMaxLength(500);
+        builder.HasIndex(x => new { x.TenantId, x.AtUtc });
+        builder.HasIndex(x => x.TaskId);
+    }
+}
+
+internal sealed class WebhookSubscriptionConfiguration : IEntityTypeConfiguration<WebhookSubscription>
+{
+    public void Configure(EntityTypeBuilder<WebhookSubscription> builder)
+    {
+        builder.ToTable("WebhookSubscriptions", Schema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.Property(x => x.Name).HasMaxLength(100).IsRequired();
+        builder.Property(x => x.Url).HasMaxLength(500).IsRequired();
+        builder.Property(x => x.Secret).HasMaxLength(100).IsRequired();
+        builder.Property(x => x.Events).HasMaxLength(500).IsRequired();
+        builder.HasIndex(x => new { x.TenantId, x.IsActive });
+    }
+}
+
+internal sealed class WebhookDeliveryConfiguration : IEntityTypeConfiguration<WebhookDelivery>
+{
+    public void Configure(EntityTypeBuilder<WebhookDelivery> builder)
+    {
+        builder.ToTable("WebhookDeliveries", Schema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.Property(x => x.EventType).HasMaxLength(60).IsRequired();
+        builder.Property(x => x.Payload).IsRequired();
+        builder.Property(x => x.LastError).HasMaxLength(500);
+        builder.Ignore(x => x.IsPending);
+        builder.HasIndex(x => new { x.DeliveredAtUtc, x.GaveUpAtUtc, x.NextAttemptAtUtc });
+        builder.HasIndex(x => new { x.SubscriptionId, x.CreatedAtUtc });
+    }
+}
+
+internal sealed class TenantMembershipConfiguration : IEntityTypeConfiguration<TenantMembership>
+{
+    public void Configure(EntityTypeBuilder<TenantMembership> builder)
+    {
+        builder.ToTable("TenantMemberships", Schema.Name);
+        builder.HasKey(x => x.TenantId);
+        builder.Property(x => x.TenantId).ValueGeneratedNever();
+        builder.Property(x => x.PlanName).HasMaxLength(100).IsRequired();
+        builder.Property(x => x.Notes).HasMaxLength(1000);
+    }
+}
+
+internal sealed class TaskRetentionSettingConfiguration : IEntityTypeConfiguration<TaskRetentionSetting>
+{
+    public void Configure(EntityTypeBuilder<TaskRetentionSetting> builder)
+    {
+        builder.ToTable("TaskRetentionSettings", Schema.Name);
+        builder.HasKey(x => x.TenantId);
+        builder.Property(x => x.TenantId).ValueGeneratedNever();
+    }
+}
+
+internal sealed class ReportSubscriptionConfiguration : IEntityTypeConfiguration<ReportSubscription>
+{
+    public void Configure(EntityTypeBuilder<ReportSubscription> builder)
+    {
+        builder.ToTable("ReportSubscriptions", Schema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.HasIndex(x => new { x.IsActive, x.NextRunAtUtc });
+        builder.HasIndex(x => new { x.TenantId, x.UserId });
+    }
+}
+
 internal sealed class TagConfiguration : IEntityTypeConfiguration<Tag>
 {
     public void Configure(EntityTypeBuilder<Tag> builder)
@@ -327,6 +555,26 @@ internal sealed class PendingTaskSmsConfiguration : IEntityTypeConfiguration<Pen
 
         // The reminder job's "what may go now" scan.
         builder.HasIndex(x => x.SendAfterUtc);
+    }
+}
+
+internal sealed class PendingTaskNotificationConfiguration : IEntityTypeConfiguration<PendingTaskNotification>
+{
+    public void Configure(EntityTypeBuilder<PendingTaskNotification> builder)
+    {
+        builder.ToTable("NotificationOutbox", Schema.Name);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.Property(x => x.Title).HasMaxLength(200).IsRequired();
+        builder.Property(x => x.Description).HasMaxLength(4000);
+        builder.Property(x => x.DueAtText).HasMaxLength(100);
+        builder.Property(x => x.DedupeKey).HasMaxLength(120).IsRequired();
+        builder.Property(x => x.LastError).HasMaxLength(500);
+
+        // The same notification is never stored twice (retries and two servers included).
+        builder.HasIndex(x => x.DedupeKey).IsUnique();
+        // The dispatcher's "what is due" scan.
+        builder.HasIndex(x => new { x.DeliveredAtUtc, x.NextAttemptAtUtc });
     }
 }
 

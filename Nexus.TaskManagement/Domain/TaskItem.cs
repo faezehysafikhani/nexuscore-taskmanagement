@@ -37,6 +37,7 @@ public sealed class TaskItem : AuditableEntity<Guid>
         TenantId = tenantId;
         Title = title.Trim();
         Description = description;
+        if (DueDate != dueDate) OverdueRulesRanAtUtc = null;
         DueDate = dueDate;
         Priority = priority;
         IsProject = isProject;
@@ -81,6 +82,33 @@ public sealed class TaskItem : AuditableEntity<Guid>
     public Guid? ParentTaskId { get; private set; }
 
     public void SetParentTask(Guid? parentTaskId) => ParentTaskId = parentTaskId;
+
+    /// <summary>
+    /// Changes with every save (SQL Server rowversion). A client that sends back the value it read is refused when
+    /// someone saved in between, instead of silently overwriting that work (CAT-209).
+    /// </summary>
+    public byte[]? RowVersion { get; private set; }
+
+    /// <summary>
+    /// When the task was put in the archive (CAT-210); null for a live task. An archived task is hidden from every
+    /// list, report and reminder, keeps all it has, and comes back with <see cref="Restore"/>.
+    /// </summary>
+    public DateTimeOffset? ArchivedAtUtc { get; private set; }
+    public Guid? ArchivedByUserId { get; private set; }
+
+    public bool IsArchived => ArchivedAtUtc is not null;
+
+    public void Archive(Guid? byUserId, DateTimeOffset now)
+    {
+        ArchivedAtUtc = now;
+        ArchivedByUserId = byUserId;
+    }
+
+    public void Restore()
+    {
+        ArchivedAtUtc = null;
+        ArchivedByUserId = null;
+    }
 
     public Guid? OwnerUserId { get; private set; }
     public User? OwnerUser { get; private set; }
@@ -267,9 +295,129 @@ public sealed class TaskItem : AuditableEntity<Guid>
         CharterEndTime = endTime;
     }
 
+    /// <summary>The organization-defined status the task shows, if any; <see cref="Status"/> is then its category.</summary>
+    public Guid? CustomStatusId { get; private set; }
+
+    // --- SLA (phase 7): a due moment set by an automation rule; the clock stops while the task is paused ---
+
+    public DateTimeOffset? SlaDueAtUtc { get; private set; }
+    public DateTimeOffset? SlaPausedAtUtc { get; private set; }
+    public DateTimeOffset? SlaBreachedAtUtc { get; private set; }
+
+    public void StartSla(DateTimeOffset dueAtUtc)
+    {
+        SlaDueAtUtc = dueAtUtc;
+        SlaPausedAtUtc = Status == TaskItemStatus.Paused ? DateTimeOffset.UtcNow : null;
+        SlaBreachedAtUtc = null;
+    }
+
+    public void MarkSlaBreached(DateTimeOffset nowUtc) => SlaBreachedAtUtc = nowUtc;
+
+    /// <summary>How long the work is expected to take, in minutes (null = not estimated).</summary>
+    public int? EstimatedMinutes { get; private set; }
+
+    public void SetEstimate(int? minutes) => EstimatedMinutes = minutes;
+
+    /// <summary>A free-text blocker ("waiting for the supplier"); null when nothing blocks the task.</summary>
+    public string? BlockedReason { get; private set; }
+
+    public void SetBlockedReason(string? reason) => BlockedReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+
+    /// <summary>Where the task came from ("Request", "ChatMessage") and the id of that thing: a task made from something keeps it.</summary>
+    public string? SourceType { get; private set; }
+    public Guid? SourceId { get; private set; }
+
+    public void SetSource(string sourceType, Guid sourceId)
+    {
+        SourceType = sourceType;
+        SourceId = sourceId;
+    }
+
+    // --- Review (phase 4): "submit for review", decided through the approval backend when one is installed ---
+
+    public NexusCore.Application.Approvals.ApprovalStatus ReviewStatus { get; private set; }
+    public DateTimeOffset? ReviewSubmittedAtUtc { get; private set; }
+    public Guid? ReviewSubmittedByUserId { get; private set; }
+    public DateTimeOffset? ReviewDecidedAtUtc { get; private set; }
+    public Guid? ReviewDecidedByUserId { get; private set; }
+
+    /// <summary>The submitter's note while pending; the reviewer's note once decided.</summary>
+    public string? ReviewComment { get; private set; }
+
+    public bool IsInReview => ReviewStatus == NexusCore.Application.Approvals.ApprovalStatus.PendingApproval;
+
+    public void SubmitForReview(Guid? byUserId, string? comment, DateTimeOffset nowUtc)
+    {
+        ReviewStatus = NexusCore.Application.Approvals.ApprovalStatus.PendingApproval;
+        ReviewSubmittedAtUtc = nowUtc;
+        ReviewSubmittedByUserId = byUserId;
+        ReviewDecidedAtUtc = null;
+        ReviewDecidedByUserId = null;
+        ReviewComment = comment;
+    }
+
+    /// <summary>Approved: the task is done.</summary>
+    public void ApproveReview(Guid? byUserId, string? comment, DateTimeOffset nowUtc)
+    {
+        ReviewStatus = NexusCore.Application.Approvals.ApprovalStatus.Approved;
+        ReviewDecidedAtUtc = nowUtc;
+        ReviewDecidedByUserId = byUserId;
+        ReviewComment = comment;
+        ChangeStatus(TaskItemStatus.Completed, nowUtc);
+    }
+
+    /// <summary>Rejected: back to work (بازکاری); it can be submitted again.</summary>
+    public void RejectReview(Guid? byUserId, string? comment, DateTimeOffset nowUtc)
+    {
+        ReviewStatus = NexusCore.Application.Approvals.ApprovalStatus.Rejected;
+        ReviewDecidedAtUtc = nowUtc;
+        ReviewDecidedByUserId = byUserId;
+        ReviewComment = comment;
+        ChangeStatus(TaskItemStatus.InProgress, nowUtc);
+    }
+
+    /// <summary>The label goes; the task keeps its built-in status.</summary>
+    public void ClearCustomStatus() => CustomStatusId = null;
+
+    /// <summary>The organization-defined kind of work (<see cref="WorkTypeDefinition"/>), if any.</summary>
+    public Guid? WorkTypeId { get; private set; }
+
+    public void SetWorkType(Guid? workTypeId) => WorkTypeId = workTypeId;
+
+    /// <summary>Hands the task to a team (user group) without changing who is responsible.</summary>
+    public void SetAssignedGroup(Guid? groupId) => AssignedUserGroupId = groupId;
+
+    /// <summary>When the overdue rules ran for this task (once per due date; moving the date re-arms it).</summary>
+    public DateTimeOffset? OverdueRulesRanAtUtc { get; private set; }
+
+    public void MarkOverdueRulesRan(DateTimeOffset nowUtc) => OverdueRulesRanAtUtc = nowUtc;
+
+    public void ChangeCustomStatus(TaskStatusDefinition definition, DateTimeOffset nowUtc)
+    {
+        ChangeStatus(definition.Category, nowUtc);
+        CustomStatusId = definition.Id;
+    }
+
+    public void SetPriority(TaskPriority priority) => Priority = priority;
+
     public void ChangeStatus(TaskItemStatus status, DateTimeOffset nowUtc)
     {
+        // The SLA clock stops while the task is paused and runs on again afterwards.
+        if (SlaDueAtUtc is not null)
+        {
+            if (status == TaskItemStatus.Paused && SlaPausedAtUtc is null)
+            {
+                SlaPausedAtUtc = nowUtc;
+            }
+            else if (status != TaskItemStatus.Paused && SlaPausedAtUtc is { } pausedAt)
+            {
+                SlaDueAtUtc += nowUtc - pausedAt;
+                SlaPausedAtUtc = null;
+            }
+        }
+
         Status = status;
+        CustomStatusId = null;
         ActualCompletionDateUtc = status == TaskItemStatus.Completed
             ? ActualCompletionDateUtc ?? nowUtc
             : null;

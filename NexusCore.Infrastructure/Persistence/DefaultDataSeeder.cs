@@ -53,6 +53,7 @@ public sealed class DefaultDataSeeder(
 
         // Sessions (db/upgrade-sessions.sql): their tables, and the columns they added.
         await SessionSchema.EnsureAsync(dbContext, cancellationToken);
+        await SecuritySchema.EnsureAsync(dbContext, cancellationToken);
 
         if (!await dbContext.Tenants.AnyAsync(cancellationToken))
         {

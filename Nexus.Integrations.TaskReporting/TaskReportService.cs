@@ -124,7 +124,7 @@ public sealed class TaskReportService(
         }
 
         // --- whose tasks
-        var tasks = db.Tasks.IgnoreQueryFilters().AsNoTracking().Where(task => task.TenantId == tenantId);
+        var tasks = db.Tasks.IgnoreQueryFilters().AsNoTracking().Where(task => task.TenantId == tenantId && task.ArchivedAtUtc == null);
         if (!access.IsRestricted && await ReachAsync(tenantId, userId, cancellationToken) is { } reach)
         {
             // Kept to one's own company: the tasks of its people (as on the task board).

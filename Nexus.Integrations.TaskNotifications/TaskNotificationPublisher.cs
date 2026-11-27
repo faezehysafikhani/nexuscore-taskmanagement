@@ -19,9 +19,13 @@ namespace Nexus.Integrations.TaskNotifications;
 /// </summary>
 public sealed class TaskNotificationPublisher(
     IServiceScopeFactory scopeFactory,
-    ILogger<TaskNotificationPublisher> logger) : ITaskNotificationPublisher
+    ILogger<TaskNotificationPublisher> logger) : IReliableTaskNotificationPublisher
 {
-    public async Task PublishAsync(TaskDueNotification notification, CancellationToken cancellationToken)
+    public async Task PublishAsync(TaskDueNotification notification, CancellationToken cancellationToken) =>
+        await TryPublishAsync(notification, cancellationToken);
+
+    /// <summary>False when any recipient's notification could not be stored; the outbox then tries again.</summary>
+    public async Task<bool> TryPublishAsync(TaskDueNotification notification, CancellationToken cancellationToken)
     {
         var title = $"یادآوری وظیفه: {notification.Title}";
         var when = notification.DueAtText ?? TaskCreatedChannelNotifier.ToPersianDate(notification.DueDate);
@@ -31,10 +35,13 @@ public sealed class TaskNotificationPublisher(
 
         // Only the people the task names, already limited to active users of its organization.
         // Each is stored on its own, so one failure does not cost the others theirs.
+        var all = true;
         foreach (var userId in notification.RecipientUserIds)
         {
-            await StoreWithRetryAsync(notification, userId, title, message, cancellationToken);
+            all &= await StoreWithRetryAsync(notification, userId, title, message, cancellationToken);
         }
+
+        return all;
     }
 
     /// <summary>Attempts per recipient, and the pause before each retry.</summary>
@@ -45,7 +52,7 @@ public sealed class TaskNotificationPublisher(
     /// trying again cannot create a second copy. Each attempt uses a fresh scope - a failed
     /// insert stays in its DbContext and would otherwise be saved along with the retry.
     /// </summary>
-    private async Task StoreWithRetryAsync(
+    private async Task<bool> StoreWithRetryAsync(
         TaskDueNotification notification, Guid userId, string title, string message, CancellationToken cancellationToken)
     {
         for (var attempt = 0; ; attempt++)
@@ -59,7 +66,7 @@ public sealed class TaskNotificationPublisher(
                     cancellationToken);
                 logger.LogInformation(ReminderDeliveryEvents.NotificationStored,
                     "Reminder notification stored for user {UserId}, task {TaskId}.", userId, notification.TaskId);
-                return;
+                return true;
             }
             catch (Exception ex) when (attempt < RetryDelays.Length && !cancellationToken.IsCancellationRequested)
             {
@@ -72,7 +79,7 @@ public sealed class TaskNotificationPublisher(
             {
                 logger.LogError(ReminderDeliveryEvents.NotificationFailed, ex,
                     "Reminder notification for user {UserId} about task {TaskId} was not stored.", userId, notification.TaskId);
-                return;
+                return false;
             }
         }
     }
