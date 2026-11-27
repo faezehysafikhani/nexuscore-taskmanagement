@@ -20,6 +20,16 @@ public static class SecurityEndpoints
     {
         // Each part below belongs to a commercial feature: a host without it does not map it.
         var features = app.ServiceProvider.GetService(typeof(IEditionFeatures)) as IEditionFeatures;
+        // Which commercial features this host runs, so a front end can show only those.
+        app.MapGet("/api/platform/edition", (IEditionFeatures gate) => Results.Ok(new
+            {
+                features = CommercialFeature.All.Where(gate.IsEnabled).ToArray(),
+            }))
+            .RequireAuthorization()
+            .WithTags("Platform")
+            .WithName("GetEditionFeatures")
+            .WithSummary("The commercial features this host runs (Edition:Commercial, Edition:Features:<Name>)");
+
         var auth = app.MapGroup("/api/identity/auth").WithTags("Authentication");
 
         if (features.Allows(CommercialFeature.Mfa))

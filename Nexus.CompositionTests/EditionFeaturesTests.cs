@@ -51,7 +51,7 @@ public sealed class EditionFeaturesTests
     [Fact]
     public void AHostWithoutTheEdition_MapsNoneOfTheSecurityEndpoints()
     {
-        Assert.Empty(SecurityRoutes());
+        Assert.Equal(["/api/platform/edition"], SecurityRoutes());
     }
 
     [Fact]

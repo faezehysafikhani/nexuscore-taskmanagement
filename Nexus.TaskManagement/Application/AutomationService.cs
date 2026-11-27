@@ -63,7 +63,8 @@ public sealed class TaskAutomationEngine(
     ITaskNoticePublisher notices,
     ILogger<TaskAutomationEngine> logger,
     IManagementChainProvider? managers = null,
-    ISlaWorkingDays? workingDays = null) : ITaskAutomation
+    ISlaWorkingDays? workingDays = null,
+    NexusCore.Application.Editions.IEditionFeatures? features = null) : ITaskAutomation
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } };
 
@@ -72,7 +73,8 @@ public sealed class TaskAutomationEngine(
 
     public async Task RunAsync(AutomationTrigger trigger, TaskItem task, CancellationToken cancellationToken)
     {
-        if (_running)
+        // Automation rules (and the SLA clock they start) are a commercial feature.
+        if (_running || !NexusCore.Application.Editions.EditionFeaturesExtensions.Allows(features, NexusCore.Application.Editions.CommercialFeature.Automation))
         {
             return;
         }

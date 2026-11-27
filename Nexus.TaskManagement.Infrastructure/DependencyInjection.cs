@@ -39,14 +39,31 @@ public static class DependencyInjection
         // First of all hosted services (the host starts them one by one, in this order): the columns
         // and tables newer versions need, added to an existing database before any job reads them.
         services.AddHostedService<TaskManagementSchemaPatcher>();
-        services.AddHostedService<TaskSlaMonitorService>();
+        // Background jobs of commercial features run only where the host turns the feature on.
+        bool On(string feature) => NexusCore.Application.Editions.EditionFeatures.IsEnabled(configuration, feature);
+        if (On(NexusCore.Application.Editions.CommercialFeature.Automation) || On(NexusCore.Application.Editions.CommercialFeature.Sla))
+        {
+            services.AddHostedService<TaskSlaMonitorService>();
+        }
+
         services.Configure<Nexus.TaskManagement.Application.WebhookOptions>(configuration.GetSection(Nexus.TaskManagement.Application.WebhookOptions.SectionName));
         services.AddSingleton<WebhookDeliveryService>();
-        services.AddHostedService<WebhookDeliveryBackgroundService>();
+        if (On(NexusCore.Application.Editions.CommercialFeature.Webhooks))
+        {
+            services.AddHostedService<WebhookDeliveryBackgroundService>();
+        }
+
         services.AddSingleton<ReportDistributionService>();
-        services.AddHostedService(p => p.GetRequiredService<ReportDistributionService>());
+        if (On(NexusCore.Application.Editions.CommercialFeature.ReportSubscriptions))
+        {
+            services.AddHostedService(p => p.GetRequiredService<ReportDistributionService>());
+        }
+
         services.AddSingleton<TaskRetentionBackgroundService>();
-        services.AddHostedService(p => p.GetRequiredService<TaskRetentionBackgroundService>());
+        if (On(NexusCore.Application.Editions.CommercialFeature.Retention))
+        {
+            services.AddHostedService(p => p.GetRequiredService<TaskRetentionBackgroundService>());
+        }
         services.AddScoped<ITaskFileRepository, TaskFileRepository>();
         services.AddScoped<INoteRepository, NoteRepository>();
         services.AddScoped<ITaskCommentRepository, TaskCommentRepository>();

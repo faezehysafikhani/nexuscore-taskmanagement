@@ -257,7 +257,7 @@ public sealed class WebhookService(
     }
 }
 
-public sealed class WebhookPublisher(IWebhookRepository repository, ITaskManagementUnitOfWork unitOfWork, TimeProvider clock, ILogger<WebhookPublisher> logger, IOptions<WebhookOptions>? options = null) : IWebhookPublisher
+public sealed class WebhookPublisher(IWebhookRepository repository, ITaskManagementUnitOfWork unitOfWork, TimeProvider clock, ILogger<WebhookPublisher> logger, IOptions<WebhookOptions>? options = null, NexusCore.Application.Editions.IEditionFeatures? features = null) : IWebhookPublisher
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } };
 
@@ -266,7 +266,7 @@ public sealed class WebhookPublisher(IWebhookRepository repository, ITaskManagem
 
     public async Task PublishAsync(Guid tenantId, string eventType, object data, CancellationToken cancellationToken)
     {
-        if (options?.Value.Enabled == false)
+        if (options?.Value.Enabled == false || !NexusCore.Application.Editions.EditionFeaturesExtensions.Allows(features, NexusCore.Application.Editions.CommercialFeature.Webhooks))
         {
             return;
         }
