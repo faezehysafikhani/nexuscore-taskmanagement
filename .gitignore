@@ -379,4 +379,5 @@ FodyWeavers.xsd
 graphify-out/
 
 # The Tejarat Bank host's database upgrade scripts are deliverables too.
-!TMTejarat-API/db/*.sql
+!TM-Tejarat-Api/db/*.sql
+!TM-PostBank-Api/db/*.sql

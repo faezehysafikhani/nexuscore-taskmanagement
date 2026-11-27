@@ -8,13 +8,13 @@ referencing this source tree directly.
 
 ## PostBank host in this solution
 
-`PostBank.Api` (solution folder `Hosts`) is the Post Bank project-management API host, moved here from the
+`PM-PostBank-Api` (formerly `PostBank.Api`; solution folder `APIs`) is the Post Bank project-management API host, moved here from the
 `POSTBANKPMAPI` repository. It references `Nexus.Bundles.Platform` and `Nexus.Bundles.ProjectManagement` as
 projects, so a Core change is used by building and running this host: no pack, offline feed or version bump.
 It is not packed (`IsPackable=false`, and `eng/pack-core-modules.ps1` lists only Core projects).
 
 ```powershell
-dotnet run --project PostBank.Api   # http://localhost:5251, the address POSTBANKPMUI expects
+dotnet run --project PM-PostBank-Api   # http://localhost:5251, the address POSTBANKPMUI expects
 ```
 
 ## Product hosts live outside this repository

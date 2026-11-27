@@ -1,0 +1,62 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!-- Post Bank task management host (TMPB-API, from the TMPB_API repository): part of NexusCore.sln and
+       built straight from the Core projects through project references instead of the NexusCore packages. -->
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>TMPB_API</RootNamespace>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Identity, task management, chat, notifications -->
+    <ProjectReference Include="..\NexusCore.Infrastructure\NexusCore.Infrastructure.csproj" />
+    <ProjectReference Include="..\Chat.Api\Chat.Api.csproj" />
+    <ProjectReference Include="..\Notifications.Api\Notifications.Api.csproj" />
+    <ProjectReference Include="..\Notifications.Infrastructure\Notifications.Infrastructure.csproj" />
+    <ProjectReference Include="..\Nexus.TaskManagement\Nexus.TaskManagement.csproj" />
+    <ProjectReference Include="..\Nexus.TaskManagement.Infrastructure\Nexus.TaskManagement.Infrastructure.csproj" />
+    <ProjectReference Include="..\Nexus.Integrations.TaskNotifications\Nexus.Integrations.TaskNotifications.csproj" />
+
+    <!-- Deputies / units, companies, positions, manager / subordinates, and the
+         task reports that follow them -->
+    <ProjectReference Include="..\Nexus.Organization\Nexus.Organization.csproj" />
+    <ProjectReference Include="..\Nexus.Organization.Infrastructure\Nexus.Organization.Infrastructure.csproj" />
+    <ProjectReference Include="..\Nexus.OrgStructure\Nexus.OrgStructure.csproj" />
+    <ProjectReference Include="..\Nexus.OrgStructure.Infrastructure\Nexus.OrgStructure.Infrastructure.csproj" />
+    <ProjectReference Include="..\Nexus.Integrations.TaskReporting\Nexus.Integrations.TaskReporting.csproj" />
+
+    <!-- Calendar and meetings: the meeting people follow the organization structure; minutes make tasks -->
+    <ProjectReference Include="..\Nexus.Calendar\Nexus.Calendar.csproj" />
+    <ProjectReference Include="..\Nexus.Calendar.Infrastructure\Nexus.Calendar.Infrastructure.csproj" />
+    <ProjectReference Include="..\Nexus.Integrations.CalendarOrgStructure\Nexus.Integrations.CalendarOrgStructure.csproj" />
+    <ProjectReference Include="..\Nexus.Integrations.CalendarTasks\Nexus.Integrations.CalendarTasks.csproj" />
+
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.0">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Serilog" Version="4.4.0" />
+    <PackageReference Include="Serilog.AspNetCore" Version="8.0.0" />
+    <PackageReference Include="Serilog.Extensions.Hosting" Version="8.0.0" />
+    <PackageReference Include="Serilog.Extensions.Logging" Version="8.0.0" />
+    <PackageReference Include="Serilog.Formatting.Compact" Version="3.0.0" />
+    <PackageReference Include="Serilog.Settings.Configuration" Version="8.0.0" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
+    <PackageReference Include="Serilog.Sinks.Debug" Version="3.0.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+    <PackageReference Include="System.Text.Json" Version="8.0.6" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="db\**" CopyToOutputDirectory="Never" />
+  </ItemGroup>
+
+</Project>

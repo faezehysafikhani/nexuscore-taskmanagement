@@ -262,8 +262,9 @@ public sealed class OrgStructureTests
             // Optional integrations built on the module (and the tests) may reference it.
             if (name.StartsWith("Nexus.OrgStructure", StringComparison.Ordinal)
                 || name is "Nexus.CompositionTests" or "Nexus.Integrations.TaskReporting" or "Nexus.Integrations.CalendarOrgStructure"
-                // The Tejarat Bank host is a composition root that wires the module in.
-                || name == "TMTejarat-API")
+                // The platform bundle and the organization hosts are composition roots that wire the module in.
+                || name == "Nexus.Bundles.Platform"
+                || name == "TM-Tejarat-Api" || name == "TM-PostBank-Api" || name == "PM-PostBank-Api")
             {
                 continue;
             }
