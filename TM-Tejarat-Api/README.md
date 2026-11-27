@@ -22,9 +22,9 @@ the «گزارش فعالیت‌ها» reports because this API answers for them
 dotnet run --launch-profile http
 ```
 
-Opens `http://localhost:5112/swagger`. Development defaults: SQL Server on this machine, database
+Opens `http://localhost:5113/swagger`. Development defaults: SQL Server on this machine, database
 `TMTejarat` (created on first run), user `admin` / `Admin@12345`. Point TMPBUI at this address
-(`VITE_DEV_API_BASE_URL=http://localhost:5112`).
+(`VITE_DEV_API_BASE_URL=http://localhost:5113`).
 
 ## Deploy
 
