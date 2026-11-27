@@ -32,6 +32,7 @@ public static class CommercialFeature
     public const string BulkActions = "BulkActions";
     public const string WorkTypes = "WorkTypes";
     public const string Handoff = "Handoff";
+    public const string Archive = "Archive";
 
     // Automation, integrations and administration
     public const string Automation = "Automation";
@@ -44,7 +45,7 @@ public static class CommercialFeature
     public static readonly IReadOnlyList<string> All =
     [
         Sso, Mfa, PasswordPolicy, ServiceAccounts, GuestAccounts, LdapSync, MoreSmsProviders, LongerSessions, Offboarding,
-        CustomStatuses, TaskReview, TaskRequests, Timesheets, TaskTemplates, TaskImport, TaskPlanning, BulkActions, WorkTypes, Handoff,
+        CustomStatuses, TaskReview, TaskRequests, Timesheets, TaskTemplates, TaskImport, TaskPlanning, BulkActions, WorkTypes, Handoff, Archive,
         Automation, Sla, Webhooks, Membership, ReportSubscriptions, Retention,
     ];
 }

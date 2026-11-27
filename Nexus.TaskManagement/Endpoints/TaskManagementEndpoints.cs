@@ -275,17 +275,21 @@ public static class TaskManagementEndpoints
             .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(TaskManagementPermissions.Edit);
 
-        group.MapPost("/{id:guid}/archive", async (Guid id, ITaskService service, CancellationToken cancellationToken) =>
-                (await service.ArchiveAsync(id, cancellationToken)).ToApiResult())
-            .WithSummary("Put a task or project in the archive: hidden everywhere, nothing is deleted")
-            .RequireRateLimiting(NexusRateLimitPolicies.Write)
-            .RequireAuthorization(TaskManagementPermissions.Edit);
+        // The archive is a commercial feature (Edition:Features:Archive).
+        if (On(app, CommercialFeature.Archive))
+        {
+            group.MapPost("/{id:guid}/archive", async (Guid id, ITaskService service, CancellationToken cancellationToken) =>
+                    (await service.ArchiveAsync(id, cancellationToken)).ToApiResult())
+                .WithSummary("Put a task or project in the archive: hidden everywhere, nothing is deleted")
+                .RequireRateLimiting(NexusRateLimitPolicies.Write)
+                .RequireAuthorization(TaskManagementPermissions.Edit);
 
-        group.MapPost("/{id:guid}/restore", async (Guid id, ITaskService service, CancellationToken cancellationToken) =>
-                (await service.RestoreAsync(id, cancellationToken)).ToApiResult())
-            .WithSummary("Bring a task or project back from the archive")
-            .RequireRateLimiting(NexusRateLimitPolicies.Write)
-            .RequireAuthorization(TaskManagementPermissions.Edit);
+            group.MapPost("/{id:guid}/restore", async (Guid id, ITaskService service, CancellationToken cancellationToken) =>
+                    (await service.RestoreAsync(id, cancellationToken)).ToApiResult())
+                .WithSummary("Bring a task or project back from the archive")
+                .RequireRateLimiting(NexusRateLimitPolicies.Write)
+                .RequireAuthorization(TaskManagementPermissions.Edit);
+        }
 
         group.MapDelete("/{id:guid}", async (Guid id, ITaskService service, CancellationToken cancellationToken) =>
                 (await service.DeleteAsync(id, cancellationToken)).ToApiResult())
