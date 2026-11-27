@@ -18,7 +18,9 @@ public sealed record UserDto(
     string? FirstName = null,
     string? LastName = null,
     bool IsSystem = false, string? Address = null, string? FatherName = null, DateOnly? BirthDate = null,
-    NexusCore.Domain.Identity.UserKind Kind = NexusCore.Domain.Identity.UserKind.Normal, bool MfaEnabled = false);
+    NexusCore.Domain.Identity.UserKind Kind = NexusCore.Domain.Identity.UserKind.Normal, bool MfaEnabled = false,
+    // When the account's access ends (a guest's invitation); null: it does not end.
+    DateTimeOffset? AccessExpiresAtUtc = null);
 
 /// <summary>
 /// A new account, created by an administrator (there is no self-registration). Username is the

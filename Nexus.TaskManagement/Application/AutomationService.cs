@@ -68,6 +68,13 @@ public sealed class TaskAutomationEngine(
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } };
 
+    // The execution log is read by people as it is: its details are written in Persian.
+    private static string PriorityFa(TaskPriority p) => p switch { TaskPriority.High => "زیاد", TaskPriority.Low => "کم", _ => "متوسط" };
+    private static string StatusFa(TaskItemStatus s) => s switch
+    {
+        TaskItemStatus.InProgress => "در حال انجام", TaskItemStatus.Paused => "متوقف", TaskItemStatus.Completed => "خاتمه یافته", _ => "شروع نشده",
+    };
+
     // One run at a time per request: an action's own change never starts the rules again.
     private bool _running;
 
@@ -138,15 +145,15 @@ public sealed class TaskAutomationEngine(
         {
             case AutomationActionType.SetPriority when action.Priority is { } priority:
                 task.SetPriority(priority);
-                return $"Priority -> {priority}";
+                return $"اولویت: {PriorityFa(priority)}";
 
             case AutomationActionType.SetStatus when action.Status is { } status:
                 task.ChangeStatus(status, now);
-                return $"Status -> {status}";
+                return $"وضعیت: {StatusFa(status)}";
 
             case AutomationActionType.AssignUser when action.UserId is { } userId:
                 task.SetResponsibleUsers([userId]);
-                return "Assigned";
+                return "واگذار شد";
 
             case AutomationActionType.AssignManager:
             {
@@ -163,12 +170,12 @@ public sealed class TaskAutomationEngine(
                 }
 
                 task.SetResponsibleUsers([chain[0]]);
-                return "Assigned to the manager";
+                return "به مدیر واگذار شد";
             }
 
             case AutomationActionType.AssignGroup when action.GroupId is { } groupId:
                 task.SetAssignedGroup(groupId);
-                return "Handed to the team";
+                return "به تیم سپرده شد";
 
             case AutomationActionType.EscalateUp:
             {
@@ -186,7 +193,7 @@ public sealed class TaskAutomationEngine(
 
                 var level = Math.Clamp(action.Levels ?? 1, 1, chain.Count);
                 task.SetResponsibleUsers([chain[level - 1]]);
-                return $"Escalated {level} level(s) up";
+                return $"{level} سطح بالاتر ارجاع شد";
             }
 
             case AutomationActionType.AddTag when !string.IsNullOrWhiteSpace(action.Tag):
@@ -204,7 +211,7 @@ public sealed class TaskAutomationEngine(
                     await tagRepository.AddLinkAsync(TaskTag.ForTask(Guid.NewGuid(), tag.Id, task.Id), cancellationToken);
                 }
 
-                return $"Tag {name}";
+                return $"برچسب «{name}»";
             }
 
             case AutomationActionType.StartSla when action.Hours is > 0:
@@ -223,7 +230,7 @@ public sealed class TaskAutomationEngine(
 
                 var due = SlaCalculator.DueAt(now, action.Hours.Value, action.BusinessDaysOnly, isWorkingDay);
                 task.StartSla(due);
-                return $"SLA due {due:u}";
+                return $"شروع SLA (موعد {due.ToOffset(TimeSpan.FromHours(3.5)):yyyy-MM-dd HH:mm})";
             }
 
             case AutomationActionType.Notify:
@@ -237,7 +244,7 @@ public sealed class TaskAutomationEngine(
                 await notices.PublishAsync(
                     new TaskNotice(task.TenantId, task.Id, task.Title, null, TaskNoticeKind.Activity, "Automation", Trim(action.Message ?? "A rule ran on this task."), [recipient.Value]),
                     cancellationToken);
-                return "Notified";
+                return "اعلان فرستاده شد";
             }
 
             default:

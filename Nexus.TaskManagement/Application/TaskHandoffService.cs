@@ -18,7 +18,8 @@ public sealed class TaskHandoffService(
     ITaskAccessScope access,
     ITaskActivityService activity,
     ITaskManagementUnitOfWork unitOfWork,
-    ICurrentUserContext currentUser) : ITaskHandoffService
+    ICurrentUserContext currentUser,
+    NexusCore.Application.Identity.Interfaces.ITaskPosts? taskPosts = null) : ITaskHandoffService
 {
     public async Task<Result> HandoffAsync(Guid taskId, HandoffTaskRequest request, CancellationToken cancellationToken)
     {
@@ -38,7 +39,14 @@ public sealed class TaskHandoffService(
 
         await comments.AddAsync(new TaskComment(Guid.NewGuid(), tenantId, taskId, me, $"تحویل کار: {request.Note.Trim()}"), cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        await activity.RecordAsync(taskId, "task.handoff", request.Note.Trim(), cancellationToken);
+        // Where tasks are given to posts, the responsible post follows the person: the new person's main post.
+        if (request.ToUserId is { } to && taskPosts is { Enabled: true }
+            && (await taskPosts.GetMainPostsAsync(tenantId, [to], cancellationToken)).TryGetValue(to, out var post))
+        {
+            await taskPosts.SetTaskPostsAsync(tenantId, taskId, null, [post], null, cancellationToken);
+        }
+
+        await activity.RecordAsync(taskId, "Task handed off", request.Note.Trim(), cancellationToken);
         return Result.Success();
     }
 }

@@ -103,9 +103,11 @@ public static class WorkflowEndpoints
                 }
 
                 var canActForAnyone = (await authorization.AuthorizeAsync(httpContext.User, WorkflowPermissions.Configure)).Succeeded;
-                return (await service.ApproveAsync(id, currentUser.UserId.Value, request, canActForAnyone, cancellationToken)).ToApiResult();
+                // A substitute (delegation) may decide without holding the permission; the service checks who they act for.
+                var holdsPermission = (await authorization.AuthorizeAsync(httpContext.User, WorkflowPermissions.Approve)).Succeeded;
+                return (await service.ApproveAsync(id, currentUser.UserId.Value, request, canActForAnyone, holdsPermission, cancellationToken)).ToApiResult();
             })
-            .RequireAuthorization(WorkflowPermissions.Approve);
+            .RequireAuthorization();
 
         approvalCenter.MapPost("/{id:guid}/reject", async (
                 Guid id, DecideWorkflowInstanceRequest request, ICurrentUserContext currentUser,
@@ -118,9 +120,10 @@ public static class WorkflowEndpoints
                 }
 
                 var canActForAnyone = (await authorization.AuthorizeAsync(httpContext.User, WorkflowPermissions.Configure)).Succeeded;
-                return (await service.RejectAsync(id, currentUser.UserId.Value, request, canActForAnyone, cancellationToken)).ToApiResult();
+                var holdsPermission = (await authorization.AuthorizeAsync(httpContext.User, WorkflowPermissions.Reject)).Succeeded;
+                return (await service.RejectAsync(id, currentUser.UserId.Value, request, canActForAnyone, holdsPermission, cancellationToken)).ToApiResult();
             })
-            .RequireAuthorization(WorkflowPermissions.Reject);
+            .RequireAuthorization();
 
         // Delegation: handing approvals to a substitute for a period. Anyone who can approve may delegate their own;
         // delegating someone else's, or revoking another person's, needs Workflow.Configure.

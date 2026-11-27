@@ -356,24 +356,29 @@ public sealed class TaskItem : AuditableEntity<Guid>
         ReviewComment = comment;
     }
 
-    /// <summary>Approved: the task is done.</summary>
-    public void ApproveReview(Guid? byUserId, string? comment, DateTimeOffset nowUtc)
+    /// <summary>Approved: the task is done - unless <paramref name="complete"/> is false (something the task waits for
+    /// is still open), when the approval is kept and the task stays where it is.</summary>
+    public void ApproveReview(Guid? byUserId, string? comment, DateTimeOffset nowUtc, bool complete = true)
     {
         ReviewStatus = NexusCore.Application.Approvals.ApprovalStatus.Approved;
         ReviewDecidedAtUtc = nowUtc;
         ReviewDecidedByUserId = byUserId;
         ReviewComment = comment;
-        ChangeStatus(TaskItemStatus.Completed, nowUtc);
+        if (complete)
+        {
+            ChangeStatus(TaskItemStatus.Completed, nowUtc);
+        }
     }
 
     /// <summary>Rejected: back to work (بازکاری); it can be submitted again.</summary>
-    public void RejectReview(Guid? byUserId, string? comment, DateTimeOffset nowUtc)
+    /// <param name="backTo">Where the task goes: in progress, or not started when the person's in-progress limit is full.</param>
+    public void RejectReview(Guid? byUserId, string? comment, DateTimeOffset nowUtc, TaskItemStatus backTo = TaskItemStatus.InProgress)
     {
         ReviewStatus = NexusCore.Application.Approvals.ApprovalStatus.Rejected;
         ReviewDecidedAtUtc = nowUtc;
         ReviewDecidedByUserId = byUserId;
         ReviewComment = comment;
-        ChangeStatus(TaskItemStatus.InProgress, nowUtc);
+        ChangeStatus(backTo, nowUtc);
     }
 
     /// <summary>The label goes; the task keeps its built-in status.</summary>

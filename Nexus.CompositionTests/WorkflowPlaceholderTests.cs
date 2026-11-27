@@ -231,6 +231,31 @@ public sealed class WorkflowPlaceholderTests
         Assert.Equal(Manager, viaDelegate.Decisions.Single().OnBehalfOfUserId);
     }
 
+    [Fact]
+    public async Task WithoutTheApprovePermission_OnlyTheDesignatedApproverOrTheirSubstituteCanDecide()
+    {
+        var f = new Fixture();
+        await f.Define("Risk", ByKey("Review", ApprovalParticipants.Manager));
+        var center = f.Center(false);
+        var request = new DecideWorkflowInstanceRequest(null);
+
+        // Someone without the permission who is neither the approver nor their substitute: refused.
+        var first = await f.Submit("Risk");
+        Assert.Equal("forbidden", (await center.ApproveAsync(first!.Id, Stranger, request, false, holdsPermission: false, default)).Error.Code);
+        Assert.Equal("forbidden", (await center.RejectAsync(first.Id, Stranger, request, false, holdsPermission: false, default)).Error.Code);
+
+        // The designated approver decides without the permission.
+        Assert.True((await center.ApproveAsync(first.Id, Manager, request, false, holdsPermission: false, default)).IsSuccess);
+
+        // So does their substitute today (a delegation), recorded as on their behalf.
+        var second = await f.Submit("Risk");
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        await new WorkflowDelegationService(f.Delegations, f.Db).CreateAsync(
+            Tenant, Manager, false, new CreateWorkflowDelegationRequest(Substitute, today.AddDays(-1), today.AddDays(2)), default);
+        var viaDelegate = (await center.ApproveAsync(second!.Id, Substitute, request, false, holdsPermission: false, default)).Value!;
+        Assert.Equal(Manager, viaDelegate.Decisions.Single().OnBehalfOfUserId);
+    }
+
     // -------------------------------------------------------------- the definition endpoint's service
 
     [Fact]

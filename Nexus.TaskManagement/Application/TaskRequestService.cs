@@ -16,7 +16,8 @@ public sealed class TaskRequestService(
     ITaskRepository taskRepository,
     ITaskService tasks,
     ITaskManagementUnitOfWork unitOfWork,
-    ICurrentUserContext currentUser) : ITaskRequestService
+    ICurrentUserContext currentUser,
+    NexusCore.Application.Common.ISchedulingDayPolicy? days = null) : ITaskRequestService
 {
     public const string SourceType = "Request";
 
@@ -151,7 +152,9 @@ public sealed class TaskRequestService(
         var created = await tasks.CreateAsync(
             new CreateTaskRequest(
                 item.Title,
-                request.DueDate ?? item.NeededBy ?? DateOnly.FromDateTime(DateTime.UtcNow.AddDays(7)),
+                request.DueDate
+                    // The date the requester needed it by, or a week on - moved to a working day when it is not one.
+                    ?? DefaultDueDates.FirstWorkingDay(item.NeededBy is { } needed && needed >= DefaultDueDates.TodayInIran() ? needed : DefaultDueDates.TodayInIran().AddDays(7), days),
                 item.Priority,
                 item.Description,
                 AssignedUserId: assignee,
