@@ -21,6 +21,7 @@ public static class SessionReasons
     public const string ReuseDetected = "session.reuse_detected";
     public const string ConcurrentLimit = "session.concurrent_limit";
     public const string LoggedOut = "session.logged_out";
+    public const string ReplacedByRelogin = "session.replaced_by_relogin";
 
     public static string CodeFor(SessionEndReason reason) => reason switch
     {
@@ -32,6 +33,7 @@ public static class SessionReasons
         SessionEndReason.AccountDisabled => AccountDisabled,
         SessionEndReason.ReuseDetected => ReuseDetected,
         SessionEndReason.ConcurrentLimit => ConcurrentLimit,
+        SessionEndReason.ReplacedByRelogin => ReplacedByRelogin,
         _ => Revoked
     };
 }

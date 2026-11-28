@@ -26,7 +26,8 @@ public static class IdentityEndpoints
 
         auth.MapPost("/login", async (LoginRequest request, HttpContext http, IIdentityService identityService, IOptions<SignInSessionOptions> session, CancellationToken cancellationToken) =>
             {
-                var result = await identityService.LoginAsync(request, cancellationToken);
+                // This browser's own session (its cookie) is replaced, not counted against the limit.
+                var result = await identityService.LoginAsync(request, SessionCookies.ReadCookie(http, session.Value), cancellationToken);
                 return result.IsSuccess ? WithSessionCookie(http, session.Value, result).ToApiResult() : result.ToApiResult();
             })
             .AllowAnonymous()

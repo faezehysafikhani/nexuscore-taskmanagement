@@ -25,7 +25,9 @@ public enum SessionEndReason
     /// <summary>An exchanged refresh token was presented again: a copy of it exists.</summary>
     ReuseDetected = 8,
     /// <summary>The user picked it to make room for a new sign-in at the concurrent-session limit.</summary>
-    ConcurrentLimit = 9
+    ConcurrentLimit = 9,
+    /// <summary>The same browser signed in again while this session was still open: the new sign-in replaced it.</summary>
+    ReplacedByRelogin = 10
 }
 
 /// <summary>

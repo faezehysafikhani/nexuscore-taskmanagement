@@ -554,6 +554,44 @@ public sealed class SessionSecurityTests
     }
 
     [Fact]
+    public async Task SigningInAgainFromTheSameBrowser_ReplacesItsOwnSession_InsteadOfHittingTheLimit()
+    {
+        await using var api = await Api.StartAsync();
+        await api.LoginAsync(UserName, Password);
+        await api.LoginAsync(UserName, Password);
+        var mine = await api.LoginAsync(UserName, Password, cookieMode: true);
+        var mineSid = SidOf(Access(await Json(mine)));
+        var cookie = CookieValue(mine);
+
+        // The same browser (its cookie) signs in again: at the limit of 3, but its own session does not count.
+        var again = await Json(await api.CookieSendAsync(HttpMethod.Post, "/api/identity/auth/login", cookie, new { identifier = UserName, password = Password }));
+
+        Assert.False(string.IsNullOrEmpty(Access(again)));
+        Assert.True(again.TryGetProperty("sessionLimit", out var limit) is false || limit.ValueKind == JsonValueKind.Null);
+        var admin = await Json(await api.LoginAsync(Api.AdminName, Password));
+        var list = await Json(await api.SendAsync(HttpMethod.Get, $"/api/identity/users/{api.UserId}/sessions", Access(admin), null));
+        var replaced = list.GetProperty("recent").EnumerateArray().Single(row => row.GetProperty("id").GetString() == mineSid.ToString());
+        Assert.Equal("session.replaced_by_relogin", replaced.GetProperty("endReason").GetString());
+        Assert.Equal(3, list.GetProperty("active").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task SigningInFromAnotherBrowser_StillHitsTheLimit()
+    {
+        await using var api = await Api.StartAsync();
+        for (var i = 0; i < 3; i++)
+        {
+            await api.LoginAsync(UserName, Password, cookieMode: true);
+        }
+
+        // Browser B has no cookie of its own: the limit applies as before.
+        var blocked = await Json(await api.LoginAsync(UserName, Password, cookieMode: true));
+
+        Assert.True(string.IsNullOrEmpty(blocked.GetProperty("accessToken").GetString()));
+        Assert.Equal(3, blocked.GetProperty("sessionLimit").GetProperty("sessions").GetArrayLength());
+    }
+
+    [Fact]
     public async Task ClosingOldest_CompletesTheSignIn_AndTheOldestSessionEnds()
     {
         await using var api = await Api.StartAsync();
