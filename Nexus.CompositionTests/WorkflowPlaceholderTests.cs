@@ -166,15 +166,18 @@ public sealed class WorkflowPlaceholderTests
     }
 
     [Fact]
-    public async Task ARequiredPlaceholderThatCannotBeResolved_LeavesTheStepOpenToAnyoneWithPermission()
+    public async Task ARequiredPlaceholderThatCannotBeResolved_RefusesTheSubmission_InsteadOfLeavingTheStepToAnyone()
     {
+        // Rule L: a mandatory step whose approver cannot be found is not left open to everyone with the permission.
         var f = new Fixture();
         await f.Define("Risk", ByKey("Review", ApprovalParticipants.Manager));
 
-        var instance = await f.Submit("Risk", inProject: false); // no project, so nobody to resolve to
+        var refused = await Assert.ThrowsAsync<ApprovalRefusedException>(() => f.Submit("Risk", inProject: false)); // no project, so nobody to resolve to
 
-        Assert.Null(instance!.GetSteps()![0].ApproverUserId);
-        Assert.Single((await f.Center(true).ListPendingForApproverAsync(Tenant, Stranger, default)).Value!);
+        Assert.Equal("workflow.approver_missing", refused.Code);
+        Assert.Contains("Review", refused.Message);
+        Assert.Empty(f.Db.WorkflowInstances);
+        Assert.Empty((await f.Center(true).ListPendingForApproverAsync(Tenant, Stranger, default)).Value!);
     }
 
     [Fact]
@@ -282,7 +285,8 @@ public sealed class WorkflowPlaceholderTests
         await f.Service.SetStepsAsync(new SetWorkflowStepsRequest(Tenant, "Risk", "Project", f.Project.Id, null, []), default);
 
         Assert.Null(await f.Submit("Risk"));
-        Assert.NotNull(await f.Submit("Risk", inProject: false));
+        // Outside the project the general chain still applies (its Manager given by the submitter here).
+        Assert.NotNull(await f.Submit("Risk", participants: new Dictionary<string, Guid> { [ApprovalParticipants.Manager] = Manager }, inProject: false));
     }
 
     // -------------------------------------------------------------- the project settings (groups)

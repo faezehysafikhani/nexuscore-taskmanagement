@@ -24,6 +24,7 @@ public static class DependencyInjection
         configure?.Invoke(options);
         services.AddSingleton(options);
         services.AddScoped<IProjectService, ProjectService>();
+        services.AddScoped<NexusCore.Application.Approvals.IApprovalSubjectDescriber, ProjectApprovalSubjectDescriber>();
         services.AddScoped<IProjectProgressService, ProjectProgressService>();
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<IValidator<CreateProjectRequest>, CreateProjectRequestValidator>();

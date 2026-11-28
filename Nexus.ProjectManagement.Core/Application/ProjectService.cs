@@ -16,8 +16,13 @@ public sealed class ProjectService(
     IEnumerable<IProjectSubmissionCheck>? submissionChecks = null,
     IWorkAssignmentScope? assignmentScope = null,
     IUserReachScope? reachScope = null,
-    ICurrentUserContext? currentUser = null) : IProjectService
+    ICurrentUserContext? currentUser = null,
+    IApprovalTracker? approvalTracker = null) : IProjectService
 {
+    /// <summary>The charter's approval: scoped to the project, so a chain set for this project wins over the general one.</summary>
+    private static ApprovalSubject SubjectOf(Project project) =>
+        new("Project", project.Id, project.TenantId, ScopeType: "Project", ScopeId: project.Id);
+
     public async Task<Result<PagedResult<ProjectDto>>> ListAsync(ListProjectsRequest request, CancellationToken cancellationToken)
     {
         var normalized = request with
@@ -37,9 +42,63 @@ public sealed class ProjectService(
     public async Task<Result<ProjectDto>> GetAsync(Guid id, CancellationToken cancellationToken)
     {
         var project = await repository.GetByIdAsync(id, cancellationToken);
-        return project is null
-            ? Result.Failure<ProjectDto>(Error.NotFound("Project not found."))
-            : Result.Success(ToDto(project));
+        if (project is null)
+        {
+            return Result.Failure<ProjectDto>(Error.NotFound("Project not found."));
+        }
+
+        // A project left "pending" while its approval was already decided (see SyncApprovalAsync) is put right on read.
+        if (await SyncWithApprovalAsync(project, cancellationToken))
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+
+        return Result.Success(ToDto(project));
+    }
+
+    /// <summary>
+    /// Brings the project's approval state in line with its approval in the backend: a decision whose follow-up failed
+    /// (the project stayed "pending"), or a submission that never got an approval (withdrawn or lost) is repaired.
+    /// </summary>
+    public async Task<Result<ProjectDto>> SyncApprovalAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var project = await repository.GetByIdAsync(id, cancellationToken);
+        if (project is null)
+        {
+            return Result.Failure<ProjectDto>(Error.NotFound("Project not found."));
+        }
+
+        if (await SyncWithApprovalAsync(project, cancellationToken))
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+
+        return Result.Success(ToDto(project));
+    }
+
+    private async Task<bool> SyncWithApprovalAsync(Project project, CancellationToken cancellationToken)
+    {
+        if (project.ApprovalStatus != ApprovalStatus.PendingApproval || approvalTracker is null)
+        {
+            return false;
+        }
+
+        var latest = await approvalTracker.GetLatestAsync(SubjectOf(project), cancellationToken);
+        switch (latest?.State)
+        {
+            case ApprovalRunState.InProgress:
+                return false;
+            case ApprovalRunState.Approved:
+                project.Approve();
+                return true;
+            case ApprovalRunState.Rejected:
+                project.Reject();
+                return true;
+            default:
+                // Withdrawn, or no approval at all: nothing is deciding it - it can be sent again.
+                project.ResetApproval();
+                return true;
+        }
     }
 
     public async Task<Result> CheckAsync(CreateProjectRequest request, Guid? existingProjectId, CancellationToken cancellationToken)
@@ -127,6 +186,13 @@ public sealed class ProjectService(
             return Result.Failure<ProjectDto>(Error.NotFound("Project not found."));
         }
 
+        // While the charter is with the approvers it does not change under them.
+        await SyncWithApprovalAsync(project, cancellationToken);
+        if (project.ApprovalStatus == ApprovalStatus.PendingApproval)
+        {
+            return Result.Failure<ProjectDto>(ProjectErrors.PendingApproval);
+        }
+
         if (string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(request.Code))
         {
             return Result.Failure<ProjectDto>(Error.Validation("Name and code are required."));
@@ -155,10 +221,20 @@ public sealed class ProjectService(
             return Result.Failure<ProjectDto>(managerError);
         }
 
+        // «تصمیم ۲»: after approval, changing the manager, dates, cost, goal or requirements sends the charter for approval
+        // again (the project keeps working meanwhile); other fields change freely.
+        var needsReapproval = project.ApprovalStatus == ApprovalStatus.Approved
+            && project.ChangesApprovedCharter(request.ManagerUserId, request.StartDate, request.EndDate, request.Cost, request.Goal, request.Requirements);
+
         project.UpdateDetails(
             request.Name, request.Code, request.ManagerUserId, request.OwnerUserId,
             request.OrganizationUnitId, request.WorkCalendarId, request.StartDate, request.EndDate, request.Cost,
             request.Goal, request.Requirements, request.Constraints, request.Assumptions, request.Description, request.Charter);
+
+        if (needsReapproval)
+        {
+            return await StartApprovalAsync(project, cancellationToken);
+        }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success(ToDto(project));
@@ -193,6 +269,13 @@ public sealed class ProjectService(
         if (project.Status == ProjectStatus.Archived)
         {
             return Result.Failure<ProjectDto>(Error.Conflict("An archived project cannot change status."));
+        }
+
+        // Working statuses belong to an approved charter; Draft stays open to every project.
+        await SyncWithApprovalAsync(project, cancellationToken);
+        if (request.Status != ProjectStatus.Draft && request.Status != project.Status && project.ApprovalStatus != ApprovalStatus.Approved)
+        {
+            return Result.Failure<ProjectDto>(ProjectErrors.NotApproved);
         }
 
         project.ChangeStatus(request.Status);
@@ -242,6 +325,19 @@ public sealed class ProjectService(
             return Result.Failure<ProjectDto>(Error.NotFound("Project not found."));
         }
 
+        // A project already with the approvers, or already approved, is not sent again (a double click, a stale screen).
+        // One left "pending" by a failure is repaired first, so it can be sent.
+        await SyncWithApprovalAsync(project, cancellationToken);
+        if (project.ApprovalStatus == ApprovalStatus.PendingApproval)
+        {
+            return Result.Failure<ProjectDto>(ProjectErrors.AlreadyPending);
+        }
+
+        if (project.ApprovalStatus == ApprovalStatus.Approved)
+        {
+            return Result.Failure<ProjectDto>(ProjectErrors.AlreadyApproved);
+        }
+
         foreach (var check in submissionChecks ?? [])
         {
             var objection = await check.CheckAsync(project, cancellationToken);
@@ -251,8 +347,26 @@ public sealed class ProjectService(
             }
         }
 
-        var subject = new ApprovalSubject("Project", project.Id, project.TenantId);
-        var outcome = await approvalRequester.RequestApprovalAsync(subject, cancellationToken);
+        return await StartApprovalAsync(project, cancellationToken);
+    }
+
+    /// <summary>
+    /// Starts the charter's approval and records it on the project. The approval lives in another store: if the project
+    /// cannot be saved afterwards, the approval just started is withdrawn, so no approver is left with an orphan.
+    /// </summary>
+    private async Task<Result<ProjectDto>> StartApprovalAsync(Project project, CancellationToken cancellationToken)
+    {
+        var subject = SubjectOf(project);
+        ApprovalRequestOutcome outcome;
+        try
+        {
+            outcome = await approvalRequester.RequestApprovalAsync(subject, cancellationToken);
+        }
+        catch (ApprovalRefusedException refused)
+        {
+            // Nothing was started (no approver for a step, or only the submitter could approve): nothing is saved either.
+            return Result.Failure<ProjectDto>(new Error(refused.Code, refused.Message));
+        }
 
         if (outcome == ApprovalRequestOutcome.Submitted)
         {
@@ -264,7 +378,16 @@ public sealed class ProjectService(
             project.Approve();
         }
 
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch when (outcome == ApprovalRequestOutcome.Submitted && approvalTracker is not null)
+        {
+            await approvalTracker.WithdrawAsync(subject, CancellationToken.None);
+            throw;
+        }
+
         return Result.Success(ToDto(project));
     }
 

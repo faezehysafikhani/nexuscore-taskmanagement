@@ -125,6 +125,7 @@ public sealed class ProjectLifecycleTests
     public async Task Status_CanMoveBetweenTheWorkingStatuses_ButNotToArchivedOrOutOfIt()
     {
         var project = ExistingProject();
+        project.Approve(); // the working statuses belong to an approved charter (H2)
         var service = Service(new Repo(project));
 
         Assert.Equal(ProjectStatus.OnHold, (await service.ChangeStatusAsync(project.Id, new ChangeProjectStatusRequest(ProjectStatus.OnHold), default)).Value!.Status);

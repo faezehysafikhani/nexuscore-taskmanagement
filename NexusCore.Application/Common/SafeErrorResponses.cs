@@ -66,6 +66,13 @@ public static class SafeErrorResponses
                 return;
             }
 
+            // The approval backend would not start an approval (see ApprovalRefusedException): the submitter has to fix something.
+            if (exception is NexusCore.Application.Approvals.ApprovalRefusedException refused)
+            {
+                await Results.Problem(refused.Message, statusCode: StatusCodes.Status400BadRequest, title: refused.Code).ExecuteAsync(context);
+                return;
+            }
+
             context.RequestServices.GetRequiredService<ILoggerFactory>()
                 .CreateLogger("NexusCore.UnhandledException")
                 .LogError(exception, "Unhandled exception on {Method} {Path}.", context.Request.Method, context.Request.Path);

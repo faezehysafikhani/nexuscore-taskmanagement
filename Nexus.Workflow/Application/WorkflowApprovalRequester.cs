@@ -16,7 +16,8 @@ public sealed class WorkflowApprovalRequester(
     IWorkflowUnitOfWork unitOfWork,
     IEnumerable<IApprovalParticipantResolver>? participantResolvers = null,
     IEnumerable<IApprovalKeyResolver>? keyResolvers = null,
-    ICurrentUserContext? currentUser = null) : IApprovalRequester
+    ICurrentUserContext? currentUser = null,
+    WorkflowOptions? options = null) : IApprovalRequester
 {
     public async Task<ApprovalRequestOutcome> RequestApprovalAsync(ApprovalSubject subject, CancellationToken cancellationToken)
     {
@@ -37,14 +38,35 @@ public sealed class WorkflowApprovalRequester(
 
         // The people each step points at are fixed now, when the approval starts.
         var participants = await ResolveParticipantsAsync(subject, cancellationToken);
+        var submitter = currentUser?.UserId;
+        var noSelfApproval = submitter is not null
+            && (options ?? new WorkflowOptions()).SelfApprovalForbiddenSubjectTypes.Contains(subject.SubjectType);
         var steps = new List<WorkflowInstanceStep>();
         foreach (var step in definition.Steps.OrderBy(s => s.Order))
         {
             var approver = step.ApproverUserId ?? Resolve(participants, step.ApproverKey)
                 ?? await ResolveKeyAsync(subject, step.ApproverKey, cancellationToken);
-            if (approver is null && step.ApproverKey is not null && step.IsOptional)
+            if (approver is null && step.ApproverKey is not null)
             {
-                continue;
+                if (step.IsOptional)
+                {
+                    continue;
+                }
+
+                // A mandatory step that names a role nobody fills would wait for "anyone": refused instead.
+                throw new ApprovalRefusedException(WorkflowErrors.ApproverMissingCode, string.Format(WorkflowErrors.ApproverMissingMessage, step.Name));
+            }
+
+            if (noSelfApproval && approver == submitter)
+            {
+                // The submitter cannot approve their own request: the step goes to their manager in the chart.
+                var manager = await ResolveKeyAsync(subject, ApprovalParticipants.OrgManager, cancellationToken);
+                if (manager is null || manager == submitter)
+                {
+                    throw new ApprovalRefusedException(WorkflowErrors.SelfApprovalCode, string.Format(WorkflowErrors.SelfApprovalNoManagerMessage, step.Name));
+                }
+
+                approver = manager;
             }
 
             steps.Add(new WorkflowInstanceStep(steps.Count + 1, step.Name, approver));
@@ -56,7 +78,7 @@ public sealed class WorkflowApprovalRequester(
             return ApprovalRequestOutcome.NotConfigured;
         }
 
-        var instance = new WorkflowInstance(Guid.NewGuid(), subject.TenantId, definition.Id, subject.SubjectType, subject.SubjectId, steps);
+        var instance = new WorkflowInstance(Guid.NewGuid(), subject.TenantId, definition.Id, subject.SubjectType, subject.SubjectId, steps, submitter);
         await instanceRepository.AddAsync(instance, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return ApprovalRequestOutcome.Submitted;

@@ -22,4 +22,10 @@ public interface IProjectService
     /// <summary>Deletes the project for good. Refused (409) while any installed module still holds data about it.</summary>
     Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken);
     Task<Result<ProjectDto>> SubmitForApprovalAsync(Guid id, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Re-reads the charter's approval from the approval backend and puts the project's approval state right (a decision
+    /// whose follow-up failed, a submission whose approval was withdrawn). A no-op when nothing drifted.
+    /// </summary>
+    Task<Result<ProjectDto>> SyncApprovalAsync(Guid id, CancellationToken cancellationToken) => GetAsync(id, cancellationToken);
 }

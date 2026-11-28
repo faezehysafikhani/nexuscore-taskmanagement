@@ -13,6 +13,9 @@ public sealed class WorkflowInstanceConfiguration : IEntityTypeConfiguration<Wor
         builder.Property(x => x.Id).ValueGeneratedNever();
         builder.Property(x => x.SubjectType).HasMaxLength(80).IsRequired();
         builder.Property(x => x.StepsSnapshot);
+        builder.Property(x => x.SubmittedByUserId);
+        // Set by the application on every decision (works on every provider, unlike a server-generated rowversion).
+        builder.Property(x => x.RowVersion).IsConcurrencyToken();
         builder.Navigation(x => x.Decisions).UsePropertyAccessMode(PropertyAccessMode.Field);
 
         builder.HasMany(x => x.Decisions)

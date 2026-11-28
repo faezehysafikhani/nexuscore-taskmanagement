@@ -13,11 +13,27 @@ public sealed record ApprovalGranted(
     Guid SubjectId,
     Guid TenantId,
     Guid? DecidedByUserId,
-    string? Comment) : DomainEvent;
+    string? Comment,
+    Guid? SubmittedByUserId = null) : DomainEvent;
 
 public sealed record ApprovalRejected(
     string SubjectType,
     Guid SubjectId,
     Guid TenantId,
     Guid? DecidedByUserId,
-    string? Comment) : DomainEvent;
+    string? Comment,
+    Guid? SubmittedByUserId = null) : DomainEvent;
+
+/// <summary>
+/// Raised by the approval backend when a step of a subject's approval starts and waits for someone: when the
+/// approval is started (its first step) and each time a step approves and the next one begins. ApproverUserId is
+/// null for a step anyone with the approve permission may decide. Used to tell the approver (notifications).
+/// </summary>
+public sealed record ApprovalStepAssigned(
+    string SubjectType,
+    Guid SubjectId,
+    Guid TenantId,
+    int StepOrder,
+    string StepName,
+    Guid? ApproverUserId,
+    Guid? SubmittedByUserId) : DomainEvent;

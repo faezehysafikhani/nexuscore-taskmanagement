@@ -50,6 +50,8 @@
     <ProjectReference Include="..\Ticketing.Infrastructure\Ticketing.Infrastructure.csproj" />
     <!-- RecurringTaskReminderTests: due recurring tasks through notifications and SMS. -->
     <ProjectReference Include="..\Nexus.Integrations.TaskNotifications\Nexus.Integrations.TaskNotifications.csproj" />
+    <!-- ProjectApprovalIntegrityTests: the platform's approval notifications (ApprovalNotifications). -->
+    <ProjectReference Include="..\Nexus.Bundles.Platform\Nexus.Bundles.Platform.csproj" />
     <!-- NotificationInboxTests: the notification endpoints the bell reads. -->
     <ProjectReference Include="..\Notifications.Api\Notifications.Api.csproj" />
     <ProjectReference Include="..\Notifications.Infrastructure\Notifications.Infrastructure.csproj" />

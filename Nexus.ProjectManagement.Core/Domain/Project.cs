@@ -120,4 +120,21 @@ public sealed class Project : AuditableEntity<Guid>
     }
 
     public void Reject() => ApprovalStatus = ApprovalStatus.Rejected;
+
+    /// <summary>
+    /// Back to "not submitted": the approval it was waiting for no longer exists (it was withdrawn, or its submission
+    /// never reached the approval backend). The project can be sent again.
+    /// </summary>
+    public void ResetApproval() => ApprovalStatus = ApprovalStatus.NotSubmitted;
+
+    /// <summary>
+    /// Whether these values change what the charter was approved for - the manager, the dates, the cost, the goal or the
+    /// requirements (see «تصمیم ۲»). Other fields (name, description, constraints ...) can change freely after approval.
+    /// </summary>
+    public bool ChangesApprovedCharter(Guid? managerUserId, DateOnly? startDate, DateOnly? endDate, decimal? cost, string? goal, string? requirements) =>
+        managerUserId != ManagerUserId || startDate != StartDate || endDate != EndDate || cost != Cost
+        || !SameText(goal, Goal) || !SameText(requirements, Requirements);
+
+    private static bool SameText(string? a, string? b) =>
+        string.Equals(string.IsNullOrWhiteSpace(a) ? null : a.Trim(), string.IsNullOrWhiteSpace(b) ? null : b.Trim(), StringComparison.Ordinal);
 }

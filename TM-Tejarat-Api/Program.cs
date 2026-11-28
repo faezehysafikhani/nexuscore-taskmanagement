@@ -549,6 +549,7 @@ if (builder.Configuration.GetValue(
         cancellationToken);
     await WorkflowSchemaUpgrade.EnsureCurrentAsync(services.GetRequiredService<WorkflowDbContext>(), cancellationToken);
     await WorkflowApproverPlaceholdersSchemaUpgrade.EnsureCurrentAsync(services.GetRequiredService<WorkflowDbContext>(), cancellationToken);
+    await WorkflowApprovalIntegritySchemaUpgrade.EnsureCurrentAsync(services.GetRequiredService<WorkflowDbContext>(), cancellationToken);
 
     // Work calendars (working days, hours, official holidays, date exceptions): the calendar module's own
     // tables beside the meetings, and the columns later Core releases added to them

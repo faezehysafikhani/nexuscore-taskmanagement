@@ -13,4 +13,11 @@ public sealed class WorkflowOptions
     /// designated approver only decides who sees the item in their approval centre.
     /// </summary>
     public bool RequireDesignatedApprover { get; set; }
+
+    /// <summary>
+    /// Subject types whose submitter may never decide any step of their own approval. When a step would be theirs, it
+    /// goes to their manager in the organization chart (OrgManager); with no such manager the submission is refused.
+    /// Project charters by default.
+    /// </summary>
+    public ISet<string> SelfApprovalForbiddenSubjectTypes { get; } = new HashSet<string>(StringComparer.Ordinal) { "Project" };
 }

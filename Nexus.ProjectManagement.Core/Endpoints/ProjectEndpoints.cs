@@ -78,6 +78,11 @@ public static class ProjectEndpoints
                 (await service.SubmitForApprovalAsync(id, cancellationToken)).ToApiResult())
             .RequireAuthorization(ProjectPermissions.Submit);
 
+        // Repairs a project whose approval state drifted from its approval (see IProjectService.SyncApprovalAsync).
+        group.MapPost("/{id:guid}/approval/sync", async (Guid id, IProjectService service, CancellationToken cancellationToken) =>
+                (await service.SyncApprovalAsync(id, cancellationToken)).ToApiResult())
+            .RequireAuthorization(ProjectPermissions.View);
+
         return app;
     }
 }

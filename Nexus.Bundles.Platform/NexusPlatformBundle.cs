@@ -1,3 +1,5 @@
+using NexusCore.SharedKernel.Domain;
+using NexusCore.Application.Approvals;
 using System.Text;
 using Chat.Api.Endpoints;
 using Chat.Api.Hubs;
@@ -113,6 +115,11 @@ public static class NexusPlatformBundle
             services.AddEventsApplication();
             services.AddTicketingApplication();
             services.AddNotificationApplication();
+
+            // Approvers and submitters are told about approvals (project charters).
+            services.AddScoped<IDomainEventHandler<ApprovalStepAssigned>, ApprovalNotifications>();
+            services.AddScoped<IDomainEventHandler<ApprovalGranted>, ApprovalNotifications>();
+            services.AddScoped<IDomainEventHandler<ApprovalRejected>, ApprovalNotifications>();
         }
 
         // Infrastructure tier: one DbContext per module, same database, isolated by schema.
@@ -317,6 +324,7 @@ public static class NexusPlatformBundle
             await CalendarSchemaUpgrade.EnsureCurrentAsync(sp.GetRequiredService<CalendarDbContext>(), cancellationToken);
             await WorkflowSchemaUpgrade.EnsureCurrentAsync(sp.GetRequiredService<WorkflowDbContext>(), cancellationToken);
             await WorkflowApproverPlaceholdersSchemaUpgrade.EnsureCurrentAsync(sp.GetRequiredService<WorkflowDbContext>(), cancellationToken);
+            await WorkflowApprovalIntegritySchemaUpgrade.EnsureCurrentAsync(sp.GetRequiredService<WorkflowDbContext>(), cancellationToken);
         }
 
         if (options.OrgStructure)

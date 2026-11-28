@@ -28,6 +28,7 @@ public static class DependencyInjection
         // Replace the default NullApprovalRequester - order-independent regardless of whether
         // NexusCore's AddInfrastructure() or this call runs first.
         services.Replace(ServiceDescriptor.Scoped<IApprovalRequester, WorkflowApprovalRequester>());
+        services.Replace(ServiceDescriptor.Scoped<IApprovalTracker, WorkflowApprovalTracker>());
 
         services.AddAuthorization(options =>
         {

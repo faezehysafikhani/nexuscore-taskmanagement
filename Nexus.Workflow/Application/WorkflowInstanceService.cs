@@ -92,6 +92,13 @@ public sealed class WorkflowInstanceService(
             return Result.Failure<WorkflowInstanceDto>(Error.Conflict("This workflow instance has already been decided."));
         }
 
+        // Nobody decides their own request where that is forbidden (project charters by default), whoever they are.
+        if (instance.SubmittedByUserId == decidedByUserId
+            && (options ?? new WorkflowOptions()).SelfApprovalForbiddenSubjectTypes.Contains(instance.SubjectType))
+        {
+            return Result.Failure<WorkflowInstanceDto>(new Error(WorkflowErrors.SelfApprovalCode, WorkflowErrors.SelfApprovalMessage));
+        }
+
         // Deciding as a substitute is recorded: the step's designated approver, when the decider is not them
         // but holds a delegation from them that covers this kind of approval today. Anyone else with the
         // approve permission can still decide, as before - this only adds the record of on whose behalf.
@@ -118,7 +125,15 @@ public sealed class WorkflowInstanceService(
         // part of SaveChangesAsync below, so the module owning the subject (e.g. Risk, Project)
         // reacts without this service knowing who is listening.
         instance.Decide(decidedByUserId, approved, request.Comment, onBehalfOf);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (WorkflowConcurrencyException)
+        {
+            // Another decision on the same step was saved first (see WorkflowInstance.RowVersion).
+            return Result.Failure<WorkflowInstanceDto>(new Error(WorkflowErrors.ConcurrentDecisionCode, WorkflowErrors.ConcurrentDecisionMessage));
+        }
 
         return Result.Success(ToDto(instance, null, null));
     }
