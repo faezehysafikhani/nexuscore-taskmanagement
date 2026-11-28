@@ -23,10 +23,10 @@ public sealed class CompanyProfileTests
         Assert.Equal("C-001", first.Code);
         Assert.Equal("advanced", first.UiLevel);
 
-        // A hand-made code that takes the next number is skipped.
-        Assert.True((await world.Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("دستی", "C-002"), default)).IsSuccess);
-        var third = (await world.Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("سازمان سه", "  "), default)).Value!;
-        Assert.Equal("C-003", third.Code);
+        // The system holds one company: another is refused, with a code of its own or without one.
+        Assert.Equal("conflict", (await world.Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("دستی", "C-002"), default)).Error.Code);
+        Assert.Equal("conflict", (await world.Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("سازمان سه", "  "), default)).Error.Code);
+        Assert.Single((await world.Service.ListCompaniesAsync(Tenant, default)).Value!);
     }
 
     [Fact]
@@ -60,8 +60,9 @@ public sealed class CompanyProfileTests
         var result = await world.Profile.SetCompanyDetailsAsync(Tenant, company.Id, new SetCompanyDetailsRequest(Email: email, NationalId: nationalId), default);
         Assert.Equal("validation.error", result.Error.Code);
 
-        var onCreate = await world.Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("ب", Details: new SetCompanyDetailsRequest(Email: email, NationalId: nationalId)), default);
-        Assert.False(onCreate.IsSuccess);
+        // On create too (in a world with no company yet: the system holds one only).
+        var onCreate = await new World().Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("ب", Details: new SetCompanyDetailsRequest(Email: email, NationalId: nationalId)), default);
+        Assert.Equal("validation.error", onCreate.Error.Code);
     }
 
     [Fact]
@@ -72,12 +73,15 @@ public sealed class CompanyProfileTests
         var b = world.Unit("معاونت ب");
         var under = world.Unit("اداره زیر الف", a.Id);
 
+        // A unit under another: nothing is made.
+        var nested = await world.Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("دوم", UnitIds: [under.Id]), default);
+        Assert.Equal("validation.error", nested.Error.Code);
+        Assert.Empty((await world.Service.ListCompaniesAsync(Tenant, default)).Value!);
+
         var company = (await world.Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("سازمان", UnitIds: [a.Id, b.Id]), default)).Value!;
         Assert.Equal(new[] { a.Id, b.Id }.Order(), company.LinkedUnitIds.Order());
 
-        // A unit under another, or one already in a company: nothing is made.
-        var nested = await world.Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("دوم", UnitIds: [under.Id]), default);
-        Assert.Equal("validation.error", nested.Error.Code);
+        // The system holds one company: a second one, even with a unit already in a company, is not made.
         var taken = await world.Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("سوم", UnitIds: [a.Id]), default);
         Assert.Equal("conflict", taken.Error.Code);
         Assert.Single((await world.Service.ListCompaniesAsync(Tenant, default)).Value!);

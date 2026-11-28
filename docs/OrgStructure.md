@@ -360,7 +360,7 @@ OrgStructure schemas (see its `DEPLOYMENT-CONFIG.md`), run it, open `/swagger`, 
 development default) and authorize with the access token. A typical first run:
 
 1. `POST /api/organization/units` — create a deputy (and units under it).
-2. `POST /api/org-structure/companies` — create the company.
+2. `POST /api/org-structure/companies` — create the company. **The system holds one company** (per tenant): once it exists, even a deactivated one, this returns 409 for everyone, whatever permissions they hold; only after the company is deleted can another be made. Data from before this rule that already holds several companies is not touched.
 3. `PUT /api/org-structure/company-units/{deputyId}` — put the deputy in the company.
 4. `POST /api/org-structure/positions` — create positions: first the head's (no superior), then
    the rest under it, each with its `companyIds`.

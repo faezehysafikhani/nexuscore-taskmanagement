@@ -99,6 +99,12 @@ public sealed partial class OrgStructureService(
             return Result.Failure<CompanyDto>(OtherCompany());
         }
 
+        // The system holds one company only: once it exists no other is made, whoever asks.
+        if (await CompanyExistsAsync(tenantId, cancellationToken))
+        {
+            return Result.Failure<CompanyDto>(OnlyOneCompany());
+        }
+
         // No code given: the next free automatic one.
         var code = string.IsNullOrWhiteSpace(request.Code) ? await NextCompanyCodeAsync(tenantId, cancellationToken) : request.Code;
         var invalid = await ValidateCompanyAsync(tenantId, null, request.Name, code, request.Description, cancellationToken);
@@ -158,11 +164,34 @@ public sealed partial class OrgStructureService(
             return Result.Success(await ToDtoAsync(tenantId, company, cancellationToken));
         }
 
+        // In the organization's turn: two requests at the same moment cannot both find no company and make one each.
+        var (turn, busy) = await AppointmentTurnAsync(tenantId, cancellationToken);
+        if (busy is not null)
+        {
+            return Result.Failure<CompanyDto>(busy);
+        }
+
+        await using var _ = turn;
+        if (await CompanyExistsAsync(tenantId, cancellationToken))
+        {
+            return Result.Failure<CompanyDto>(OnlyOneCompany());
+        }
+
         await repository.AddCompanyAsync(company, cancellationToken);
         await LinkNewCompanyUnitsAsync(tenantId, company.Id, unitIds, cancellationToken);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        if (!await SaveAppointmentsAsync(turn, cancellationToken))
+        {
+            return Result.Failure<CompanyDto>(OnlyOneCompany());
+        }
+
         return Result.Success(await ToDtoAsync(tenantId, company, cancellationToken));
     }
+
+    private async Task<bool> CompanyExistsAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        (await repository.ListCompaniesAsync(tenantId, cancellationToken)).Count > 0;
+
+    /// <summary>One company per tenant, the whole system of that organization (inactive ones count): not a permission matter, so no permission lifts it.</summary>
+    internal static Error OnlyOneCompany() => Error.Conflict("در این سامانه فقط یک شرکت می‌تواند وجود داشته باشد و شرکت از قبل ساخته شده است؛ شرکت دیگری ساخته نمی‌شود. اطلاعات همان شرکت را ویرایش کنید.");
 
     public async Task<Result<CompanyDto>> UpdateCompanyAsync(Guid tenantId, Guid id, UpdateCompanyRequest request, CancellationToken cancellationToken)
     {
