@@ -41,6 +41,7 @@ export class AuthTokenStore {
   }
 
   static clear() {
+    runningReads.clear();
     try {
       localStorage.removeItem(this.ACCESS_TOKEN_KEY);
       localStorage.removeItem(this.REFRESH_TOKEN_KEY);
@@ -93,7 +94,47 @@ export class PersianMessages {
   }
 }
 
-export async function apiRequest<T = any>(
+// Reads (GET) asked while the same read is on its way share it: the same address, for the same user and token, is one
+// request however many components (or React StrictMode's second mount in development) ask for it. Each caller gets its
+// own copy of the answer. A write (POST / PUT / PATCH / DELETE) drops what is running, so a read asked after a change
+// never joins one that began before it; a failed read is shared with those waiting and forgotten at once.
+const runningReads = new Map<string, Promise<ApiResult<any>>>();
+
+function copyOf<T>(value: T): T {
+  if (value !== null && typeof value === 'object') {
+    try {
+      return structuredClone(value);
+    } catch {
+      // Not cloneable: shared as it is.
+    }
+  }
+  return value;
+}
+
+export function apiRequest<T = any>(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<ApiResult<T>> {
+  const method = (options.method || 'GET').toUpperCase();
+  if (method !== 'GET') {
+    runningReads.clear();
+    return send<T>(endpoint, options).finally(() => runningReads.clear());
+  }
+
+  const key = `${endpoint}|${AuthTokenStore.getAccessToken() ?? ''}|${AuthTokenStore.getUserId() ?? ''}`;
+  let shared = runningReads.get(key) as Promise<ApiResult<T>> | undefined;
+  if (!shared) {
+    const started: Promise<ApiResult<T>> = send<T>(endpoint, options).finally(() => {
+      if (runningReads.get(key) === started) runningReads.delete(key);
+    });
+    runningReads.set(key, started);
+    shared = started;
+  }
+  // Everyone, the first caller too, gets its own copy: one that edits its answer cannot change another's.
+  return shared.then((result) => ({ ...result, value: copyOf(result.value) }));
+}
+
+async function send<T = any>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<ApiResult<T>> {
