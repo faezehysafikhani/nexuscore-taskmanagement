@@ -4,10 +4,14 @@ using Nexus.ProjectManagement.Progress.Domain;
 
 namespace Nexus.ProjectManagement.Progress.Infrastructure;
 
-public sealed class DelayReasonRepository(ProgressDbContext dbContext) : IDelayReasonRepository
+public sealed class DelayReasonRepository(ProgressDbContext dbContext, NexusCore.SharedKernel.Interfaces.ICurrentUserContext? currentUser = null) : IDelayReasonRepository
 {
-    public Task<DelayReason?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
-        dbContext.DelayReasons.SingleOrDefaultAsync(reason => reason.Id == id, cancellationToken);
+    public Task<DelayReason?> GetByIdAsync(Guid id, CancellationToken cancellationToken)
+    {
+        // M7: by id, only within the signed-in user's organization (no user, e.g. a background job: unrestricted).
+        var tenant = currentUser?.TenantId;
+        return dbContext.DelayReasons.SingleOrDefaultAsync(reason => reason.Id == id && (tenant == null || reason.TenantId == tenant), cancellationToken);
+    }
 
     public async Task<IReadOnlyList<DelayReason>> ListByProjectsAsync(IReadOnlyCollection<Guid> projectIds, CancellationToken cancellationToken) =>
         await dbContext.DelayReasons

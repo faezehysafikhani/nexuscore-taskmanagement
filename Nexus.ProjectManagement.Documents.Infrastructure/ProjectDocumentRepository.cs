@@ -4,10 +4,14 @@ using Nexus.ProjectManagement.Documents.Domain;
 
 namespace Nexus.ProjectManagement.Documents.Infrastructure;
 
-public sealed class ProjectDocumentRepository(ProjectDocumentsDbContext dbContext) : IProjectDocumentRepository
+public sealed class ProjectDocumentRepository(ProjectDocumentsDbContext dbContext, NexusCore.SharedKernel.Interfaces.ICurrentUserContext? currentUser = null) : IProjectDocumentRepository
 {
-    public Task<ProjectDocument?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
-        dbContext.ProjectDocuments.SingleOrDefaultAsync(document => document.Id == id, cancellationToken);
+    public Task<ProjectDocument?> GetByIdAsync(Guid id, CancellationToken cancellationToken)
+    {
+        // M7: by id, only within the signed-in user's organization (no user, e.g. a background job: unrestricted).
+        var tenant = currentUser?.TenantId;
+        return dbContext.ProjectDocuments.SingleOrDefaultAsync(document => document.Id == id && (tenant == null || document.TenantId == tenant), cancellationToken);
+    }
 
     public Task<ProjectDocument?> GetByIdAsync(Guid tenantId, Guid id, CancellationToken cancellationToken) =>
         dbContext.ProjectDocuments.SingleOrDefaultAsync(document => document.Id == id && document.TenantId == tenantId, cancellationToken);

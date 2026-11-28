@@ -4,10 +4,14 @@ using Nexus.ProjectManagement.Contracts.Domain;
 
 namespace Nexus.ProjectManagement.Contracts.Infrastructure;
 
-public sealed class ContractRepository(ContractsDbContext dbContext) : IContractRepository
+public sealed class ContractRepository(ContractsDbContext dbContext, NexusCore.SharedKernel.Interfaces.ICurrentUserContext? currentUser = null) : IContractRepository
 {
-    public Task<Contract?> GetContractAsync(Guid id, CancellationToken cancellationToken) =>
-        dbContext.Contracts.SingleOrDefaultAsync(c => c.Id == id, cancellationToken);
+    public Task<Contract?> GetContractAsync(Guid id, CancellationToken cancellationToken)
+    {
+        // M7: by id, only within the signed-in user's organization.
+        var tenant = currentUser?.TenantId;
+        return dbContext.Contracts.SingleOrDefaultAsync(c => c.Id == id && (tenant == null || c.TenantId == tenant), cancellationToken);
+    }
 
     public async Task<IReadOnlyList<Contract>> ListContractsAsync(Guid projectId, CancellationToken cancellationToken) =>
         await dbContext.Contracts.Where(c => c.ProjectId == projectId).ToListAsync(cancellationToken);
@@ -29,8 +33,12 @@ public sealed class ContractRepository(ContractsDbContext dbContext) : IContract
         return Task.CompletedTask;
     }
 
-    public Task<ContractAddendum?> GetAddendumAsync(Guid id, CancellationToken cancellationToken) =>
-        dbContext.ContractAddenda.SingleOrDefaultAsync(a => a.Id == id, cancellationToken);
+    public Task<ContractAddendum?> GetAddendumAsync(Guid id, CancellationToken cancellationToken)
+    {
+        // M7: by id, only within the signed-in user's organization.
+        var tenant = currentUser?.TenantId;
+        return dbContext.ContractAddenda.SingleOrDefaultAsync(a => a.Id == id && (tenant == null || a.TenantId == tenant), cancellationToken);
+    }
 
     public async Task<IReadOnlyList<ContractAddendum>> ListAddendaAsync(Guid contractId, CancellationToken cancellationToken) =>
         await dbContext.ContractAddenda.Where(a => a.ContractId == contractId).OrderBy(a => a.Number).ToListAsync(cancellationToken);
@@ -47,8 +55,12 @@ public sealed class ContractRepository(ContractsDbContext dbContext) : IContract
         return Task.CompletedTask;
     }
 
-    public Task<ContractInvoice?> GetInvoiceAsync(Guid id, CancellationToken cancellationToken) =>
-        dbContext.ContractInvoices.SingleOrDefaultAsync(i => i.Id == id, cancellationToken);
+    public Task<ContractInvoice?> GetInvoiceAsync(Guid id, CancellationToken cancellationToken)
+    {
+        // M7: by id, only within the signed-in user's organization.
+        var tenant = currentUser?.TenantId;
+        return dbContext.ContractInvoices.SingleOrDefaultAsync(i => i.Id == id && (tenant == null || i.TenantId == tenant), cancellationToken);
+    }
 
     public async Task<IReadOnlyList<ContractInvoice>> ListInvoicesAsync(Guid contractId, CancellationToken cancellationToken) =>
         await dbContext.ContractInvoices.Where(i => i.ContractId == contractId).ToListAsync(cancellationToken);

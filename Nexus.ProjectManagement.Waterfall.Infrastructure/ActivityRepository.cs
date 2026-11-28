@@ -4,10 +4,14 @@ using Nexus.ProjectManagement.Waterfall.Domain;
 
 namespace Nexus.ProjectManagement.Waterfall.Infrastructure;
 
-public sealed class ActivityRepository(WaterfallDbContext dbContext) : IActivityRepository
+public sealed class ActivityRepository(WaterfallDbContext dbContext, NexusCore.SharedKernel.Interfaces.ICurrentUserContext? currentUser = null) : IActivityRepository
 {
-    public Task<Activity?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
-        dbContext.Activities.SingleOrDefaultAsync(activity => activity.Id == id, cancellationToken);
+    public Task<Activity?> GetByIdAsync(Guid id, CancellationToken cancellationToken)
+    {
+        // M7: by id, only within the signed-in user's organization (no user, e.g. a background job: unrestricted).
+        var tenant = currentUser?.TenantId;
+        return dbContext.Activities.SingleOrDefaultAsync(activity => activity.Id == id && (tenant == null || activity.TenantId == tenant), cancellationToken);
+    }
 
     public async Task<IReadOnlyList<Activity>> ListByProjectAsync(Guid projectId, CancellationToken cancellationToken) =>
         await dbContext.Activities

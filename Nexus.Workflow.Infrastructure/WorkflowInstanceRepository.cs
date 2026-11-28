@@ -4,10 +4,14 @@ using Nexus.Workflow.Domain;
 
 namespace Nexus.Workflow.Infrastructure;
 
-public sealed class WorkflowInstanceRepository(WorkflowDbContext dbContext) : IWorkflowInstanceRepository
+public sealed class WorkflowInstanceRepository(WorkflowDbContext dbContext, NexusCore.SharedKernel.Interfaces.ICurrentUserContext? currentUser = null) : IWorkflowInstanceRepository
 {
-    public Task<WorkflowInstance?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
-        dbContext.WorkflowInstances.Include(i => i.Decisions).SingleOrDefaultAsync(i => i.Id == id, cancellationToken);
+    public Task<WorkflowInstance?> GetByIdAsync(Guid id, CancellationToken cancellationToken)
+    {
+        // M7: by id, only within the signed-in user's organization (no user, e.g. a background job: unrestricted).
+        var tenant = currentUser?.TenantId;
+        return dbContext.WorkflowInstances.Include(i => i.Decisions).SingleOrDefaultAsync(i => i.Id == id && (tenant == null || i.TenantId == tenant), cancellationToken);
+    }
 
     public Task<WorkflowInstance?> GetActiveForSubjectAsync(string subjectType, Guid subjectId, CancellationToken cancellationToken) =>
         dbContext.WorkflowInstances

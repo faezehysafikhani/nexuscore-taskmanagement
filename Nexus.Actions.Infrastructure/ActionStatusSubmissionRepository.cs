@@ -4,10 +4,14 @@ using Nexus.Actions.Domain;
 
 namespace Nexus.Actions.Infrastructure;
 
-public sealed class ActionStatusSubmissionRepository(ActionsDbContext dbContext) : IActionStatusSubmissionRepository
+public sealed class ActionStatusSubmissionRepository(ActionsDbContext dbContext, NexusCore.SharedKernel.Interfaces.ICurrentUserContext? currentUser = null) : IActionStatusSubmissionRepository
 {
-    public Task<ActionStatusSubmission?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
-        dbContext.StatusSubmissions.SingleOrDefaultAsync(submission => submission.Id == id, cancellationToken);
+    public Task<ActionStatusSubmission?> GetByIdAsync(Guid id, CancellationToken cancellationToken)
+    {
+        // M7: by id, only within the signed-in user's organization (no user, e.g. a background job: unrestricted).
+        var tenant = currentUser?.TenantId;
+        return dbContext.StatusSubmissions.SingleOrDefaultAsync(submission => submission.Id == id && (tenant == null || submission.TenantId == tenant), cancellationToken);
+    }
 
     public async Task<IReadOnlyList<ActionStatusSubmission>> ListByActionsAsync(IReadOnlyCollection<Guid> actionIds, CancellationToken cancellationToken) =>
         await dbContext.StatusSubmissions

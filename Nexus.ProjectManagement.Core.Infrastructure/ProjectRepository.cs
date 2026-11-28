@@ -6,10 +6,14 @@ using NexusCore.SharedKernel.Results;
 
 namespace Nexus.ProjectManagement.Core.Infrastructure;
 
-public sealed class ProjectRepository(ProjectManagementCoreDbContext dbContext) : IProjectRepository
+public sealed class ProjectRepository(ProjectManagementCoreDbContext dbContext, NexusCore.SharedKernel.Interfaces.ICurrentUserContext? currentUser = null) : IProjectRepository
 {
-    public Task<Project?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
-        dbContext.Projects.SingleOrDefaultAsync(project => project.Id == id, cancellationToken);
+    public Task<Project?> GetByIdAsync(Guid id, CancellationToken cancellationToken)
+    {
+        // M7: by id, only within the signed-in user's organization (no user, e.g. a background job: unrestricted).
+        var tenant = currentUser?.TenantId;
+        return dbContext.Projects.SingleOrDefaultAsync(project => project.Id == id && (tenant == null || project.TenantId == tenant), cancellationToken);
+    }
 
     public async Task<PagedResult<Project>> ListAsync(ListProjectsRequest request, CancellationToken cancellationToken)
     {

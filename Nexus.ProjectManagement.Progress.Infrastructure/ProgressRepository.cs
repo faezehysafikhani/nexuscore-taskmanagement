@@ -4,10 +4,14 @@ using Nexus.ProjectManagement.Progress.Domain;
 
 namespace Nexus.ProjectManagement.Progress.Infrastructure;
 
-public sealed class ProgressRepository(ProgressDbContext dbContext) : IProgressRepository
+public sealed class ProgressRepository(ProgressDbContext dbContext, NexusCore.SharedKernel.Interfaces.ICurrentUserContext? currentUser = null) : IProgressRepository
 {
-    public Task<ProgressUpdate?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
-        dbContext.ProgressUpdates.SingleOrDefaultAsync(update => update.Id == id, cancellationToken);
+    public Task<ProgressUpdate?> GetByIdAsync(Guid id, CancellationToken cancellationToken)
+    {
+        // M7: by id, only within the signed-in user's organization (no user, e.g. a background job: unrestricted).
+        var tenant = currentUser?.TenantId;
+        return dbContext.ProgressUpdates.SingleOrDefaultAsync(update => update.Id == id && (tenant == null || update.TenantId == tenant), cancellationToken);
+    }
 
     public async Task<IReadOnlyList<ProgressUpdate>> ListByProjectsAsync(IReadOnlyCollection<Guid> projectIds, CancellationToken cancellationToken) =>
         await dbContext.ProgressUpdates

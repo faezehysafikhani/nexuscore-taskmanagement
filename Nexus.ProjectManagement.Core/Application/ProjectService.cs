@@ -197,6 +197,11 @@ public sealed class ProjectService(
             return Result.Failure<ProjectDto>(Error.NotFound("Project not found."));
         }
 
+        if (CheckCanManage(project) is { } forbidden)
+        {
+            return Result.Failure<ProjectDto>(forbidden);
+        }
+
         // While the charter is with the approvers it does not change under them.
         await SyncWithApprovalAsync(project, cancellationToken);
         if (project.ApprovalStatus == ApprovalStatus.PendingApproval)
@@ -278,6 +283,11 @@ public sealed class ProjectService(
             return Result.Failure<ProjectDto>(Error.NotFound("Project not found."));
         }
 
+        if (CheckCanManage(project) is { } forbidden)
+        {
+            return Result.Failure<ProjectDto>(forbidden);
+        }
+
         if (!Enum.IsDefined(request.Status) || request.Status == ProjectStatus.Archived)
         {
             return Result.Failure<ProjectDto>(Error.Validation("Choose Draft, Active, OnHold or Completed; use the archive call to archive a project."));
@@ -340,6 +350,11 @@ public sealed class ProjectService(
         if (project is null)
         {
             return Result.Failure<ProjectDto>(Error.NotFound("Project not found."));
+        }
+
+        if (CheckCanManage(project) is { } forbidden)
+        {
+            return Result.Failure<ProjectDto>(forbidden);
         }
 
         // A project already with the approvers, or already approved, is not sent again (a double click, a stale screen).
@@ -423,6 +438,22 @@ public sealed class ProjectService(
         }
 
         return Result.Success(new CalendarUsageDto(calendarId, total, approved));
+    }
+
+    /// <summary>
+    /// M7: editing, sending and moving a project is for its manager or owner, or for someone holding Projects.ManageAll (what the
+    /// screens show with isPMOrOwnerOrAdmin). With no signed-in user (a background job) nothing is restricted.
+    /// </summary>
+    private Error? CheckCanManage(Project project)
+    {
+        if (currentUser?.UserId is not { } userId)
+        {
+            return null;
+        }
+
+        return userId == project.ManagerUserId || userId == project.OwnerUserId || currentUser.HasPermission(Permissions.ProjectPermissions.ManageAll)
+            ? null
+            : ProjectErrors.Forbidden;
     }
 
     /// <summary>M2: the chosen work calendar must exist in the project's tenant (when the calendar integration is installed).</summary>

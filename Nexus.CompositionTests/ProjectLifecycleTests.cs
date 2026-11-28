@@ -342,8 +342,9 @@ public sealed class ProjectLifecycleTests
         Assert.Contains("مدیر پروژه", refused.Error.Message);
         Assert.True((await limited.CreateAsync(Create(code: "B2", manager: me), default)).IsSuccess);
 
-        // A project that already has that manager (set by someone else) can still be edited by the limited user.
-        var existing = (await open.CreateAsync(Create(code: "B3", manager: boss), default)).Value!;
+        // A project that already has that manager (set by someone else) can still be edited by the limited user - who owns it
+        // (since M7 only the manager, the owner or Projects.ManageAll may edit a project).
+        var existing = (await open.CreateAsync(Create(code: "B3", manager: boss) with { OwnerUserId = me }, default)).Value!;
         var edit = new UpdateProjectRequest(existing.Name, existing.Code, boss, existing.OwnerUserId, existing.OrganizationUnitId, null,
             new DateOnly(2026, 1, 1), new DateOnly(2026, 6, 1), null, "A real goal", "Real requirements", null, null, null, null);
         Assert.True((await limited.UpdateAsync(existing.Id, edit, default)).IsSuccess);

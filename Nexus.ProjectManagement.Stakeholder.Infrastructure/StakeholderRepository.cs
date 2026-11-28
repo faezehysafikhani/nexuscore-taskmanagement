@@ -4,10 +4,14 @@ using Nexus.ProjectManagement.StakeholderManagement.Domain;
 
 namespace Nexus.ProjectManagement.StakeholderManagement.Infrastructure;
 
-public sealed class StakeholderRepository(StakeholderManagementDbContext dbContext) : IStakeholderRepository
+public sealed class StakeholderRepository(StakeholderManagementDbContext dbContext, NexusCore.SharedKernel.Interfaces.ICurrentUserContext? currentUser = null) : IStakeholderRepository
 {
-    public Task<Stakeholder?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
-        dbContext.Stakeholders.SingleOrDefaultAsync(stakeholder => stakeholder.Id == id, cancellationToken);
+    public Task<Stakeholder?> GetByIdAsync(Guid id, CancellationToken cancellationToken)
+    {
+        // M7: by id, only within the signed-in user's organization (no user, e.g. a background job: unrestricted).
+        var tenant = currentUser?.TenantId;
+        return dbContext.Stakeholders.SingleOrDefaultAsync(stakeholder => stakeholder.Id == id && (tenant == null || stakeholder.TenantId == tenant), cancellationToken);
+    }
 
     public async Task<IReadOnlyList<Stakeholder>> ListByProjectAsync(Guid projectId, CancellationToken cancellationToken) =>
         await dbContext.Stakeholders.Where(stakeholder => stakeholder.ProjectId == projectId).ToListAsync(cancellationToken);

@@ -4,10 +4,14 @@ using Nexus.ProjectManagement.RiskManagement.Domain;
 
 namespace Nexus.ProjectManagement.RiskManagement.Infrastructure;
 
-public sealed class RiskRepository(RiskManagementDbContext dbContext) : IRiskRepository
+public sealed class RiskRepository(RiskManagementDbContext dbContext, NexusCore.SharedKernel.Interfaces.ICurrentUserContext? currentUser = null) : IRiskRepository
 {
-    public Task<Risk?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
-        dbContext.Risks.SingleOrDefaultAsync(risk => risk.Id == id, cancellationToken);
+    public Task<Risk?> GetByIdAsync(Guid id, CancellationToken cancellationToken)
+    {
+        // M7: by id, only within the signed-in user's organization (no user, e.g. a background job: unrestricted).
+        var tenant = currentUser?.TenantId;
+        return dbContext.Risks.SingleOrDefaultAsync(risk => risk.Id == id && (tenant == null || risk.TenantId == tenant), cancellationToken);
+    }
 
     public async Task<IReadOnlyList<Risk>> ListByProjectAsync(Guid projectId, CancellationToken cancellationToken) =>
         await dbContext.Risks
