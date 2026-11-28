@@ -276,6 +276,12 @@ public sealed partial class OrgNodeService : IOrgTemplateService
             return Result.Failure<IReadOnlyList<CompanyPostToMake>>(Busy());
         }
 
+        // Checked again in the turn: the system holds one company only.
+        if ((await repository.ListCompaniesAsync(tenantId, cancellationToken)).Count > 0)
+        {
+            return Result.Failure<IReadOnlyList<CompanyPostToMake>>(OrgStructureService.OnlyOneCompany());
+        }
+
         var state = await LoadAsync(tenantId, cancellationToken);
         company.SetGroup(company.ParentCompanyId, templateId);
         if (Enum.TryParse<OrgUiLevel>(model.UiLevel, ignoreCase: true, out var level) && Enum.IsDefined(level))

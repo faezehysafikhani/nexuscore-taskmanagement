@@ -96,7 +96,7 @@ public sealed class OrgStructureTests
     // ------------------------------------------------------------------ the service
 
     [Fact]
-    public async Task Companies_AreCreatedPerTenant_WithUniqueCodes()
+    public async Task Companies_AreCreatedPerTenant_OneInEach()
     {
         var world = new World();
         var created = (await world.Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest(" بانک تجارت ", "TJ", null), default)).Value!;
@@ -105,10 +105,40 @@ public sealed class OrgStructureTests
         var duplicate = await world.Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("دیگر", "TJ", null), default);
         Assert.Equal("conflict", duplicate.Error.Code);
 
-        // Same code in another tenant is fine, and neither tenant sees the other's companies.
+        // Each tenant has its own company, and neither tenant sees the other's.
         Assert.True((await world.Service.CreateCompanyAsync(OtherTenant, new CreateCompanyRequest("X", "TJ", null), default)).IsSuccess);
         Assert.Single((await world.Service.ListCompaniesAsync(Tenant, default)).Value!);
         Assert.Equal("not_found", (await world.Service.GetCompanyAsync(OtherTenant, created.Id, default)).Error.Code);
+    }
+
+    [Fact]
+    public async Task OnlyOneCompanyExists_NoMatterWhoAsks_OrWithWhat()
+    {
+        var world = new World();
+        var first = (await world.Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("بانک", "B1", null), default)).Value!;
+
+        // A second company is refused: with another code, without one, with a parent, from a template.
+        foreach (var request in new[]
+        {
+            new CreateCompanyRequest("دوم", "B2", null),
+            new CreateCompanyRequest("سوم"),
+            new CreateCompanyRequest("چهارم", "B4", null, ParentCompanyId: first.Id),
+            new CreateCompanyRequest("پنجم", "B5", null, OrgNodeService.SystemTemplateId("simple")),
+        })
+        {
+            var refused = await world.Service.CreateCompanyAsync(Tenant, request, default);
+            Assert.Equal("conflict", refused.Error.Code);
+        }
+
+        Assert.Equal(first.Id, Assert.Single((await world.Service.ListCompaniesAsync(Tenant, default)).Value!).Id);
+
+        // A deactivated company is still the company.
+        Assert.True((await world.Service.UpdateCompanyAsync(Tenant, first.Id, new UpdateCompanyRequest("بانک", "B1", null, false), default)).IsSuccess);
+        Assert.Equal("conflict", (await world.Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("دوم", "B2", null), default)).Error.Code);
+
+        // Only when the company is gone can one be made again.
+        Assert.True((await world.Service.DeleteCompanyAsync(Tenant, first.Id, default)).IsSuccess);
+        Assert.True((await world.Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("تازه", "B2", null), default)).IsSuccess);
     }
 
     [Fact]
@@ -279,13 +309,17 @@ public sealed class OrgStructureTests
     {
         private readonly OrganizationDbContext _organization;
         private readonly FakeUserDirectory _users = new();
+        private readonly OrgStructureRepository _repository;
+        private readonly OrgStructureDbContext _structure;
 
         public World()
         {
             var name = Guid.NewGuid().ToString();
             _organization = new OrganizationDbContext(new DbContextOptionsBuilder<OrganizationDbContext>().UseInMemoryDatabase("org-" + name).Options);
             var structure = new OrgStructureDbContext(new DbContextOptionsBuilder<OrgStructureDbContext>().UseInMemoryDatabase("orgs-" + name).Options);
-            Service = new OrgStructureService(new OrgStructureRepository(structure), structure, new OrganizationUnitRepository(_organization), _users, new OrgChartTeamsAndTitlesTests.NoWorkTeams());
+            _structure = structure;
+            _repository = new OrgStructureRepository(structure);
+            Service = new OrgStructureService(_repository, structure, new OrganizationUnitRepository(_organization), _users, new OrgChartTeamsAndTitlesTests.NoWorkTeams());
         }
 
         public IOrgStructureService Service { get; }
@@ -335,7 +369,7 @@ public sealed class OrgStructureTests
 
         private async Task<Guid> AddCompanyAsync(string name, string code)
         {
-            var id = (await Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest(name, code, null), default)).Value!.Id;
+            var id = await TestCompanies.MakeAsync(Service, _repository, _structure, Tenant, _companies.Count, name, code);
             _companies.Add(id);
             if (_top is null)
             {
