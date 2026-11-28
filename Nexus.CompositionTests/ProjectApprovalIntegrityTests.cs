@@ -285,6 +285,28 @@ public sealed class ProjectApprovalIntegrityTests
         Assert.Equal(Manager, instance.SubmittedByUserId);
     }
 
+    [Theory]
+    [InlineData("Risk")]
+    [InlineData("Stakeholder")]
+    [InlineData("ProgressUpdate")]
+    [InlineData("DelayReason")]
+    [InlineData("ProjectDocument")]
+    public async Task H6_AManagerSubmittingTheirOwnRegisterItem_HasItGoToTheirOrgManager(string subjectType)
+    {
+        var f = new Fixture();
+        await f.Definitions.SetStepsAsync(new SetWorkflowStepsRequest(Tenant, subjectType, null, null, null,
+            [new AddWorkflowStepRequest("تایید مدیر پروژه", null, null, ApprovalParticipants.Manager)]), default);
+        var project = await f.NewProject();
+        var itemId = Guid.NewGuid();
+
+        var outcome = await f.Requester(Manager).RequestApprovalAsync(
+            new ApprovalSubject(subjectType, itemId, Tenant, ScopeType: "Project", ScopeId: project.Id), default);
+
+        Assert.Equal(ApprovalRequestOutcome.Submitted, outcome);
+        var instance = await f.Db.WorkflowInstances.SingleAsync(i => i.SubjectId == itemId);
+        Assert.Equal(Boss, instance.GetSteps()!.Single().ApproverUserId);
+    }
+
     [Fact]
     public async Task H6_WithNoOrgManager_TheSubmissionIsRefused_AndNothingIsStarted()
     {

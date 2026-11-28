@@ -17,7 +17,7 @@ public sealed class WorkflowOptions
     /// <summary>
     /// Subject types whose submitter may never decide any step of their own approval. When a step would be theirs, it
     /// goes to their manager in the organization chart (OrgManager); with no such manager the submission is refused.
-    /// Project charters by default.
+    /// Project charters and the project registers (risks, stakeholders, status updates, delay reasons, documents) by default.
     /// </summary>
-    public ISet<string> SelfApprovalForbiddenSubjectTypes { get; } = new HashSet<string>(StringComparer.Ordinal) { "Project" };
+    public ISet<string> SelfApprovalForbiddenSubjectTypes { get; } = new HashSet<string>(StringComparer.Ordinal) { "Project", "Risk", "Stakeholder", "ProgressUpdate", "DelayReason", "ProjectDocument" };
 }
