@@ -130,7 +130,7 @@ public sealed class ProjectWorkflowSettingsService(
                     Error.Validation("Each step needs exactly one approver: a user, or a participant key."));
             }
 
-            if (step.ApproverKey is not null && !ApprovalParticipants.All.Contains(step.ApproverKey))
+            if (step.ApproverKey is not null && !IsKnownApproverKey(step.ApproverKey))
             {
                 return Result.Failure<IReadOnlyList<WorkflowGroupSettingsDto>>(
                     Error.Validation($"Unknown approver key '{step.ApproverKey}'. Use one of: {string.Join(", ", ApprovalParticipants.All)}."));
@@ -142,6 +142,14 @@ public sealed class ProjectWorkflowSettingsService(
             ? Result.Failure<IReadOnlyList<WorkflowGroupSettingsDto>>(saved.Error)
             : await GetAsync(tenantId, projectId, cancellationToken);
     }
+
+    /// <summary>The participants a subject names, plus the organization-chart keys (the submitter's manager, a post, a position)
+    /// that the editor offers and the approval backend resolves.</summary>
+    private static bool IsKnownApproverKey(string key) =>
+        ApprovalParticipants.All.Contains(key)
+        || key == ApprovalParticipants.OrgManager || key == ApprovalParticipants.OrgManager2
+        || key.StartsWith(ApprovalParticipants.PostPrefix, StringComparison.Ordinal)
+        || key.StartsWith(ApprovalParticipants.PositionPrefix, StringComparison.Ordinal);
 
     private async Task<Result> WriteAsync(
         Guid tenantId, Guid? projectId, WorkflowGroup group, IReadOnlyList<WorkflowStepSettingDto> steps, CancellationToken cancellationToken)
