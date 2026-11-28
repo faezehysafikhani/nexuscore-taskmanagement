@@ -6,6 +6,13 @@ namespace NexusCore.Application.Identity.Interfaces;
 public interface IIdentityService
 {
     Task<Result<AuthResponse>> LoginAsync(LoginRequest request, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// A sign-in from a browser that still holds a live session of the same user (its refresh-token
+    /// cookie, or the access token's sid): that session is closed first, so it never counts toward
+    /// the concurrent-session limit nor shows in the list of sessions to close.
+    /// </summary>
+    Task<Result<AuthResponse>> LoginAsync(LoginRequest request, string? deviceRefreshToken, CancellationToken cancellationToken);
     Task<Result<AuthResponse>> RefreshTokenAsync(RefreshTokenRequest request, CancellationToken cancellationToken);
     Task<Result<AuthResponse>> CompleteLoginAsync(NexusCore.Application.Identity.Sessions.CompleteLoginRequest request, CancellationToken cancellationToken);
     Task<Result> LogoutAsync(RefreshTokenRequest request, CancellationToken cancellationToken);

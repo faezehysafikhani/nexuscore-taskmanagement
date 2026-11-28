@@ -10,7 +10,10 @@ public sealed record LoginRequest(
     string Password,
     string? TenantSlug = null,
     string? CaptchaId = null,
-    string? CaptchaAnswer = null);
+    string? CaptchaAnswer = null,
+    // The refresh token this client still holds (clients that keep it in the body, not the cookie):
+    // its live session is replaced by the new sign-in instead of counting toward the session limit.
+    string? RefreshToken = null);
 
 /// <summary>
 /// The refresh token may be left out (null or empty) by a browser that holds it in its HttpOnly

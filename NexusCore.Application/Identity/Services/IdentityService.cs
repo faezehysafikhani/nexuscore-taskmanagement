@@ -55,7 +55,10 @@ public sealed class IdentityService(
     /// <summary>Sign-in with the right password to a disabled account (HTTP 403).</summary>
     public static readonly Error AccountDisabled = new("account.disabled", "حساب کاربری شما غیرفعال شده است. لطفاً با مدیر سامانه تماس بگیرید.");
 
-    public async Task<Result<AuthResponse>> LoginAsync(LoginRequest request, CancellationToken cancellationToken)
+    public Task<Result<AuthResponse>> LoginAsync(LoginRequest request, CancellationToken cancellationToken) =>
+        LoginAsync(request, null, cancellationToken);
+
+    public async Task<Result<AuthResponse>> LoginAsync(LoginRequest request, string? deviceRefreshToken, CancellationToken cancellationToken)
     {
         var validation = await loginValidator.ValidateAsResultAsync(request, cancellationToken);
         if (validation.IsFailure)
@@ -104,7 +107,56 @@ public sealed class IdentityService(
         }
 
         await loginProtection.RecordSuccessfulLoginAsync(request.Identifier, cancellationToken);
+        await EndSameDeviceSessionsAsync(user, deviceRefreshToken, cancellationToken);
         return Result.Success(await sessionIssuer.IssueAsync(user, cancellationToken));
+    }
+
+    /// <summary>Closes this browser's own live session(s) of <paramref name="user"/> before a new sign-in.</summary>
+    private async Task EndSameDeviceSessionsAsync(User user, string? deviceRefreshToken, CancellationToken cancellationToken)
+    {
+        var ids = new HashSet<Guid>();
+        if (currentUser.SessionId is { } sid && currentUser.UserId == user.Id)
+        {
+            ids.Add(sid);
+        }
+
+        if (!string.IsNullOrWhiteSpace(deviceRefreshToken))
+        {
+            var token = await repository.FindRefreshTokenAsync(passwordHasher.HashToken(deviceRefreshToken), cancellationToken);
+            // The token family is the session id (AuthSessionIssuer).
+            if (token is not null && token.UserId == user.Id && token.FamilyId is { } family)
+            {
+                ids.Add(family);
+            }
+        }
+
+        if (ids.Count == 0)
+        {
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var ended = new List<Guid>();
+        foreach (var id in ids)
+        {
+            var session = await sessionRepository.GetSessionAsync(id, cancellationToken);
+            if (session is null || session.UserId != user.Id || !session.IsActiveAt(now))
+            {
+                continue;
+            }
+
+            // Also closes its live hub connections.
+            await sessionService.EndSessionAsync(id, SessionEndReason.ReplacedByRelogin, cancellationToken);
+            ended.Add(id);
+        }
+
+        if (ended.Count == 0)
+        {
+            return;
+        }
+
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        await platformService.AuditForAsync(user.TenantId, user.Id, "identity.session_replaced_by_relogin", nameof(User), user.Id.ToString(), $"{ended.Count} session(s)", cancellationToken);
     }
 
     public async Task<Result<AuthResponse>> RefreshTokenAsync(RefreshTokenRequest request, CancellationToken cancellationToken)

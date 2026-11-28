@@ -48,6 +48,32 @@ public sealed class SessionPolicySettings
     public int ExternalIdleMinutes { get; set; } = 10;
     public int ExternalAbsoluteHours { get; set; } = 4;
 
+    /// <summary>Field-by-field errors (camelCase names, as the API sends them); empty when every value is in range.</summary>
+    public static Dictionary<string, string[]> Validate(SessionPolicySettingsDto s)
+    {
+        var errors = new Dictionary<string, string[]>();
+        void Check(string name, int value, int min, int max)
+        {
+            if (value < min || value > max)
+            {
+                errors[name] = [$"مقدار باید بین {min} تا {max} باشد."];
+            }
+        }
+
+        Check("idleMinutes", s.IdleMinutes, MinIdleMinutes, MaxIdleMinutes);
+        Check("absoluteHours", s.AbsoluteHours, MinAbsoluteHours, MaxAbsoluteHours);
+        Check("maxConcurrent", s.MaxConcurrent, MinConcurrent, MaxConcurrentCeiling);
+        Check("sensitiveIdleMinutes", s.SensitiveIdleMinutes, MinIdleMinutes, MaxIdleMinutes);
+        Check("sensitiveAbsoluteHours", s.SensitiveAbsoluteHours, MinAbsoluteHours, MaxAbsoluteHours);
+        Check("sensitiveMaxConcurrent", s.SensitiveMaxConcurrent, MinConcurrent, MaxConcurrentCeiling);
+        Check("systemIdleMinutes", s.SystemIdleMinutes, MinIdleMinutes, MaxIdleMinutes);
+        Check("systemAbsoluteHours", s.SystemAbsoluteHours, MinAbsoluteHours, MaxAbsoluteHours);
+        Check("systemMaxConcurrent", s.SystemMaxConcurrent, MinConcurrent, MaxConcurrentCeiling);
+        Check("externalIdleMinutes", s.ExternalIdleMinutes, MinIdleMinutes, MaxIdleMinutes);
+        Check("externalAbsoluteHours", s.ExternalAbsoluteHours, MinAbsoluteHours, MaxAbsoluteHours);
+        return errors;
+    }
+
     public SessionPolicySettings Clamped()
     {
         return new SessionPolicySettings

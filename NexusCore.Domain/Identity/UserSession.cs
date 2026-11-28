@@ -25,7 +25,9 @@ public enum SessionEndReason
     /// <summary>An exchanged refresh token was presented again: a copy of it exists.</summary>
     ReuseDetected = 8,
     /// <summary>The user picked it to make room for a new sign-in at the concurrent-session limit.</summary>
-    ConcurrentLimit = 9
+    ConcurrentLimit = 9,
+    /// <summary>The same browser signed in again while this session was still open: the new sign-in replaced it.</summary>
+    ReplacedByRelogin = 10
 }
 
 /// <summary>
@@ -103,12 +105,22 @@ public sealed class UserSession : Entity<Guid>
             return RevokedReason ?? SessionEndReason.Revoked;
         }
 
-        if (nowUtc >= AbsoluteExpiresAtUtc)
+        return NaturalEndReason(IdleExpiresAtUtc, AbsoluteExpiresAtUtc, nowUtc);
+    }
+
+    /// <summary>
+    /// Which limit ended a session that was not closed by anyone: the one reached first. Read later
+    /// (after both have passed) it must still say idle when the idle limit came first.
+    /// </summary>
+    public static SessionEndReason? NaturalEndReason(DateTimeOffset idleExpiresAtUtc, DateTimeOffset absoluteExpiresAtUtc, DateTimeOffset nowUtc)
+    {
+        var firstLimit = idleExpiresAtUtc <= absoluteExpiresAtUtc ? idleExpiresAtUtc : absoluteExpiresAtUtc;
+        if (nowUtc < firstLimit)
         {
-            return SessionEndReason.AbsoluteTimeout;
+            return null;
         }
 
-        return nowUtc >= IdleExpiresAtUtc ? SessionEndReason.IdleTimeout : null;
+        return idleExpiresAtUtc <= absoluteExpiresAtUtc ? SessionEndReason.IdleTimeout : SessionEndReason.AbsoluteTimeout;
     }
 
     public void Revoke(SessionEndReason reason, DateTimeOffset nowUtc, Guid? byUserId = null)

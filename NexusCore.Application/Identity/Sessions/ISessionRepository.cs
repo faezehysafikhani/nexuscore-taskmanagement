@@ -24,12 +24,8 @@ public sealed record SessionValidation(
             return SessionReasons.CodeFor(RevokedReason ?? SessionEndReason.Revoked);
         }
 
-        if (nowUtc >= AbsoluteExpiresAtUtc)
-        {
-            return SessionReasons.AbsoluteExpired;
-        }
-
-        return nowUtc >= LastActivityAtUtc.AddSeconds(IdleTimeoutSeconds) ? SessionReasons.IdleExpired : null;
+        var natural = UserSession.NaturalEndReason(LastActivityAtUtc.AddSeconds(IdleTimeoutSeconds), AbsoluteExpiresAtUtc, nowUtc);
+        return natural is null ? null : SessionReasons.CodeFor(natural.Value);
     }
 }
 

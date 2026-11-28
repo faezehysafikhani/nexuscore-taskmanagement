@@ -102,7 +102,9 @@ internal sealed class ActiveUserTokenValidation : IPostConfigureOptions<JwtBeare
         var failure = state.FailureCode(now);
         if (failure is null)
         {
-            var activity = http.Request.Headers.ContainsKey(ActivityHeader);
+            // Polling (unread counts, notifications, sessions/current...) says X-Background-Request:
+            // it is checked but never counts as the user being there, whatever else it carries.
+            var activity = http.Request.Headers.ContainsKey(ActivityHeader) && !http.Request.Headers.ContainsKey(BackgroundHeader);
             await sessions.TouchAsync(sessionId, now, activity, http.Connection.RemoteIpAddress?.ToString(), 
                 // 30 s normally; a quarter of a very short idle timeout (development), so it stays accurate.
                 TimeSpan.FromSeconds(Math.Min(SessionService.TouchInterval.TotalSeconds, Math.Max(1, state.IdleTimeoutSeconds / 4.0))), cancellationToken);
@@ -113,6 +115,9 @@ internal sealed class ActiveUserTokenValidation : IPostConfigureOptions<JwtBeare
 
     /// <summary>Sent by the UI on a request that follows a real interaction (click, key, scroll, touch, mouse move).</summary>
     public const string ActivityHeader = "X-Nexus-Activity";
+
+    /// <summary>Sent by the UI on polling and other requests the user did not cause.</summary>
+    public const string BackgroundHeader = "X-Background-Request";
 
     internal static async Task<bool> IsActiveAsync(ClaimsPrincipal? principal, IIdentityRepository repository, CancellationToken cancellationToken)
     {
