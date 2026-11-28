@@ -29,11 +29,19 @@ public sealed partial class OrgNodeApiTests
         var w = new World();
         var templates = await w.Ok(w.Templates.ListTemplatesAsync(Tenant, default));
         Assert.Equal(["simple", "deputy", "bank"], templates.Select(t => t.Code));
+        // The system holds one company: each template makes its company in a world of its own.
+        World? bankWorld = null;
         Assert.All(templates, t => Assert.True(t.IsSystem));
         Assert.Equal(OrgNodeService.SystemTemplateId("bank"), templates.Single(t => t.Code == "bank").Id);
 
         foreach (var template in templates)
         {
+            w = new World();
+            if (template.Code == "bank")
+            {
+                bankWorld = w;
+            }
+
             var company = await w.Ok(w.Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("شرکت " + template.Name, "T-" + template.Code, null, template.Id), default));
             var chart = Assert.Single((await w.Service.GetChartAsync(Tenant, company.Id, default)).Value!);
             Assert.Equal(template.UiLevel, chart.UiLevel);
@@ -52,6 +60,7 @@ public sealed partial class OrgNodeApiTests
         }
 
         // The bank: nested nodes, every committee linked to the board (automatic rule), the other links of the template.
+        w = bankWorld!;
         var bank = (await w.Ok(w.Service.ListCompaniesAsync(Tenant, default))).Single(c => c.Code == "T-bank").Id;
         var bankNodes = await w.Ok(w.Nodes.ListNodesAsync(Tenant, bank, default));
         var committees = bankNodes.Where(n => n.NodeTypeName == "کمیته").ToList();
@@ -70,11 +79,15 @@ public sealed partial class OrgNodeApiTests
     [Fact]
     public async Task ANestedTemplate_MakesTheCompany_AndSoDoesAFlatOne()
     {
+        // The system holds one company: each is tried in a world of its own.
         var w = new World();
         await w.Ok(w.Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("بانک", "B", null, OrgNodeService.SystemTemplateId("bank")), default));
 
-        await w.Ok(w.Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("ساده", "S", null, OrgNodeService.SystemTemplateId("simple")), default));
-        Assert.Equal("not_found", (await w.Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("x", "X", null, Guid.NewGuid()), default)).Error.Code);
+        var flat = new World();
+        await flat.Ok(flat.Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("ساده", "S", null, OrgNodeService.SystemTemplateId("simple")), default));
+
+        var none = new World();
+        Assert.Equal("not_found", (await none.Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("x", "X", null, Guid.NewGuid()), default)).Error.Code);
     }
 
     [Fact]
@@ -91,19 +104,15 @@ public sealed partial class OrgNodeApiTests
         Assert.Equal("conflict", (await w.Templates.SaveCompanyAsTemplateAsync(Tenant, new SaveStructureTemplateRequest(first.Id, "بانک ما"), default)).Error.Code);
         await w.Ok(w.Nodes.CreateNodeAsync(Tenant, new CreateNodeRequest("کمیته تازه", CompanyId: first.Id, NodeTypeId: firstNodes.Single(n => n.NodeTypeName == "کمیته" && n.ParentNodeId is null && n.Name.Contains("ریسک")).NodeTypeId), default));
 
-        // A company from the saved template has the structure as it was saved.
-        var second = await w.Ok(w.Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("بانک دو", "B2", null, saved.Id), default));
-        var secondNodes = await w.Ok(w.Nodes.ListNodesAsync(Tenant, second.Id, default));
-        Assert.Equal(firstNodes.Count, secondNodes.Count);
-        Assert.Equal(firstNodes.Select(n => (n.Name, n.NodeTypeId)).Order(), secondNodes.Select(n => (n.Name, n.NodeTypeId)).Order());
-        // Types are reused, not made again.
+        // The system holds one company: no second one is made from the saved template, and nothing is made.
+        Assert.Equal("conflict", (await w.Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("بانک دو", "B2", null, saved.Id), default)).Error.Code);
+        Assert.Single(await w.Ok(w.Service.ListCompaniesAsync(Tenant, default)));
         Assert.Equal(13, (await w.Ok(w.Nodes.ListNodeTypesAsync(Tenant, default))).Count); // company, unit + the bank's 11
 
-        // The template goes: both companies stay as they are. A built-in one cannot go.
+        // The template goes: the company stays as it is. A built-in one cannot go.
         await Done(w.Templates.DeleteTemplateAsync(Tenant, saved.Id, default));
         Assert.DoesNotContain(await w.Ok(w.Templates.ListTemplatesAsync(Tenant, default)), t => t.Id == saved.Id);
         Assert.Equal(firstNodes.Count + 1, (await w.Ok(w.Nodes.ListNodesAsync(Tenant, first.Id, default))).Count);
-        Assert.Equal(secondNodes.Count, (await w.Ok(w.Nodes.ListNodesAsync(Tenant, second.Id, default))).Count);
         Assert.Equal("validation.error", (await w.Templates.DeleteTemplateAsync(Tenant, OrgNodeService.SystemTemplateId("bank"), default)).Error.Code);
     }
 
@@ -111,8 +120,8 @@ public sealed partial class OrgNodeApiTests
     public async Task ATemplateOnAFlatOrganization_LeavesItsNodesWhereTheyAre_WithoutConflicts()
     {
         var w = new World();
-        var old = await w.CompanyAsync("OLD");
-        await w.Ok(w.Nodes.CreateNodeAsync(Tenant, new CreateNodeRequest("معاونت قدیمی", CompanyId: old), default));
+        // Units of an organization with no company yet (the system's one company is made from the template after them).
+        await w.Ok(w.Nodes.CreateNodeAsync(Tenant, new CreateNodeRequest("معاونت قدیمی"), default));
         Assert.Empty((await w.Ok(w.Nodes.GetRulesAsync(Tenant, default))).Rules);
 
         await w.Ok(w.Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("معاونتی", "D", null, OrgNodeService.SystemTemplateId("deputy")), default));
@@ -122,7 +131,7 @@ public sealed partial class OrgNodeApiTests
         Assert.Contains(new NodeTypeRuleDto(null, w.PlainType), rules.Rules);
         Assert.Contains(rules.Rules, r => r.ChildNodeTypeId == w.PlainType && r.ParentNodeTypeId is not null);
         // Another node at the top of the old company is still fine.
-        await w.Ok(w.Nodes.CreateNodeAsync(Tenant, new CreateNodeRequest("معاونت دوم", CompanyId: old), default));
+        await w.Ok(w.Nodes.CreateNodeAsync(Tenant, new CreateNodeRequest("معاونت دوم"), default));
     }
 
     // ------------------------------------------------------------------ links
