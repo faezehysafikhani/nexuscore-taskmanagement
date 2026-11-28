@@ -66,6 +66,24 @@ public sealed class WorkflowPlaceholderTests
 
     private static AddWorkflowStepRequest ByKey(string name, string key, bool optional = false) => new(name, null, null, key, optional);
 
+    [Fact]
+    public async Task SendingAgain_WhileItsApprovalRuns_StartsNoSecondApproval()
+    {
+        var f = new Fixture();
+        await f.Define("Risk", ByKey("Review", ApprovalParticipants.Manager));
+        var id = Guid.NewGuid();
+        var subject = new ApprovalSubject("Risk", id, Tenant, "Project", f.Project.Id);
+
+        Assert.Equal(ApprovalRequestOutcome.Submitted, await f.Requester.RequestApprovalAsync(subject, default));
+        Assert.Equal(ApprovalRequestOutcome.Submitted, await f.Requester.RequestApprovalAsync(subject, default));
+        var instance = await f.Db.WorkflowInstances.SingleAsync(i => i.SubjectId == id);
+
+        // Once decided, sending it again starts a new approval.
+        await f.Center(false).RejectAsync(instance.Id, Manager, new DecideWorkflowInstanceRequest(null), default);
+        Assert.Equal(ApprovalRequestOutcome.Submitted, await f.Requester.RequestApprovalAsync(subject, default));
+        Assert.Equal(2, await f.Db.WorkflowInstances.CountAsync(i => i.SubjectId == id));
+    }
+
     // -------------------------------------------------------------- placeholders
 
     [Fact]

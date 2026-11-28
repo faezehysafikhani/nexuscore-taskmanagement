@@ -28,6 +28,13 @@ public sealed class WorkflowApprovalRequester(
             return ApprovalRequestOutcome.NotConfigured;
         }
 
+        // Sent again while its approval is still running (a double click, a resubmit): the running one stands, no second
+        // approval is started - otherwise the same item would wait twice in the approvers' inboxes.
+        if (await IsRunningAsync(subject, cancellationToken))
+        {
+            return ApprovalRequestOutcome.Submitted;
+        }
+
         // The people each step points at are fixed now, when the approval starts.
         var participants = await ResolveParticipantsAsync(subject, cancellationToken);
         var steps = new List<WorkflowInstanceStep>();
@@ -53,6 +60,19 @@ public sealed class WorkflowApprovalRequester(
         await instanceRepository.AddAsync(instance, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return ApprovalRequestOutcome.Submitted;
+    }
+
+    private async Task<bool> IsRunningAsync(ApprovalSubject subject, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var approvals = await instanceRepository.ListForSubjectsAsync(subject.TenantId, subject.SubjectType, [subject.SubjectId], cancellationToken);
+            return approvals.Any(instance => instance.Status == WorkflowInstanceStatus.InProgress);
+        }
+        catch (NotSupportedException)
+        {
+            return false; // a repository that cannot list by subject: behave as before
+        }
     }
 
     private async Task<Dictionary<string, Guid>> ResolveParticipantsAsync(ApprovalSubject subject, CancellationToken cancellationToken)
