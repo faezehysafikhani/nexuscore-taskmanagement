@@ -36,7 +36,6 @@ public sealed class AnalyticsService(
     AnalyticsOptions? options = null) : IAnalyticsService
 {
     private const int MaxProjects = 1000;
-    private static readonly ProjectStatus[] Running = [ProjectStatus.Active, ProjectStatus.OnHold];
     private static readonly ActionStatus[] OpenActionStatuses = [ActionStatus.Open, ActionStatus.InProgress];
 
     /// <summary>Where a project stands: from its latest progress update, or (when asked for) from what its planning modules work out.</summary>
@@ -397,9 +396,9 @@ public sealed class AnalyticsService(
         var performances = withProgress.Where(u => u.Performance is not null).Select(u => u.Performance!.Value).ToList();
         return new Aggregates(
             figures.Count,
-            figures.Count(f => Running.Contains(f.Project.Status)),
+            figures.Count(f => f.Project.IsActive),
             figures.Count(f => f.Project.Status == ProjectStatus.Completed),
-            figures.Count(f => Running.Contains(f.Project.Status) && f.Project.EndDate < asOf && f.Latest?.ActualProgress is null or < 100),
+            figures.Count(f => f.Project.IsActive && f.Project.EndDate < asOf && f.Latest?.ActualProgress is null or < 100),
             figures.Sum(f => f.Project.Cost ?? 0m),
             withProgress.Count,
             avgPlanned, avgActual,

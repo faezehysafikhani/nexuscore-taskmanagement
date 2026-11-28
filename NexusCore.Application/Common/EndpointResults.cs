@@ -50,6 +50,9 @@ public static class EndpointResults
             "project.already_approved" => StatusCodes.Status409Conflict,
             "project.not_approved" => StatusCodes.Status409Conflict,
             "project.forbidden" => StatusCodes.Status403Forbidden,
+            // A register item with its approvers: not edited, not sent again.
+            "approval.pending_edit" => StatusCodes.Status409Conflict,
+            "approval.already_pending" => StatusCodes.Status409Conflict,
             "unauthorized" => StatusCodes.Status401Unauthorized,
             // A failed sign-in after which the next attempt must include a CAPTCHA.
             "unauthorized.captcha_required" => StatusCodes.Status401Unauthorized,

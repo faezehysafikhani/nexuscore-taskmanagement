@@ -193,6 +193,7 @@ public sealed class AnalyticsTests
         var project = new Project(Guid.NewGuid(), tenant ?? Tenant, code, code, ProjectType.Waterfall, manager, null);
         project.UpdateDetails(code, code, manager, null, unit, null, start ?? new DateOnly(2026, 1, 1), end ?? new DateOnly(2026, 12, 31),
             cost, null, null, null, null, null, null);
+        project.Approve(); // «تصمیم ۱»: a running project is an approved one (an unapproved project cannot be Active any more)
         project.ChangeStatus(status);
         return project;
     }

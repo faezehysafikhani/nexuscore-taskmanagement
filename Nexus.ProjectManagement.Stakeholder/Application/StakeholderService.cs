@@ -155,6 +155,12 @@ public sealed class StakeholderService(
             return Result.Failure<StakeholderDto>(Error.NotFound("Stakeholder not found."));
         }
 
+        // An item with its approvers is neither edited nor sent again until it is decided.
+        if (stakeholder.ApprovalStatus == ApprovalStatus.PendingApproval)
+        {
+            return Result.Failure<StakeholderDto>(ApprovalErrors.PendingEdit);
+        }
+
         if (string.IsNullOrWhiteSpace(request.Name))
         {
             return Result.Failure<StakeholderDto>(Error.Validation("Name is required."));
@@ -192,6 +198,12 @@ public sealed class StakeholderService(
         if (stakeholder is null)
         {
             return Result.Failure<StakeholderDto>(Error.NotFound("Stakeholder not found."));
+        }
+
+        // An item with its approvers is neither edited nor sent again until it is decided.
+        if (stakeholder.ApprovalStatus == ApprovalStatus.PendingApproval)
+        {
+            return Result.Failure<StakeholderDto>(ApprovalErrors.AlreadyPending);
         }
 
         var subject = new ApprovalSubject("Stakeholder", stakeholder.Id, stakeholder.TenantId, ScopeType: "Project", ScopeId: stakeholder.ProjectId);

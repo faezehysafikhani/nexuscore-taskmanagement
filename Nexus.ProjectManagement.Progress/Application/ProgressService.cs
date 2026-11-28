@@ -56,6 +56,12 @@ public sealed class ProgressService(
             return Result.Failure<ProgressUpdateDto>(Error.NotFound("Progress update not found."));
         }
 
+        // An item with its approvers is neither edited nor sent again until it is decided.
+        if (update.ApprovalStatus == ApprovalStatus.PendingApproval)
+        {
+            return Result.Failure<ProgressUpdateDto>(ApprovalErrors.PendingEdit);
+        }
+
         update.UpdateDetails(request.StatusDescription, request.PlannedProgress, request.ActualProgress, request.DelayReasons);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success(ToDto(update));
@@ -87,6 +93,12 @@ public sealed class ProgressService(
         if (update is null)
         {
             return Result.Failure<ProgressUpdateDto>(Error.NotFound("Progress update not found."));
+        }
+
+        // An item with its approvers is neither edited nor sent again until it is decided.
+        if (update.ApprovalStatus == ApprovalStatus.PendingApproval)
+        {
+            return Result.Failure<ProgressUpdateDto>(ApprovalErrors.AlreadyPending);
         }
 
         var subject = new ApprovalSubject("ProgressUpdate", update.Id, update.TenantId, ScopeType: "Project", ScopeId: update.ProjectId);

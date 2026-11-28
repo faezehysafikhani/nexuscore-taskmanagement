@@ -21,7 +21,6 @@ public sealed class DashboardService(
     IActionItemRepository actionRepository,
     IProgressService? progressService = null) : IDashboardService
 {
-    private static readonly ProjectStatus[] RunningProjectStatuses = [ProjectStatus.Active, ProjectStatus.OnHold];
     private static readonly ActionStatus[] RunningActionStatuses = [ActionStatus.Open, ActionStatus.InProgress];
 
     public async Task<Result<DashboardSummaryDto>> GetSummaryAsync(Guid tenantId, Guid? organizationUnitId, CancellationToken cancellationToken)
@@ -38,7 +37,7 @@ public sealed class DashboardService(
 
         var summary = new DashboardSummaryDto(
             ProjectCount: projects.Count,
-            RunningProjectCount: projects.Count(project => RunningProjectStatuses.Contains(project.Status)),
+            RunningProjectCount: projects.Count(project => project.IsActive),
             ActionCount: relevantActions.Count,
             RunningActionCount: relevantActions.Count(action => RunningActionStatuses.Contains(action.Status)),
             ProjectsByStatus: projects
@@ -72,7 +71,7 @@ public sealed class DashboardService(
             .ToList();
 
         var dashboard = new MyDashboardDto(
-            MyRunningProjectCount: myProjects.Count(project => RunningProjectStatuses.Contains(project.Status)),
+            MyRunningProjectCount: myProjects.Count(project => project.IsActive),
             MyRunningActionCount: myActions.Count(action => RunningActionStatuses.Contains(action.Status)),
             MyProjectIds: myProjects.Select(project => project.Id).ToList(),
             MyActionIds: myActions.Select(action => action.Id).ToList());

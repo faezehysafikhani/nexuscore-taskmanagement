@@ -89,6 +89,12 @@ public sealed class RiskService(
             return Result.Failure<RiskDto>(Error.NotFound("Risk not found."));
         }
 
+        // An item with its approvers is neither edited nor sent again until it is decided.
+        if (risk.ApprovalStatus == ApprovalStatus.PendingApproval)
+        {
+            return Result.Failure<RiskDto>(ApprovalErrors.PendingEdit);
+        }
+
         if (string.IsNullOrWhiteSpace(request.Description))
         {
             return Result.Failure<RiskDto>(Error.Validation("Description is required."));
@@ -127,6 +133,12 @@ public sealed class RiskService(
         if (risk is null)
         {
             return Result.Failure<RiskDto>(Error.NotFound("Risk not found."));
+        }
+
+        // An item with its approvers is neither edited nor sent again until it is decided.
+        if (risk.ApprovalStatus == ApprovalStatus.PendingApproval)
+        {
+            return Result.Failure<RiskDto>(ApprovalErrors.AlreadyPending);
         }
 
         var subject = new ApprovalSubject("Risk", risk.Id, risk.TenantId, ScopeType: "Project", ScopeId: risk.ProjectId);

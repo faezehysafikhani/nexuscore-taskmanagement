@@ -97,6 +97,12 @@ public sealed class Project : AuditableEntity<Guid>
 
     public void ChangeStatus(ProjectStatus status) => Status = status;
 
+    /// <summary>
+    /// «تصمیم ۱» (M8): the one definition of an active (running) project used by every count - the dashboard, the analytics and the
+    /// screens: an approved charter and a working status (Active or OnHold).
+    /// </summary>
+    public bool IsActive => ApprovalStatus == ApprovalStatus.Approved && Status is ProjectStatus.Active or ProjectStatus.OnHold;
+
     public void Archive() => Status = ProjectStatus.Archived;
 
     /// <summary>Called by the service once a Workflow-backed IApprovalRequester accepts the submission.</summary>

@@ -64,6 +64,12 @@ public sealed class DelayReasonService(
             return Result.Failure<DelayReasonDto>(Error.NotFound("Delay reason not found."));
         }
 
+        // An item with its approvers is neither edited nor sent again until it is decided.
+        if (reason.ApprovalStatus == ApprovalStatus.PendingApproval)
+        {
+            return Result.Failure<DelayReasonDto>(ApprovalErrors.PendingEdit);
+        }
+
         if (string.IsNullOrWhiteSpace(request.Description))
         {
             return Result.Failure<DelayReasonDto>(Error.Validation("Description is required."));
@@ -100,6 +106,12 @@ public sealed class DelayReasonService(
         if (reason is null)
         {
             return Result.Failure<DelayReasonDto>(Error.NotFound("Delay reason not found."));
+        }
+
+        // An item with its approvers is neither edited nor sent again until it is decided.
+        if (reason.ApprovalStatus == ApprovalStatus.PendingApproval)
+        {
+            return Result.Failure<DelayReasonDto>(ApprovalErrors.AlreadyPending);
         }
 
         var subject = new ApprovalSubject(SubjectType, reason.Id, reason.TenantId, ScopeType: "Project", ScopeId: reason.ProjectId);

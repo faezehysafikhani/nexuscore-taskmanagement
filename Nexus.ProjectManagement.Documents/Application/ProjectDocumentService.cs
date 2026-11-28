@@ -92,6 +92,12 @@ public sealed class ProjectDocumentService(
             return Result.Failure<ProjectDocumentDto>(Error.NotFound("Document not found."));
         }
 
+        // An item with its approvers is neither edited nor sent again until it is decided.
+        if (document.ApprovalStatus == ApprovalStatus.PendingApproval)
+        {
+            return Result.Failure<ProjectDocumentDto>(ApprovalErrors.PendingEdit);
+        }
+
         if (string.IsNullOrWhiteSpace(request.Description))
         {
             return Result.Failure<ProjectDocumentDto>(Error.Validation("Description is required."));
@@ -242,6 +248,12 @@ public sealed class ProjectDocumentService(
         if (document is null)
         {
             return Result.Failure<ProjectDocumentDto>(Error.NotFound("Document not found."));
+        }
+
+        // An item with its approvers is neither edited nor sent again until it is decided.
+        if (document.ApprovalStatus == ApprovalStatus.PendingApproval)
+        {
+            return Result.Failure<ProjectDocumentDto>(ApprovalErrors.AlreadyPending);
         }
 
         var subject = new ApprovalSubject("ProjectDocument", document.Id, document.TenantId, ScopeType: "Project", ScopeId: document.ProjectId);
