@@ -15,7 +15,7 @@ public sealed class WorkflowDefinitionRepository(WorkflowDbContext dbContext) : 
         {
             var scoped = await dbContext.WorkflowDefinitions
                 .Include(d => d.Steps)
-                .SingleOrDefaultAsync(
+                .FirstOrDefaultAsync(
                     d => d.TenantId == tenantId && d.SubjectType == subjectType && d.IsActive
                         && d.ScopeType == scopeType && d.ScopeId == scopeId,
                     cancellationToken);
@@ -28,7 +28,7 @@ public sealed class WorkflowDefinitionRepository(WorkflowDbContext dbContext) : 
 
         return await dbContext.WorkflowDefinitions
             .Include(d => d.Steps)
-            .SingleOrDefaultAsync(
+            .FirstOrDefaultAsync(
                 d => d.TenantId == tenantId && d.SubjectType == subjectType && d.IsActive
                     && d.ScopeType == WorkflowDefinition.GeneralScope,
                 cancellationToken);
