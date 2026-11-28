@@ -106,6 +106,17 @@ public sealed class WorkflowDefinitionService(
 
         definition.ReplaceSteps(request.Steps.Select(step =>
             (step.Name, step.ApproverUserId, step.ApproverRoleId, step.ApproverKey, step.IsOptional)));
+
+        // Only one definition may be in force for a subject and scope. Another active one (made elsewhere, or by an
+        // older version) would be read back instead of this one, so the edit would seem not to have been saved.
+        foreach (var other in await repository.ListAsync(request.TenantId, request.SubjectType.Trim(), cancellationToken))
+        {
+            if (other.Id != definition.Id && other.IsActive && other.ScopeType == scopeType && other.ScopeId == request.ScopeId)
+            {
+                other.SetActive(false);
+            }
+        }
+
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success(ToDto(definition));
     }
