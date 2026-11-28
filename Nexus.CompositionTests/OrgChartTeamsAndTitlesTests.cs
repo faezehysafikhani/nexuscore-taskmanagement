@@ -1073,6 +1073,34 @@ public sealed class OrgChartTeamsAndTitlesTests
         Assert.DoesNotContain(OrgStructurePermissions.All, p => p.Name == OrgStructurePermissions.TeamMembersFromAnyUnit);
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task AManagerPostsHolder_MayGiveWorkToTheExpertOfTheSameUnit(bool expertPostUnderManagerPost, bool expertPositionUnderManagerPosition)
+    {
+        var world = new World();
+        var (alef, be) = (world.User("alef"), world.User("be"));
+        var unit = world.Unit("اداره کل A");
+        var company = await world.CompanyAsync("C1");
+        await world.Service.LinkUnitAsync(Tenant, unit.Id, new LinkUnitRequest(company), default);
+        var managerPosition = await world.PositionAsync("مدیر");
+        var expertPosition = expertPositionUnderManagerPosition
+            ? (await world.Service.CreatePositionAsync(Tenant, new CreatePositionRequest("کارشناس", managerPosition, [company]), default)).Value!.Id
+            : await world.PositionAsync("کارشناس");
+        var managerPost = (await world.Service.AddUnitPositionAsync(Tenant, unit.Id, new AddUnitPositionRequest(managerPosition), default)).Value!.Id;
+        var expertPost = (await world.Service.AddUnitPositionAsync(Tenant, unit.Id,
+            new AddUnitPositionRequest(expertPosition, ParentPostId: expertPostUnderManagerPost ? managerPost : null), default)).Value!.Id;
+        Assert.True((await world.Service.SetAssignmentAsync(Tenant, alef, new SetUserAssignmentRequest(company, unit.Id, null, null, [managerPost]), default)).IsSuccess);
+        Assert.True((await world.Service.SetAssignmentAsync(Tenant, be, new SetUserAssignmentRequest(company, unit.Id, null, null, [expertPost]), default)).IsSuccess);
+
+        var limit = await world.AssignmentScope(alef, true).GetLimitAsync(Tenant, alef, default);
+        var reach = await world.Reach(alef).GetReachAsync(Tenant, alef, default);
+        // Whether the expert's post sits under the manager's or beside it, the manager may pick the expert.
+        Assert.DoesNotContain(be, limit!.BlockedUserIds);
+        Assert.Contains(be, reach!.UserIds);
+    }
+
     private sealed class World
     {
         private readonly OrganizationDbContext _organization;
