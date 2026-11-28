@@ -360,9 +360,9 @@ public sealed class SessionService(
         }
 
         var reason = request.Reason?.Trim() ?? string.Empty;
-        if (reason.Length < 3 || reason.Length > 300)
+        if (reason.Length < 10 || reason.Length > 300)
         {
-            return Result.Failure<int>(Error.Validation("Write the reason (3 to 300 characters)."));
+            return Result.Failure<int>(Error.Validation("Write the reason (10 to 300 characters)."));
         }
 
         var caller = await identity.GetUserByIdAsync(callerId, cancellationToken);

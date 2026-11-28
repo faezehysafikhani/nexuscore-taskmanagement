@@ -471,6 +471,27 @@ public sealed class SessionSecurityTests
     }
 
     [Fact]
+    public async Task ABackgroundRequest_NeverMovesTheIdleClock_EvenWithTheActivityHeader()
+    {
+        await using var api = await Api.StartAsync();
+        var login = await Json(await api.LoginAsync(UserName, Password));
+        var sid = SidOf(Access(login));
+        var old = DateTimeOffset.UtcNow.AddMinutes(-5);
+        await SetSessionAsync(api, sid, entry => entry.Property(nameof(UserSession.LastActivityAtUtc)).CurrentValue = old);
+
+        foreach (var path in new[] { "/api/identity/auth/sessions/current", "/api/identity/auth/me" })
+        {
+            using var poll = new HttpRequestMessage(HttpMethod.Get, path);
+            poll.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Access(login));
+            poll.Headers.Add("X-Nexus-Activity", "1");
+            poll.Headers.Add("X-Background-Request", "1");
+            await api.RawAsync(poll);
+        }
+
+        Assert.Equal(old, await LastActivityAsync(api, sid));
+    }
+
+    [Fact]
     public async Task ASessionThatEndedByIdleTimeout_IsListedAsEnded_AndAnAdministratorClosingItDoesNotChangeWhy()
     {
         await using var api = await Api.StartAsync();

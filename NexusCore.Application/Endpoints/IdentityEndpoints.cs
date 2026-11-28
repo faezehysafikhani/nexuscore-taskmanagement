@@ -346,7 +346,16 @@ public static class IdentityEndpoints
             .RequireAuthorization(IdentityPermissions.SettingsView);
 
         sessionAdmin.MapPut("/policy", async (Guid? tenantId, SessionPolicySettingsDto request, ISessionService sessions, CancellationToken cancellationToken) =>
-                (await sessions.UpdatePolicySettingsAsync(tenantId, request, cancellationToken)).ToApiResult())
+            {
+                // Out-of-range values are refused field by field, never clamped silently.
+                var errors = SessionPolicySettings.Validate(request);
+                if (errors.Count > 0)
+                {
+                    return Results.ValidationProblem(errors, detail: "مقادیر سیاست نشست خارج از بازه‌ی مجاز است.", title: "validation.error");
+                }
+
+                return (await sessions.UpdatePolicySettingsAsync(tenantId, request, cancellationToken)).ToApiResult();
+            })
             .RequireRateLimiting(NexusRateLimitPolicies.Write)
             .RequireAuthorization(IdentityPermissions.SettingsUpdate);
 
