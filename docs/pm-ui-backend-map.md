@@ -94,3 +94,29 @@
 - endpointهای بک‌اندی که فرانت PM صدا نمی‌زند: KPI (`/project-management/kpis`)، Deliverables، History، Meetings، Ticketing،
   governance-roles تیم، `waterfall/msproject/import` از مسیر جدا. این‌ها فقط فهرست شده‌اند.
 - ماژول منابع / بودجه‌ی مستقل در UI وجود ندارد.
+
+## وضعیت بعد از اصلاح (فازهای ۱ تا ۵)
+
+| مورد | وضعیت قبل | بعد از اصلاح | کجا |
+|---|---|---|---|
+| H2 تغییر وضعیت پروژه‌ی تأییدنشده | ناقص | درست: `project.not_approved` (409). فرانت فقط «برنامه‌ریزی» را برای پروژه‌ی تأییدنشده نشان می‌دهد. | `ProjectService.ChangeStatusAsync`، `Forms.tsx` |
+| H3 ویرایش منشور در Pending | ناقص | درست: `project.pending_approval` (409). فرانت فرم را فقط‌خواندنی می‌کند و بنر نشان می‌دهد. | `ProjectService.UpdateAsync`، `ProjectPages.tsx` |
+| تصمیم ۲ ویرایش بعد از تأیید | پیاده‌نشده | درست: تغییر مدیر/تاریخ/هزینه/هدف/نیازمندی → Pending و شروع دوباره‌ی گردش منشور؛ Status فعال می‌ماند. | `Project.ChangesApprovedCharter`، `StartApprovalAsync` |
+| H5 ارسال تکراری | ناقص | درست: `project.already_pending` / `project.already_approved`. | `SubmitForApprovalAsync` |
+| H5 تصمیم هم‌زمان | پیاده‌نشده | درست: `WorkflowInstance.RowVersion` (concurrency token) و `workflow.concurrent_decision` (409). | `WorkflowInstanceService.DecideAsync` |
+| H4 instance یتیم | ناقص | درست: شکست ذخیره‌ی پروژه → withdraw (Status=3). | `IApprovalTracker`، `WorkflowApprovalTracker` |
+| H4 پروژه‌ی گیرکرده در Pending | پیاده‌نشده | درست: همگام‌سازی هنگام خواندن، ارسال، ویرایش، و `POST /projects/{id}/approval/sync`. فرانت هنگام بارگذاری صدا می‌زند. | `SyncWithApprovalAsync`، `ProjectsContext` |
+| M1 scope منشور | ناقص | درست: `ScopeType=Project`، fallback به General حفظ شد. | `ProjectService.SubjectOf` |
+| H6 / تصمیم ۳ خودتأییدی | پیاده‌نشده | درست: `SubmittedByUserId` روی instance. مرحله‌ی خودِ ارسال‌کننده به OrgManager می‌رود؛ اگر نبود رد. تصمیم ارسال‌کننده رد می‌شود (`workflow.self_approval`). | `WorkflowApprovalRequester`، `DecideAsync` |
+| L تأییدکننده‌ی حل‌نشده | ناقص | درست: `workflow.approver_missing` با نام مرحله (برای همه‌ی موجودیت‌ها). | `WorkflowApprovalRequester` |
+| M6 اعلان | پیاده‌نشده | درست (برای منشور): اعلان به تأییدکننده‌ی مرحله‌ی بعد و به ارسال‌کننده (با دلیل رد). | `ApprovalNotifications` (Bundles.Platform) |
+| نمایش دلیل رد | پیاده‌نشده | درست: بنر روی تب منشور. | `ProjectPages.tsx` |
+| M3 / M4 ایجاد پروژه | ناقص | درست: ارسال ناقص انجام نمی‌شود (`project.partially_saved`) و پروژه برای ویرایش باز می‌شود. | `ProjectsContext.saveProject`، `App.tsx` |
+| قفل تب زمان‌بندی چابک | ناهماهنگ | برداشته شد (بک‌اند معادلی ندارد و پروژه‌ی چابک جدید تسک‌هایش را قبل از ارسال می‌گیرد). | `ProjectPages.tsx` |
+| M2 تقویم | ناقص | درست: `project.calendar_not_found`. | `IProjectCalendarLookup` |
+| تصمیم ۴ تغییر تقویم | ناقص | درست: `GET /projects/calendar-usage` و تأیید قبل از ذخیره. | `ProjectService.GetCalendarUsageAsync`، `App.tsx` |
+| M9 وزن‌ها بعد از ارسال | ناقص | هشدار (نه رد): `ScheduleDto.WeightsTotalNot100` و بنر در تب زمان‌بندی. | `ScheduleService` |
+| M8 پروژه‌ی فعال | ناهماهنگ | درست: `Project.IsActive` در داشبورد و آنالیتیکس؛ `isActiveProject` در فرانت. | `DashboardService`، `AnalyticsService` |
+| ثبت‌ها: قفل در Pending | ناقص | درست برای ریسک، ذی‌نفع، گزارش وضعیت، دلیل تأخیر، مستند: `approval.pending_edit` / `approval.already_pending`. اقدام‌ها تغییر نکردند. | سرویس‌های همان ماژول‌ها |
+| M5 / تصمیم ۵ | ناهماهنگ | UI از قبل فقط «تأیید پیشرفت» را نشان می‌دهد و submit فعالیت/تسک را صدا نمی‌زند؛ تغییری لازم نبود. | - |
+| M7 tenant و مالکیت | ناقص | درست: فیلتر tenant در `GetByIdAsync` مخزن‌ها؛ TenantId ایجاد از کاربر جاری؛ مدیر/مالک/`Projects.ManageAll`. | مخزن‌ها، `ProjectEndpoints`، `CheckCanManage` |
