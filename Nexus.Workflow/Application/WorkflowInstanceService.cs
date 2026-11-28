@@ -176,5 +176,6 @@ public sealed class WorkflowInstanceService(
             .Select(d => new WorkflowDecisionDto(d.Id, d.StepOrder, d.DecidedByUserId, d.Approved, d.Comment, d.DecidedAtUtc, d.OnBehalfOfUserId))
             .ToList(),
         currentApprover, delegatedFrom,
-        instance.GetSteps()?.Select(step => new WorkflowInstanceStepDto(step.Order, step.Name, step.ApproverUserId)).ToList());
+        instance.GetSteps()?.Select(step => new WorkflowInstanceStepDto(step.Order, step.Name, step.ApproverUserId)).ToList(),
+        instance.CreatedAtUtc, instance.SubmittedByUserId);
 }
