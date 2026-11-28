@@ -396,6 +396,39 @@ public sealed class WaterfallPlanningTests
     }
 
     [Fact]
+    public async Task M9_AfterSubmission_ThePlanWarnsWhileTheWeightsDoNotAddUpTo100()
+    {
+        var f = Build(new WaterfallOptions { RequireWeightsTotalOnSubmit = true });
+        Add(f, "A", 2, weight: 60);
+        var b = Add(f, "B", 2, weight: 40);
+
+        Assert.Null((await f.Schedule.GetPlanAsync(f.Project.Id, default)).Value!.Schedule.WeightsTotalNot100);
+
+        // Edited after the project was approved: the edit is accepted (weights are fixed one at a time), the plan says the total is off.
+        f.Project.Approve();
+        b.UpdateDetails("B", null, null, null, null, null, null, null, 2, 2m, 30);
+        var plan = (await f.Schedule.GetPlanAsync(f.Project.Id, default)).Value!.Schedule;
+        Assert.Equal(90m, plan.WeightsTotalNot100);
+        Assert.Contains(plan.Warnings, w => w.Contains("90"));
+
+        b.UpdateDetails("B", null, null, null, null, null, null, null, 2, 2m, 40);
+        Assert.Null((await f.Schedule.GetPlanAsync(f.Project.Id, default)).Value!.Schedule.WeightsTotalNot100);
+    }
+
+    [Fact]
+    public async Task M9_BeforeSubmission_OrWithoutTheRule_ThereIsNoWarning()
+    {
+        var off = Build(new WaterfallOptions { RequireWeightsTotalOnSubmit = true });
+        Add(off, "A", 2, weight: 10); // a draft: being planned, nothing to warn about yet
+        Assert.Null((await off.Schedule.GetPlanAsync(off.Project.Id, default)).Value!.Schedule.WeightsTotalNot100);
+
+        var relaxed = Build(new WaterfallOptions());
+        Add(relaxed, "A", 2, weight: 10);
+        relaxed.Project.Approve();
+        Assert.Null((await relaxed.Schedule.GetPlanAsync(relaxed.Project.Id, default)).Value!.Schedule.WeightsTotalNot100);
+    }
+
+    [Fact]
     public async Task ProjectService_RefusesToSendAProjectWhenACheckObjects_AndSendsItOtherwise()
     {
         var dbOptions = new DbContextOptionsBuilder<Nexus.ProjectManagement.Core.Infrastructure.ProjectManagementCoreDbContext>()

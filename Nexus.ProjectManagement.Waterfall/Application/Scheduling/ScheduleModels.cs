@@ -31,4 +31,4 @@ public sealed record ScheduleResult(
 /// that had no duration).</summary>
 public sealed record ScheduleCalculation(
     Guid ProjectId, ScheduleResult Result, bool UsesWorkCalendar, IReadOnlyList<string> Warnings, IWorkingDayCalendar Calendar,
-    PlannedProgressMode PlannedMode = PlannedProgressMode.Stored);
+    PlannedProgressMode PlannedMode = PlannedProgressMode.Stored, decimal? WeightsTotalNot100 = null);

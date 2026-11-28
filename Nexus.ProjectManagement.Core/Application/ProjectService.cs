@@ -17,7 +17,8 @@ public sealed class ProjectService(
     IWorkAssignmentScope? assignmentScope = null,
     IUserReachScope? reachScope = null,
     ICurrentUserContext? currentUser = null,
-    IApprovalTracker? approvalTracker = null) : IProjectService
+    IApprovalTracker? approvalTracker = null,
+    IProjectCalendarLookup? calendarLookup = null) : IProjectService
 {
     /// <summary>The charter's approval: scoped to the project, so a chain set for this project wins over the general one.</summary>
     private static ApprovalSubject SubjectOf(Project project) =>
@@ -120,6 +121,11 @@ public sealed class ProjectService(
             return Result.Failure(Error.Validation("End date must be on or after the start date."));
         }
 
+        if (await CheckCalendarAsync(request.TenantId, request.WorkCalendarId, cancellationToken) is { } calendarError)
+        {
+            return Result.Failure(calendarError);
+        }
+
         if (options?.RequireUniqueName == true && await repository.NameExistsAsync(request.TenantId, request.Name, existingProjectId, cancellationToken))
         {
             return Result.Failure(new Error("project.name_exists", "A project with this name already exists."));
@@ -150,6 +156,11 @@ public sealed class ProjectService(
         if (options?.RequireUniqueName == true && await repository.NameExistsAsync(request.TenantId, request.Name, null, cancellationToken))
         {
             return Result.Failure<ProjectDto>(new Error("project.name_exists", "A project with this name already exists."));
+        }
+
+        if (await CheckCalendarAsync(request.TenantId, request.WorkCalendarId, cancellationToken) is { } calendarError)
+        {
+            return Result.Failure<ProjectDto>(calendarError);
         }
 
         var code = string.IsNullOrWhiteSpace(request.Code)
@@ -213,6 +224,12 @@ public sealed class ProjectService(
         if (await repository.CodeExistsAsync(project.TenantId, request.Code, id, cancellationToken))
         {
             return Result.Failure<ProjectDto>(Error.Conflict("A project with this code already exists."));
+        }
+
+        if (request.WorkCalendarId != project.WorkCalendarId
+            && await CheckCalendarAsync(project.TenantId, request.WorkCalendarId, cancellationToken) is { } calendarError)
+        {
+            return Result.Failure<ProjectDto>(calendarError);
         }
 
         if (await WorkAssignmentCheck.CheckAsync(assignmentScope, reachScope, currentUser, project.TenantId, request.ManagerUserId, project.ManagerUserId,
@@ -390,6 +407,29 @@ public sealed class ProjectService(
 
         return Result.Success(ToDto(project));
     }
+
+    public async Task<Result<CalendarUsageDto>> GetCalendarUsageAsync(Guid tenantId, Guid calendarId, CancellationToken cancellationToken)
+    {
+        int total = 0, approved = 0;
+        for (var page = 1; ; page++)
+        {
+            var batch = await repository.ListAsync(new ListProjectsRequest(tenantId, page, 200, WorkCalendarId: calendarId), cancellationToken);
+            total = batch.TotalCount;
+            approved += batch.Items.Count(p => p.ApprovalStatus == ApprovalStatus.Approved);
+            if (batch.Items.Count < 200 || page * 200 >= batch.TotalCount)
+            {
+                break;
+            }
+        }
+
+        return Result.Success(new CalendarUsageDto(calendarId, total, approved));
+    }
+
+    /// <summary>M2: the chosen work calendar must exist in the project's tenant (when the calendar integration is installed).</summary>
+    private async Task<Error?> CheckCalendarAsync(Guid tenantId, Guid? calendarId, CancellationToken cancellationToken) =>
+        calendarId is { } id && calendarLookup is not null && !await calendarLookup.ExistsAsync(tenantId, id, cancellationToken)
+            ? ProjectErrors.CalendarNotFound
+            : null;
 
     private Error? CheckCharter(
         string name, Guid? managerUserId, Guid? organizationUnitId, DateOnly? startDate, DateOnly? endDate,

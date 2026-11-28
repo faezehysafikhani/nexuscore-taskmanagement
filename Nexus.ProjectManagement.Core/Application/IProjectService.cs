@@ -28,4 +28,8 @@ public interface IProjectService
     /// whose follow-up failed, a submission whose approval was withdrawn). A no-op when nothing drifted.
     /// </summary>
     Task<Result<ProjectDto>> SyncApprovalAsync(Guid id, CancellationToken cancellationToken) => GetAsync(id, cancellationToken);
+
+    /// <summary>The projects of a tenant that use a work calendar, and how many of them are approved («تصمیم ۴»).</summary>
+    Task<Result<CalendarUsageDto>> GetCalendarUsageAsync(Guid tenantId, Guid calendarId, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
 }

@@ -153,8 +153,23 @@ public sealed class ScheduleService(
             .Where(a => a.UsedDefaultDuration)
             .Select(a => $"'{a.Name}' has no duration or dates; one day is assumed."));
 
+        // M9: the rule "weights add up to 100" is checked when the project is sent; after that (pending or approved) an edit that
+        // breaks it is not refused - the weights are often fixed one activity at a time - but the plan says so until it is right.
+        decimal? weightsOff = null;
+        if (options?.RequireWeightsTotalOnSubmit == true && settings.Weighting == WeightingMode.Manual && project.Type == Nexus.ProjectManagement.Core.Domain.ProjectType.Waterfall
+            && project.ApprovalStatus is NexusCore.Application.Approvals.ApprovalStatus.PendingApproval or NexusCore.Application.Approvals.ApprovalStatus.Approved
+            && inputs.Count > 0)
+        {
+            var leafTotal = Math.Round(inputs.Where(i => !inputs.Any(c => c.ParentId == i.Id)).Sum(i => i.Weight));
+            if (leafTotal != 100m)
+            {
+                weightsOff = leafTotal;
+                warnings.Add($"The weights of the activities add up to {leafTotal}, not 100.");
+            }
+        }
+
         return new Loaded(
-            Result.Success(new ScheduleCalculation(projectId, result, calendar is not null, warnings, effectiveCalendar, settings.PlannedProgress)),
+            Result.Success(new ScheduleCalculation(projectId, result, calendar is not null, warnings, effectiveCalendar, settings.PlannedProgress, weightsOff)),
             byId, dependencies, stored, settings);
     }
 
@@ -264,7 +279,7 @@ public sealed class ScheduleService(
             calculation.ProjectId, result.ProjectStart, result.ProjectFinish, result.ProjectDurationDays,
             calculation.UsesWorkCalendar, result.PlannedProgress, result.ActualProgress,
             result.CriticalPath, result.Activities.Select(Map).ToList(), calculation.Warnings, applied,
-            loaded.Settings.Weighting, loaded.Settings.PlannedProgress);
+            loaded.Settings.Weighting, loaded.Settings.PlannedProgress, calculation.WeightsTotalNot100);
     }
 
     private static ActivityDto ToDto(Activity activity) => ActivityService.ToDto(activity);

@@ -22,4 +22,6 @@ public sealed record ScheduleDto(
     bool UsesWorkCalendar, decimal PlannedProgress, decimal ActualProgress,
     IReadOnlyList<Guid> CriticalPath, IReadOnlyList<ScheduledActivityDto> Activities,
     IReadOnlyList<string> Warnings, bool Applied,
-    WeightingMode Weighting = WeightingMode.Manual, PlannedProgressMode PlannedProgressMode = PlannedProgressMode.Stored);
+    WeightingMode Weighting = WeightingMode.Manual, PlannedProgressMode PlannedProgressMode = PlannedProgressMode.Stored,
+    // M9: in a project already sent or approved (with RequireWeightsTotalOnSubmit), what the manual weights add up to when it is not 100.
+    decimal? WeightsTotalNot100 = null);

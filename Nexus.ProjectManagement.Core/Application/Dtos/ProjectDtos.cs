@@ -79,6 +79,10 @@ public sealed record ListProjectsRequest(
     bool SortDescending = true,
     Guid? WorkCalendarId = null);
 
+/// <summary>«تصمیم ۴»: how many projects use a work calendar, and how many of them are approved (their computed plan changes with
+/// the calendar; their saved baselines do not).</summary>
+public sealed record CalendarUsageDto(Guid CalendarId, int Projects, int ApprovedProjects);
+
 public enum ProjectSortBy
 {
     Name,

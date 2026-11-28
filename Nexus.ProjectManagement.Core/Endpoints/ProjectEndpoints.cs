@@ -45,6 +45,13 @@ public static class ProjectEndpoints
             })
             .RequireAuthorization(ProjectPermissions.View);
 
+        // «تصمیم ۴»: before a work calendar is changed, how many (approved) projects it would move.
+        group.MapGet("/calendar-usage", async (Guid calendarId, ICurrentUserContext currentUser, IProjectService service, CancellationToken cancellationToken) =>
+                currentUser.TenantId is { } tenantId
+                    ? (await service.GetCalendarUsageAsync(tenantId, calendarId, cancellationToken)).ToApiResult()
+                    : Results.Unauthorized())
+            .RequireAuthorization(ProjectPermissions.View);
+
         group.MapGet("/{id:guid}", async (Guid id, IProjectService service, CancellationToken cancellationToken) =>
                 (await service.GetAsync(id, cancellationToken)).ToApiResult())
             .RequireAuthorization(ProjectPermissions.View);

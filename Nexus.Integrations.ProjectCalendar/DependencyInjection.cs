@@ -16,6 +16,7 @@ public static class DependencyInjection
     {
         services.Replace(ServiceDescriptor.Scoped<IWorkingDayCalendarProvider, WorkCalendarProvider>());
         services.AddScoped<ICalendarUsageChecker, ProjectCalendarUsageChecker>();
+        services.AddScoped<Nexus.ProjectManagement.Core.Application.IProjectCalendarLookup, ProjectCalendarLookup>();
         return services;
     }
 }
