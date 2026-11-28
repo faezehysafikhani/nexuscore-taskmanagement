@@ -393,7 +393,7 @@ public sealed partial class OrgNodeApiTests
 
         public async Task<Guid> CompanyAsync(string code)
         {
-            var id = (await Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("شرکت " + code, code, null), default)).Value!.Id;
+            var id = await TestCompanies.MakeAsync(Service, Repo, _structure, Tenant, _companies.Count, "شرکت " + code, code);
             _companies.Add(id);
             if (_top is null)
             {

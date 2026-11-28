@@ -1193,7 +1193,7 @@ public sealed class OrgChartTeamsAndTitlesTests
 
         private async Task<Guid> AddCompanyAsync(string name, string code)
         {
-            var id = (await Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest(name, code, null), default)).Value!.Id;
+            var id = await TestCompanies.MakeAsync(Service, _repository, _structure, Tenant, _companies.Count, name, code);
             _companies.Add(id);
             if (_top is null)
             {

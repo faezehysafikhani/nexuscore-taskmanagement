@@ -91,6 +91,8 @@ public sealed partial class OrgNodeApiTests
         Assert.Equal(["مدیرعامل", "کارشناس"], simplePosts.OrderBy(p => p.SortOrder).Select(p => p.Title));
         Assert.All(simplePosts, p => Assert.Null(p.UnitId));
 
+        // The system holds one company: the bank template makes its company in a world of its own.
+        w = new World();
         var bank = await w.Ok(w.Service.CreateCompanyAsync(Tenant, new CreateCompanyRequest("بانک", "B", null, OrgNodeService.SystemTemplateId("bank")), default));
         var nodes = await w.Ok(w.Nodes.ListNodesAsync(Tenant, bank.Id, default));
         var posts = (await w.Ok(w.Service.ListUnitPositionsAsync(Tenant, null, default))).Where(p => p.CompanyId == bank.Id).ToList();
